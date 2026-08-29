@@ -58,6 +58,22 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
+      - name: Quieten the database log
+        # The image logs every statement, and the runner dumps the service
+        # container's output when it tears the job down. On the first green run
+        # that was ~380KB of DDL — which is harmless when the build passes and
+        # exactly the wrong thing to hand someone when it fails, because it
+        # buries the failing assertion.
+        #
+        # Log verbosity is a convenience, not a correctness property, so this
+        # does not fail the build if the image will not allow it.
+        run: |
+          psql -d postgres \
+            -c "alter system set log_statement = 'none'" \
+            -c "alter system set log_min_messages = 'warning'" \
+            -c "select pg_reload_conf()" \
+            || echo "could not quieten the server log; output will be verbose"
+
       - name: Create the database
         run: |
           psql -v ON_ERROR_STOP=1 -d postgres -c 'create database erpware'
