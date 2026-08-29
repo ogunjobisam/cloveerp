@@ -1,0 +1,112 @@
+import { createFileRoute } from "@tanstack/react-router";
+
+import { Gate } from "../../components/erp/gate";
+import { DataPanel, Pill, Table } from "../../components/erp/panel";
+
+export const Route = createFileRoute("/operations/jobs")({
+  head: () => ({ meta: [{ title: "Scheduled jobs — ERPWare" }] }),
+  component: () => (
+    <Gate>
+      <Jobs />
+    </Gate>
+  ),
+});
+
+type Silent = {
+  job_code: string;
+  schedule: string;
+  last_success_at: string | null;
+  silent_for: string;
+  tolerance: string;
+  finding: string;
+};
+
+type Health = {
+  job_code: string;
+  is_enabled: boolean;
+  is_failing: boolean;
+  is_killed: boolean;
+  in_outage: boolean;
+  next_run_at: string | null;
+  running: number;
+  last_outcome: string | null;
+  runs_24h: number;
+  failures_24h: number;
+  skips_24h: number;
+};
+
+function Jobs() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-semibold">Scheduled jobs</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A job that fails is loud. A job that stops being scheduled is silent, and silence looks
+          exactly like success — so it is reported first.
+        </p>
+      </div>
+
+      <DataPanel<Silent>
+        title="Jobs that have stopped running"
+        description="Overdue against their own schedule. Suppressed during a planned outage."
+        fn="erp_silent_jobs"
+        empty="Nothing is overdue. Every enabled job has run within its own tolerance."
+      >
+        {(rows) => (
+          <Table columns={["Job", "Schedule", "Silent for", "Tolerance", "Finding"]}>
+            {rows.map((r) => (
+              <tr key={r.job_code} className="border-b border-border/50 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{r.job_code}</td>
+                <td className="py-2 pr-4 text-muted-foreground">{r.schedule}</td>
+                <td className="py-2 pr-4">
+                  <Pill tone="bad">{r.silent_for}</Pill>
+                </td>
+                <td className="py-2 pr-4 text-muted-foreground">{r.tolerance}</td>
+                <td className="py-2 pr-4 text-muted-foreground">{r.finding}</td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<Health>
+        title="All jobs"
+        description="State, next run, and the last 24 hours."
+        fn="erp_job_health"
+        empty="No jobs are configured for this tenant yet."
+      >
+        {(rows) => (
+          <Table columns={["Job", "State", "Next run", "Running", "24h runs", "Failed", "Skipped"]}>
+            {rows.map((r) => (
+              <tr key={r.job_code} className="border-b border-border/50 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{r.job_code}</td>
+                <td className="py-2 pr-4">
+                  {!r.is_enabled ? (
+                    <Pill tone="muted">Disabled</Pill>
+                  ) : r.is_killed ? (
+                    <Pill tone="bad">Kill switch</Pill>
+                  ) : r.in_outage ? (
+                    <Pill tone="muted">Outage window</Pill>
+                  ) : r.is_failing ? (
+                    <Pill tone="bad">Failing</Pill>
+                  ) : (
+                    <Pill tone="ok">Scheduled</Pill>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.next_run_at ? new Date(r.next_run_at).toLocaleString() : "—"}
+                </td>
+                <td className="py-2 pr-4">{r.running}</td>
+                <td className="py-2 pr-4">{r.runs_24h}</td>
+                <td className="py-2 pr-4">
+                  {r.failures_24h > 0 ? <Pill tone="warn">{r.failures_24h}</Pill> : "0"}
+                </td>
+                <td className="py-2 pr-4 text-muted-foreground">{r.skips_24h}</td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+    </div>
+  );
+}
