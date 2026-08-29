@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -122,21 +122,113 @@ function SignIn() {
   );
 }
 
-function NoTenant({ onSignOut }: { onSignOut: () => void }) {
+/**
+ * The onboarding state: signed in, but resolving to no principal anywhere.
+ *
+ * Rather than leaving this as a dead end for an administrator to fix, it is
+ * the one place a tenant can be born: the caller names it, and the database
+ * creates the tenant, their principal, an administrator role holding every
+ * permission, and the grant between them — in one transaction, because
+ * half of that list is worse than none of it.
+ */
+function Onboarding({ onSignOut }: { onSignOut: () => void }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"create" | "demo" | null>(null);
+
+  async function run(which: "create" | "demo") {
+    setBusy(which);
+    setError(null);
+    try {
+      if (which === "create") {
+        await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
+      } else {
+        await callErp("erp_seed_demo");
+      }
+      // The session query is keyed on the auth user; invalidating everything
+      // re-resolves the tenant and lands on the shell.
+      await queryClient.invalidateQueries();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <Centred>
-      <h1 className="text-lg font-semibold">No tenant for this account</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        You are signed in, but this identity does not resolve to a principal in any tenant. Until an
-        administrator creates one, there is no tenant context — and without a tenant context the
-        platform deliberately shows nothing rather than showing something.
-      </p>
-      <button
-        onClick={onSignOut}
-        className="mt-5 rounded-md border border-input px-4 py-2 text-sm font-medium"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run("create");
+        }}
+        className="rounded-xl border border-border bg-card p-6"
       >
-        Sign out
-      </button>
+        <h1 className="text-lg font-semibold">Create your tenant</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          You are signed in, but this identity resolves to no principal yet. Creating a tenant makes
+          you its first principal, with an administrator role holding every permission.
+        </p>
+
+        <label className="mt-5 block text-sm font-medium">
+          Tenant name
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Acme Manufacturing"
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </label>
+
+        <label className="mt-3 block text-sm font-medium">
+          Tenant code
+          <input
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="acme"
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
+          />
+        </label>
+
+        {error ? (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={busy !== null}
+          className="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+        >
+          {busy === "create" ? "Creating…" : "Create tenant"}
+        </button>
+
+        <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => run("demo")}
+          disabled={busy !== null}
+          className="mt-4 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+        >
+          {busy === "demo" ? "Seeding…" : "Explore a seeded demo tenant instead"}
+        </button>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          <button type="button" onClick={onSignOut} className="underline underline-offset-2">
+            Sign out
+          </button>
+        </p>
+      </form>
     </Centred>
   );
 }
@@ -227,7 +319,7 @@ export function Gate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!data?.tenant_id) return <NoTenant onSignOut={signOut} />;
+  if (!data?.tenant_id) return <Onboarding onSignOut={signOut} />;
 
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>

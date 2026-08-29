@@ -42,6 +42,12 @@ const NAV: NavItem[] = [
     permission: "administration.read",
     description: "The structural checks the build runs on every push",
   },
+  {
+    to: "/administration/permissions",
+    label: "Permissions",
+    permission: "administration.roles",
+    description: "Principals, roles, and the grants between them",
+  },
 ];
 
 function ScopeSelect({
