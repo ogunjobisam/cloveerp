@@ -20,6 +20,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      erp_grant_role: {
+        Args: {
+          p_app_user_id: string
+          p_grant_reason?: string
+          p_role_id: string
+          p_valid_from?: string
+          p_valid_to?: string
+        }
+        Returns: Json
+      }
       erp_integration_backlog: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_health: { Args: never; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
@@ -27,7 +37,19 @@ export type Database = {
         Args: { p_code: string; p_name: string }
         Returns: Json
       }
+      erp_permissions_directory: { Args: never; Returns: Json }
       erp_platform_assurance: { Args: never; Returns: Json }
+      erp_revoke_role: { Args: { p_user_role_id: string }; Returns: Json }
+      erp_save_role: {
+        Args: {
+          p_code: string
+          p_description: string
+          p_name: string
+          p_permissions: string[]
+          p_role_id: string
+        }
+        Returns: Json
+      }
       erp_seed_demo: { Args: never; Returns: Json }
       erp_session: { Args: never; Returns: Json }
       erp_silent_jobs: { Args: never; Returns: Json }
