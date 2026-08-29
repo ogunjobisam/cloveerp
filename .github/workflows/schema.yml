@@ -61,18 +61,27 @@ jobs:
       - name: Quieten the database log
         # The image logs every statement, and the runner dumps the service
         # container's output when it tears the job down. On the first green run
-        # that was ~380KB of DDL — which is harmless when the build passes and
-        # exactly the wrong thing to hand someone when it fails, because it
-        # buries the failing assertion.
+        # that was ~380KB of DDL: harmless while the build passes, and exactly
+        # the wrong thing to hand someone when it fails, because it buries the
+        # failing assertion under every statement of all 34 migrations.
         #
-        # Log verbosity is a convenience, not a correctness property, so this
-        # does not fail the build if the image will not allow it.
+        # ALTER SYSTEM was tried first and did not work — the setting is pinned
+        # ahead of it in this image, so the statements kept logging. A session
+        # GUC does win, because nothing outranks the session.
+        #
+        # PGOPTIONS is applied at connection time, so getting it wrong breaks
+        # every later psql call rather than merely staying noisy. It is proven
+        # on a throwaway connection first and only exported if that connection
+        # actually succeeded. Log verbosity is a convenience, not a correctness
+        # property, and it must never be the reason a build goes red.
         run: |
-          psql -d postgres \
-            -c "alter system set log_statement = 'none'" \
-            -c "alter system set log_min_messages = 'warning'" \
-            -c "select pg_reload_conf()" \
-            || echo "could not quieten the server log; output will be verbose"
+          OPTS="-c log_statement=none -c log_min_messages=warning"
+          if PGOPTIONS="$OPTS" psql -v ON_ERROR_STOP=1 -d postgres -tAc 'select 1' >/dev/null 2>&1; then
+            echo "PGOPTIONS=$OPTS" >> "$GITHUB_ENV"
+            echo "server log quietened for this job's connections"
+          else
+            echo "could not set the session log level; output will be verbose"
+          fi
 
       - name: Create the database
         run: |
