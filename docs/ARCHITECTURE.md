@@ -227,6 +227,7 @@ scratch, or by an assertion, or by running the thing.
 | A solo administrator could install no configuration at all                | The same question, from the other side     |
 | The two tenant-creation doors built two different tenants                 | Trying to configure one of them            |
 | 58 operations were reachable from nowhere                                 | Counting the public API against `erp.*`    |
+| A test suite left its tenant behind, so it could only run once            | Re-reading my own merged code              |
 
 The last three of the merge batch arrived when a second line of work merged.
 The assertions caught all of them within minutes.
@@ -242,6 +243,18 @@ never governed. Meanwhile B6's refusal to let the author of a change set approve
 it — correct, and the reason the guard exists — meant a person on their own
 could not install a single module, because there was nobody else to approve it.
 Too loose and too tight, from the same missing row.
+
+The last one is mine, found after the change above had merged green. Fifteen of
+the sixteen adversarial suites end with the same three lines — open a purge
+window, delete the tenant, close it — and the sixteenth, which I had just
+written, ended by clearing the session claims and stopping. CI could not see it:
+the database is created empty, the suite is the only thing that has ever run,
+and the cluster is thrown away a minute later. Two local databases could see it
+immediately — both carried a leftover tenant, and both refused the suite on its
+second run, failing on a unique tenant code rather than on anything under test.
+The suite also fabricates rows in `auth.users`, which is the platform's identity
+table rather than the product's and has no foreign key to cascade along, so
+those survived too. **The green tick again described the run, not the artefact.**
 
 ### The lesson
 
