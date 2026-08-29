@@ -37,15 +37,21 @@ Sections cited in migration headers, which is where the mapping is authoritative
 | 2 — Tenancy          | 2.1 – 2.5                            |
 | 3 — Platform engines | 3.1 – 3.12                           |
 | 4 — Canonical model  | 4.1 – 4.10                           |
-| 5 — Modules          | 5.3 – 5.8 (as substrate), 5.10, 5.11 |
+| 5 — Modules          | 5.1 – 5.11, all eleven areas         |
 | 6 — Extensibility    | 6.1, 6.3                             |
 | 7 — Prohibitions     | enforced throughout                  |
 | 8 — Invariants       | enforced throughout                  |
 
-**Not built, deliberately:** the functional modules of Part 5 beyond
-procurement — sales, manufacturing, warehouse operations, finance operations,
-CRM. Procurement is the proof that they are configuration; the rest is
-configuration work, not platform work.
+**What of Part 5 is built is a query, not a claim.** `erp.part5_coverage()`
+enumerates all ninety capabilities Part 5 names, in the specification's own
+words, bound to the functions and tables that deliver each one — and
+`erp.assert_part5_coverage()` fails the build if any artefact named there does
+not exist. At the last build: **73 built, 16 partial, 1 absent.**
+
+Every partial and the one absent capability carries a written gap saying
+exactly what is missing. Marking them built would have been easy and would have
+made every other row untrustworthy. Run `select * from erp.part5_summary();`
+for the breakdown by section.
 
 ---
 

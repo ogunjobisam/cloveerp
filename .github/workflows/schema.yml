@@ -127,6 +127,15 @@ jobs:
             "erp.assert_intelligence_boundary()" \
             "erp.assert_public_api_safe()" \
             "erp.assert_no_dead_configuration()" \
+            "erp.assert_master_data_sane()" \
+            "erp.assert_inventory_sane()" \
+            "erp.assert_procurement_controls_sane()" \
+            "erp.assert_planning_sane()" \
+            "erp.assert_production_sane()" \
+            "erp.assert_sales_controls_sane()" \
+            "erp.assert_quality_logistics_sane()" \
+            "erp.assert_finance_depth_sane()" \
+            "erp.assert_part5_coverage()" \
             "erp.assert_resource_coverage('en')"
           do
             printf '── %-45s' "$a"
@@ -147,7 +156,16 @@ jobs:
             "erp_test.assert_gateway_suite()" \
             "erp_test.assert_provisioning_suite()" \
             "erp_test.assert_procurement_suite()" \
-            "erp_test.assert_sales_suite()"
+            "erp_test.assert_sales_suite()" \
+            "erp_test.assert_finance_suite()" \
+            "erp_test.assert_master_data_suite()" \
+            "erp_test.assert_inventory_suite()" \
+            "erp_test.assert_procurement_controls_suite()" \
+            "erp_test.assert_planning_suite()" \
+            "erp_test.assert_production_suite()" \
+            "erp_test.assert_sales_depth_suite()" \
+            "erp_test.assert_quality_logistics_suite()" \
+            "erp_test.assert_finance_depth_suite()"
           do
             $PSQL -tAc "select $s;"
           done
