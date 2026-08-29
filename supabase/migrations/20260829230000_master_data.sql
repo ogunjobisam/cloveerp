@@ -764,6 +764,7 @@ declare
   v_sets   text := '';
   v_key    text;
   v_kind   text;
+  v_type   text;
   v_count  integer := 0;
   v_drift  text;
 begin
@@ -813,15 +814,20 @@ begin
     -- The identifier comes from the registry row, not from the key, and the
     -- value goes in as a parameterised jsonb extraction rather than as text
     -- spliced into the statement.
+    -- The cast comes from the catalogue, not from data_kind. A hand-kept
+    -- mapping cannot know that erp.item.lifecycle and erp.party.status are two
+    -- different enums, and text assigned to either fails at run time — which
+    -- is a defect that only appears the first time somebody maintains a status.
+    -- format_type, not atttypid::regtype: the second drops the type modifier,
+    -- so character(2) comes back as `character` and a two-letter country code
+    -- is silently truncated to one before it reaches its foreign key. Caught
+    -- by a build from empty, on a row that had been passing for an hour.
+    select pg_catalog.format_type(a.atttypid, a.atttypmod) into v_type
+      from pg_catalog.pg_attribute a
+     where a.attrelid = format('erp.%I', v_table)::regclass and a.attname = v_key;
+
     v_sets := v_sets || case when v_sets = '' then '' else ', ' end
-              || format('%I = ($2 ->> %L)%s', v_key, v_key,
-                        case v_kind
-                          when 'jsonb'   then '::jsonb'
-                          when 'integer' then '::integer'
-                          when 'numeric' then '::numeric'
-                          when 'boolean' then '::boolean'
-                          when 'uuid'    then '::uuid'
-                          else '' end);
+              || format('%I = ($2 ->> %L)::%s', v_key, v_key, v_type);
     v_count := v_count + 1;
   end loop;
 
@@ -1097,6 +1103,7 @@ declare
   v_sets   text := '';
   v_key    text;
   v_kind   text;
+  v_type   text;
 begin
   select distinct m.table_name into v_table
     from erp_meta.maintainable_field m where m.object_type = p_object_type;
@@ -1112,15 +1119,20 @@ begin
         using errcode = '42501';
     end if;
 
+    -- The cast comes from the catalogue, not from data_kind. A hand-kept
+    -- mapping cannot know that erp.item.lifecycle and erp.party.status are two
+    -- different enums, and text assigned to either fails at run time — which
+    -- is a defect that only appears the first time somebody maintains a status.
+    -- format_type, not atttypid::regtype: the second drops the type modifier,
+    -- so character(2) comes back as `character` and a two-letter country code
+    -- is silently truncated to one before it reaches its foreign key. Caught
+    -- by a build from empty, on a row that had been passing for an hour.
+    select pg_catalog.format_type(a.atttypid, a.atttypmod) into v_type
+      from pg_catalog.pg_attribute a
+     where a.attrelid = format('erp.%I', v_table)::regclass and a.attname = v_key;
+
     v_sets := v_sets || case when v_sets = '' then '' else ', ' end
-              || format('%I = ($2 ->> %L)%s', v_key, v_key,
-                        case v_kind
-                          when 'jsonb'   then '::jsonb'
-                          when 'integer' then '::integer'
-                          when 'numeric' then '::numeric'
-                          when 'boolean' then '::boolean'
-                          when 'uuid'    then '::uuid'
-                          else '' end);
+              || format('%I = ($2 ->> %L)::%s', v_key, v_key, v_type);
   end loop;
 
   if v_sets = '' then return; end if;

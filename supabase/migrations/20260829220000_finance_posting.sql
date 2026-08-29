@@ -443,11 +443,21 @@ begin
           from erp.posting_rule pr
          where pr.tenant_id = v_tenant and pr.code = (p ->> 'code');
 
-        -- Supersede the version in force. Closing it the day before the new
-        -- one starts keeps "exactly one rule in force" true without a gap.
+        -- Supersede the version in force, and only move its end date if it
+        -- actually started earlier.
+        --
+        -- This is the defect 0019 found in every other activation path,
+        -- arriving here through a door that did not exist when 0019 was
+        -- written. Setting effective_to = v_from on a version that started on
+        -- the same day produces an empty window, which posting_rule_range
+        -- refuses. Invisible in normal use, because changes are made on later
+        -- days than the versions they replace — and immediate the moment two
+        -- change sets touch the same rule in one sitting, which is exactly
+        -- what installing finance and then inventory does.
         update erp.posting_rule pr
            set status = 'superseded',
-               effective_to = least(coalesce(pr.effective_to, v_from), v_from),
+               effective_to = case when pr.effective_from < v_from then v_from
+                                   else pr.effective_to end,
                updated_at = now()
          where pr.tenant_id = v_tenant and pr.code = (p ->> 'code')
            and pr.status = 'active';
