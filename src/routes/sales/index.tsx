@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { Gate } from "../../components/erp/gate";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { SeedDemoAction } from "../../components/erp/seed";
 
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — ERPWare" }] }),
@@ -59,15 +61,12 @@ function DocTable({ rows }: { rows: Doc[] }) {
 
 function Sales() {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Sales</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Quotation to order to delivery. None of this is a table of its own — all three are
-          configured document types on one spine, and posting a delivery moves stock through the
-          same function a goods receipt uses, with the sign coming from the movement type.
-        </p>
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title="Sales">
+        Quotation to order to delivery. None of this is a table of its own — all three are
+        configured document types on one spine, and posting a delivery moves stock through the same
+        function a goods receipt uses, with the sign coming from the movement type.
+      </PageHeader>
 
       <DataPanel<Doc>
         title="Quotations"
@@ -75,6 +74,7 @@ function Sales() {
         fn="erp_documents"
         args={{ p_type_code: "quotation" }}
         empty="No quotations yet."
+        emptyAction={<SeedDemoAction />}
       >
         {(rows) => <DocTable rows={rows} />}
       </DataPanel>
@@ -85,6 +85,7 @@ function Sales() {
         fn="erp_documents"
         args={{ p_type_code: "sales_order" }}
         empty="No sales orders yet."
+        emptyAction={<SeedDemoAction />}
       >
         {(rows) => <DocTable rows={rows} />}
       </DataPanel>
@@ -95,6 +96,7 @@ function Sales() {
         fn="erp_documents"
         args={{ p_type_code: "delivery" }}
         empty="No deliveries yet."
+        emptyAction={<SeedDemoAction />}
       >
         {(rows) => <DocTable rows={rows} />}
       </DataPanel>

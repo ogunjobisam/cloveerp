@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { Gate, useErpSession } from "../../components/erp/gate";
+import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
 
@@ -78,7 +79,7 @@ function Permissions() {
 
   const allowed = hasPermission(session, "administration.roles");
 
-  const { data, isPending, error, refetch, isFetching } = useQuery({
+  const { data, isPending, error } = useQuery({
     queryKey: ["erp_permissions_directory"],
     queryFn: () => callErp<Directory>("erp_permissions_directory"),
     enabled: allowed,
@@ -91,14 +92,9 @@ function Permissions() {
 
   if (!allowed) {
     return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-xl font-semibold">Permissions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Principals, roles, and the grants between them.
-          </p>
-        </div>
-        <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+      <div className="flex min-w-0 flex-col gap-6">
+        <PageHeader title="Permissions">Principals, roles, and the grants between them.</PageHeader>
+        <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
           This account does not hold <code className="font-mono text-xs">administration.roles</code>
           , so the directory is not offered. Absence of a grant is a refusal, not a default.
         </p>
@@ -107,24 +103,12 @@ function Permissions() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Permissions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            A grant is the only way a principal gains a permission. Everything on this page is
-            scoped to <span className="font-medium">{session.tenant?.name}</span> by the database,
-            not by this screen.
-          </p>
-        </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="shrink-0 rounded-md border border-input px-2.5 py-1 text-xs font-medium disabled:opacity-50"
-        >
-          {isFetching ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title="Permissions">
+        A grant is the only way a principal gains a permission. Everything on this page is scoped to{" "}
+        <span className="font-medium">{session.tenant?.name}</span> by the database, not by this
+        screen.
+      </PageHeader>
 
       {isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -177,14 +161,14 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
 
   return (
     <section className="rounded-xl border border-border bg-card">
-      <header className="border-b border-border px-5 py-4">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Assign a role</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <Prose className="mt-0.5 text-xs text-muted-foreground">
           Granting takes effect from the validity date; the database, not this form, decides.
-        </p>
+        </Prose>
       </header>
       <form
-        className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid grid-cols-1 gap-3 px-4 py-4 sm:px-5 md:grid-cols-2 lg:grid-cols-3"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -199,7 +183,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             required
             value={appUserId}
             onChange={(e) => setAppUserId(e.target.value)}
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           >
             <option value="">Choose…</option>
             {directory.principals.map((p) => (
@@ -219,7 +203,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             required
             value={roleId}
             onChange={(e) => setRoleId(e.target.value)}
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           >
             <option value="">Choose…</option>
             {activeRoles.map((r) => (
@@ -238,7 +222,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Why this grant exists"
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           />
         </label>
 
@@ -250,7 +234,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             type="date"
             value={validFrom}
             onChange={(e) => setValidFrom(e.target.value)}
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           />
         </label>
 
@@ -262,7 +246,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             type="date"
             value={validTo}
             onChange={(e) => setValidTo(e.target.value)}
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           />
         </label>
 
@@ -270,7 +254,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
           >
             {mutation.isPending ? "Granting…" : "Grant role"}
           </button>
@@ -303,7 +287,7 @@ function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () =
 
   return (
     <section className="rounded-xl border border-border bg-card">
-      <header className="border-b border-border px-5 py-4">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Grants ({directory.grants.length})</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Removing a grant takes effect immediately; the principal's next session reflects it.
@@ -333,7 +317,7 @@ function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () =
                   <button
                     onClick={() => mutation.mutate(g.id)}
                     disabled={mutation.isPending}
-                    className="rounded-md border border-input px-2.5 py-1 text-xs font-medium text-destructive disabled:opacity-50"
+                    className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium text-destructive disabled:opacity-50`}
                   >
                     Remove
                   </button>
@@ -358,25 +342,25 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
 
   return (
     <section className="rounded-xl border border-border bg-card">
-      <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+      <header className="flex flex-col gap-3 border-b border-border px-4 py-4 sm:px-5 md:flex-row md:items-start md:justify-between md:gap-4">
         <div>
           <h2 className="text-sm font-semibold">Roles ({directory.roles.length})</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
             A role is a named set of permissions. Nothing here takes effect until it is granted.
-          </p>
+          </Prose>
         </div>
         <button
           onClick={() => {
             setEditing(null);
             setCreating(true);
           }}
-          className="shrink-0 rounded-md border border-input px-2.5 py-1 text-xs font-medium"
+          className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
         >
           New role
         </button>
       </header>
 
-      <div className="flex flex-col gap-4 px-5 py-4">
+      <div className="flex flex-col gap-4 px-4 py-4 sm:px-5">
         {creating || editing ? (
           <RoleForm
             key={editing?.id ?? "new"}
@@ -417,7 +401,7 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
                         setCreating(false);
                         setEditing(r);
                       }}
-                      className="rounded-md border border-input px-2.5 py-1 text-xs font-medium"
+                      className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
                     >
                       Edit permissions
                     </button>
@@ -500,7 +484,7 @@ function RoleForm({
     >
       <p className="text-sm font-semibold">{role ? `Edit ${role.name}` : "New role"}</p>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Code
@@ -511,7 +495,7 @@ function RoleForm({
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="inventory-clerk"
-            className="rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm disabled:opacity-60"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 font-mono text-sm disabled:opacity-60`}
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -523,7 +507,7 @@ function RoleForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Inventory clerk"
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -533,12 +517,12 @@ function RoleForm({
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           />
         </label>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {byModule.map(([moduleCode, items]) => (
           <fieldset key={moduleCode} className="rounded-md border border-border/60 p-3">
             <legend className="px-1 font-mono text-xs text-muted-foreground">{moduleCode}</legend>
@@ -575,14 +559,14 @@ function RoleForm({
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
         >
           {mutation.isPending ? "Saving…" : role ? "Save changes" : "Create role"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-input px-4 py-2 text-sm font-medium"
+          className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-sm font-medium`}
         >
           Cancel
         </button>
