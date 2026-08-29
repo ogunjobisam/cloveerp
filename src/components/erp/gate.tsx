@@ -123,80 +123,147 @@ function SignIn() {
 }
 
 /**
- * Signed in, but nobody here yet.
+ * The onboarding state: signed in, but resolving to no principal anywhere.
  *
- * This screen used to be a dead end, which was honest but not useful: it named
- * the condition and offered no way out of it. An invitation token is the only
- * door into a tenant — a service principal cannot be adopted as a person, by
- * design — so the door belongs on the screen that reports the locked one.
+ * Two ways out, because there are two ways to arrive here and only one of them
+ * is a new customer.
+ *
+ * Creating a tenant makes the caller its first principal, with an
+ * administrator role holding every permission — tenant, principal, role and
+ * grant in one transaction, because half of that list is worse than none.
+ *
+ * Redeeming an invitation is the other: somebody already inside a tenant
+ * created a principal for this person and handed them a single-use token. It
+ * belongs on the same screen, since from here the two states are
+ * indistinguishable — you are signed in and the database has nothing to say
+ * about you.
  */
-function NoTenant({ onSignOut }: { onSignOut: () => void }) {
+function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | null>(null);
 
-  async function redeem(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
+  async function run(which: "create" | "demo" | "redeem") {
+    setBusy(which);
     setError(null);
     try {
-      await callErp("erp_claim_invitation", { p_token: token.trim() });
-      // The session query is keyed on the auth user, and that has not changed —
-      // what changed is what the database will now say about them.
-      await queryClient.invalidateQueries({ queryKey: ["erp_session"] });
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(false);
+      if (which === "create") {
+        await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
+      } else if (which === "redeem") {
+        await callErp("erp_claim_invitation", { p_token: token.trim() });
+      } else {
+        await callErp("erp_seed_demo");
+      }
+      // The session query is keyed on the auth user; invalidating everything
+      // re-resolves the tenant and lands on the shell.
+      await queryClient.invalidateQueries();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
     }
   }
 
   return (
     <Centred>
-      <h1 className="text-lg font-semibold">No tenant for this account</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        You are signed in, but this identity does not resolve to a principal in any tenant. If
-        someone has invited you, redeem the token below. Otherwise an administrator needs to create
-        one — until then there is no tenant context, and without a tenant context the platform
-        deliberately shows nothing rather than showing something.
-      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run("create");
+        }}
+        className="rounded-xl border border-border bg-card p-6"
+      >
+        <h1 className="text-lg font-semibold">Create your tenant</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          You are signed in, but this identity resolves to no principal yet. Creating a tenant makes
+          you its first principal, with an administrator role holding every permission.
+        </p>
 
-      <form onSubmit={redeem} className="mt-5 rounded-xl border border-border bg-card p-4">
-        <label className="block text-sm font-medium">
-          Invitation token
+        <label className="mt-5 block text-sm font-medium">
+          Tenant name
           <input
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
             required
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="64 hexadecimal characters"
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Acme Manufacturing"
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
         </label>
+
+        <label className="mt-3 block text-sm font-medium">
+          Tenant code
+          <input
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="acme"
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
+          />
+        </label>
+
         {error ? (
-          <p role="alert" className="mt-2 text-sm text-destructive">
+          <p role="alert" className="mt-3 text-sm text-destructive">
             {error}
           </p>
         ) : null}
+
         <button
           type="submit"
-          disabled={busy || token.trim().length === 0}
-          className="mt-3 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          disabled={busy !== null}
+          className="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
-          {busy ? "Redeeming…" : "Redeem invitation"}
+          {busy === "create" ? "Creating…" : "Create tenant"}
         </button>
-        <p className="mt-2 text-xs text-muted-foreground">
-          A token works once and then never again.
+
+        <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => run("demo")}
+          disabled={busy !== null}
+          className="mt-4 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+        >
+          {busy === "demo" ? "Seeding…" : "Explore a seeded demo tenant instead"}
+        </button>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <label className="block text-sm font-medium">
+            Been invited instead?
+            <input
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="Paste your invitation token"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => run("redeem")}
+            disabled={busy !== null || token.trim().length === 0}
+            className="mt-2 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+          >
+            {busy === "redeem" ? "Redeeming…" : "Redeem invitation"}
+          </button>
+          <p className="mt-2 text-xs text-muted-foreground">
+            A token works once and then never again.
+          </p>
+        </div>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          <button type="button" onClick={onSignOut} className="underline underline-offset-2">
+            Sign out
+          </button>
         </p>
       </form>
-
-      <button
-        onClick={onSignOut}
-        className="mt-5 rounded-md border border-input px-4 py-2 text-sm font-medium"
-      >
-        Sign out
-      </button>
     </Centred>
   );
 }
@@ -287,7 +354,7 @@ export function Gate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!data?.tenant_id) return <NoTenant onSignOut={signOut} />;
+  if (!data?.tenant_id) return <Onboarding onSignOut={signOut} />;
 
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>
