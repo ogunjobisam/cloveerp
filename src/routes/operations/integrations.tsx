@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { Gate } from "../../components/erp/gate";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { SeedDemoAction } from "../../components/erp/seed";
 
 export const Route = createFileRoute("/operations/integrations")({
   head: () => ({ meta: [{ title: "Integrations — ERPWare" }] }),
@@ -39,14 +41,11 @@ type Backlog = {
 
 function Integrations() {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Integrations</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every outbound write goes through the gateway. Nothing here can send anything — it reports
-          what the gateway is doing and what needs a person.
-        </p>
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title="Integrations">
+        Every outbound write goes through the gateway. Nothing here can send anything — it reports
+        what the gateway is doing and what needs a person.
+      </PageHeader>
 
       <DataPanel<Backlog>
         title="Needs a decision"
@@ -87,6 +86,7 @@ function Integrations() {
         description="Queue depth and the state of each configured counterpart."
         fn="erp_integration_health"
         empty="No external systems are configured for this tenant yet."
+        emptyAction={<SeedDemoAction />}
       >
         {(rows) => (
           <Table

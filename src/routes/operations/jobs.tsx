@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { Gate } from "../../components/erp/gate";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { SeedDemoAction } from "../../components/erp/seed";
 
 export const Route = createFileRoute("/operations/jobs")({
   head: () => ({ meta: [{ title: "Scheduled jobs — ERPWare" }] }),
@@ -37,14 +39,11 @@ type Health = {
 
 function Jobs() {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Scheduled jobs</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A job that fails is loud. A job that stops being scheduled is silent, and silence looks
-          exactly like success — so it is reported first.
-        </p>
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title="Scheduled jobs">
+        A job that fails is loud. A job that stops being scheduled is silent, and silence looks
+        exactly like success — so it is reported first.
+      </PageHeader>
 
       <DataPanel<Silent>
         title="Jobs that have stopped running"
@@ -74,6 +73,7 @@ function Jobs() {
         description="State, next run, and the last 24 hours."
         fn="erp_job_health"
         empty="No jobs are configured for this tenant yet."
+        emptyAction={<SeedDemoAction />}
       >
         {(rows) => (
           <Table columns={["Job", "State", "Next run", "Running", "24h runs", "Failed", "Skipped"]}>
