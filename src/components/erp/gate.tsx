@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -122,15 +122,75 @@ function SignIn() {
   );
 }
 
+/**
+ * Signed in, but nobody here yet.
+ *
+ * This screen used to be a dead end, which was honest but not useful: it named
+ * the condition and offered no way out of it. An invitation token is the only
+ * door into a tenant — a service principal cannot be adopted as a person, by
+ * design — so the door belongs on the screen that reports the locked one.
+ */
 function NoTenant({ onSignOut }: { onSignOut: () => void }) {
+  const queryClient = useQueryClient();
+  const [token, setToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function redeem(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await callErp("erp_claim_invitation", { p_token: token.trim() });
+      // The session query is keyed on the auth user, and that has not changed —
+      // what changed is what the database will now say about them.
+      await queryClient.invalidateQueries({ queryKey: ["erp_session"] });
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   return (
     <Centred>
       <h1 className="text-lg font-semibold">No tenant for this account</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        You are signed in, but this identity does not resolve to a principal in any tenant. Until an
-        administrator creates one, there is no tenant context — and without a tenant context the
-        platform deliberately shows nothing rather than showing something.
+        You are signed in, but this identity does not resolve to a principal in any tenant. If
+        someone has invited you, redeem the token below. Otherwise an administrator needs to create
+        one — until then there is no tenant context, and without a tenant context the platform
+        deliberately shows nothing rather than showing something.
       </p>
+
+      <form onSubmit={redeem} className="mt-5 rounded-xl border border-border bg-card p-4">
+        <label className="block text-sm font-medium">
+          Invitation token
+          <input
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            required
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="64 hexadecimal characters"
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          disabled={busy || token.trim().length === 0}
+          className="mt-3 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+        >
+          {busy ? "Redeeming…" : "Redeem invitation"}
+        </button>
+        <p className="mt-2 text-xs text-muted-foreground">
+          A token works once and then never again.
+        </p>
+      </form>
+
       <button
         onClick={onSignOut}
         className="mt-5 rounded-md border border-input px-4 py-2 text-sm font-medium"
