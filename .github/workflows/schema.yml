@@ -126,6 +126,7 @@ jobs:
             "erp.assert_governed_views_are_safe()" \
             "erp.assert_intelligence_boundary()" \
             "erp.assert_public_api_safe()" \
+            "erp.assert_no_dead_configuration()" \
             "erp.assert_resource_coverage('en')"
           do
             printf '── %-45s' "$a"
@@ -144,7 +145,8 @@ jobs:
             "erp_test.assert_isolation_suite()" \
             "erp_test.assert_stock_invariants()" \
             "erp_test.assert_gateway_suite()" \
-            "erp_test.assert_provisioning_suite()"
+            "erp_test.assert_provisioning_suite()" \
+            "erp_test.assert_procurement_suite()"
           do
             $PSQL -tAc "select $s;"
           done
