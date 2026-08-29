@@ -24,6 +24,47 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * One-click exploration. Seeding creates a demo tenant — entities, sites, a
+ * viewer principal, and the caller's administrator grant — and makes it the
+ * working context, because the newest principal wins. Calling it again
+ * returns the same tenant rather than piling up copies.
+ */
+function DemoSeed() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () =>
+      callErp<{ tenant_id: string; already_existed: boolean }>("erp_seed_demo"),
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+
+  return (
+    <section className="rounded-xl border border-dashed border-border bg-card/50 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold">Explore with demo data</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Creates a demo tenant — two entities, three sites, a viewer principal — and switches
+            your working context to it. Your current tenant is untouched.
+          </p>
+        </div>
+        <button
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+          className="shrink-0 rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+        >
+          {mutation.isPending ? "Seeding…" : "Seed a demo tenant"}
+        </button>
+      </div>
+      {mutation.error ? (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {(mutation.error as Error).message}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function Overview() {
   const { session, scope } = useErpSession();
 
