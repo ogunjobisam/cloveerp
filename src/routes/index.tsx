@@ -135,6 +135,8 @@ function Overview() {
         </div>
       </section>
 
+      {!session.tenant?.code.startsWith("demo-") ? <DemoSeed /> : null}
+
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="text-sm font-semibold">Permissions held ({session.permissions.length})</h2>
         {session.permissions.length === 0 ? (
