@@ -135,6 +135,7 @@ jobs:
             "erp.assert_sales_controls_sane()" \
             "erp.assert_quality_logistics_sane()" \
             "erp.assert_finance_depth_sane()" \
+            "erp.assert_part5_coverage()" \
             "erp.assert_resource_coverage('en')"
           do
             printf '── %-45s' "$a"
