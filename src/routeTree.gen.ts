@@ -10,33 +10,89 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProductRouteImport } from './routes/product'
+import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
+import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
+import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProductRoute = ProductRouteImport.update({
+  id: '/product',
+  path: '/product',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
+  id: '/operations/assurance',
+  path: '/operations/assurance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsIntegrationsRoute = OperationsIntegrationsRouteImport.update({
+  id: '/operations/integrations',
+  path: '/operations/integrations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsJobsRoute = OperationsJobsRouteImport.update({
+  id: '/operations/jobs',
+  path: '/operations/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/product': typeof ProductRoute
+  '/operations/assurance': typeof OperationsAssuranceRoute
+  '/operations/integrations': typeof OperationsIntegrationsRoute
+  '/operations/jobs': typeof OperationsJobsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/product': typeof ProductRoute
+  '/operations/assurance': typeof OperationsAssuranceRoute
+  '/operations/integrations': typeof OperationsIntegrationsRoute
+  '/operations/jobs': typeof OperationsJobsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/product': typeof ProductRoute
+  '/operations/assurance': typeof OperationsAssuranceRoute
+  '/operations/integrations': typeof OperationsIntegrationsRoute
+  '/operations/jobs': typeof OperationsJobsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/product'
+    | '/operations/assurance'
+    | '/operations/integrations'
+    | '/operations/jobs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/product'
+    | '/operations/assurance'
+    | '/operations/integrations'
+    | '/operations/jobs'
+  id:
+    | '__root__'
+    | '/'
+    | '/product'
+    | '/operations/assurance'
+    | '/operations/integrations'
+    | '/operations/jobs'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ProductRoute: typeof ProductRoute
+  OperationsAssuranceRoute: typeof OperationsAssuranceRoute
+  OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
+  OperationsJobsRoute: typeof OperationsJobsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +104,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/product': {
+      id: '/product'
+      path: '/product'
+      fullPath: '/product'
+      preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations/assurance': {
+      id: '/operations/assurance'
+      path: '/operations/assurance'
+      fullPath: '/operations/assurance'
+      preLoaderRoute: typeof OperationsAssuranceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations/integrations': {
+      id: '/operations/integrations'
+      path: '/operations/integrations'
+      fullPath: '/operations/integrations'
+      preLoaderRoute: typeof OperationsIntegrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations/jobs': {
+      id: '/operations/jobs'
+      path: '/operations/jobs'
+      fullPath: '/operations/jobs'
+      preLoaderRoute: typeof OperationsJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ProductRoute: ProductRoute,
+  OperationsAssuranceRoute: OperationsAssuranceRoute,
+  OperationsIntegrationsRoute: OperationsIntegrationsRoute,
+  OperationsJobsRoute: OperationsJobsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
