@@ -147,7 +147,8 @@ jobs:
             "erp_test.assert_gateway_suite()" \
             "erp_test.assert_provisioning_suite()" \
             "erp_test.assert_procurement_suite()" \
-            "erp_test.assert_sales_suite()"
+            "erp_test.assert_sales_suite()" \
+            "erp_test.assert_finance_suite()"
           do
             $PSQL -tAc "select $s;"
           done
