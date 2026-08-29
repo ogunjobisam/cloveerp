@@ -11,7 +11,16 @@ export default tseslint.config(
   // regeneration and would churn the diff every time. It arrived unformatted and
   // put 160 errors into a previously clean lint; ignoring generated output is the
   // fix, reformatting it is not.
-  { ignores: ["dist", ".output", ".vinxi", "src/integrations/supabase/**"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      "src/integrations/supabase/**",
+      "worker/**",
+      "supabase/functions/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
