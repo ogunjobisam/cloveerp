@@ -23,22 +23,22 @@ jobs:
   build-and-assert:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        # The Supabase image, because pg_jsonschema is a Rust extension that is
-        # not installable from apt. Pinned, and pinned to the same major version
-        # the live project runs (PostgreSQL 17.6): an implicit upgrade of the
-        # database the product is verified against is not something to discover
-        # from a red build.
-        image: supabase/postgres:17.6.1.167
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+    # Deliberately NOT a `services:` container.
+    #
+    # The runner dumps a service container's entire stdout when it tears the job
+    # down. This image logs every statement it executes, so that dump was ~380KB
+    # of DDL — it swamped the retrievable log and left none of the step output
+    # readable, which is worthless when the build passes and actively harmful
+    # when it fails, because the failing assertion is buried in it.
+    #
+    # Two attempts to quieten the server were made first and both failed
+    # silently: ALTER SYSTEM (the setting is pinned ahead of it in this image)
+    # and a PGOPTIONS session GUC. Both left the log exactly as noisy while
+    # reporting success, which is the failure mode this whole workflow exists to
+    # catch — so neither belongs in it.
+    #
+    # A container started here is not managed by the runner and is therefore
+    # never dumped. That addresses the mechanism rather than the symptom.
 
     env:
       PGHOST: localhost
@@ -58,30 +58,32 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Quieten the database log
-        # The image logs every statement, and the runner dumps the service
-        # container's output when it tears the job down. On the first green run
-        # that was ~380KB of DDL: harmless while the build passes, and exactly
-        # the wrong thing to hand someone when it fails, because it buries the
-        # failing assertion under every statement of all 34 migrations.
-        #
-        # ALTER SYSTEM was tried first and did not work — the setting is pinned
-        # ahead of it in this image, so the statements kept logging. A session
-        # GUC does win, because nothing outranks the session.
-        #
-        # PGOPTIONS is applied at connection time, so getting it wrong breaks
-        # every later psql call rather than merely staying noisy. It is proven
-        # on a throwaway connection first and only exported if that connection
-        # actually succeeded. Log verbosity is a convenience, not a correctness
-        # property, and it must never be the reason a build goes red.
+      - name: Start PostgreSQL
+        # The Supabase image, because pg_jsonschema is a Rust extension that is
+        # not installable from apt. Pinned, and pinned to the major version the
+        # live project runs (17.6): an implicit upgrade of the database the
+        # product is verified against is not something to discover from a red
+        # build.
         run: |
-          OPTS="-c log_statement=none -c log_min_messages=warning"
-          if PGOPTIONS="$OPTS" psql -v ON_ERROR_STOP=1 -d postgres -tAc 'select 1' >/dev/null 2>&1; then
-            echo "PGOPTIONS=$OPTS" >> "$GITHUB_ENV"
-            echo "server log quietened for this job's connections"
-          else
-            echo "could not set the session log level; output will be verbose"
-          fi
+          set -euo pipefail
+          docker run -d --name erpware-pg \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            supabase/postgres:17.6.1.167
+
+          # Readiness is this step's job now that the runner is not doing it.
+          # Fail loudly on timeout rather than letting the next step present a
+          # connection refusal as if the schema were at fault.
+          for i in $(seq 1 60); do
+            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then
+              echo "ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL did not become ready within 60s" >&2
+          docker logs erpware-pg 2>&1 | tail -40 >&2
+          exit 1
 
       - name: Create the database
         run: |
