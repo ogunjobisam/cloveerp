@@ -9,9 +9,9 @@
 -- It exists for two reasons. It lets CI stand the product up from nothing on
 -- every push, which is what makes the assert_* functions in every migration
 -- mean anything. And it is the honest answer to "how much of this is locked to
--- Supabase" — the answer is the eighty lines below.
+-- Supabase" — the answer is the hundred lines below.
 --
--- Three things, in dependency order. The extensions are deliberately NOT here:
+-- Four things, in dependency order. The extensions are deliberately NOT here:
 -- each migration creates the one it needs (pgcrypto in 0001, pg_jsonschema in
 -- 0009, btree_gist in 0010), so a migration carries its own dependency rather
 -- than assuming someone else arranged it. All three must be *available* to the
@@ -24,9 +24,18 @@
 --      two never do. erp.session_is_trusted() reads rolbypassrls and nothing
 --      else, so this is the whole of the trust model.
 --
---   3. auth.uid(). The single point at which ERPWare touches the identity
---      provider. erp.principal_context() calls it and nothing else does.
---      Replacing your identity provider means replacing this function.
+--   3. auth.uid(). The point at which ERPWare learns WHO is calling.
+--      erp.principal_context() calls it and nothing else does.
+--
+--   4. auth.users, in the three columns the product actually reads. This was
+--      missing, and its absence was hiding something: the identity boundary is
+--      two things rather than one. erp.onboard_tenant() and erp.seed_demo()
+--      create a principal for a caller who has none, and erp.app_user requires
+--      an email of every person — which has to come from the verified identity
+--      rather than from the client, or anyone could claim to be anyone. So the
+--      product reads the subject's email back from the provider.
+--
+--      Replacing your identity provider means replacing both.
 -- =============================================================================
 
 -- 1. The schema the extensions install into ----------------------------------
@@ -76,14 +85,25 @@ as $$
 $$;
 
 comment on function auth.uid() is
-  'The identity boundary. Returns the authenticated subject from the session '
-  'JWT claims, or null. Swapping identity providers means swapping this '
-  'function and nothing else.';
+  'Half the identity boundary. Returns the authenticated subject from the '
+  'session JWT claims, or null. The other half is auth.users, which the two '
+  'self-service doors read the subject''s verified email back from.';
+
+-- The subject's verified identity, read back by the two self-service doors.
+-- On Supabase this table is the platform's and has forty columns; ERPWare
+-- reads three, and listing them here is the point of this file. Nothing in the
+-- product writes to it: an identity is created by signing up, not by ERPWare.
+create table if not exists auth.users (
+  id                 uuid primary key,
+  email              text,
+  raw_user_meta_data jsonb
+);
 
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+grant select on auth.users to authenticated, service_role;
 
--- 4. Make the claims GUC settable by unprivileged sessions --------------------
+-- A note on the claims GUC, which needs no setup --------------------------
 --
 -- PostgreSQL allows any session to set a custom GUC in a namespaced parameter,
 -- so nothing is required here beyond noting that ERPWare never trusts it

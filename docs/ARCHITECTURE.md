@@ -223,9 +223,25 @@ scratch, or by an assertion, or by running the thing.
 | A purchase order silently ran the _requisition's_ lifecycle               | Driving procurement end to end             |
 | Six `SECURITY DEFINER` functions on the public API                        | Assertions, after a parallel branch merged |
 | A seed with hard-coded UUIDs failed the build on an empty database        | CI going red                               |
+| Self-service tenants were never governed, permanently                     | Asking whether the product was too strict  |
+| A solo administrator could install no configuration at all                | The same question, from the other side     |
+| The two tenant-creation doors built two different tenants                 | Trying to configure one of them            |
+| 58 operations were reachable from nowhere                                 | Counting the public API against `erp.*`    |
 
-The last three arrived when a second line of work merged. The assertions caught
-all of them within minutes.
+The last three of the merge batch arrived when a second line of work merged.
+The assertions caught all of them within minutes.
+
+The four after that came from a question rather than a test — "is the app
+restrictive about writing to the database and creating tenants?" — and the
+answer turned out to be both yes and no at once, which is the shape of most of
+this section. `erp.guard_live_configuration()` reads the environment marked
+`is_self` to decide whether a tenant is still being built. The self-service door
+created no such row, so the guard's `coalesce(is_live, false)` answered "still
+being built" for ever: those tenants were not governed leniently, they were
+never governed. Meanwhile B6's refusal to let the author of a change set approve
+it — correct, and the reason the guard exists — meant a person on their own
+could not install a single module, because there was nobody else to approve it.
+Too loose and too tight, from the same missing row.
 
 ### The lesson
 
@@ -279,3 +295,21 @@ select * from erp.provision_tenant('acme', 'Acme Ltd',
 
 It returns a single-use token. The administrator signs in and redeems it; from
 then on everything goes through the gated API.
+
+**Creating a tenant for yourself** is the other door, and it is on the public
+API, because a signed-in caller with no principal is the one case where there is
+nothing to authorise against:
+
+```sql
+select public.erp_onboard_tenant('Acme Ltd', 'acme');
+```
+
+It builds the same tenant the operator door does — root entity, administrator
+role, `is_self` environment — with one difference: the environment is not yet
+live. That is the **bootstrap window**. Inside it, `erp.install_module_config()`
+approves and promotes in the same call, because separation of duties has nobody
+to separate from. `erp.go_live()` closes it, and refuses to close it over dead
+configuration or over a tenant with a single administrator — either would leave
+a tenant that is governed and unable to change. After that a self-service tenant
+is governed exactly as a provisioned one is: configuration moves through a
+promoted change set, and an author may not approve their own.
