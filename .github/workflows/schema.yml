@@ -134,6 +134,7 @@ jobs:
             "erp.assert_production_sane()" \
             "erp.assert_sales_controls_sane()" \
             "erp.assert_quality_logistics_sane()" \
+            "erp.assert_finance_depth_sane()" \
             "erp.assert_resource_coverage('en')"
           do
             printf '── %-45s' "$a"
@@ -162,7 +163,8 @@ jobs:
             "erp_test.assert_planning_suite()" \
             "erp_test.assert_production_suite()" \
             "erp_test.assert_sales_depth_suite()" \
-            "erp_test.assert_quality_logistics_suite()"
+            "erp_test.assert_quality_logistics_suite()" \
+            "erp_test.assert_finance_depth_suite()"
           do
             $PSQL -tAc "select $s;"
           done
