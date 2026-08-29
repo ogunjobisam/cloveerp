@@ -95,11 +95,20 @@ jobs:
         run: $PSQL -f supabase/ci/00_host_bootstrap.sql
 
       - name: Apply every migration, in order, to an empty database
+        # --single-transaction so a migration is atomic. Without it psql
+        # autocommits each statement, and a migration that fails halfway leaves
+        # the tables it managed to create behind — so the next attempt fails on
+        # "already exists" rather than on the real error, and the schema is in a
+        # state no migration describes. Found the hard way applying B9 to a
+        # scratch cluster.
+        #
+        # Safe here because no migration uses CREATE INDEX CONCURRENTLY or
+        # anything else that refuses to run inside a transaction block.
         run: |
           set -euo pipefail
           for f in supabase/migrations/*.sql; do
             echo "── $(basename "$f")"
-            $PSQL -f "$f"
+            $PSQL --single-transaction -f "$f"
           done
 
       - name: Structural assertions
