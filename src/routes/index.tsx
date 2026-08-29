@@ -165,10 +165,7 @@ function Pricing() {
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-surface/80">
           Fair Pricing
         </p>
-        <h2
-          id="pricing-heading"
-          className="mt-3 font-display text-2xl font-medium leading-tight"
-        >
+        <h2 id="pricing-heading" className="mt-3 font-display text-2xl font-medium leading-tight">
           From $29 per seat.
         </h2>
         <p className="mt-2 text-sm text-surface/80 text-pretty">
