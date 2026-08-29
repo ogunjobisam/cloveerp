@@ -420,20 +420,26 @@ begin
          (v_tenant, 'goods_receipt', v_entity, 'GRN-', 6, 'yearly', 1)
   on conflict (tenant_id, code) do nothing;
 
+  -- The movement column is what makes posting real. A goods receipt whose
+  -- base type declares affects_stock and which names no movement type commits,
+  -- looks posted, and moves nothing — which is the state this shipped in until
+  -- the posting bridge was built. erp.assert_no_dead_configuration() now
+  -- refuses it.
   insert into erp.document_type (
     tenant_id, code, base_type_code, name, entity_id,
-    state_machine_code, approval_chain_code, numbering_rule_id)
-  select v_tenant, x.code, x.base, x.name, v_entity, x.machine, x.chain, n.id
+    state_machine_code, approval_chain_code, numbering_rule_id, stock_movement_type)
+  select v_tenant, x.code, x.base, x.name, v_entity, x.machine, x.chain, n.id, x.movement
     from (values
-      ('requisition',    'requisition',    'Requisition',    'requisition',    null::text),
-      ('purchase_order', 'purchase_order', 'Purchase order', 'purchase_order', 'purchase_order_value'),
-      ('goods_receipt',  'receipt',        'Goods receipt',  'goods_receipt',  null)
-    ) as x(code, base, name, machine, chain)
+      ('requisition',    'requisition',    'Requisition',    'requisition',    null::text, null::text),
+      ('purchase_order', 'purchase_order', 'Purchase order', 'purchase_order', 'purchase_order_value', null),
+      ('goods_receipt',  'receipt',        'Goods receipt',  'goods_receipt',  null, 'goods_receipt')
+    ) as x(code, base, name, machine, chain, movement)
     join erp.numbering_rule n on n.tenant_id = v_tenant and n.code = x.code
   on conflict (tenant_id, code) do update
     set state_machine_code = excluded.state_machine_code,
         approval_chain_code = excluded.approval_chain_code,
-        numbering_rule_id = excluded.numbering_rule_id;
+        numbering_rule_id = excluded.numbering_rule_id,
+        stock_movement_type = excluded.stock_movement_type;
 
   return v_cs;
 end;

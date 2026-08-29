@@ -26,6 +26,12 @@ type NavItem = {
 const NAV: NavItem[] = [
   { to: "/", label: "Overview", description: "Tenant, scope and platform state" },
   {
+    to: "/sales",
+    label: "Sales",
+    permission: "sales.read",
+    description: "Quotations, orders and deliveries",
+  },
+  {
     to: "/operations/jobs",
     label: "Scheduled jobs",
     permission: "administration.jobs",
