@@ -287,6 +287,16 @@ begin
   end;
   return next;
 
+  -- --- 8. Erasure (spec 2.5) is the one route through the append-only guard --
+  case_name := 'a tenant session cannot open a purge';
+  begin
+    perform erp.begin_tenant_purge(v_tenant_a);
+    passed := false; detail := 'begin_tenant_purge was accepted';
+  exception when others then
+    passed := true; detail := sqlerrm;
+  end;
+  return next;
+
   -- ---------------------------------------------------------------------------
   -- Back to the owner, then the unauthenticated case.
   -- ---------------------------------------------------------------------------
@@ -328,16 +338,45 @@ begin
 
   execute format('set local role %I', v_owner);
 
+  -- A purge is scoped to the tenant it was opened for. Opening one for B must
+  -- not turn into a licence to erase A's evidence.
+  case_name := 'a purge opened for one tenant cannot remove another''s evidence';
+  perform erp.begin_tenant_purge(v_tenant_b);
+  select count(*) into v_count from erp.audit_entry where tenant_id = v_tenant_a;
+  if v_count = 0 then
+    passed := false;
+    detail := 'inconclusive: the other tenant had no audit rows to protect';
+  else
+    begin
+      delete from erp.audit_entry where tenant_id = v_tenant_a;
+      passed := false;
+      detail := format('%s audit row(s) of the other tenant were deleted', v_count);
+    exception when others then
+      passed := true; detail := sqlerrm;
+    end;
+  end if;
+  perform erp.end_tenant_purge();
+  return next;
+
   -- ---------------------------------------------------------------------------
   -- Fixtures are removed here for the case where the caller committed; the
   -- suite is normally run inside a transaction that is rolled back anyway.
+  --
+  -- Removing them exercises the erasure path rather than working around it: the
+  -- append-only guard refuses a plain DELETE, so each tenant is taken down
+  -- under its own purge, one at a time.
   -- ---------------------------------------------------------------------------
-  delete from erp.tenant where id in (v_tenant_a, v_tenant_b);
+  perform erp.begin_tenant_purge(v_tenant_a);
+  delete from erp.tenant where id = v_tenant_a;
+  perform erp.begin_tenant_purge(v_tenant_b);
+  delete from erp.tenant where id = v_tenant_b;
+  perform erp.end_tenant_purge();
   delete from erp_ref.currency where code = 'XTS';
 
 exception when others then
-  -- Never leave the session impersonating anybody.
+  -- Never leave the session impersonating anybody, or with a purge open.
   execute format('set local role %I', v_owner);
+  perform erp.end_tenant_purge();
   raise;
 end;
 $$;
