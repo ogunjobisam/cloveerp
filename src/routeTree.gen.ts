@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductRouteImport } from './routes/product'
+import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
@@ -25,6 +26,12 @@ const ProductRoute = ProductRouteImport.update({
   path: '/product',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministrationPermissionsRoute =
+  AdministrationPermissionsRouteImport.update({
+    id: '/administration/permissions',
+    path: '/administration/permissions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
   id: '/operations/assurance',
   path: '/operations/assurance',
@@ -44,6 +51,7 @@ const OperationsJobsRoute = OperationsJobsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/permissions': typeof AdministrationPermissionsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -51,6 +59,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/permissions': typeof AdministrationPermissionsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -59,6 +68,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/permissions': typeof AdministrationPermissionsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -68,6 +78,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/product'
+    | '/administration/permissions'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -75,6 +86,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/product'
+    | '/administration/permissions'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -82,6 +94,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/product'
+    | '/administration/permissions'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -90,6 +103,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProductRoute: typeof ProductRoute
+  AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
@@ -109,6 +123,13 @@ declare module '@tanstack/react-router' {
       path: '/product'
       fullPath: '/product'
       preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/permissions': {
+      id: '/administration/permissions'
+      path: '/administration/permissions'
+      fullPath: '/administration/permissions'
+      preLoaderRoute: typeof AdministrationPermissionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/operations/assurance': {
@@ -138,6 +159,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProductRoute: ProductRoute,
+  AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,

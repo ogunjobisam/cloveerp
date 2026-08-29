@@ -539,7 +539,7 @@ function RoleForm({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {byModule(([moduleCode, items]) => (
+        {byModule.map(([moduleCode, items]) => (
           <fieldset key={moduleCode} className="rounded-md border border-border/60 p-3">
             <legend className="px-1 font-mono text-xs text-muted-foreground">{moduleCode}</legend>
             <ul className="flex flex-col gap-1.5">
