@@ -977,7 +977,7 @@ begin
   delete from erp.tenant where id = v_other;
   perform erp.end_tenant_purge();
 
-  perform set_config('erp.job_tenant_id', '', false);
+  perform set_config('erp.job_tenant_id', '', true);
 end;
 $$;
 
