@@ -124,6 +124,7 @@ jobs:
             "erp.assert_gateway_integrity()" \
             "erp.assert_scheduler_integrity()" \
             "erp.assert_governed_views_are_safe()" \
+            "erp.assert_intelligence_boundary()" \
             "erp.assert_resource_coverage('en')"
           do
             printf '── %-45s' "$a"
