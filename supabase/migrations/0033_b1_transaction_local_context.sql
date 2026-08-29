@@ -170,9 +170,12 @@ $$;
 -- is the whole point: they run in one transaction and could never observe this.
 -- -----------------------------------------------------------------------------
 
+-- No `set search_path` clause, unlike every other routine here. PostgreSQL
+-- refuses transaction control inside a routine that carries a SET clause, so a
+-- procedure that must COMMIT cannot have one. Every identifier below is fully
+-- schema-qualified instead, which is what the SET clause was buying anyway.
 create or replace procedure erp_test.assert_context_not_leaked()
 language plpgsql
-set search_path = ''
 as $$
 declare
   v_tenant uuid;
