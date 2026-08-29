@@ -1,0 +1,141 @@
+name: schema
+
+# The product is a PostgreSQL schema, so the build is: stand it up from nothing
+# and make it prove itself. Every migration ends by calling assertions designed
+# to fail a build; without this workflow there was no build for them to fail.
+#
+# Two things this catches that applying migrations to a long-lived database
+# structurally cannot:
+#
+#   - Whether the migration sequence still applies to an EMPTY cluster. A
+#     database that has accumulated fixes out of band can be correct while the
+#     repository that is supposed to reproduce it is not.
+#   - Whether a test has quietly stopped existing. The suites assert their own
+#     case counts, because a suite that loses a case reports success.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-assert:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # The Supabase image, because pg_jsonschema is a Rust extension that is
+        # not installable from apt. Pinned, and pinned to the same major version
+        # the live project runs (PostgreSQL 17.6): an implicit upgrade of the
+        # database the product is verified against is not something to discover
+        # from a red build.
+        image: supabase/postgres:17.6.1.167
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: erpware
+      # Any notice is noise; an error must stop the run at the statement that
+      # caused it rather than carrying on and failing somewhere less useful.
+      PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Create the database
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres -c 'create database erpware'
+
+      - name: Bootstrap the host
+        # Everything ERPWare expects its host to provide, and nothing else. That
+        # this file is short is the point: it is the whole Supabase surface.
+        run: $PSQL -f supabase/ci/00_host_bootstrap.sql
+
+      - name: Apply every migration, in order, to an empty database
+        run: |
+          set -euo pipefail
+          for f in supabase/migrations/*.sql; do
+            echo "── $(basename "$f")"
+            $PSQL -f "$f"
+          done
+
+      - name: Structural assertions
+        # These read the catalogue: they answer "could this schema be wrong?"
+        # rather than "is this data wrong?", so they need no fixtures.
+        run: |
+          set -euo pipefail
+          for a in \
+            "erp.assert_isolation()" \
+            "erp.assert_audit_coverage()" \
+            "erp.assert_attribution_coverage()" \
+            "erp.assert_session_context_hygiene()" \
+            "erp.assert_gateway_integrity()" \
+            "erp.assert_resource_coverage('en')"
+          do
+            printf '── %-45s' "$a"
+            $PSQL -tAc "select $a;" | sed 's/^$/ok/'
+          done
+
+      - name: Adversarial suites
+        # Each creates its own tenants, attacks them, and cleans up after
+        # itself. Each also asserts its own case count, so a test that
+        # disappears fails the build instead of passing quietly.
+        run: |
+          set -euo pipefail
+          for s in \
+            "erp_test.assert_isolation_suite()" \
+            "erp_test.assert_stock_invariants()" \
+            "erp_test.assert_gateway_suite()"
+          do
+            $PSQL -tAc "select $s;"
+          done
+
+      - name: Context does not survive a commit
+        # The one property that cannot be tested inside a transaction, and
+        # therefore cannot live in the suites above: a tenant context set by one
+        # transaction must be gone in the next, or a pooled connection carries
+        # it to whoever is served next.
+        run: $PSQL -c 'call erp_test.assert_context_not_leaked();'
+
+      - name: The generators are idempotent
+        # Row security, append-only guards, attribution and audit coverage are
+        # all GENERATED from the table registry, and every migration ends by
+        # running them again. If a second run produced a different schema, then
+        # what a table's protection is would depend on how many migrations had
+        # happened to run since it was created.
+        #
+        # This re-runs the generators, not the migrations: the migrations use
+        # bare CREATE TABLE and are not designed to be applied twice.
+        run: |
+          set -euo pipefail
+          shape() {
+            $PSQL -tAc "select (select count(*) from pg_policy)
+                            || '/' || (select count(*) from pg_trigger where not tgisinternal)"
+          }
+          before=$(shape)
+          $PSQL -q >/dev/null <<'SQL'
+          set client_min_messages = warning;
+          select erp.apply_row_security();
+          select erp.apply_append_only_guards();
+          select erp.apply_attribution_triggers();
+          select erp.apply_audit_coverage();
+          SQL
+          after=$(shape)
+          echo "policies/triggers before: $before   after: $after"
+          test "$before" = "$after"
