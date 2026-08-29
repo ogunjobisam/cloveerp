@@ -1,37 +1,47 @@
--- 1. Tenant administrator role + grant for the test admin in the Finance smoke tenant
-with r as (
-  insert into erp.role (tenant_id, code, name_key, name, description, status)
-  values (
-    'c59e86ce-5d50-4aa2-b6e2-456d97459828',
-    'tenant-admin',
-    'role.tenant_admin.name',
-    'Tenant administrator',
-    'Full access to every module and action in this tenant.',
-    'active'::erp.record_status)
-  on conflict do nothing
-  returning id
-), r2 as (
-  select id from r
-  union all
-  select id from erp.role
-   where tenant_id='c59e86ce-5d50-4aa2-b6e2-456d97459828' and code='tenant-admin'
-  limit 1
-)
-insert into erp.role_permission (tenant_id, role_id, permission_code, data_classes)
-select 'c59e86ce-5d50-4aa2-b6e2-456d97459828', r2.id, p.code, '{}'
-from r2 cross join erp_ref.permission p
-on conflict do nothing;
+-- 1. Tenant administrator role + grant for the test admin in the Finance smoke
+-- tenant.
+--
+-- Guarded, because it names two rows by literal UUID and neither exists in an
+-- empty database. Unguarded it raised a foreign-key violation, and since every
+-- migration is applied with --single-transaction the whole file rolled back —
+-- taking erp.provision_tenant_admin(), public.erp_onboard_tenant() and
+-- public.erp_seed_demo() with it. That is why the schema build went red on
+-- "Added perms mgmt & demo seed": not the seed data, but everything defined
+-- after it.
+--
+-- A seed for one specific tenant is environment data, not schema, so it should
+-- never have been able to fail a build. Skipping it where the tenant is absent
+-- is a no-op on the database it was written for.
+do $seed$
+declare
+  v_tenant constant uuid := 'c59e86ce-5d50-4aa2-b6e2-456d97459828';
+  v_user   constant uuid := '5dff2d8a-487a-458c-8cbc-ab0c62148a03';
+  v_role   uuid;
+begin
+  if not exists (select 1 from erp.tenant where id = v_tenant)
+     or not exists (select 1 from erp.app_user where id = v_user) then
+    raise notice 'skipping the Finance smoke seed: tenant or principal absent';
+    return;
+  end if;
 
-insert into erp.user_role (tenant_id, app_user_id, role_id, valid_from, granted_by, grant_reason)
-select 'c59e86ce-5d50-4aa2-b6e2-456d97459828',
-       '5dff2d8a-487a-458c-8cbc-ab0c62148a03',
-       r.id,
-       current_date,
-       '5dff2d8a-487a-458c-8cbc-ab0c62148a03',
-       'Initial administrator grant'
-from erp.role r
-where r.tenant_id='c59e86ce-5d50-4aa2-b6e2-456d97459828' and r.code='tenant-admin'
-on conflict do nothing;
+  insert into erp.role (tenant_id, code, name_key, name, description, status)
+  values (v_tenant, 'tenant-admin', 'role.tenant_admin.name', 'Tenant administrator',
+          'Full access to every module and action in this tenant.',
+          'active'::erp.record_status)
+  on conflict (tenant_id, code) do update set name = excluded.name
+  returning id into v_role;
+
+  insert into erp.role_permission (tenant_id, role_id, permission_code, data_classes)
+  select v_tenant, v_role, p.code, '{}' from erp_ref.permission p
+  on conflict do nothing;
+
+  insert into erp.user_role (tenant_id, app_user_id, role_id, valid_from,
+                             granted_by, grant_reason)
+  values (v_tenant, v_user, v_role, current_date, v_user,
+          'Initial administrator grant')
+  on conflict do nothing;
+end;
+$seed$;
 
 -- 2. Shared helper: create admin role (all permissions) + grant for a principal
 create or replace function erp.provision_tenant_admin(p_tenant_id uuid, p_app_user_id uuid, p_granted_by uuid)

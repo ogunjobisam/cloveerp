@@ -126,6 +126,7 @@ jobs:
             "erp.assert_governed_views_are_safe()" \
             "erp.assert_intelligence_boundary()" \
             "erp.assert_public_api_safe()" \
+            "erp.assert_no_dead_configuration()" \
             "erp.assert_resource_coverage('en')"
           do
             printf '── %-45s' "$a"
@@ -135,13 +136,17 @@ jobs:
       - name: Adversarial suites
         # Each creates its own tenants, attacks them, and cleans up after
         # itself. Each also asserts its own case count, so a test that
-        # disappears fails the build instead of passing quietly.
+        # disappears fails the build instead of passing quietly — which was
+        # true of the isolation suite alone until 0044; the stock and gateway
+        # suites reported n/n without ever saying what n should be.
         run: |
           set -euo pipefail
           for s in \
             "erp_test.assert_isolation_suite()" \
             "erp_test.assert_stock_invariants()" \
-            "erp_test.assert_gateway_suite()"
+            "erp_test.assert_gateway_suite()" \
+            "erp_test.assert_provisioning_suite()" \
+            "erp_test.assert_procurement_suite()"
           do
             $PSQL -tAc "select $s;"
           done

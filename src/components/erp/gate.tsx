@@ -125,25 +125,35 @@ function SignIn() {
 /**
  * The onboarding state: signed in, but resolving to no principal anywhere.
  *
- * Rather than leaving this as a dead end for an administrator to fix, it is
- * the one place a tenant can be born: the caller names it, and the database
- * creates the tenant, their principal, an administrator role holding every
- * permission, and the grant between them — in one transaction, because
- * half of that list is worse than none of it.
+ * Two ways out, because there are two ways to arrive here and only one of them
+ * is a new customer.
+ *
+ * Creating a tenant makes the caller its first principal, with an
+ * administrator role holding every permission — tenant, principal, role and
+ * grant in one transaction, because half of that list is worse than none.
+ *
+ * Redeeming an invitation is the other: somebody already inside a tenant
+ * created a principal for this person and handed them a single-use token. It
+ * belongs on the same screen, since from here the two states are
+ * indistinguishable — you are signed in and the database has nothing to say
+ * about you.
  */
 function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"create" | "demo" | null>(null);
+  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | null>(null);
 
-  async function run(which: "create" | "demo") {
+  async function run(which: "create" | "demo" | "redeem") {
     setBusy(which);
     setError(null);
     try {
       if (which === "create") {
         await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
+      } else if (which === "redeem") {
+        await callErp("erp_claim_invitation", { p_token: token.trim() });
       } else {
         await callErp("erp_seed_demo");
       }
@@ -222,6 +232,31 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
         >
           {busy === "demo" ? "Seeding…" : "Explore a seeded demo tenant instead"}
         </button>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <label className="block text-sm font-medium">
+            Been invited instead?
+            <input
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="Paste your invitation token"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => run("redeem")}
+            disabled={busy !== null || token.trim().length === 0}
+            className="mt-2 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+          >
+            {busy === "redeem" ? "Redeeming…" : "Redeem invitation"}
+          </button>
+          <p className="mt-2 text-xs text-muted-foreground">
+            A token works once and then never again.
+          </p>
+        </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <button type="button" onClick={onSignOut} className="underline underline-offset-2">

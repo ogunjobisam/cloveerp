@@ -33,8 +33,7 @@ function Field({ label, value }: { label: string; value: string }) {
 function DemoSeed() {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () =>
-      callErp<{ tenant_id: string; already_existed: boolean }>("erp_seed_demo"),
+    mutationFn: () => callErp<{ tenant_id: string; already_existed: boolean }>("erp_seed_demo"),
     onSuccess: () => queryClient.invalidateQueries(),
   });
 

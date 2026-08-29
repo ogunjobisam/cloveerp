@@ -1,0 +1,16 @@
+{
+  "name": "erpware-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "typescript": "^5.8.3"
+  }
+}

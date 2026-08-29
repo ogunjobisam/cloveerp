@@ -1,8 +1,9 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import type { ErpSession } from "../../lib/erp";
-import { hasPermission } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
 
 /**
  * The application shell.
@@ -82,6 +83,61 @@ function ScopeSelect({
   );
 }
 
+type MyTenant = {
+  tenant_id: string;
+  code: string;
+  name: string;
+  principal_id: string;
+  is_active: boolean;
+};
+
+/**
+ * Which tenant am I working in?
+ *
+ * Only rendered when the answer is not obvious — one membership needs no
+ * chooser. It exists because membership became per-tenant, and the database
+ * was resolving the resulting ambiguity by insertion order: newest principal
+ * wins. That is not a choice, and a person in two tenants had no way to reach
+ * the other one. The switcher is the other half of that change.
+ */
+function TenantSwitch() {
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["erp_my_tenants"],
+    queryFn: () => callErp<MyTenant[]>("erp_my_tenants"),
+  });
+
+  const choose = useMutation({
+    mutationFn: (tenantId: string) => callErp("erp_set_active_tenant", { p_tenant_id: tenantId }),
+    // Everything on screen is scoped to the tenant that just changed.
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+
+  if (!data || data.length < 2) return null;
+
+  const active = data.find((t) => t.is_active)?.tenant_id ?? "";
+
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Tenant
+      </span>
+      <select
+        value={active}
+        disabled={choose.isPending}
+        onChange={(e) => choose.mutate(e.target.value)}
+        className="rounded-md border border-input bg-background px-2 py-1.5 text-sm disabled:opacity-60"
+      >
+        {data.map((t) => (
+          <option key={t.tenant_id} value={t.tenant_id}>
+            {t.code} — {t.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export type Scope = { entityId: string; siteId: string };
 
 export function Shell({
@@ -129,6 +185,7 @@ export function Shell({
           </div>
 
           <div className="ml-auto flex items-end gap-3">
+            <TenantSwitch />
             <ScopeSelect
               label="Entity"
               value={scope.entityId}
