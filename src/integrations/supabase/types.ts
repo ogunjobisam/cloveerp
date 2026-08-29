@@ -23,7 +23,12 @@ export type Database = {
       erp_integration_backlog: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_health: { Args: never; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
+      erp_onboard_tenant: {
+        Args: { p_code: string; p_name: string }
+        Returns: Json
+      }
       erp_platform_assurance: { Args: never; Returns: Json }
+      erp_seed_demo: { Args: never; Returns: Json }
       erp_session: { Args: never; Returns: Json }
       erp_silent_jobs: { Args: never; Returns: Json }
     }
