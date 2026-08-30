@@ -182,6 +182,10 @@ export type Database = {
         Args: { p_task_id: string; p_waiver_reason?: string }
         Returns: string
       }
+      erp_complete_warehouse_task: {
+        Args: { p_quantity?: number; p_task_id: string }
+        Returns: Json
+      }
       erp_configure_finance: {
         Args: { p_currency?: string; p_fiscal_year?: number }
         Returns: string
@@ -288,6 +292,10 @@ export type Database = {
           | "destroy"
       }
       erp_document: { Args: { p_document_id: string }; Returns: Json }
+      erp_document_lines: {
+        Args: { p_document_id?: string; p_limit?: number; p_type_code?: string }
+        Returns: Json
+      }
       erp_document_types: { Args: { p_base_type_code?: string }; Returns: Json }
       erp_documents: {
         Args: { p_limit?: number; p_type_code?: string }
@@ -311,6 +319,7 @@ export type Database = {
       erp_export_tenant: { Args: never; Returns: Json }
       erp_fiscal_periods: { Args: never; Returns: Json }
       erp_fixed_asset_register: { Args: { p_as_at?: string }; Returns: Json }
+      erp_forecast_versions: { Args: { p_limit?: number }; Returns: Json }
       erp_go_live: { Args: never; Returns: Json }
       erp_grant_role: {
         Args: {
@@ -324,6 +333,7 @@ export type Database = {
       }
       erp_grni: { Args: never; Returns: Json }
       erp_import_batches: { Args: { p_limit?: number }; Returns: Json }
+      erp_inspections: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_backlog: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_health: { Args: never; Returns: Json }
       erp_intercompany_position: { Args: never; Returns: Json }
@@ -361,6 +371,7 @@ export type Database = {
       }
       erp_items: { Args: { p_search?: string }; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
+      erp_landed_costs: { Args: { p_limit?: number }; Returns: Json }
       erp_ledgers: { Args: never; Returns: Json }
       erp_link_documents: {
         Args: {
@@ -380,6 +391,7 @@ export type Database = {
         Returns: string
       }
       erp_load_import: { Args: { p_batch_id: string }; Returns: number }
+      erp_locations: { Args: { p_site_id?: string }; Returns: Json }
       erp_log_recall_action: {
         Args: {
           p_action_kind: string
@@ -393,6 +405,14 @@ export type Database = {
         Returns: number
       }
       erp_match_workbench: { Args: never; Returns: Json }
+      erp_merge_batches: {
+        Args: {
+          p_reason: string
+          p_source_batch_id: string
+          p_target_batch_id: string
+        }
+        Returns: Json
+      }
       erp_merge_master_record: {
         Args: {
           p_duplicate_id: string
@@ -437,6 +457,7 @@ export type Database = {
         Args: { p_role_kind?: string; p_search?: string }
         Returns: Json
       }
+      erp_payment_proposals: { Args: { p_limit?: number }; Returns: Json }
       erp_permissions_directory: { Args: never; Returns: Json }
       erp_plan_shipment: {
         Args: {
@@ -557,6 +578,7 @@ export type Database = {
         }
         Returns: string
       }
+      erp_raise_putaway_tasks: { Args: { p_site_id: string }; Returns: number }
       erp_raise_quality_event: {
         Args: {
           p_batch_id?: string
@@ -586,6 +608,10 @@ export type Database = {
           p_title: string
         }
         Returns: string
+      }
+      erp_raise_replenishment_tasks: {
+        Args: { p_site_id: string }
+        Returns: number
       }
       erp_raise_works_order: {
         Args: {
@@ -672,6 +698,10 @@ export type Database = {
         Args: { p_document_id: string; p_reason: string }
         Returns: undefined
       }
+      erp_release_sequence: {
+        Args: { p_limit?: number; p_site_id?: string }
+        Returns: Json
+      }
       erp_release_works_order: {
         Args: { p_allow_shortage?: boolean; p_works_order_id: string }
         Returns:
@@ -701,6 +731,16 @@ export type Database = {
       }
       erp_resolve_price: {
         Args: { p_item_id: string; p_party_id: string; p_quantity?: number }
+        Returns: Json
+      }
+      erp_resolve_purchase_price: {
+        Args: {
+          p_item_id: string
+          p_on?: string
+          p_party_id: string
+          p_quantity?: number
+          p_site_id?: string
+        }
         Returns: Json
       }
       erp_resource_catalog: { Args: { p_locale?: string }; Returns: Json }
@@ -739,6 +779,7 @@ export type Database = {
         Returns: Json
       }
       erp_seed_demo: { Args: never; Returns: Json }
+      erp_seed_demo_operations: { Args: never; Returns: Json }
       erp_select_carrier: {
         Args: { p_required_by?: string; p_shipment_id: string }
         Returns: Json
@@ -797,6 +838,7 @@ export type Database = {
       }
       erp_stock_ageing: { Args: never; Returns: Json }
       erp_stock_health: { Args: never; Returns: Json }
+      erp_stock_provision: { Args: never; Returns: Json }
       erp_stock_valuation: { Args: never; Returns: Json }
       erp_submit_change_request: {
         Args: { p_request_id: string }
@@ -832,6 +874,10 @@ export type Database = {
         Returns: Json
       }
       erp_validate_import: { Args: { p_batch_id: string }; Returns: Json }
+      erp_warehouse_tasks: {
+        Args: { p_kind?: string; p_limit?: number; p_site_id?: string }
+        Returns: Json
+      }
       erp_works_order_availability: {
         Args: { p_works_order_id: string }
         Returns: Json
