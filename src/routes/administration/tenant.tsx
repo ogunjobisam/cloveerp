@@ -72,6 +72,8 @@ function TenantLifecycle() {
 
       {mayAdminister ? <BrandingPanel /> : null}
 
+      <EncryptionKeysPanel />
+
       <DemoOperationsPanel />
 
       <ExportPanel />
