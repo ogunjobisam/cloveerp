@@ -58,6 +58,10 @@ export function UserMenu({
     queryFn: () => callErp<MyTenant[]>("erp_my_tenants"),
   });
 
+  // Asked on every signed-in account: the console is only offered to the
+  // platform's own staff, and that is not a tenant permission.
+  const platform = usePlatformMe();
+
   const choose = useMutation({
     mutationFn: (tenantId: string) => callErp("erp_set_active_tenant", { p_tenant_id: tenantId }),
     // Everything on screen is scoped to the tenant that just changed.
