@@ -102,7 +102,7 @@ export function Launchpad() {
       {journey.length > 0 ? (
         <div className="relative overflow-hidden rounded-2xl border border-border bg-card/70 p-4 shadow-[var(--shadow-card)] backdrop-blur-sm sm:p-6">
           <div className="pointer-events-none absolute inset-0 hairline-grid opacity-20" />
-          <div className="relative flex flex-col gap-7">
+          <div className="relative flex flex-col gap-5">
             <div className="min-w-0">
               <h2 className="font-display text-lg font-semibold tracking-tight">The flow</h2>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -110,9 +110,28 @@ export function Launchpad() {
                 account may open.
               </p>
             </div>
-            {journey.map((group, i) => (
-              <Section key={group} group={group} index={i + 1} tiles={inGroup(group)} />
-            ))}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {journey.map((group, i) => (
+                <div key={group} className="flex min-w-0 flex-col gap-2">
+                  <div className="flex items-baseline gap-2 border-b border-border pb-1.5">
+                    <span className="font-mono text-[11px] font-semibold text-accent">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="truncate font-display text-xs font-semibold uppercase tracking-wide">
+                      {GROUP_LABELS[group]}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    {GROUP_BLURBS[group]}
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {inGroup(group).map((tile) => (
+                      <Tile key={tile.path} tile={tile} dense />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
