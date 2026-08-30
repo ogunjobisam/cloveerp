@@ -30,6 +30,10 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_add_party_role: {
+        Args: { p_party_id: string; p_role_kind: string }
+        Returns: Json
+      }
       erp_allocate_landed_cost: {
         Args: { p_landed_cost_id: string }
         Returns: number
@@ -78,6 +82,10 @@ export type Database = {
       }
       erp_available_to_promise: {
         Args: { p_item_id: string; p_on?: string; p_site_id: string }
+        Returns: Json
+      }
+      erp_available_transitions: {
+        Args: { p_document_id: string }
         Returns: Json
       }
       erp_batch_audit: { Args: { p_batch_id: string }; Returns: Json }
@@ -209,11 +217,30 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_create_item: {
+        Args: {
+          p_code: string
+          p_is_batch_controlled?: boolean
+          p_item_class?: string
+          p_name: string
+        }
+        Returns: Json
+      }
+      erp_create_party: {
+        Args: {
+          p_code: string
+          p_country_code?: string
+          p_name: string
+          p_role_kind?: string
+        }
+        Returns: Json
+      }
       erp_create_service_principal: {
         Args: { p_display_name: string }
         Returns: Json
       }
       erp_credit_position: { Args: { p_party_id: string }; Returns: Json }
+      erp_currencies: { Args: never; Returns: Json }
       erp_data_quality: { Args: { p_object_type: string }; Returns: Json }
       erp_delivery_performance: { Args: { p_days?: number }; Returns: Json }
       erp_disposition_inspection: {
@@ -239,6 +266,7 @@ export type Database = {
           | "destroy"
       }
       erp_document: { Args: { p_document_id: string }; Returns: Json }
+      erp_document_types: { Args: { p_base_type_code?: string }; Returns: Json }
       erp_documents: {
         Args: { p_limit?: number; p_type_code?: string }
         Returns: Json
@@ -306,6 +334,7 @@ export type Database = {
         }
         Returns: number
       }
+      erp_items: { Args: { p_search?: string }; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
       erp_link_documents: {
         Args: {
@@ -377,6 +406,10 @@ export type Database = {
       }
       erp_part5_coverage: { Args: { p_section?: string }; Returns: Json }
       erp_part5_summary: { Args: never; Returns: Json }
+      erp_parties: {
+        Args: { p_role_kind?: string; p_search?: string }
+        Returns: Json
+      }
       erp_permissions_directory: { Args: never; Returns: Json }
       erp_plan_shipment: {
         Args: {
