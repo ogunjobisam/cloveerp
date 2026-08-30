@@ -380,6 +380,133 @@ export const FINANCE: ModuleDef = {
   blurb: "Trial balance, periods, receivables, tax and assets, read from the posted ledger.",
   permission: "finance.read",
   group: "settle",
+  actions: [
+    {
+      label: "Open a period close",
+      permission: "finance.close_period",
+      fn: "erp_open_period_close",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "status"],
+          "p_fiscal_period_id",
+          "Period",
+        ),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status"],
+    },
+    {
+      label: "Complete a close task",
+      permission: "finance.close_period",
+      fn: "erp_complete_close_task",
+      fields: [
+        { kind: "text", name: "p_task_id", label: "Task id", required: true },
+        { kind: "text", name: "p_waiver_reason", label: "Waiver reason" },
+      ],
+      invalidates: ["erp_close_status"],
+    },
+    {
+      label: "Close a period",
+      permission: "finance.close_period",
+      fn: "erp_close_period",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "status"],
+          "p_fiscal_period_id",
+          "Period",
+        ),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_trial_balance"],
+    },
+    {
+      label: "Reopen a period",
+      permission: "finance.reopen_period",
+      fn: "erp_reopen_period",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "status"],
+          "p_fiscal_period_id",
+          "Period",
+        ),
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status"],
+    },
+    {
+      label: "Propose a payment run",
+      permission: "finance.approve_payment",
+      fn: "erp_propose_payment_run",
+      fields: [
+        { kind: "date", name: "p_payment_date", label: "Payment date" },
+        { kind: "text", name: "p_currency", label: "Currency", hint: "Three-letter code." },
+      ],
+      invalidates: ["erp_payment_runs", "erp_payables_ageing"],
+    },
+    {
+      label: "Approve a payment run",
+      permission: "finance.approve_payment",
+      fn: "erp_approve_payment_run",
+      fields: [{ kind: "text", name: "p_proposal_id", label: "Proposal id", required: true }],
+      invalidates: ["erp_payment_runs", "erp_payables_ageing"],
+    },
+    {
+      label: "Apply cash",
+      permission: "finance.post",
+      fn: "erp_apply_cash",
+      fields: [
+        pickParty("customer"),
+        {
+          kind: "number",
+          name: "p_amount_minor",
+          label: "Amount",
+          required: true,
+          hint: "In minor units — pence, cents.",
+        },
+        { kind: "text", name: "p_currency", label: "Currency", required: true },
+        { kind: "text", name: "p_reference", label: "Reference" },
+      ],
+      invalidates: ["erp_receivables_ageing", "erp_dunning_worklist", "erp_trial_balance"],
+    },
+    {
+      label: "Invoice a delivery",
+      permission: "sales.invoice",
+      fn: "erp_invoice_from_delivery",
+      fields: [
+        pickFrom(
+          "erp_documents",
+          "document_id",
+          ["document_number", "status"],
+          "p_delivery_id",
+          "Delivery",
+          { p_type_code: null, p_limit: 100 },
+        ),
+        {
+          kind: "choice",
+          name: "p_allow_self_invoice",
+          label: "Allow self-invoice",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+        },
+      ],
+      invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
+    },
+    {
+      label: "Allocate a landed cost",
+      permission: "finance.post",
+      fn: "erp_allocate_landed_cost",
+      fields: [{ kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true }],
+      invalidates: ["erp_trial_balance", "erp_stock_valuation"],
+    },
+  ],
+
   kpis: [
     {
       label: "Receivables",
