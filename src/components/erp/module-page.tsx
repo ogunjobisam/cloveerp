@@ -3,9 +3,11 @@ import { useState, type ReactNode } from "react";
 
 import { useT } from "../../lib/i18n";
 import { GROUP_LABELS, type ModuleDef, type Panel } from "../../lib/modules";
+import { ActionBar } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { KpiRow, MiniBars } from "./kpi";
 import { RefreshButton, TOUCH } from "./page";
+
 
 /**
  * The object page every module shares.
@@ -128,6 +130,12 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
 
       {tab === "work" ? (
         <div className="flex min-w-0 flex-col gap-4">
+          {def.actions && def.actions.length > 0 ? (
+            <ActionBar
+              actions={def.actions}
+              note="The database authorises every one of these; you only see the ones you hold."
+            />
+          ) : null}
           {def.worklists.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               This module has no worklist of its own. Its reports are under Reports.
@@ -137,6 +145,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           )}
         </div>
       ) : null}
+
 
       {tab === "reports" ? (
         <div className="flex min-w-0 flex-col gap-4">{def.reports.map(panelOf)}</div>
