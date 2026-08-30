@@ -8,9 +8,17 @@ export const Route = createFileRoute("/finance/")({
   head: () => ({
     meta: [
       { title: "Finance — ERPWare" },
-      { name: "description", content: "Trial balance, fiscal periods, receivables ageing, dunning, tax and fixed assets from the posted ledger." },
+      {
+        name: "description",
+        content:
+          "Trial balance, fiscal periods, receivables ageing, dunning, tax and fixed assets from the posted ledger.",
+      },
       { property: "og:title", content: "Finance — ERPWare" },
-      { property: "og:description", content: "Trial balance, fiscal periods, receivables ageing, dunning, tax and fixed assets from the posted ledger." },
+      {
+        property: "og:description",
+        content:
+          "Trial balance, fiscal periods, receivables ageing, dunning, tax and fixed assets from the posted ledger.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

@@ -8,9 +8,17 @@ export const Route = createFileRoute("/quality/")({
   head: () => ({
     meta: [
       { title: "Quality and recall — ERPWare" },
-      { name: "description", content: "Quality events, dispositions, supplier qualification and recalls against a regulatory clock." },
+      {
+        name: "description",
+        content:
+          "Quality events, dispositions, supplier qualification and recalls against a regulatory clock.",
+      },
       { property: "og:title", content: "Quality and recall — ERPWare" },
-      { property: "og:description", content: "Quality events, dispositions, supplier qualification and recalls against a regulatory clock." },
+      {
+        property: "og:description",
+        content:
+          "Quality events, dispositions, supplier qualification and recalls against a regulatory clock.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

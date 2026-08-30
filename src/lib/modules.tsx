@@ -462,7 +462,10 @@ export const PLANNING: ModuleDef = {
       label: "Unacknowledged",
       fn: "erp_planning_exceptions",
       compute: (rows) =>
-        zeroIsGood(count(rows, (r) => !r["is_acknowledged"]), "nobody has looked at these"),
+        zeroIsGood(
+          count(rows, (r) => !r["is_acknowledged"]),
+          "nobody has looked at these",
+        ),
     },
     {
       label: "Planned orders",
@@ -662,7 +665,9 @@ export const QUALITY: ModuleDef = {
       label: "Qualified suppliers",
       fn: "erp_supplier_qualification",
       compute: (rows) => ({
-        value: String(count(rows, (r) => isOneOf(r["status"], ["approved", "active", "qualified"]))),
+        value: String(
+          count(rows, (r) => isOneOf(r["status"], ["approved", "active", "qualified"])),
+        ),
         hint: `of ${rows.length} assessed`,
       }),
     },
@@ -745,7 +750,11 @@ export const LOGISTICS: ModuleDef = {
     {
       label: "Awaiting despatch",
       fn: "erp_shipments",
-      compute: (rows) => zeroIsGood(count(rows, (r) => !r["actual_despatch"]), "not yet left site"),
+      compute: (rows) =>
+        zeroIsGood(
+          count(rows, (r) => !r["actual_despatch"]),
+          "not yet left site",
+        ),
     },
     {
       label: "OTIF",

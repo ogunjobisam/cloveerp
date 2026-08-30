@@ -179,21 +179,21 @@ function NavList({
             )}
             <ul className="flex flex-col gap-1">
               {inGroup.map((item) => {
-          const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-          return (
-            <li key={item.to}>
-              <Link
-                to={item.to}
-                onClick={onNavigate}
-                className={[
-                  TOUCH,
-                  "flex items-center rounded-md px-3 text-sm transition-colors",
-                  active
-                    ? "bg-primary/10 font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                ].join(" ")}
-              >
-                {t(item.labelKey, item.label)}
+                const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+                return (
+                  <li key={item.to}>
+                    <Link
+                      to={item.to}
+                      onClick={onNavigate}
+                      className={[
+                        TOUCH,
+                        "flex items-center rounded-md px-3 text-sm transition-colors",
+                        active
+                          ? "bg-primary/10 font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {t(item.labelKey, item.label)}
                     </Link>
                   </li>
                 );

@@ -8,9 +8,17 @@ export const Route = createFileRoute("/production/")({
   head: () => ({
     meta: [
       { title: "Production — ERPWare" },
-      { name: "description", content: "Works orders and their progress against plan, including completed and scrapped quantity." },
+      {
+        name: "description",
+        content:
+          "Works orders and their progress against plan, including completed and scrapped quantity.",
+      },
       { property: "og:title", content: "Production — ERPWare" },
-      { property: "og:description", content: "Works orders and their progress against plan, including completed and scrapped quantity." },
+      {
+        property: "og:description",
+        content:
+          "Works orders and their progress against plan, including completed and scrapped quantity.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

@@ -8,9 +8,15 @@ export const Route = createFileRoute("/logistics/")({
   head: () => ({
     meta: [
       { title: "Logistics — ERPWare" },
-      { name: "description", content: "Shipments, carrier bookings and on-time-in-full delivery performance." },
+      {
+        name: "description",
+        content: "Shipments, carrier bookings and on-time-in-full delivery performance.",
+      },
       { property: "og:title", content: "Logistics — ERPWare" },
-      { property: "og:description", content: "Shipments, carrier bookings and on-time-in-full delivery performance." },
+      {
+        property: "og:description",
+        content: "Shipments, carrier bookings and on-time-in-full delivery performance.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
