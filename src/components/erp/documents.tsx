@@ -61,10 +61,15 @@ export function DocumentPanel({
 }) {
   const { session, scope } = useErpSession();
 
-  const { data: types } = useQuery({
+  const {
+    data: types,
+    isPending: typesPending,
+    error: typesError,
+  } = useQuery({
     queryKey: ["erp_document_types", { p_base_type_code: baseType }],
     queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: baseType }),
   });
+
 
   const { data: currencies } = useQuery({
     queryKey: ["erp_currencies", {}],
