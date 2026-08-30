@@ -133,6 +133,28 @@ function Classification() {
         <RefreshButton />
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ConfigTransfer
+          objectType="classification_axis"
+          title="Axes as a file"
+          description="Download what is configured, edit it, check it, load it."
+          invalidates={["erp_classification_axes", "erp_classification_gaps"]}
+        />
+        <ConfigTransfer
+          objectType="classification_value"
+          title="Values as a file"
+          description="Each row names its axis by code; a parent value may be named the same way."
+          invalidates={["erp_classification_values", "erp_classification_gaps"]}
+        />
+        <ConfigTransfer
+          objectType="code_template"
+          title="Code templates as a file"
+          description="Segments travel as JSON in a single column, so a template round-trips intact."
+          invalidates={["erp_code_templates", "erp_code_divergences"]}
+        />
+      </div>
+
+
       <ActionBar
         note="Axes are the questions asked of every item; values are the permitted answers."
         actions={[
