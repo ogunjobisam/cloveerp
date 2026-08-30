@@ -10,7 +10,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { callErp, ErpError, hasPermission } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
+import { friendlyError } from "../../lib/errors";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useErpSession } from "./gate";
 import { TOUCH } from "./page";
