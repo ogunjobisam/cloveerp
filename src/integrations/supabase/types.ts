@@ -81,8 +81,16 @@ export type Database = {
         Args: { p_mass_change_id: string }
         Returns: number
       }
+      erp_approval_audit: {
+        Args: { p_limit?: number; p_object_type?: string }
+        Returns: Json
+      }
       erp_approval_bands: {
         Args: { p_department_id?: string; p_object_type?: string }
+        Returns: Json
+      }
+      erp_approval_delegations: {
+        Args: { p_include_ended?: boolean }
         Returns: Json
       }
       erp_approval_routing_stamps: { Args: { p_limit?: number }; Returns: Json }
@@ -308,6 +316,20 @@ export type Database = {
         Args: { p_approve: boolean; p_comment?: string; p_task_id: string }
         Returns: Json
       }
+      erp_delegate_approval: {
+        Args: {
+          p_delegate_user_id: string
+          p_delegator_user_id: string
+          p_kind?: string
+          p_lower_bound_minor?: number
+          p_object_type?: string
+          p_reason?: string
+          p_upper_bound_minor?: number
+          p_valid_from?: string
+          p_valid_to?: string
+        }
+        Returns: Json
+      }
       erp_delivery_performance: { Args: { p_days?: number }; Returns: Json }
       erp_department_members: {
         Args: { p_department_id?: string }
@@ -352,6 +374,10 @@ export type Database = {
           | "destroy"
       }
       erp_document: { Args: { p_document_id: string }; Returns: Json }
+      erp_document_approval_chain: {
+        Args: { p_document_id: string }
+        Returns: Json
+      }
       erp_document_lines: {
         Args: { p_document_id?: string; p_limit?: number; p_type_code?: string }
         Returns: Json
@@ -364,6 +390,10 @@ export type Database = {
       erp_dunning_worklist: { Args: never; Returns: Json }
       erp_duplicate_candidates: {
         Args: { p_object_type: string }
+        Returns: Json
+      }
+      erp_end_approval_delegation: {
+        Args: { p_delegation_id: string; p_reason?: string }
         Returns: Json
       }
       erp_end_approver_assignment: {
@@ -980,6 +1010,10 @@ export type Database = {
           p_object_type: string
           p_value_minor: number
         }
+        Returns: Json
+      }
+      erp_stamp_document_approval: {
+        Args: { p_document_id: string }
         Returns: Json
       }
       erp_stock_ageing: { Args: never; Returns: Json }
