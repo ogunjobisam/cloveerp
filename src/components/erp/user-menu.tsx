@@ -25,7 +25,7 @@ type MyTenant = {
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
-  const letters = parts.map((p) => p[0］ ?? "").join("");
+  const letters = parts.map((p) => p[0] ?? "").join("");
   return (letters || name.slice(0, 2)).toUpperCase();
 }
 
