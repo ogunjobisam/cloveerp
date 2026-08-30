@@ -322,6 +322,8 @@ function ReleaseAreas() {
         )}
       </DataPanel>
 
+      <WavePrintReadiness />
+
       <ActionBar
         note="Cover for a wave you are looking at."
         actions={[
