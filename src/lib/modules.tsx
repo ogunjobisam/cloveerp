@@ -1057,7 +1057,8 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/administration/audit",
     titleKey: "nav.audit",
     title: "Audit log",
-    blurb: "Who did what, to which object, and when — filterable by action, object, actor and date.",
+    blurb:
+      "Who did what, to which object, and when — filterable by action, object, actor and date.",
     permission: "administration.audit_read",
     group: "administer",
   },

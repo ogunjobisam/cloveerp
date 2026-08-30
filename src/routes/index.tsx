@@ -1,12 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Building2,
-  Landmark,
-  MapPin,
-  Sparkles,
-  UserRound,
-  type LucideIcon,
-} from "lucide-react";
+import { Building2, Landmark, MapPin, Sparkles, UserRound, type LucideIcon } from "lucide-react";
 
 import { Gate } from "../components/erp/gate";
 import { Launchpad } from "../components/erp/launchpad";
