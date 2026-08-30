@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { type Field } from "../../components/erp/action";
 import { ActionBar, pickFrom, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
@@ -43,23 +44,21 @@ const OBJECT_TYPES = [
   { value: "change_request", label: "Change request" },
 ];
 
-const pickDepartment = (name = "p_department_id", label = "Department", required = true) =>
-  ({
-    kind: "select" as const,
+const pickDepartment = (name = "p_department_id", label = "Department", required = true): Field => ({
+    kind: "select",
     name,
     label,
     required,
     options: { fn: "erp_departments", value: "department_id", label: ["code", "name"] },
-  }) as const;
+  });
 
-const pickPrincipal = (name: string, label: string, required = true) =>
-  ({
-    kind: "select" as const,
+const pickPrincipal = (name: string, label: string, required = true): Field => ({
+    kind: "select",
     name,
     label,
     required,
     options: { fn: "erp_principals", value: "id", label: ["display_name"] },
-  }) as const;
+  });
 
 type Department = {
   department_id: string;
