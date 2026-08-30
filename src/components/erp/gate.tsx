@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
+import { usePlatformMe } from "../../lib/platform";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
