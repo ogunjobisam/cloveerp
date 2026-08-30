@@ -53,7 +53,13 @@ const pickDepartment = (name = "p_department_id", label = "Department", required
   }) as const;
 
 const pickPrincipal = (name: string, label: string, required = true) =>
-  pickFrom("erp_permissions_directory", "id", ["display_name"], name, label);
+  ({
+    kind: "select" as const,
+    name,
+    label,
+    required,
+    options: { fn: "erp_principals", value: "id", label: ["display_name"] },
+  }) as const;
 
 type Department = {
   department_id: string;
@@ -551,7 +557,7 @@ function Organisation() {
         inquiries={[
           {
             fn: "erp_preview_approval_chain",
-            title: "Who would approve this?",
+            label: "Who would approve this?",
             description:
               "The chain a request of this value would take, and which rule chose each approver.",
             fields: [
