@@ -25,6 +25,7 @@ import { Route as PlanningIndexRouteImport } from './routes/planning/index'
 import { Route as ProcurementIndexRouteImport } from './routes/procurement/index'
 import { Route as ProductionIndexRouteImport } from './routes/production/index'
 import { Route as QualityIndexRouteImport } from './routes/quality/index'
+import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -109,6 +110,11 @@ const QualityIndexRoute = QualityIndexRouteImport.update({
   path: '/quality/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingIndexRoute = ReportingIndexRouteImport.update({
+  id: '/reporting/',
+  path: '/reporting/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SalesIndexRoute = SalesIndexRouteImport.update({
   id: '/sales/',
   path: '/sales/',
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/procurement/': typeof ProcurementIndexRoute
   '/production/': typeof ProductionIndexRoute
   '/quality/': typeof QualityIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/procurement': typeof ProcurementIndexRoute
   '/production': typeof ProductionIndexRoute
   '/quality': typeof QualityIndexRoute
+  '/reporting': typeof ReportingIndexRoute
   '/sales': typeof SalesIndexRoute
 }
 export interface FileRoutesById {
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   '/procurement/': typeof ProcurementIndexRoute
   '/production/': typeof ProductionIndexRoute
   '/quality/': typeof QualityIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
 export interface FileRouteTypes {
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/procurement/'
     | '/production/'
     | '/quality/'
+    | '/reporting/'
     | '/sales/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/procurement'
     | '/production'
     | '/quality'
+    | '/reporting'
     | '/sales'
   id:
     | '__root__'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/procurement/'
     | '/production/'
     | '/quality/'
+    | '/reporting/'
     | '/sales/'
   fileRoutesById: FileRoutesById
 }
@@ -250,6 +262,7 @@ export interface RootRouteChildren {
   ProcurementIndexRoute: typeof ProcurementIndexRoute
   ProductionIndexRoute: typeof ProductionIndexRoute
   QualityIndexRoute: typeof QualityIndexRoute
+  ReportingIndexRoute: typeof ReportingIndexRoute
   SalesIndexRoute: typeof SalesIndexRoute
 }
 
@@ -367,6 +380,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QualityIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/': {
+      id: '/reporting/'
+      path: '/reporting'
+      fullPath: '/reporting/'
+      preLoaderRoute: typeof ReportingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sales/': {
       id: '/sales/'
       path: '/sales'
@@ -394,6 +414,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProcurementIndexRoute: ProcurementIndexRoute,
   ProductionIndexRoute: ProductionIndexRoute,
   QualityIndexRoute: QualityIndexRoute,
+  ReportingIndexRoute: ReportingIndexRoute,
   SalesIndexRoute: SalesIndexRoute,
 }
 export const routeTree = rootRouteImport
