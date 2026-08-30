@@ -137,7 +137,14 @@ export function DocumentPanel({
       </header>
 
       <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
-        {!type ? (
+        {typesError ? (
+          // A failed lookup is not an unconfigured tenant. Saying "install the
+          // module" when the call fell over sends the reader to fix something
+          // that was never broken.
+          <ErrorNote error={typesError} />
+        ) : typesPending ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !type ? (
           <p className="text-sm text-muted-foreground">
             No <code className="font-mono text-xs">{baseType}</code> type is configured for this
             tenant. Installing the module that owns it on{" "}
@@ -147,6 +154,7 @@ export function DocumentPanel({
             is what creates one.
           </p>
         ) : isPending ? (
+
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : error ? (
           <ErrorNote error={error} />
