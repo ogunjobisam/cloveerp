@@ -461,6 +461,10 @@ export type Database = {
         Args: { p_action?: string; p_limit?: number; p_tenant_id?: string }
         Returns: Json
       }
+      erp_platform_cancel_ownership_transfer: {
+        Args: { p_reason?: string; p_transfer_id: string }
+        Returns: Json
+      }
       erp_platform_claim_ownership: {
         Args: { p_display_name?: string }
         Returns: Json
@@ -478,6 +482,10 @@ export type Database = {
         Returns: Json
       }
       erp_platform_me: { Args: never; Returns: Json }
+      erp_platform_offer_ownership: {
+        Args: { p_reason?: string; p_tenant_id: string; p_to_staff_id: string }
+        Returns: Json
+      }
       erp_platform_onboard_company: {
         Args: {
           p_admin_display_name: string
@@ -488,6 +496,14 @@ export type Database = {
           p_name: string
           p_timezone?: string
         }
+        Returns: Json
+      }
+      erp_platform_ownership_transfers: {
+        Args: { p_limit?: number; p_tenant_id?: string }
+        Returns: Json
+      }
+      erp_platform_respond_ownership_transfer: {
+        Args: { p_accept: boolean; p_note?: string; p_transfer_id: string }
         Returns: Json
       }
       erp_platform_revoke_staff: {
