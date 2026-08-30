@@ -39,10 +39,24 @@ export type Database = {
         Args: { p_party_id: string; p_role_kind: string }
         Returns: Json
       }
+      erp_add_wave_line: {
+        Args: {
+          p_document_id?: string
+          p_item_id: string
+          p_quantity: number
+          p_wave_id: string
+        }
+        Returns: Json
+      }
+      erp_age_back_release_area: {
+        Args: { p_release_area_id: string }
+        Returns: Json
+      }
       erp_allocate_landed_cost: {
         Args: { p_landed_cost_id: string }
         Returns: number
       }
+      erp_allocate_release_wave: { Args: { p_wave_id: string }; Returns: Json }
       erp_amend_batch: {
         Args: {
           p_batch_id: string
@@ -428,6 +442,10 @@ export type Database = {
         Args: { p_membership_id: string; p_valid_to?: string }
         Returns: Json
       }
+      erp_end_item_supplier: {
+        Args: { p_item_supplier_id: string; p_reason?: string }
+        Returns: Json
+      }
       erp_entities: { Args: never; Returns: Json }
       erp_excursion_impact: {
         Args: {
@@ -495,6 +513,10 @@ export type Database = {
       erp_item_classification: { Args: { p_item_id: string }; Returns: Json }
       erp_item_code_assignments: { Args: { p_limit?: number }; Returns: Json }
       erp_item_posting_classes: { Args: { p_limit?: number }; Returns: Json }
+      erp_item_suppliers: {
+        Args: { p_item_id?: string; p_site_id?: string }
+        Returns: Json
+      }
       erp_items: { Args: { p_search?: string }; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
       erp_landed_costs: { Args: { p_limit?: number }; Returns: Json }
@@ -576,6 +598,10 @@ export type Database = {
       erp_open_period_close: {
         Args: { p_fiscal_period_id: string }
         Returns: number
+      }
+      erp_open_release_wave: {
+        Args: { p_code?: string; p_note?: string; p_release_area_id: string }
+        Returns: Json
       }
       erp_override_posting_account: {
         Args: {
@@ -699,6 +725,7 @@ export type Database = {
       }
       erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
       erp_principals: { Args: never; Returns: Json }
+      erp_print_release_wave: { Args: { p_wave_id: string }; Returns: Json }
       erp_promise_date: {
         Args: { p_item_id: string; p_quantity: number; p_site_id: string }
         Returns: string
@@ -845,6 +872,8 @@ export type Database = {
         Args: { p_days?: number }
         Returns: Json
       }
+      erp_release_area_locations: { Args: never; Returns: Json }
+      erp_release_areas: { Args: { p_site_id?: string }; Returns: Json }
       erp_release_batch: {
         Args: {
           p_basis: string
@@ -861,6 +890,11 @@ export type Database = {
       }
       erp_release_sequence: {
         Args: { p_limit?: number; p_site_id?: string }
+        Returns: Json
+      }
+      erp_release_wave_lines: { Args: { p_wave_id: string }; Returns: Json }
+      erp_release_waves: {
+        Args: { p_limit?: number; p_release_area_id?: string }
         Returns: Json
       }
       erp_release_works_order: {
@@ -889,6 +923,10 @@ export type Database = {
       erp_reserve_for_line: {
         Args: { p_document_line_id: string; p_policy_code?: string }
         Returns: string
+      }
+      erp_resolve_item_supplier: {
+        Args: { p_item_id: string; p_site_id?: string }
+        Returns: Json
       }
       erp_resolve_price: {
         Args: { p_item_id: string; p_party_id: string; p_quantity?: number }
@@ -970,6 +1008,22 @@ export type Database = {
           p_posting_class_id: string
           p_reason?: string
           p_valid_from?: string
+        }
+        Returns: Json
+      }
+      erp_set_item_supplier: {
+        Args: {
+          p_is_approved_for_use?: boolean
+          p_is_default?: boolean
+          p_item_id: string
+          p_lead_time_days?: number
+          p_min_order_quantity?: number
+          p_party_id: string
+          p_preference_rank?: number
+          p_reason?: string
+          p_site_id?: string
+          p_split_pct?: number
+          p_supplier_item_code?: string
         }
         Returns: Json
       }
@@ -1183,6 +1237,23 @@ export type Database = {
           p_kind: string
           p_name: string
           p_valid_from?: string
+        }
+        Returns: Json
+      }
+      erp_upsert_release_area: {
+        Args: {
+          p_ageing_hours?: number
+          p_channel_code?: string
+          p_code: string
+          p_gate_printing?: boolean
+          p_item_classes?: string
+          p_location_id?: string
+          p_max_quantity?: number
+          p_min_quantity?: number
+          p_name: string
+          p_order_type_code?: string
+          p_replenishment_mode?: string
+          p_site_id: string
         }
         Returns: Json
       }
