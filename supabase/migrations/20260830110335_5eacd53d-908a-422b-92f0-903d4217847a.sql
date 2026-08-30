@@ -58,7 +58,7 @@ begin
     from erp.tenant_key k where k.tenant_id = v_tenant and k.purpose = p_purpose;
 
   v_ref := vault.create_secret(
-    encode(public.gen_random_bytes(32), 'base64'),
+    encode(extensions.gen_random_bytes(32), 'base64'),
     'erpware:' || v_tenant::text || ':' || p_purpose || ':v' || v_version,
     'ERPWare per-tenant data key');
 
@@ -132,7 +132,7 @@ begin
     from vault.decrypted_secrets s where s.id = v_old_ref::uuid;
 
   v_new_version := v_old_version + 1;
-  v_new_material := encode(public.gen_random_bytes(32), 'base64');
+  v_new_material := encode(extensions.gen_random_bytes(32), 'base64');
 
   insert into erp.tenant_key (tenant_id, purpose, kms_key_ref, key_version,
                               activated_at, created_by, updated_by)
