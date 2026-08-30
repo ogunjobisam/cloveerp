@@ -3,7 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ErrorNote, PermissionNote, useErpAction } from "../../components/erp/action";
-import { AutoPanel, StatusPill } from "../../components/erp/auto";
+import { ActionBar, type ActionSpec } from "../../components/erp/actions-bar";
+import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
 import { BrandingPanel } from "../../components/erp/branding";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
