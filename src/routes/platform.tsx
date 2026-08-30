@@ -53,7 +53,8 @@ export const Route = createFileRoute("/platform")({
       { property: "og:title", content: "Platform console — ERPWare" },
       {
         property: "og:description",
-        content: "Onboard companies, manage platform staff, and review audited cross-tenant access.",
+        content:
+          "Onboard companies, manage platform staff, and review audited cross-tenant access.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -86,9 +87,7 @@ function Card({
             {icon}
             {title}
           </h2>
-          {description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-          ) : null}
+          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {action}
       </div>
@@ -688,7 +687,10 @@ function Frame({ children, right }: { children: ReactNode; right?: ReactNode }) 
           </div>
           <div className="flex items-center gap-3">
             {right}
-            <Link to="/" className={`${TOUCH} inline-flex items-center text-sm underline underline-offset-2`}>
+            <Link
+              to="/"
+              className={`${TOUCH} inline-flex items-center text-sm underline underline-offset-2`}
+            >
               Back to the app
             </Link>
           </div>
@@ -799,7 +801,9 @@ function PlatformConsole() {
       right={
         <span className="hidden items-center gap-2 text-xs text-muted-foreground sm:inline-flex">
           {me.data.email}
-          <Pill tone={role === "owner" ? "ok" : role === "operator" ? "warn" : "muted"}>{role}</Pill>
+          <Pill tone={role === "owner" ? "ok" : role === "operator" ? "warn" : "muted"}>
+            {role}
+          </Pill>
         </span>
       }
     >
