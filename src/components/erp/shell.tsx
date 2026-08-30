@@ -9,9 +9,10 @@ import type { ErpSession } from "../../lib/erp";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { GROUP_LABELS, allTiles } from "../../lib/modules";
-import { Logo } from "./logo";
+import { useBrand, useBrandedFavicon } from "../../lib/brand";
+import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
-
+import { UserMenu } from "./user-menu";
 
 /**
  * The application shell.
@@ -104,53 +105,6 @@ type MyTenant = {
   principal_id: string;
   is_active: boolean;
 };
-
-/**
- * Which tenant am I working in?
- *
- * Only rendered when the answer is not obvious — one membership needs no
- * chooser. It exists because membership became per-tenant, and the database
- * was resolving the resulting ambiguity by insertion order: newest principal
- * wins. That is not a choice, and a person in two tenants had no way to reach
- * the other one. The switcher is the other half of that change.
- */
-function TenantSwitch() {
-  const queryClient = useQueryClient();
-  const { data } = useQuery({
-    queryKey: ["erp_my_tenants"],
-    queryFn: () => callErp<MyTenant[]>("erp_my_tenants"),
-  });
-
-  const choose = useMutation({
-    mutationFn: (tenantId: string) => callErp("erp_set_active_tenant", { p_tenant_id: tenantId }),
-    // Everything on screen is scoped to the tenant that just changed.
-    onSuccess: () => queryClient.invalidateQueries(),
-  });
-
-  if (!data || data.length < 2) return null;
-
-  const active = data.find((t) => t.is_active)?.tenant_id ?? "";
-
-  return (
-    <label className="flex min-w-0 flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Tenant
-      </span>
-      <select
-        value={active}
-        disabled={choose.isPending}
-        onChange={(e) => choose.mutate(e.target.value)}
-        className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60`}
-      >
-        {data.map((t) => (
-          <option key={t.tenant_id} value={t.tenant_id}>
-            {t.code} — {t.name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 export type Scope = { entityId: string; siteId: string };
 
@@ -262,6 +216,10 @@ export function Shell({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const brand = useBrand();
+
+  // The tab icon follows the tenant, where the browser supports it.
+  useBrandedFavicon(brand);
 
   // A drawer left open across a navigation would cover the page it just
   // reached. Closing on the path change covers every way of navigating,
@@ -276,24 +234,6 @@ export function Shell({
 
   const visible = NAV.filter((n) => !n.permission || hasPermission(session, n.permission));
   const hidden = NAV.length - visible.length;
-
-  const identity = (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">
-        {session.principal?.display_name ?? "Signed in"}
-      </span>
-      <button
-        onClick={onSignOut}
-        // 44px at every width, including md — a tablet in portrait is exactly
-        // 768px and is a touch device. Above md the border and background go
-        // away so it still reads as the text link the desktop header had; only
-        // the hit area is larger.
-        className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-sm font-medium md:justify-start md:border-0 md:px-0 md:text-xs md:text-muted-foreground md:underline-offset-2 md:hover:text-foreground md:hover:underline`}
-      >
-        Sign out
-      </button>
-    </div>
-  );
 
   return (
     // overflow-x-hidden is the backstop, not the fix: everything inside is
@@ -313,12 +253,12 @@ export function Shell({
           </button>
 
           <Link to="/" className={`${TOUCH} flex shrink-0 items-center gap-2`}>
-            <Logo size={28} />
+            <BrandMark size={28} />
             <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] md:inline">
-              ERPWare
+              <span style={{ color: brand.ink }}>{brand.prefix}</span>
+              <span style={{ color: brand.total }}>{brand.suffix}</span>
             </span>
           </Link>
-
 
           <div className="flex min-w-0 flex-1 flex-col leading-tight md:flex-none">
             <span className="truncate text-sm font-medium">
@@ -336,7 +276,6 @@ export function Shell({
 
           {/* Everything here is in the drawer below md. */}
           <div className="ml-auto hidden items-end gap-3 md:flex">
-            <TenantSwitch />
             <ScopeSelect
               label="Entity"
               value={scope.entityId}
@@ -349,7 +288,7 @@ export function Shell({
               onChange={(siteId) => onScopeChange({ ...scope, siteId })}
               options={sites}
             />
-            <div className="pl-2 text-right">{identity}</div>
+            <UserMenu session={session} onSignOut={onSignOut} />
           </div>
         </div>
       </header>
@@ -368,7 +307,6 @@ export function Shell({
           </nav>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">
-            <TenantSwitch />
             <ScopeSelect
               label="Entity"
               value={scope.entityId}
@@ -383,7 +321,14 @@ export function Shell({
             />
           </div>
 
-          <div className="mt-auto border-t border-border pt-4">{identity}</div>
+          <div className="mt-auto border-t border-border pt-4">
+            <UserMenu
+              session={session}
+              onSignOut={onSignOut}
+              onNavigate={() => setDrawerOpen(false)}
+              className="w-full justify-start"
+            />
+          </div>
         </SheetContent>
       </Sheet>
 

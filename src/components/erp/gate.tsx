@@ -10,7 +10,6 @@ import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
 
-
 /**
  * The auth boundary.
  *

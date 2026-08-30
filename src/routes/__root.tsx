@@ -81,18 +81,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "ERPWare unifies finance, inventory, and operations into one calm command center. Built for teams who value precision.",
+          "ERPWare keeps entries above the rule and the derived position beneath it: finance, inventory and operations on one append-only, tenant-isolated ledger.",
       },
       { name: "author", content: "ERPWare" },
       { property: "og:title", content: "ERPWare — Enterprise Resource Planning" },
       {
         property: "og:description",
         content:
-          "ERPWare unifies finance, inventory, and operations into one calm command center. Built for teams who value precision.",
+          "ERPWare keeps entries above the rule and the derived position beneath it: finance, inventory and operations on one append-only, tenant-isolated ledger.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@ERPWare" },
+      { property: "og:site_name", content: "ERPWare" },
+      { property: "og:image", content: "https://erpware.dev/og-image.png" },
+      { name: "twitter:image", content: "https://erpware.dev/og-image.png" },
+      { name: "theme-color", content: "#1E5B4F" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -104,7 +108,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "alternate icon", href: "/favicon.ico", type: "image/x-icon" },
-
+      { rel: "apple-touch-icon", href: "/favicon.svg" },
     ],
   }),
   shellComponent: RootShell,
