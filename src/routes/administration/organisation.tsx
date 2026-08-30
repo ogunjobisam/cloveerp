@@ -64,6 +64,37 @@ const pickPrincipal = (name: string, label: string, required = true): Field => (
   options: { fn: "erp_principals", value: "id", label: ["display_name"] },
 });
 
+type Delegation = {
+  delegation_id: string;
+  delegator: string | null;
+  delegate: string | null;
+  kind: string;
+  object_type: string | null;
+  lower_bound_minor: number | null;
+  upper_bound_minor: number | null;
+  reason: string | null;
+  valid_from: string;
+  valid_to: string | null;
+  in_force: boolean;
+  status: string;
+};
+
+type AuditRow = {
+  stamp_id: number;
+  resolved_at: string;
+  object_type: string;
+  department_code: string | null;
+  requester: string | null;
+  seq: number;
+  source: string;
+  rule_id: string | null;
+  rule_version: number | null;
+  approver: string | null;
+  approver_of_record: string | null;
+  covered: boolean;
+  cover_kind: string | null;
+};
+
 type Department = {
   department_id: string;
   code: string;
@@ -367,6 +398,65 @@ function Organisation() {
         ]}
       />
 
+      <ActionBar
+        note="Cover while somebody is away. A delegation keeps the approver of record and records who acted; a substitution replaces them outright."
+        actions={[
+          {
+            label: "Delegate approvals",
+            permission: "administration.configure",
+            fn: "erp_delegate_approval",
+            fields: [
+              pickPrincipal("p_delegator_user_id", "Approver away"),
+              pickPrincipal("p_delegate_user_id", "Covering for them"),
+              {
+                kind: "choice",
+                name: "p_kind",
+                label: "Kind of cover",
+                choices: [
+                  {
+                    value: "delegation",
+                    label: "Delegation — the original stays the approver of record",
+                  },
+                  {
+                    value: "substitution",
+                    label: "Substitution — the delegate takes the decision as their own",
+                  },
+                ],
+              },
+              { kind: "date", name: "p_valid_from", label: "From" },
+              { kind: "date", name: "p_valid_to", label: "Until" },
+              {
+                kind: "choice",
+                name: "p_object_type",
+                label: "Only for",
+                choices: OBJECT_TYPES,
+                hint: "Leave empty to cover everything they approve.",
+              },
+              { kind: "money", name: "p_lower_bound_minor", label: "From value", currency: "GBP" },
+              { kind: "money", name: "p_upper_bound_minor", label: "Up to value", currency: "GBP" },
+              reason(),
+            ],
+            invalidates,
+          },
+          {
+            label: "End cover",
+            permission: "administration.configure",
+            fn: "erp_end_approval_delegation",
+            fields: [
+              pickFrom(
+                "erp_approval_delegations",
+                "delegation_id",
+                ["delegator", "delegate"],
+                "p_delegation_id",
+                "Cover",
+              ),
+              reason(),
+            ],
+            invalidates,
+          },
+        ]}
+      />
+
       <DataPanel<Department>
         title={ui("Departments")}
         description={ui(
@@ -559,6 +649,98 @@ function Organisation() {
                 <td className="py-2 pr-4 tabular-nums">{money(s.value_minor, s.currency)}</td>
                 <td className="py-2 pr-4 tabular-nums">{s.resolved_chain?.steps?.length ?? 0}</td>
                 <td className="py-2 pr-4">{s.resolved_by ?? "—"}</td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<Delegation>
+        title={ui("Cover in force")}
+        description={ui(
+          "Cover is followed at resolution time, up to three hops, and never back to the person who raised the request.",
+        )}
+        fn="erp_approval_delegations"
+        empty={ui("Nobody is covering for anybody.")}
+      >
+        {(rows) => (
+          <Table
+            columns={[
+              ui("Approver away"),
+              ui("Covered by"),
+              ui("Kind"),
+              ui("Only for"),
+              ui("From"),
+              ui("Until"),
+              ui("In force"),
+            ]}
+          >
+            {rows.map((d) => (
+              <tr key={d.delegation_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4">{d.delegator ?? "—"}</td>
+                <td className="py-2 pr-4">{d.delegate ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  <Pill tone={d.kind === "substitution" ? "warn" : "muted"}>{d.kind}</Pill>
+                </td>
+                <td className="py-2 pr-4">{d.object_type ?? ui("Everything")}</td>
+                <td className="py-2 pr-4 tabular-nums">{d.valid_from?.slice(0, 10)}</td>
+                <td className="py-2 pr-4 tabular-nums">{d.valid_to?.slice(0, 10) ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  <Pill tone={d.in_force ? "ok" : "muted"}>
+                    {d.in_force ? ui("Yes") : ui("No")}
+                  </Pill>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<AuditRow>
+        title={ui("Approval audit")}
+        description={ui(
+          "Every resolved step, the rule version that chose it, who acted and who remained the approver of record.",
+        )}
+        fn="erp_approval_audit"
+        args={{ p_limit: 200 }}
+        empty={ui("No approvals have been resolved yet.")}
+      >
+        {(rows) => (
+          <Table
+            columns={[
+              ui("When"),
+              ui("Object type"),
+              ui("Requester"),
+              ui("Step"),
+              ui("Chosen by"),
+              ui("Rule version"),
+              ui("Acted"),
+              ui("Of record"),
+              ui("Cover"),
+            ]}
+          >
+            {rows.map((r) => (
+              <tr
+                key={`${r.stamp_id}-${r.seq}`}
+                className="border-b border-border/60 last:border-0"
+              >
+                <td className="py-2 pr-4 tabular-nums">
+                  {r.resolved_at.slice(0, 16).replace("T", " ")}
+                </td>
+                <td className="py-2 pr-4">{r.object_type}</td>
+                <td className="py-2 pr-4">{r.requester ?? "—"}</td>
+                <td className="py-2 pr-4 tabular-nums">{r.seq}</td>
+                <td className="py-2 pr-4">{r.source}</td>
+                <td className="py-2 pr-4 tabular-nums">{r.rule_version ?? "—"}</td>
+                <td className="py-2 pr-4">{r.approver ?? "—"}</td>
+                <td className="py-2 pr-4">{r.approver_of_record ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  {r.covered ? (
+                    <Pill tone="warn">{r.cover_kind ?? ui("Cover")}</Pill>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </Table>

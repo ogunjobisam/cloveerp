@@ -151,8 +151,106 @@ function Document() {
         currency={doc.currency}
       />
 
+      <ApprovalChain documentId={documentId} />
+
       {data.lineage.length > 0 ? <LineagePanel lineage={data.lineage} /> : null}
     </div>
+  );
+}
+
+type ChainStep = {
+  seq: number;
+  source: string;
+  rule_id: string | null;
+  rule_version: number | null;
+  band_seq?: number | null;
+  approver_user_id: string | null;
+  approver_of_record_user_id: string | null;
+  covered: boolean;
+  cover_kind: string | null;
+  cover_trail: { from_user_id: string; to_user_id: string; reason: string | null }[];
+};
+
+type Stamp = {
+  stamp_id: number;
+  resolved_at: string;
+  value_minor: number | null;
+  currency: string | null;
+  resolved_chain: { steps?: ChainStep[]; department_id?: string | null };
+};
+
+/**
+ * The approval chain as it was resolved on this document.
+ *
+ * The stamp is evidence, not a live calculation: it records which rule, at
+ * which version, chose each approver, and where cover moved the decision to
+ * somebody else while keeping the approver of record.
+ */
+function ApprovalChain({ documentId }: { documentId: string }) {
+  const { data, error } = useQuery({
+    queryKey: ["erp_document_approval_chain", { p_document_id: documentId }],
+    queryFn: () => callErp<Stamp[]>("erp_document_approval_chain", { p_document_id: documentId }),
+  });
+
+  const stamp = useErpAction({
+    fn: "erp_stamp_document_approval",
+    invalidates: ["erp_document_approval_chain"],
+  });
+
+  const latest = data?.[0];
+  const steps = latest?.resolved_chain?.steps ?? [];
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Approval routing</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            {latest
+              ? `Resolved ${latest.resolved_at.slice(0, 16).replace("T", " ")}, against the rules in force at that moment.`
+              : "Nothing has been stamped on this document yet. Stamping records the chain, the rule version behind each step, and any cover in force."}
+          </Prose>
+        </div>
+        <ActionButton
+          busy={stamp.isPending}
+          onClick={() => stamp.mutate({ p_document_id: documentId })}
+        >
+          Stamp the approval chain
+        </ActionButton>
+      </header>
+
+      <div className="px-4 py-4 sm:px-5">
+        <ErrorNote error={error ?? stamp.error} />
+        {steps.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No steps resolved.</p>
+        ) : (
+          <Table columns={["Step", "Chosen by", "Rule version", "Approver", "Of record", "Cover"]}>
+            {steps.map((s) => (
+              <tr key={s.seq} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 tabular-nums">{s.seq}</td>
+                <td className="py-2 pr-4">
+                  {s.source === "named_assignment"
+                    ? "Named assignment"
+                    : `Band ${s.band_seq ?? ""}`}
+                </td>
+                <td className="py-2 pr-4 tabular-nums">{s.rule_version ?? "—"}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{s.approver_user_id ?? "—"}</td>
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {s.approver_of_record_user_id ?? "—"}
+                </td>
+                <td className="py-2 pr-4">
+                  {s.covered ? (
+                    <Pill tone="warn">{s.cover_kind ?? "cover"}</Pill>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">none</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </div>
+    </section>
   );
 }
 
