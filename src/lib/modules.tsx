@@ -1293,6 +1293,15 @@ export const LOGISTICS: ModuleDef = {
         { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: true },
       ],
       invalidates: ["erp_shipments", "erp_open_shipments"],
+      mapArgs: (v) => ({
+        p_site_id: v["p_site_id"],
+        p_planned_despatch: v["p_planned_despatch"],
+        p_delivery_ids: String(v["p_delivery_ids"] ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }),
+
     },
     {
       label: "Select a carrier",
