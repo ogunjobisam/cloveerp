@@ -15,6 +15,7 @@ import { Route as AdministrationConfigurationRouteImport } from './routes/admini
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
+import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
@@ -58,6 +59,11 @@ const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
 const FinanceIndexRoute = FinanceIndexRouteImport.update({
   id: '/finance/',
   path: '/finance/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
+  id: '/governance/',
+  path: '/governance/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InventoryIndexRoute = InventoryIndexRouteImport.update({
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance/': typeof FinanceIndexRoute
+  '/governance/': typeof GovernanceIndexRoute
   '/inventory/': typeof InventoryIndexRoute
   '/logistics/': typeof LogisticsIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance': typeof FinanceIndexRoute
+  '/governance': typeof GovernanceIndexRoute
   '/inventory': typeof InventoryIndexRoute
   '/logistics': typeof LogisticsIndexRoute
   '/master-data': typeof MasterDataIndexRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance/': typeof FinanceIndexRoute
+  '/governance/': typeof GovernanceIndexRoute
   '/inventory/': typeof InventoryIndexRoute
   '/logistics/': typeof LogisticsIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/finance/'
+    | '/governance/'
     | '/inventory/'
     | '/logistics/'
     | '/master-data/'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/finance'
+    | '/governance'
     | '/inventory'
     | '/logistics'
     | '/master-data'
@@ -234,6 +245,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/finance/'
+    | '/governance/'
     | '/inventory/'
     | '/logistics/'
     | '/master-data/'
@@ -255,6 +267,7 @@ export interface RootRouteChildren {
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
+  GovernanceIndexRoute: typeof GovernanceIndexRoute
   InventoryIndexRoute: typeof InventoryIndexRoute
   LogisticsIndexRoute: typeof LogisticsIndexRoute
   MasterDataIndexRoute: typeof MasterDataIndexRoute
@@ -308,6 +321,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance/'
       preLoaderRoute: typeof FinanceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/governance/': {
+      id: '/governance/'
+      path: '/governance'
+      fullPath: '/governance/'
+      preLoaderRoute: typeof GovernanceIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inventory/': {
@@ -407,6 +427,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
   FinanceIndexRoute: FinanceIndexRoute,
+  GovernanceIndexRoute: GovernanceIndexRoute,
   InventoryIndexRoute: InventoryIndexRoute,
   LogisticsIndexRoute: LogisticsIndexRoute,
   MasterDataIndexRoute: MasterDataIndexRoute,
