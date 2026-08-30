@@ -84,9 +84,10 @@ function TenantLifecycle() {
           <h2 className="text-sm font-semibold">Deletion</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
             Requesting deletion suspends the tenant immediately and schedules the purge. Tenant
-            terminology overrides and cached material are destroyed at request time; operational
-            data is removed by the purge, which is deliberately not instant so that a mistaken
-            request can be caught.
+            terminology overrides, cached material and — decisively — the tenant's encryption keys
+            are destroyed at request time, so anything encrypted under them is unreadable from that
+            moment. Remaining operational data is removed by the purge, which is deliberately not
+            instant so that a mistaken request can be caught.
           </Prose>
         </header>
         <div className="px-4 py-4 sm:px-5">
