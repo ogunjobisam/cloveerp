@@ -901,19 +901,21 @@ export const REPORTING: ModuleDef = {
   ],
   reports: [
     {
-      title: "Data quality",
-      description: "Completeness and validity of master records.",
+      title: "Party data quality",
+      description: "Completeness and validity of party master records.",
       fn: "erp_data_quality",
-      empty: "No master data to assess yet.",
-      rowKey: (r, i) => `${String(r["object_type"] ?? i)}-${String(r["check_code"] ?? i)}`,
+      args: { p_object_type: "party" },
+      empty: "No party master data to assess yet.",
+      rowKey: (r, i) => `${String(r["object_id"] ?? i)}`,
       columns: [
-        { header: "Object", cell: "object_type" },
-        { header: "Check", cell: "check_code" },
-        { header: "Records", cell: "records", numeric: true },
-        { header: "Failing", cell: "failing", numeric: true },
-        { header: "Score %", cell: "score_pct", numeric: true },
+        { header: "Code", cell: "code" },
+        { header: "Name", cell: "name" },
+        { header: "Score", cell: "score", numeric: true },
+        { header: "Errors", cell: "errors", numeric: true },
+        { header: "Warnings", cell: "warnings", numeric: true },
       ],
     },
+
     {
       title: "Specification coverage",
       description: "Part 5, section by section, measured against the database.",
