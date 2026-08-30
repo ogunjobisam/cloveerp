@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickItem, reason } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom, pickItem } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, RefreshButton } from "../../components/erp/page";
@@ -45,7 +45,7 @@ type Axis = {
   axis_id: string;
   code: string;
   name: string;
-  description: string | null;
+  seq: number;
   is_mandatory: boolean;
   item_classes: string[] | null;
   value_count: number;
@@ -76,25 +76,31 @@ type Gap = {
   item_id: string;
   item_code: string;
   item_name: string;
-  missing_axes: string[];
+  item_class: string;
+  axis_code: string;
+  axis_name: string;
 };
 
 type Assignment = {
   assignment_id: string;
-  item_code: string;
+  item_id: string;
   item_name: string;
-  code: string;
+  composed_code: string;
   template_code: string | null;
   template_version: number | null;
   assigned_at: string;
+  assigned_by: string | null;
 };
 
 type Divergence = {
+  item_id: string;
   item_code: string;
   item_name: string;
-  assigned_code: string;
-  recorded_classification: Record<string, unknown>;
-  current_classification: Record<string, unknown>;
+  template_code: string | null;
+  template_version: number | null;
+  coded_as: Record<string, unknown>;
+  classified_as: Record<string, unknown>;
+  assigned_at: string;
 };
 
 const summarise = (value: unknown) => {
@@ -136,7 +142,6 @@ function Classification() {
             fields: [
               { kind: "text", name: "p_code", label: "Code", required: true },
               { kind: "text", name: "p_name", label: "Name", required: true },
-              { kind: "text", name: "p_description", label: "What this axis answers" },
               {
                 kind: "choice",
                 name: "p_is_mandatory",
@@ -153,6 +158,7 @@ function Classification() {
                 label: "Only for item classes",
                 hint: "Comma separated. Leave empty to apply to every item.",
               },
+              { kind: "number", name: "p_seq", label: "Order" },
             ],
             invalidates,
           },
@@ -168,9 +174,16 @@ function Classification() {
                 kind: "text",
                 name: "p_abbreviation",
                 label: "Abbreviation",
+                required: true,
                 hint: "What the code template uses for this value.",
               },
-              { kind: "text", name: "p_parent_code", label: "Parent value" },
+              pickFrom(
+                "erp_classification_values",
+                "value_id",
+                ["axis_code", "code", "name"],
+                "p_parent_value_id",
+                "Parent value",
+              ),
             ],
             invalidates,
           },
@@ -181,8 +194,14 @@ function Classification() {
             fields: [
               pickItem(),
               pickAxis(),
-              { kind: "text", name: "p_value_code", label: "Value code", required: true },
-              reason(),
+              pickFrom(
+                "erp_classification_values",
+                "value_id",
+                ["axis_code", "code", "name"],
+                "p_value_id",
+                "Value",
+              ),
+              { kind: "date", name: "p_valid_from", label: "Valid from" },
             ],
             invalidates,
           },
@@ -206,7 +225,17 @@ function Classification() {
                 required: true,
                 hint: 'For example [{"kind":"axis","axis":"FAMILY","length":3},{"kind":"literal","text":"-"},{"kind":"sequence","length":4},{"kind":"check"}]',
               },
-              { kind: "text", name: "p_separator", label: "Separator" },
+              { kind: "text", name: "p_item_classes", label: "Only for item classes" },
+              {
+                kind: "choice",
+                name: "p_casing",
+                label: "Casing",
+                choices: [
+                  { value: "upper", label: "Upper case" },
+                  { value: "lower", label: "Lower case" },
+                  { value: "none", label: "As entered" },
+                ],
+              },
             ],
             invalidates,
           },
@@ -252,7 +281,7 @@ function Classification() {
             columns={[
               ui("Code"),
               ui("Name"),
-              ui("What it answers"),
+              ui("Order"),
               ui("Mandatory"),
               ui("Item classes"),
               ui("Values"),
@@ -263,7 +292,7 @@ function Classification() {
               <tr key={a.axis_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{a.code}</td>
                 <td className="py-2 pr-4">{a.name}</td>
-                <td className="py-2 pr-4">{a.description ?? "—"}</td>
+                <td className="py-2 pr-4 tabular-nums">{a.seq}</td>
                 <td className="py-2 pr-4">
                   {a.is_mandatory ? <Pill tone="warn">{ui("Yes")}</Pill> : "—"}
                 </td>
@@ -337,13 +366,17 @@ function Classification() {
         empty={ui("Every item answers every mandatory axis.")}
       >
         {(rows) => (
-          <Table columns={[ui("Item"), ui("Name"), ui("Missing axes")]}>
+          <Table columns={[ui("Item"), ui("Name"), ui("Item class"), ui("Unanswered axis")]}>
             {rows.map((g) => (
-              <tr key={g.item_id} className="border-b border-border/60 last:border-0">
+              <tr
+                key={`${g.item_id}-${g.axis_code}`}
+                className="border-b border-border/60 last:border-0"
+              >
                 <td className="py-2 pr-4 font-mono text-xs">{g.item_code}</td>
                 <td className="py-2 pr-4">{g.item_name}</td>
+                <td className="py-2 pr-4">{g.item_class}</td>
                 <td className="py-2 pr-4">
-                  <Pill tone="warn">{(g.missing_axes ?? []).join(", ")}</Pill>
+                  <Pill tone="warn">{g.axis_name}</Pill>
                 </td>
               </tr>
             ))}
@@ -359,17 +392,19 @@ function Classification() {
         empty={ui("No codes have been composed yet.")}
       >
         {(rows) => (
-          <Table columns={[ui("Code"), ui("Item"), ui("Name"), ui("Template"), ui("Version"), ui("When")]}>
+          <Table
+            columns={[ui("Code"), ui("Item"), ui("Template"), ui("Version"), ui("When"), ui("By")]}
+          >
             {rows.map((a) => (
               <tr key={a.assignment_id} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{a.code}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{a.item_code}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{a.composed_code}</td>
                 <td className="py-2 pr-4">{a.item_name}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{a.template_code ?? "—"}</td>
                 <td className="py-2 pr-4 tabular-nums">{a.template_version ?? "—"}</td>
                 <td className="py-2 pr-4 tabular-nums">
                   {a.assigned_at.slice(0, 16).replace("T", " ")}
                 </td>
+                <td className="py-2 pr-4">{a.assigned_by ?? "—"}</td>
               </tr>
             ))}
           </Table>
@@ -385,13 +420,13 @@ function Classification() {
         empty={ui("No item has diverged from the classification behind its code.")}
       >
         {(rows) => (
-          <Table columns={[ui("Code"), ui("Item"), ui("Recorded"), ui("Now")]}>
+          <Table columns={[ui("Item"), ui("Name"), ui("Coded as"), ui("Classified as")]}>
             {rows.map((d) => (
-              <tr key={d.assigned_code} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{d.assigned_code}</td>
+              <tr key={d.item_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{d.item_code}</td>
                 <td className="py-2 pr-4">{d.item_name}</td>
-                <td className="py-2 pr-4">{summarise(d.recorded_classification)}</td>
-                <td className="py-2 pr-4">{summarise(d.current_classification)}</td>
+                <td className="py-2 pr-4">{summarise(d.coded_as)}</td>
+                <td className="py-2 pr-4">{summarise(d.classified_as)}</td>
               </tr>
             ))}
           </Table>
