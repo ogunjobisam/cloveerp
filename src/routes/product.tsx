@@ -435,6 +435,7 @@ function ProductPage() {
         <Features />
         <UkStrip />
         <Governance />
+        <Gallery />
         <Pricing />
         <Footer />
       </div>
