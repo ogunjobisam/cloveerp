@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { Gate, useErpSession } from "../components/erp/gate";
+import { Gate } from "../components/erp/gate";
+import { useErpSession } from "../components/erp/session-context";
 import { EmptyState, PageHeader, Prose } from "../components/erp/page";
 import { SeedDemoAction } from "../components/erp/seed";
 
