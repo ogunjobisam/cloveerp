@@ -1944,6 +1944,32 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/master-data/classification",
+    titleKey: "nav.master_data_classification",
+    title: "Classification and coding",
+    blurb:
+      "Classification axes and values, code templates composed from them, completeness gaps and divergences.",
+    permission: "master_data.write",
+    group: "administer",
+  },
+  {
+    path: "/master-data/item-supply",
+    titleKey: "nav.master_data_item_supply",
+    title: "Item supply",
+    blurb: "Default suppliers, preference ranks, sourcing splits and approved-for-use status.",
+    permission: "master_data.write",
+    group: "administer",
+  },
+  {
+    path: "/logistics/release-areas",
+    titleKey: "nav.logistics_release_areas",
+    title: "Release areas and waves",
+    blurb:
+      "Allocated stock scopes, pull and push replenishment, ageing back to bulk, and print gating.",
+    permission: "logistics.plan",
+    group: "administer",
+  },
+  {
     path: "/finance/account-determination",
     titleKey: "nav.finance_account_determination",
     title: "Account determination",
