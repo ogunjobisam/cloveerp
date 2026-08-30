@@ -8,7 +8,8 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { ErpSession } from "../../lib/erp";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { GROUP_LABELS, allTiles } from "../../lib/modules";
+import { GROUP_LABELS, GROUP_ORDER, allTiles } from "../../lib/modules";
+import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
@@ -41,7 +42,7 @@ type NavItem = {
   label: string;
   /** Absent means always visible. */
   permission?: string;
-  group: "home" | "operate" | "govern" | "administer";
+  group: "home" | (typeof GROUP_ORDER)[number];
 };
 
 /**
@@ -64,7 +65,7 @@ const NAV: NavItem[] = [
   })),
 ];
 
-const NAV_GROUPS: NavItem["group"][] = ["home", "operate", "govern", "administer"];
+const NAV_GROUPS: NavItem["group"][] = ["home", ...GROUP_ORDER];
 
 function ScopeSelect({
   label,
@@ -136,6 +137,7 @@ function NavList({
             <ul className="flex flex-col gap-1">
               {inGroup.map((item) => {
                 const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+                const Icon = iconFor(item.to);
                 return (
                   <li key={item.to}>
                     <Link
@@ -143,13 +145,16 @@ function NavList({
                       onClick={onNavigate}
                       className={[
                         TOUCH,
-                        "flex items-center rounded-md px-3 text-sm transition-colors",
+                        "flex items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
                         active
-                          ? "bg-primary/10 font-medium text-foreground"
+                          ? "bg-accent/10 font-medium text-foreground shadow-[inset_2px_0_0_var(--accent)]"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       ].join(" ")}
                     >
-                      {t(item.labelKey, item.label)}
+                      <Icon
+                        className={`size-4 shrink-0 ${active ? "text-accent" : "text-muted-foreground"}`}
+                      />
+                      <span className="truncate">{t(item.labelKey, item.label)}</span>
                     </Link>
                   </li>
                 );
@@ -240,7 +245,7 @@ export function Shell({
     // meant to fit, and this only stops one mistake becoming a page that
     // scrolls sideways.
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
-      <header className="border-b border-border bg-card">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:flex-wrap md:gap-4">
           <button
             type="button"
@@ -335,7 +340,10 @@ export function Shell({
       <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
         {/* The rail exists from md up. Below it, the drawer is the navigation
             and the content takes the full width. */}
-        <nav className="hidden w-56 shrink-0 md:block" aria-label="Sections">
+        <nav
+          className="sticky top-[4.5rem] hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto pr-1 md:block"
+          aria-label="Sections"
+        >
           <NavList items={visible} pathname={pathname} hidden={hidden} />
         </nav>
 
