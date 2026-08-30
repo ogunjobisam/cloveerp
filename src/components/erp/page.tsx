@@ -79,7 +79,7 @@ export function RefreshButton() {
     <button
       onClick={refresh}
       disabled={busy}
-      className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-sm font-medium disabled:opacity-50`}
+      className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-lg border border-input bg-card px-4 text-sm font-medium shadow-[var(--shadow-card)] transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-50`}
     >
       {busy ? "Refreshing…" : "Refresh"}
     </button>
@@ -90,7 +90,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <h1 className="text-xl font-semibold">{title}</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
         {children ? <Prose className="mt-1 text-sm text-muted-foreground">{children}</Prose> : null}
       </div>
       <RefreshButton />

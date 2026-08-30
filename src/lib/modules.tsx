@@ -65,7 +65,7 @@ export type ModuleDef = {
   /** One sentence. Shown on the tile and under the page title. */
   blurb: string;
   permission?: string;
-  group: "operate" | "govern" | "administer";
+  group: "plan" | "source" | "make" | "move" | "sell" | "settle" | "govern" | "administer";
   kpis: Kpi[];
   chart?: Chart;
   worklists: Panel[];
@@ -114,7 +114,7 @@ export const INVENTORY: ModuleDef = {
   title: "Inventory",
   blurb: "Stock health, valuation, ageing, expiry and counting, all derived from the ledger.",
   permission: "inventory.read",
-  group: "operate",
+  group: "move",
   kpis: [
     {
       label: "Stock lines",
@@ -266,7 +266,7 @@ export const FINANCE: ModuleDef = {
   title: "Finance",
   blurb: "Trial balance, periods, receivables, tax and assets, read from the posted ledger.",
   permission: "finance.read",
-  group: "operate",
+  group: "settle",
   kpis: [
     {
       label: "Receivables",
@@ -451,7 +451,7 @@ export const PLANNING: ModuleDef = {
   title: "Planning",
   blurb: "Planned orders and the exceptions worth acting on before they become shortages.",
   permission: "planning.read",
-  group: "operate",
+  group: "plan",
   kpis: [
     {
       label: "Open exceptions",
@@ -533,7 +533,7 @@ export const PRODUCTION: ModuleDef = {
   title: "Production",
   blurb: "Works orders and their progress against plan, quantity by quantity.",
   permission: "production.read",
-  group: "operate",
+  group: "make",
   kpis: [
     {
       label: "Open works orders",
@@ -632,7 +632,7 @@ export const QUALITY: ModuleDef = {
   title: "Quality and recall",
   blurb: "Events, dispositions, supplier qualification and recall — each with a clock.",
   permission: "quality.read",
-  group: "operate",
+  group: "govern",
   kpis: [
     {
       label: "Open events",
@@ -737,7 +737,7 @@ export const LOGISTICS: ModuleDef = {
   title: "Logistics",
   blurb: "Shipments, carrier bookings and delivery performance, with cost landing on stock.",
   permission: "logistics.read",
-  group: "operate",
+  group: "move",
   kpis: [
     {
       label: "Open shipments",
@@ -961,7 +961,7 @@ export type TileDef = {
   title: string;
   blurb: string;
   permission?: string;
-  group: "operate" | "govern" | "administer";
+  group: "plan" | "source" | "make" | "move" | "sell" | "settle" | "govern" | "administer";
 };
 
 export const EXTRA_TILES: TileDef[] = [
@@ -971,7 +971,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Sales",
     blurb: "Quotations, orders and deliveries.",
     permission: "sales.read",
-    group: "operate",
+    group: "sell",
   },
   {
     path: "/procurement",
@@ -979,7 +979,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Procurement",
     blurb: "Requisitions, purchase orders and goods receipts.",
     permission: "procurement.read",
-    group: "operate",
+    group: "source",
   },
   {
     path: "/master-data",
@@ -1057,7 +1057,8 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/administration/audit",
     titleKey: "nav.audit",
     title: "Audit log",
-    blurb: "Who did what, to which object, and when — filterable by action, object, actor and date.",
+    blurb:
+      "Who did what, to which object, and when — filterable by action, object, actor and date.",
     permission: "administration.audit_read",
     group: "administer",
   },
@@ -1072,10 +1073,27 @@ export const EXTRA_TILES: TileDef[] = [
 ];
 
 export const GROUP_LABELS: Record<TileDef["group"], string> = {
-  operate: "Operate",
-  govern: "Govern",
-  administer: "Administer",
+  plan: "Plan",
+  source: "Source",
+  make: "Make",
+  move: "Move",
+  sell: "Sell",
+  settle: "Settle",
+  govern: "Govern & assure",
+  administer: "Administration",
 };
+
+/** The order the journey reads in, followed by the two supporting sections. */
+export const GROUP_ORDER: TileDef["group"][] = [
+  "plan",
+  "source",
+  "make",
+  "move",
+  "sell",
+  "settle",
+  "govern",
+  "administer",
+];
 
 /** Registry modules and bespoke screens, as one list of tiles. */
 export function allTiles(): TileDef[] {

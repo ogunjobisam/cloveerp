@@ -23,9 +23,9 @@ export const BRAND_DEFAULTS = {
   prefix: "ERP",
   suffix: "Ware",
   /** Ink — warm near-black, the entries. */
-  ink: "#241F1B",
-  /** Ledger green — the derived total. */
-  total: "#1E5B4F",
+  ink: "#3F3A34",
+  /** Amber — the derived total. */
+  total: "#C2703D",
   logo: "",
 } as const;
 
