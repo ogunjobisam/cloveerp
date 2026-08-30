@@ -169,7 +169,6 @@ export type Field =
       options: { fn: string; args?: Record<string, unknown>; value: string; label: string[] };
     };
 
-
 function SelectField({
   field,
   value,
@@ -286,7 +285,6 @@ export function ActionDialog({
         args[f.name] = toMinor(raw, minorUnitsOf(currencies, f.currency));
       else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
-
     }
     return args;
   }
@@ -357,7 +355,6 @@ export function ActionDialog({
                   className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
                 />
               )}
-
 
               {f.hint ? <span className="text-xs text-muted-foreground">{f.hint}</span> : null}
             </label>

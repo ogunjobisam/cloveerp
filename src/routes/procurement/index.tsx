@@ -5,7 +5,6 @@ import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 
-
 export const Route = createFileRoute("/procurement/")({
   head: () => ({ meta: [{ title: "Procurement — ERPWare" }] }),
   component: () => (
@@ -99,7 +98,6 @@ function Procurement() {
           },
         ]}
       />
-
 
       <DocumentPanel
         title="Requisitions"

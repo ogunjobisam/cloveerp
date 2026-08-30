@@ -137,7 +137,6 @@ function Permissions() {
         ]}
       />
 
-
       {isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : error ? (

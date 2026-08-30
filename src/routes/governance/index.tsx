@@ -116,7 +116,6 @@ function Governance() {
         ]}
       />
 
-
       <AutoPanel
         title="My approvals"
         description="Tasks assigned to you, directly or through a role you hold."

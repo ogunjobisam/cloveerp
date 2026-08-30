@@ -8,7 +8,6 @@ import { AutoPanel } from "./auto";
 import { KpiRow, MiniBars } from "./kpi";
 import { RefreshButton, TOUCH } from "./page";
 
-
 /**
  * The object page every module shares.
  *
@@ -145,7 +144,6 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           )}
         </div>
       ) : null}
-
 
       {tab === "reports" ? (
         <div className="flex min-w-0 flex-col gap-4">{def.reports.map(panelOf)}</div>

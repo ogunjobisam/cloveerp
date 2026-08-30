@@ -11,7 +11,6 @@ import {
   type ActionSpec,
 } from "../components/erp/actions-bar";
 
-
 /**
  * One description of every module, used by every surface that talks about it.
  *
@@ -82,7 +81,6 @@ export type ModuleDef = {
   /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
   actions?: ActionSpec[];
 };
-
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -1301,7 +1299,6 @@ export const LOGISTICS: ModuleDef = {
           .map((s) => s.trim())
           .filter(Boolean),
       }),
-
     },
     {
       label: "Select a carrier",

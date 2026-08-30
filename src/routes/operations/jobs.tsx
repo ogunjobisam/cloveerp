@@ -18,7 +18,6 @@ const KILL_TARGETS = [
   { value: "event_consumer", label: "Event consumer" },
 ];
 
-
 export const Route = createFileRoute("/operations/jobs")({
   head: () => ({ meta: [{ title: "Scheduled jobs — ERPWare" }] }),
   component: () => (
@@ -107,7 +106,6 @@ function Jobs() {
           },
         ]}
       />
-
 
       <DataPanel<Silent>
         title="Jobs that have stopped running"

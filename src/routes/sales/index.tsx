@@ -12,7 +12,6 @@ import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 
-
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — ERPWare" }] }),
   component: () => (
@@ -71,7 +70,12 @@ function Sales() {
             permission: "sales.order",
             fn: "erp_reserve_for_line",
             fields: [
-              { kind: "text", name: "p_document_line_id", label: "Document line id", required: true },
+              {
+                kind: "text",
+                name: "p_document_line_id",
+                label: "Document line id",
+                required: true,
+              },
               { kind: "text", name: "p_policy_code", label: "Policy code" },
             ],
           },
@@ -120,7 +124,6 @@ function Sales() {
           },
         ]}
       />
-
 
       <DocumentPanel
         title="Quotations"

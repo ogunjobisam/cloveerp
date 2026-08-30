@@ -65,7 +65,6 @@ function Integrations() {
         ]}
       />
 
-
       <DataPanel<Backlog>
         title="Needs a decision"
         description="Oldest first, each with the action that would resolve it."
