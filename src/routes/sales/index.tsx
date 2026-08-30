@@ -33,6 +33,86 @@ function Sales() {
         direction.
       </PageHeader>
 
+      <ActionBar
+        note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
+        actions={[
+          {
+            label: "Resolve a price",
+            description: "What would this customer pay for this item today?",
+            permission: "sales.price",
+            fn: "erp_resolve_price",
+            fields: [
+              pickItem(),
+              pickParty("customer"),
+              { kind: "number", name: "p_quantity", label: "Quantity" },
+            ],
+          },
+          {
+            label: "Promise a date",
+            permission: "sales.order",
+            fn: "erp_promise_date",
+            fields: [
+              pickItem(),
+              pickSite(),
+              { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+            ],
+          },
+          {
+            label: "Reserve stock for a line",
+            permission: "sales.order",
+            fn: "erp_reserve_for_line",
+            fields: [
+              { kind: "text", name: "p_document_line_id", label: "Document line id", required: true },
+              { kind: "text", name: "p_policy_code", label: "Policy code" },
+            ],
+          },
+          {
+            label: "Release a credit hold",
+            permission: "sales.credit_release",
+            fn: "erp_release_credit_hold",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "status"],
+                "p_document_id",
+                "Document",
+                { p_limit: 100 },
+              ),
+              reason("p_reason", "Reason", true),
+            ],
+          },
+          {
+            label: "Raise a customer return",
+            permission: "sales.order",
+            fn: "erp_raise_customer_return",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "status"],
+                "p_original_document_id",
+                "Original document",
+                { p_limit: 100 },
+              ),
+              { kind: "text", name: "p_reason_code", label: "Reason code", required: true },
+              reason("p_reason", "Reason", true),
+              {
+                kind: "choice",
+                name: "p_outcome",
+                label: "Outcome",
+                choices: [
+                  { value: "credit", label: "Credit" },
+                  { value: "replace", label: "Replace" },
+                  { value: "repair", label: "Repair" },
+                ],
+              },
+            ],
+          },
+        ]}
+      />
+
+
       <DocumentPanel
         title="Quotations"
         description="Offers, before they are orders."
