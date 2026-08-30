@@ -327,6 +327,23 @@ export function ActionDialog({
                   value={values[f.name] ?? ""}
                   onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
                 />
+              ) : f.kind === "choice" || f.kind === "site" ? (
+                <select
+                  required={f.required ?? false}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                >
+                  <option value="">Choose…</option>
+                  {(f.kind === "site"
+                    ? session.sites.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))
+                    : f.choices
+                  ).map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <input
                   type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}
@@ -338,6 +355,7 @@ export function ActionDialog({
                   className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
                 />
               )}
+
 
               {f.hint ? <span className="text-xs text-muted-foreground">{f.hint}</span> : null}
             </label>
