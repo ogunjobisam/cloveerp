@@ -44,21 +44,25 @@ const OBJECT_TYPES = [
   { value: "change_request", label: "Change request" },
 ];
 
-const pickDepartment = (name = "p_department_id", label = "Department", required = true): Field => ({
-    kind: "select",
-    name,
-    label,
-    required,
-    options: { fn: "erp_departments", value: "department_id", label: ["code", "name"] },
-  });
+const pickDepartment = (
+  name = "p_department_id",
+  label = "Department",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_departments", value: "department_id", label: ["code", "name"] },
+});
 
 const pickPrincipal = (name: string, label: string, required = true): Field => ({
-    kind: "select",
-    name,
-    label,
-    required,
-    options: { fn: "erp_principals", value: "id", label: ["display_name"] },
-  });
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_principals", value: "id", label: ["display_name"] },
+});
 
 type Department = {
   department_id: string;
@@ -412,7 +416,14 @@ function Organisation() {
       >
         {(rows) => (
           <Table
-            columns={[ui("Person"), ui("Department"), ui("Primary"), ui("From"), ui("To"), ui("Status")]}
+            columns={[
+              ui("Person"),
+              ui("Department"),
+              ui("Primary"),
+              ui("From"),
+              ui("To"),
+              ui("Status"),
+            ]}
           >
             {rows.map((m) => (
               <tr key={m.membership_id} className="border-b border-border/60 last:border-0">
@@ -459,11 +470,11 @@ function Organisation() {
                 <td className="py-2 pr-4 font-mono text-xs">{b.department_code}</td>
                 <td className="py-2 pr-4">{b.object_type}</td>
                 <td className="py-2 pr-4 tabular-nums">{b.seq}</td>
+                <td className="py-2 pr-4 tabular-nums">{money(b.lower_bound_minor, b.currency)}</td>
                 <td className="py-2 pr-4 tabular-nums">
-                  {money(b.lower_bound_minor, b.currency)}
-                </td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {b.upper_bound_minor === null ? ui("No ceiling") : money(b.upper_bound_minor, b.currency)}
+                  {b.upper_bound_minor === null
+                    ? ui("No ceiling")
+                    : money(b.upper_bound_minor, b.currency)}
                 </td>
                 <td className="py-2 pr-4">{b.is_parallel ? ui("Parallel") : ui("Sequential")}</td>
                 <td className="py-2 pr-4">{b.rerun_lower_bands ? ui("Re-run") : ui("Replaced")}</td>
@@ -540,7 +551,9 @@ function Organisation() {
           >
             {rows.map((s) => (
               <tr key={s.stamp_id} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 tabular-nums">{s.resolved_at.slice(0, 16).replace("T", " ")}</td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {s.resolved_at.slice(0, 16).replace("T", " ")}
+                </td>
                 <td className="py-2 pr-4">{s.object_type}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{s.department_code ?? "—"}</td>
                 <td className="py-2 pr-4 tabular-nums">{money(s.value_minor, s.currency)}</td>
@@ -567,7 +580,13 @@ function Organisation() {
                 required: true,
                 choices: OBJECT_TYPES,
               },
-              { kind: "money", name: "p_value_minor", label: "Value", currency: "GBP", required: true },
+              {
+                kind: "money",
+                name: "p_value_minor",
+                label: "Value",
+                currency: "GBP",
+                required: true,
+              },
               pickDepartment("p_department_id", "Department", false),
             ],
           },
