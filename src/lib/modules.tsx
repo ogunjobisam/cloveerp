@@ -851,6 +851,84 @@ export const LOGISTICS: ModuleDef = {
   blurb: "Shipments, carrier bookings and delivery performance, with cost landing on stock.",
   permission: "logistics.read",
   group: "move",
+  actions: [
+    {
+      label: "Plan a shipment",
+      description: "Group deliveries leaving one site on one day.",
+      permission: "logistics.plan",
+      fn: "erp_plan_shipment",
+      fields: [
+        pickSite(),
+        {
+          kind: "text",
+          name: "p_delivery_ids",
+          label: "Delivery ids",
+          required: true,
+          hint: "Comma separated.",
+        },
+        { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: true },
+      ],
+      invalidates: ["erp_shipments", "erp_open_shipments"],
+    },
+    {
+      label: "Select a carrier",
+      permission: "logistics.plan",
+      fn: "erp_select_carrier",
+      fields: [
+        pickFrom(
+          "erp_shipments",
+          "shipment_id",
+          ["reference", "status"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        { kind: "date", name: "p_required_by", label: "Required by", required: false },
+      ],
+      invalidates: ["erp_shipments", "erp_open_shipments"],
+    },
+    {
+      label: "Book a shipment",
+      permission: "logistics.despatch",
+      fn: "erp_book_shipment",
+      fields: [
+        pickFrom(
+          "erp_shipments",
+          "shipment_id",
+          ["reference", "status"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        { kind: "text", name: "p_carrier_code", label: "Carrier code", required: true },
+        { kind: "text", name: "p_service_code", label: "Service code", required: true },
+        {
+          kind: "number",
+          name: "p_cost_minor",
+          label: "Cost",
+          required: true,
+          hint: "In minor units — pence, cents.",
+        },
+      ],
+      invalidates: ["erp_shipments", "erp_open_shipments", "erp_delivery_performance"],
+    },
+    {
+      label: "Record proof of delivery",
+      permission: "logistics.despatch",
+      fn: "erp_record_pod",
+      fields: [
+        pickFrom(
+          "erp_shipments",
+          "shipment_id",
+          ["reference", "status"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        { kind: "text", name: "p_signed_by", label: "Signed by", required: true },
+        { kind: "text", name: "p_reference", label: "Reference", required: false },
+      ],
+      invalidates: ["erp_shipments", "erp_delivery_performance"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open shipments",
