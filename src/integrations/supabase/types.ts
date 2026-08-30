@@ -20,6 +20,246 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      erp_add_document_line: {
+        Args: {
+          p_description?: string
+          p_document_id: string
+          p_item_id: string
+          p_quantity: number
+          p_unit_price_minor?: number
+        }
+        Returns: Json
+      }
+      erp_allocate_landed_cost: {
+        Args: { p_landed_cost_id: string }
+        Returns: number
+      }
+      erp_amend_batch: {
+        Args: {
+          p_batch_id: string
+          p_field: string
+          p_reason: string
+          p_value: string
+        }
+        Returns: undefined
+      }
+      erp_amend_document_line: {
+        Args: { p_line_id: string; p_quantity: number; p_reason: string }
+        Returns: undefined
+      }
+      erp_apply_calculated_policy: {
+        Args: { p_item_id: string; p_site_id: string }
+        Returns: undefined
+      }
+      erp_apply_cash: {
+        Args: {
+          p_amount_minor: number
+          p_currency: string
+          p_party_id: string
+          p_reference?: string
+        }
+        Returns: {
+          applied_minor: number
+          remaining_minor: number
+          subledger_item_id: string
+        }[]
+      }
+      erp_apply_mass_change: {
+        Args: { p_mass_change_id: string }
+        Returns: number
+      }
+      erp_approve_change_set: {
+        Args: { p_change_set_id: string }
+        Returns: Json
+      }
+      erp_approve_payment_run: {
+        Args: { p_proposal_id: string }
+        Returns: number
+      }
+      erp_available_to_promise: {
+        Args: { p_item_id: string; p_on?: string; p_site_id: string }
+        Returns: Json
+      }
+      erp_batch_audit: { Args: { p_batch_id: string }; Returns: Json }
+      erp_batch_record: { Args: { p_works_order_id: string }; Returns: Json }
+      erp_book_operation_time: {
+        Args: {
+          p_completed?: number
+          p_minutes: number
+          p_operation_seq: number
+          p_scrapped?: number
+          p_works_order_id: string
+        }
+        Returns: undefined
+      }
+      erp_book_shipment: {
+        Args: {
+          p_carrier_code: string
+          p_cost_minor?: number
+          p_service_code: string
+          p_shipment_id: string
+        }
+        Returns: undefined
+      }
+      erp_budget_position: { Args: { p_code: string }; Returns: Json }
+      erp_calculate_policy: {
+        Args: { p_item_id: string; p_site_id: string }
+        Returns: Json
+      }
+      erp_cancel_command: {
+        Args: { p_command_id: string; p_reason: string }
+        Returns: undefined
+      }
+      erp_change_sets: { Args: never; Returns: Json }
+      erp_claim_invitation: { Args: { p_token: string }; Returns: Json }
+      erp_clear_kill_switch: {
+        Args: {
+          p_key: string
+          p_kind:
+            | "rule_set"
+            | "rule"
+            | "state_machine"
+            | "approval_chain"
+            | "job"
+            | "command_class"
+            | "integration"
+            | "event_consumer"
+        }
+        Returns: undefined
+      }
+      erp_close_period: {
+        Args: { p_fiscal_period_id: string }
+        Returns: undefined
+      }
+      erp_close_quality_event: {
+        Args: {
+          p_corrective_action: string
+          p_event_id: string
+          p_preventive_action: string
+          p_root_cause: string
+        }
+        Returns: undefined
+      }
+      erp_close_status: { Args: { p_fiscal_period_id: string }; Returns: Json }
+      erp_close_works_order: {
+        Args: { p_works_order_id: string }
+        Returns: Json
+      }
+      erp_commit_allocation: {
+        Args: {
+          p_allocation_id: string
+          p_batch_id?: string
+          p_location_id?: string
+        }
+        Returns: number
+      }
+      erp_complete_close_task: {
+        Args: { p_task_id: string; p_waiver_reason?: string }
+        Returns: string
+      }
+      erp_configure_finance: {
+        Args: { p_currency?: string; p_fiscal_year?: number }
+        Returns: string
+      }
+      erp_configure_inventory: {
+        Args: { p_approver_role?: string; p_method?: string }
+        Returns: string
+      }
+      erp_configure_logistics: { Args: never; Returns: string }
+      erp_configure_master_data: {
+        Args: { p_approver_role?: string }
+        Returns: string
+      }
+      erp_configure_period_close: { Args: never; Returns: string }
+      erp_configure_planning: {
+        Args: { p_service_level_pct?: number }
+        Returns: string
+      }
+      erp_configure_procurement: {
+        Args: { p_approval_threshold_minor?: number }
+        Returns: Json
+      }
+      erp_configure_procurement_controls: {
+        Args: { p_approver_role?: string }
+        Returns: string
+      }
+      erp_configure_production: { Args: never; Returns: string }
+      erp_configure_quality: { Args: never; Returns: string }
+      erp_configure_receivables: { Args: never; Returns: string }
+      erp_configure_sales: {
+        Args: { p_discount_threshold_pct?: number }
+        Returns: Json
+      }
+      erp_configure_sales_controls: {
+        Args: { p_min_margin_pct?: number }
+        Returns: string
+      }
+      erp_configure_tax: {
+        Args: { p_home_country?: string; p_standard_rate?: number }
+        Returns: string
+      }
+      erp_count_accuracy: { Args: never; Returns: Json }
+      erp_create_document: {
+        Args: {
+          p_party_id?: string
+          p_required_date?: string
+          p_site_id?: string
+          p_their_ref?: string
+          p_type_code: string
+        }
+        Returns: Json
+      }
+      erp_create_service_principal: {
+        Args: { p_display_name: string }
+        Returns: Json
+      }
+      erp_credit_position: { Args: { p_party_id: string }; Returns: Json }
+      erp_data_quality: { Args: { p_object_type: string }; Returns: Json }
+      erp_delivery_performance: { Args: { p_days?: number }; Returns: Json }
+      erp_disposition_inspection: {
+        Args: {
+          p_disposition:
+            | "pending"
+            | "accept"
+            | "accept_with_concession"
+            | "rework"
+            | "reject"
+            | "quarantine"
+            | "destroy"
+          p_inspection_id: string
+          p_note?: string
+        }
+        Returns:
+          | "pending"
+          | "accept"
+          | "accept_with_concession"
+          | "rework"
+          | "reject"
+          | "quarantine"
+          | "destroy"
+      }
+      erp_document: { Args: { p_document_id: string }; Returns: Json }
+      erp_documents: {
+        Args: { p_limit?: number; p_type_code?: string }
+        Returns: Json
+      }
+      erp_dunning_worklist: { Args: never; Returns: Json }
+      erp_duplicate_candidates: {
+        Args: { p_object_type: string }
+        Returns: Json
+      }
+      erp_excursion_impact: {
+        Args: {
+          p_from: string
+          p_location_id: string
+          p_site_id: string
+          p_to: string
+        }
+        Returns: Json
+      }
+      erp_expiry_horizon: { Args: { p_days?: number }; Returns: Json }
+      erp_fixed_asset_register: { Args: { p_as_at?: string }; Returns: Json }
+      erp_go_live: { Args: never; Returns: Json }
       erp_grant_role: {
         Args: {
           p_app_user_id: string
@@ -30,16 +270,323 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_grni: { Args: never; Returns: Json }
       erp_integration_backlog: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_health: { Args: never; Returns: Json }
+      erp_intercompany_position: { Args: never; Returns: Json }
+      erp_invite_principal: {
+        Args: { p_display_name: string; p_email: string }
+        Returns: Json
+      }
+      erp_invoice_against: {
+        Args: {
+          p_invoice_id: string
+          p_order_line_id: string
+          p_quantity: number
+          p_unit_price_minor?: number
+        }
+        Returns:
+          | "matched"
+          | "quantity_variance"
+          | "price_variance"
+          | "both"
+          | "unmatched"
+      }
+      erp_invoice_from_delivery: {
+        Args: { p_allow_self_invoice?: boolean; p_delivery_id: string }
+        Returns: string
+      }
+      erp_issue_to_works_order: {
+        Args: {
+          p_batch_id?: string
+          p_component_item_id: string
+          p_location_id?: string
+          p_quantity: number
+          p_works_order_id: string
+        }
+        Returns: number
+      }
       erp_job_health: { Args: never; Returns: Json }
+      erp_link_documents: {
+        Args: {
+          p_from_document_id: string
+          p_kind:
+            | "fulfils"
+            | "invoices"
+            | "credits"
+            | "converts"
+            | "returns"
+            | "consumes"
+            | "corrects"
+            | "consolidates"
+          p_quantity?: number
+          p_to_document_id: string
+        }
+        Returns: string
+      }
+      erp_load_import: { Args: { p_batch_id: string }; Returns: number }
+      erp_log_recall_action: {
+        Args: {
+          p_action_kind: string
+          p_evidence_ref?: string
+          p_impact_id?: number
+          p_note?: string
+          p_party_id?: string
+          p_quantity_recovered?: number
+          p_recall_id: string
+        }
+        Returns: number
+      }
+      erp_match_workbench: { Args: never; Returns: Json }
+      erp_merge_master_record: {
+        Args: {
+          p_duplicate_id: string
+          p_object_type: string
+          p_reason: string
+          p_survivor_id: string
+        }
+        Returns: undefined
+      }
+      erp_my_tenants: { Args: never; Returns: Json }
       erp_onboard_tenant: {
         Args: { p_code: string; p_name: string }
         Returns: Json
       }
+      erp_open_change_request: {
+        Args: {
+          p_object_id: string
+          p_object_type: string
+          p_proposed: Json
+          p_reason?: string
+        }
+        Returns: string
+      }
+      erp_open_mass_change: {
+        Args: {
+          p_changes: Json
+          p_code?: string
+          p_object_type: string
+          p_reason?: string
+          p_selector: Json
+        }
+        Returns: string
+      }
+      erp_open_period_close: {
+        Args: { p_fiscal_period_id: string }
+        Returns: number
+      }
+      erp_part5_coverage: { Args: { p_section?: string }; Returns: Json }
+      erp_part5_summary: { Args: never; Returns: Json }
       erp_permissions_directory: { Args: never; Returns: Json }
+      erp_plan_shipment: {
+        Args: {
+          p_delivery_ids: string[]
+          p_planned_despatch?: string
+          p_site_id: string
+        }
+        Returns: string
+      }
+      erp_planner_workbench: { Args: { p_site_id?: string }; Returns: Json }
       erp_platform_assurance: { Args: never; Returns: Json }
+      erp_post_count: { Args: { p_task_id: string }; Returns: number }
+      erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
+      erp_promise_date: {
+        Args: { p_item_id: string; p_quantity: number; p_site_id: string }
+        Returns: string
+      }
+      erp_promote_change_set: {
+        Args: { p_change_set_id: string }
+        Returns: Json
+      }
+      erp_propose_payment_run: {
+        Args: {
+          p_currency?: string
+          p_include_due_within?: string
+          p_payment_date?: string
+        }
+        Returns: string
+      }
+      erp_qualify_supplier: {
+        Args: { p_note?: string; p_party_id: string; p_valid_for?: string }
+        Returns: undefined
+      }
+      erp_raise_count_tasks: {
+        Args: { p_programme_code: string }
+        Returns: number
+      }
+      erp_raise_customer_return: {
+        Args: {
+          p_original_document_id: string
+          p_outcome?: string
+          p_reason: string
+          p_reason_code: string
+        }
+        Returns: string
+      }
+      erp_raise_quality_event: {
+        Args: {
+          p_batch_id?: string
+          p_document_id?: string
+          p_due_in?: string
+          p_item_id?: string
+          p_kind:
+            | "deviation"
+            | "non_conformance"
+            | "complaint"
+            | "excursion"
+            | "near_miss"
+            | "audit_finding"
+          p_party_id?: string
+          p_severity: string
+          p_site_id?: string
+          p_title: string
+        }
+        Returns: string
+      }
+      erp_raise_recall: {
+        Args: {
+          p_batch_ids: string[]
+          p_classification: string
+          p_clock_code?: string
+          p_reason: string
+          p_title: string
+        }
+        Returns: string
+      }
+      erp_raise_works_order: {
+        Args: {
+          p_item_id: string
+          p_kind?:
+            | "assembly"
+            | "kitting"
+            | "rework"
+            | "repackaging"
+            | "disassembly"
+          p_planned_end?: string
+          p_quantity: number
+          p_site_id: string
+        }
+        Returns: string
+      }
+      erp_recall_evidence: { Args: { p_recall_id: string }; Returns: Json }
+      erp_recall_readiness: { Args: { p_recall_id?: string }; Returns: Json }
+      erp_receivables_ageing: { Args: { p_as_at?: string }; Returns: Json }
+      erp_receive_against: {
+        Args: {
+          p_batch_id?: string
+          p_order_line_id: string
+          p_quantity: number
+          p_receipt_id: string
+        }
+        Returns: string
+      }
+      erp_receive_works_order_output: {
+        Args: {
+          p_batch_number?: string
+          p_location_id?: string
+          p_quantity: number
+          p_works_order_id: string
+        }
+        Returns: string
+      }
+      erp_record_count: {
+        Args: { p_quantity: number; p_task_id: string }
+        Returns:
+          | "open"
+          | "counted"
+          | "pending_approval"
+          | "approved"
+          | "rejected"
+          | "posted"
+          | "cancelled"
+      }
+      erp_record_inspection_result: {
+        Args: {
+          p_characteristic: string
+          p_inspection_id: string
+          p_instrument?: string
+          p_numeric_value?: number
+          p_text_value?: string
+        }
+        Returns: boolean
+      }
+      erp_record_proof_of_delivery: {
+        Args: {
+          p_arrived_at: string
+          p_reference?: string
+          p_shipment_id: string
+          p_signed_by: string
+        }
+        Returns: undefined
+      }
+      erp_redistribution_suggestions: {
+        Args: { p_days?: number }
+        Returns: Json
+      }
+      erp_release_batch: {
+        Args: {
+          p_basis: string
+          p_batch_id: string
+          p_inspection_id?: string
+          p_signature: string
+          p_site_id: string
+        }
+        Returns: string
+      }
+      erp_release_credit_hold: {
+        Args: { p_document_id: string; p_reason: string }
+        Returns: undefined
+      }
+      erp_release_works_order: {
+        Args: { p_allow_shortage?: boolean; p_works_order_id: string }
+        Returns:
+          | "draft"
+          | "planned"
+          | "released"
+          | "in_progress"
+          | "completed"
+          | "closed"
+          | "cancelled"
+      }
+      erp_reopen_period: {
+        Args: { p_fiscal_period_id: string; p_reason: string }
+        Returns: number
+      }
+      erp_replay_message: {
+        Args: { p_message_id: number; p_reason: string }
+        Returns: number
+      }
+      erp_reserve_for_line: {
+        Args: { p_document_line_id: string; p_policy_code?: string }
+        Returns: string
+      }
+      erp_resolve_price: {
+        Args: { p_item_id: string; p_party_id: string; p_quantity?: number }
+        Returns: Json
+      }
+      erp_return_reasons: { Args: { p_days?: number }; Returns: Json }
+      erp_reverse_mass_change: {
+        Args: { p_mass_change_id: string }
+        Returns: number
+      }
       erp_revoke_role: { Args: { p_user_role_id: string }; Returns: Json }
+      erp_rollback_import: { Args: { p_batch_id: string }; Returns: number }
+      erp_rollback_to_snapshot: {
+        Args: { p_reason: string; p_snapshot_id: string }
+        Returns: string
+      }
+      erp_run_forecast: {
+        Args: {
+          p_buckets?: number
+          p_forecast_code: string
+          p_periods?: number
+        }
+        Returns: string
+      }
+      erp_run_planning: {
+        Args: { p_horizon_days?: number; p_site_id: string }
+        Returns: string
+      }
       erp_save_role: {
         Args: {
           p_code: string
@@ -51,8 +598,103 @@ export type Database = {
         Returns: Json
       }
       erp_seed_demo: { Args: never; Returns: Json }
+      erp_select_carrier: {
+        Args: { p_required_by?: string; p_shipment_id: string }
+        Returns: Json
+      }
       erp_session: { Args: never; Returns: Json }
+      erp_set_active_tenant: { Args: { p_tenant_id: string }; Returns: Json }
+      erp_set_kill_switch: {
+        Args: {
+          p_key: string
+          p_kind:
+            | "rule_set"
+            | "rule"
+            | "state_machine"
+            | "approval_chain"
+            | "job"
+            | "command_class"
+            | "integration"
+            | "event_consumer"
+          p_reason: string
+        }
+        Returns: string
+      }
+      erp_sign_off_forecast: {
+        Args: { p_note?: string; p_version_id: string }
+        Returns: undefined
+      }
       erp_silent_jobs: { Args: never; Returns: Json }
+      erp_split_batch: {
+        Args: {
+          p_batch_id: string
+          p_location_id: string
+          p_new_number: string
+          p_quantity: number
+          p_reason: string
+        }
+        Returns: string
+      }
+      erp_stage_import: {
+        Args: {
+          p_code?: string
+          p_object_type: string
+          p_rows: Json
+          p_source?: string
+        }
+        Returns: string
+      }
+      erp_stock_ageing: { Args: never; Returns: Json }
+      erp_stock_health: { Args: never; Returns: Json }
+      erp_stock_valuation: { Args: never; Returns: Json }
+      erp_submit_command: {
+        Args: {
+          p_dry_run?: boolean
+          p_idempotency_key?: string
+          p_operation_code: string
+          p_payload?: Json
+          p_system_code: string
+        }
+        Returns: Json
+      }
+      erp_supplier_qualification: { Args: never; Returns: Json }
+      erp_supply_demand: {
+        Args: { p_horizon_days?: number; p_item_id: string; p_site_id: string }
+        Returns: Json
+      }
+      erp_tax_report: { Args: { p_from: string; p_to: string }; Returns: Json }
+      erp_transition_document: {
+        Args: {
+          p_document_id: string
+          p_reason?: string
+          p_transition_code: string
+        }
+        Returns: Json
+      }
+      erp_trial_balance: { Args: never; Returns: Json }
+      erp_trigger_job: {
+        Args: { p_job_code: string; p_reason?: string }
+        Returns: Json
+      }
+      erp_works_order_availability: {
+        Args: { p_works_order_id: string }
+        Returns: Json
+      }
+      erp_works_order_variance: {
+        Args: { p_works_order_id: string }
+        Returns: Json
+      }
+      erp_write_off_stock: {
+        Args: {
+          p_batch_id?: string
+          p_item_id: string
+          p_location_id: string
+          p_quantity: number
+          p_reason: string
+          p_site_id: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
