@@ -14,6 +14,7 @@ import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
+import { Route as AdministrationOrganisationRouteImport } from './routes/administration/organisation'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
 import { Route as AdministrationTerminologyRouteImport } from './routes/administration/terminology'
@@ -58,6 +59,12 @@ const AdministrationConfigurationRoute =
   AdministrationConfigurationRouteImport.update({
     id: '/administration/configuration',
     path: '/administration/configuration',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdministrationOrganisationRoute =
+  AdministrationOrganisationRouteImport.update({
+    id: '/administration/organisation',
+    path: '/administration/organisation',
     getParentRoute: () => rootRouteImport,
   } as any)
 const AdministrationPermissionsRoute =
@@ -164,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
@@ -190,6 +198,7 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
@@ -217,6 +226,7 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/audit'
     | '/administration/configuration'
+    | '/administration/organisation'
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/audit'
     | '/administration/configuration'
+    | '/administration/organisation'
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
@@ -297,6 +309,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/audit'
     | '/administration/configuration'
+    | '/administration/organisation'
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
@@ -324,6 +337,7 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
+  AdministrationOrganisationRoute: typeof AdministrationOrganisationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   AdministrationTenantRoute: typeof AdministrationTenantRoute
   AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
@@ -380,6 +394,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/configuration'
       fullPath: '/administration/configuration'
       preLoaderRoute: typeof AdministrationConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/organisation': {
+      id: '/administration/organisation'
+      path: '/administration/organisation'
+      fullPath: '/administration/organisation'
+      preLoaderRoute: typeof AdministrationOrganisationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/permissions': {
@@ -524,6 +545,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
+  AdministrationOrganisationRoute: AdministrationOrganisationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   AdministrationTenantRoute: AdministrationTenantRoute,
   AdministrationTerminologyRoute: AdministrationTerminologyRoute,
