@@ -5,6 +5,7 @@ import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, RefreshButton } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { ConfigTransfer } from "../../components/erp/transfer";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/master-data/item-supply")({
