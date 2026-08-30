@@ -10,6 +10,8 @@ import {
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, RefreshButton } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { ConfigTransfer } from "../../components/erp/transfer";
+import { WavePrintReadiness } from "../../components/erp/wave-print";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/logistics/release-areas")({
