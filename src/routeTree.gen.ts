@@ -14,6 +14,7 @@ import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
+import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
@@ -46,6 +47,11 @@ const AdministrationPermissionsRoute =
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryIndexRoute = InventoryIndexRouteImport.update({
+  id: '/inventory/',
+  path: '/inventory/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MasterDataIndexRoute = MasterDataIndexRouteImport.update({
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/inventory/': typeof InventoryIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
   '/sales/': typeof SalesIndexRoute
@@ -101,6 +108,7 @@ export interface FileRoutesByTo {
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/inventory': typeof InventoryIndexRoute
   '/master-data': typeof MasterDataIndexRoute
   '/procurement': typeof ProcurementIndexRoute
   '/sales': typeof SalesIndexRoute
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/inventory/': typeof InventoryIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
   '/sales/': typeof SalesIndexRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/inventory/'
     | '/master-data/'
     | '/procurement/'
     | '/sales/'
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/inventory'
     | '/master-data'
     | '/procurement'
     | '/sales'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/inventory/'
     | '/master-data/'
     | '/procurement/'
     | '/sales/'
@@ -170,6 +182,7 @@ export interface RootRouteChildren {
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
+  InventoryIndexRoute: typeof InventoryIndexRoute
   MasterDataIndexRoute: typeof MasterDataIndexRoute
   ProcurementIndexRoute: typeof ProcurementIndexRoute
   SalesIndexRoute: typeof SalesIndexRoute
@@ -210,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/documents/$documentId'
       fullPath: '/documents/$documentId'
       preLoaderRoute: typeof DocumentsDocumentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory/': {
+      id: '/inventory/'
+      path: '/inventory'
+      fullPath: '/inventory/'
+      preLoaderRoute: typeof InventoryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/master-data/': {
@@ -266,6 +286,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
+  InventoryIndexRoute: InventoryIndexRoute,
   MasterDataIndexRoute: MasterDataIndexRoute,
   ProcurementIndexRoute: ProcurementIndexRoute,
   SalesIndexRoute: SalesIndexRoute,
