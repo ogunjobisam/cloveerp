@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ErrorNote, PermissionNote, useErpAction } from "../../components/erp/action";
 import { AutoPanel, StatusPill } from "../../components/erp/auto";
+import { BrandingPanel } from "../../components/erp/branding";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
@@ -68,6 +69,8 @@ function TenantLifecycle() {
           />
         </div>
       </section>
+
+      {mayAdminister ? <BrandingPanel /> : null}
 
       <ExportPanel />
 
