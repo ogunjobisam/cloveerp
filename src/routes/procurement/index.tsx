@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickParty } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  pickFrom,
+  pickItem,
+  pickLine,
+  pickParty,
+  pickSite,
+} from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -51,7 +58,7 @@ function Procurement() {
                 "Receipt",
                 { p_limit: 100 },
               ),
-              { kind: "text", name: "p_order_line_id", label: "Order line id", required: true },
+              pickLine("purchase_order"),
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },
               pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
             ],
@@ -70,7 +77,7 @@ function Procurement() {
                 "Invoice",
                 { p_limit: 100 },
               ),
-              { kind: "text", name: "p_order_line_id", label: "Order line id", required: true },
+              pickLine("purchase_order"),
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },
               {
                 kind: "number",
@@ -80,6 +87,18 @@ function Procurement() {
               },
             ],
             invalidates: ["erp_match_workbench", "erp_grni"],
+          },
+          {
+            label: "Resolve a purchase price",
+            description: "What should this supplier charge for this item today, and on what basis?",
+            permission: "procurement.order",
+            fn: "erp_resolve_purchase_price",
+            fields: [
+              pickItem(),
+              pickParty("supplier"),
+              { kind: "number", name: "p_quantity", label: "Quantity" },
+              pickSite("p_site_id", "Site", false),
+            ],
           },
           {
             label: "Qualify a supplier",
@@ -93,7 +112,13 @@ function Procurement() {
             permission: "procurement.match",
             fn: "erp_allocate_landed_cost",
             fields: [
-              { kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true },
+              pickFrom(
+                "erp_landed_costs",
+                "landed_cost_id",
+                ["charge_code", "description", "receipt"],
+                "p_landed_cost_id",
+                "Landed cost",
+              ),
             ],
           },
         ]}

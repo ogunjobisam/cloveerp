@@ -5,6 +5,7 @@ import { StatusPill, shortDate } from "../components/erp/auto";
 import {
   pickFrom,
   pickItem,
+  pickLocation,
   pickParty,
   pickSite,
   reason,
@@ -178,7 +179,7 @@ export const INVENTORY: ModuleDef = {
       fields: [
         pickItem(),
         pickSite(),
-        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        pickLocation(),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         reason("p_reason", "Reason", true),
         pickFrom(
@@ -199,7 +200,7 @@ export const INVENTORY: ModuleDef = {
         pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
         { kind: "text", name: "p_new_number", label: "New batch number", required: true },
         { kind: "number", name: "p_quantity", label: "Quantity to split", required: true },
-        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        pickLocation(),
         reason(),
       ],
       invalidates: ["erp_batches", "erp_stock_health"],
@@ -215,6 +216,62 @@ export const INVENTORY: ModuleDef = {
         { kind: "text", name: "p_signature", label: "Signature", required: true },
       ],
       invalidates: ["erp_batches", "erp_stock_health"],
+    },
+    {
+      label: "Merge two batches",
+      description: "Combine one batch into another of the same item and condition.",
+      permission: "inventory.adjust",
+      fn: "erp_merge_batches",
+      fields: [
+        pickFrom(
+          "erp_batches",
+          "batch_id",
+          ["batch_number", "item"],
+          "p_target_batch_id",
+          "Surviving batch",
+        ),
+        pickFrom(
+          "erp_batches",
+          "batch_id",
+          ["batch_number", "item"],
+          "p_source_batch_id",
+          "Batch being merged",
+        ),
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_batches", "erp_stock_health", "erp_expiry_horizon"],
+    },
+    {
+      label: "Raise putaway tasks",
+      description: "Ask the warehouse to move what is standing in goods-in.",
+      permission: "inventory.adjust",
+      fn: "erp_raise_putaway_tasks",
+      fields: [pickSite()],
+      invalidates: ["erp_warehouse_tasks"],
+    },
+    {
+      label: "Raise replenishment tasks",
+      description: "Top the pick faces up from reserve where demand exceeds what is there.",
+      permission: "inventory.adjust",
+      fn: "erp_raise_replenishment_tasks",
+      fields: [pickSite()],
+      invalidates: ["erp_warehouse_tasks"],
+    },
+    {
+      label: "Complete a warehouse task",
+      permission: "inventory.adjust",
+      fn: "erp_complete_warehouse_task",
+      fields: [
+        pickFrom(
+          "erp_warehouse_tasks",
+          "task_id",
+          ["kind", "item", "from_location", "to_location"],
+          "p_task_id",
+          "Task",
+        ),
+        { kind: "number", name: "p_quantity", label: "Quantity", hint: "Blank means all of it." },
+      ],
+      invalidates: ["erp_warehouse_tasks", "erp_stock_health"],
     },
     {
       label: "Apply calculated policy",
@@ -277,6 +334,22 @@ export const INVENTORY: ModuleDef = {
         { header: "Expected", cell: "expected", numeric: true },
         { header: "Counted", cell: "counted", numeric: true },
         { header: "Variance", cell: "variance", numeric: true },
+        pill("status"),
+      ],
+    },
+    {
+      title: "Warehouse tasks",
+      description: "Putaway and replenishment, raised from the balances and waiting on a truck.",
+      fn: "erp_warehouse_tasks",
+      empty: "No warehouse tasks outstanding.",
+      rowKey: (r, i) => String(r["task_id"] ?? i),
+      columns: [
+        { header: "Kind", cell: "kind" },
+        { header: "Item", cell: "item" },
+        { header: "From", cell: "from_location" },
+        { header: "To", cell: "to_location" },
+        { header: "Quantity", cell: "quantity", numeric: true },
+        { header: "Done", cell: "quantity_done", numeric: true },
         pill("status"),
       ],
     },
@@ -399,7 +472,13 @@ export const FINANCE: ModuleDef = {
       permission: "finance.close_period",
       fn: "erp_complete_close_task",
       fields: [
-        { kind: "text", name: "p_task_id", label: "Task id", required: true },
+        pickFrom(
+          "erp_close_tasks",
+          "task_id",
+          ["period", "code", "status"],
+          "p_task_id",
+          "Close task",
+        ),
         { kind: "text", name: "p_waiver_reason", label: "Waiver reason" },
       ],
       invalidates: ["erp_close_status"],
@@ -449,7 +528,15 @@ export const FINANCE: ModuleDef = {
       label: "Approve a payment run",
       permission: "finance.approve_payment",
       fn: "erp_approve_payment_run",
-      fields: [{ kind: "text", name: "p_proposal_id", label: "Proposal id", required: true }],
+      fields: [
+        pickFrom(
+          "erp_payment_proposals",
+          "proposal_id",
+          ["reference", "payment_date", "status"],
+          "p_proposal_id",
+          "Payment proposal",
+        ),
+      ],
       invalidates: ["erp_payment_runs", "erp_payables_ageing"],
     },
     {
@@ -500,7 +587,15 @@ export const FINANCE: ModuleDef = {
       label: "Allocate a landed cost",
       permission: "finance.post",
       fn: "erp_allocate_landed_cost",
-      fields: [{ kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true }],
+      fields: [
+        pickFrom(
+          "erp_landed_costs",
+          "landed_cost_id",
+          ["charge_code", "description", "receipt"],
+          "p_landed_cost_id",
+          "Landed cost",
+        ),
+      ],
       invalidates: ["erp_trial_balance", "erp_stock_valuation"],
     },
   ],
@@ -575,6 +670,23 @@ export const FINANCE: ModuleDef = {
     },
   ],
   reports: [
+    {
+      title: "Slow-moving stock provision",
+      description:
+        "One published policy: nothing under ninety days, a quarter to six months, half to a year, all of it beyond.",
+      fn: "erp_stock_provision",
+      empty: "Nothing is old enough to provide against.",
+      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
+      columns: [
+        { header: "Item", cell: "item_code" },
+        { header: "Name", cell: "item_name" },
+        { header: "Age band", cell: "bucket" },
+        { header: "Quantity", cell: "quantity", numeric: true },
+        { header: "Value (minor)", cell: "value_minor", numeric: true },
+        { header: "Provision %", cell: "provision_pct", numeric: true },
+        { header: "Provision (minor)", cell: "provision_minor", numeric: true },
+      ],
+    },
     {
       title: "Trial balance",
       description: "Every account with a movement, by ledger.",
@@ -718,7 +830,13 @@ export const PLANNING: ModuleDef = {
       permission: "planning.forecast",
       fn: "erp_sign_off_forecast",
       fields: [
-        { kind: "text", name: "p_version_id", label: "Forecast version id", required: true },
+        pickFrom(
+          "erp_forecast_versions",
+          "version_id",
+          ["forecast", "version", "status"],
+          "p_version_id",
+          "Forecast version",
+        ),
         { kind: "text", name: "p_note", label: "Note" },
       ],
       invalidates: ["erp_planner_workbench"],
@@ -1077,7 +1195,13 @@ export const QUALITY: ModuleDef = {
       permission: "quality.inspect",
       fn: "erp_record_inspection_result",
       fields: [
-        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        pickFrom(
+          "erp_inspections",
+          "inspection_id",
+          ["item", "batch", "status"],
+          "p_inspection_id",
+          "Inspection",
+        ),
         { kind: "text", name: "p_characteristic", label: "Characteristic", required: true },
         { kind: "number", name: "p_numeric_value", label: "Measured value" },
         { kind: "text", name: "p_text_value", label: "Observed value" },
@@ -1090,7 +1214,13 @@ export const QUALITY: ModuleDef = {
       permission: "quality.disposition",
       fn: "erp_disposition_inspection",
       fields: [
-        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        pickFrom(
+          "erp_inspections",
+          "inspection_id",
+          ["item", "batch", "status"],
+          "p_inspection_id",
+          "Inspection",
+        ),
         {
           kind: "choice",
           name: "p_disposition",

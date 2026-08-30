@@ -72,6 +72,8 @@ function TenantLifecycle() {
 
       {mayAdminister ? <BrandingPanel /> : null}
 
+      <DemoOperationsPanel />
+
       <ExportPanel />
 
       <section className="rounded-xl border border-border bg-card">
@@ -108,6 +110,55 @@ function TenantLifecycle() {
         ]}
       />
     </div>
+  );
+}
+
+/**
+ * Demonstration history.
+ *
+ * Master data alone leaves every dashboard at zero, because a dashboard reads
+ * movements, not records. This builds a short operating history — purchase,
+ * receipt, putaway, production, a customer order, counts, a planning run — and
+ * says plainly which of those steps it could not complete in this tenant
+ * rather than failing the lot.
+ */
+function DemoOperationsPanel() {
+  const [notes, setNotes] = useState<string[]>([]);
+  const seeding = useErpAction({ fn: "erp_seed_demo_operations", invalidates: [] });
+
+  return (
+    <section className="rounded-xl border border-border bg-card">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
+        <h2 className="text-sm font-semibold">Demonstration operating history</h2>
+        <Prose className="mt-0.5 text-xs text-muted-foreground">
+          Generates receipts, production, counts and orders so the dashboards, KPIs and audit trail
+          have something real to show. Each step is guarded and reported separately.
+        </Prose>
+      </header>
+      <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
+        <button
+          type="button"
+          className="min-h-11 w-fit rounded-md border border-input px-4 text-sm font-medium"
+          disabled={seeding.isPending}
+          onClick={() =>
+            seeding.mutateAsync({}).then((result) => {
+              const payload = result as { notes?: unknown };
+              setNotes(Array.isArray(payload?.notes) ? payload.notes.map(String) : []);
+            })
+          }
+        >
+          {seeding.isPending ? "Building…" : "Build demo operating history"}
+        </button>
+        {seeding.error ? <ErrorNote error={seeding.error} /> : null}
+        {notes.length > 0 ? (
+          <ul className="list-disc pl-5 text-sm text-muted-foreground">
+            {notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

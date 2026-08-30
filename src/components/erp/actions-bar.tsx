@@ -114,3 +114,43 @@ export const reason = (name = "p_reason", label = "Reason", required = false): F
   required,
   hint: "Recorded against the action in the audit trail.",
 });
+
+/** A place in a warehouse, chosen rather than typed. */
+export const pickLocation = (
+  name = "p_location_id",
+  label = "Location",
+  required = false,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_locations", value: "location_id", label: ["code", "name"] },
+});
+
+/** A line of a document, shown as its number, item and quantity. */
+export const pickLine = (
+  typeCode: string,
+  name = "p_order_line_id",
+  label = "Order line",
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required: true,
+  options: {
+    fn: "erp_document_lines",
+    args: { p_type_code: typeCode, p_limit: 200 },
+    value: "line_id",
+    label: ["document_number", "item", "quantity"],
+  },
+});
+
+/** A batch, chosen from the register. */
+export const pickBatch = (name = "p_batch_id", label = "Batch", required = false): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_batches", value: "batch_id", label: ["batch_number", "item"] },
+});
