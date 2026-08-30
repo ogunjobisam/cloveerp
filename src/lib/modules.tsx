@@ -647,6 +647,128 @@ export const PRODUCTION: ModuleDef = {
   blurb: "Works orders and their progress against plan, quantity by quantity.",
   permission: "production.read",
   group: "make",
+  actions: [
+    {
+      label: "Raise a works order",
+      permission: "production.order",
+      fn: "erp_raise_works_order",
+      fields: [
+        pickItem(),
+        pickSite(),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        {
+          kind: "choice",
+          name: "p_kind",
+          label: "Kind",
+          required: true,
+          choices: [
+            { value: "assembly", label: "Assembly" },
+            { value: "kitting", label: "Kitting" },
+            { value: "rework", label: "Rework" },
+            { value: "repackaging", label: "Repackaging" },
+            { value: "disassembly", label: "Disassembly" },
+          ],
+        },
+        { kind: "date", name: "p_planned_end", label: "Planned finish" },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+    {
+      label: "Release a works order",
+      permission: "production.release",
+      fn: "erp_release_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        {
+          kind: "choice",
+          name: "p_allow_shortage",
+          label: "Release despite shortages",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+        },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+    {
+      label: "Issue components",
+      permission: "production.execute",
+      fn: "erp_issue_to_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        pickItem("p_component_item_id", "Component"),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
+    },
+    {
+      label: "Book operation time",
+      permission: "production.execute",
+      fn: "erp_book_operation_time",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        { kind: "number", name: "p_operation_seq", label: "Operation", required: true },
+        { kind: "number", name: "p_minutes", label: "Minutes", required: true },
+        { kind: "number", name: "p_completed", label: "Completed" },
+        { kind: "number", name: "p_scrapped", label: "Scrapped" },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+    {
+      label: "Receive output",
+      permission: "production.execute",
+      fn: "erp_receive_works_order_output",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        { kind: "text", name: "p_batch_number", label: "Batch number" },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
+    },
+    {
+      label: "Close a works order",
+      permission: "production.execute",
+      fn: "erp_close_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open works orders",
