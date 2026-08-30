@@ -83,7 +83,6 @@ export type PlatformStaff = {
   revoked_at: string | null;
 };
 
-
 export type PlatformAuditRow = {
   id: number;
   occurred_at: string;
