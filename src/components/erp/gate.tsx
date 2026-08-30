@@ -65,7 +65,7 @@ function SignIn() {
     setBusy(true);
     setError(null);
     const { error } = await supabase!.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
+    if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
     setBusy(false);
   }
 

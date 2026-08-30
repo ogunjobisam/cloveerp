@@ -27,7 +27,9 @@ function constraintName(message: string): string | null {
 
 /** `permission denied for schema erp_meta` → `erp_meta`. */
 function deniedObject(message: string): string | null {
-  return /permission denied for (?:schema|table|function|relation) ([\w.]+)/.exec(message)?.[1] ?? null;
+  return (
+    /permission denied for (?:schema|table|function|relation) ([\w.]+)/.exec(message)?.[1] ?? null
+  );
 }
 
 const ERPWARE_MESSAGES: Record<string, { title: string; body: string }> = {
@@ -122,6 +124,19 @@ export function friendlyError(error: unknown): FriendlyError {
       return out("Your session has expired.", "Sign in again to continue.");
     default:
       break;
+  }
+
+  if (/invalid login credentials/i.test(raw)) {
+    return out("That email and password do not match.", "Check both and try again.");
+  }
+  if (/email not confirmed/i.test(raw)) {
+    return out(
+      "This email is not confirmed yet.",
+      "Open the confirmation link we sent you, then sign in.",
+    );
+  }
+  if (/rate limit|too many requests/i.test(raw)) {
+    return out("Too many attempts.", "Wait a moment before trying again.");
   }
 
   if (/failed to fetch|networkerror|load failed/i.test(raw)) {

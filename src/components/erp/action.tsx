@@ -89,9 +89,7 @@ export function ErrorNote({ error }: { error: unknown }) {
   return (
     <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
       <p className="break-words text-sm font-medium text-destructive">{f.title}</p>
-      {f.body ? (
-        <p className="mt-1 break-words text-xs text-muted-foreground">{f.body}</p>
-      ) : null}
+      {f.body ? <p className="mt-1 break-words text-xs text-muted-foreground">{f.body}</p> : null}
       {f.hint ? <p className="mt-2 break-words text-xs text-foreground">{f.hint}</p> : null}
       {f.technical ? (
         <details className="mt-2">
@@ -106,7 +104,6 @@ export function ErrorNote({ error }: { error: unknown }) {
     </div>
   );
 }
-
 
 /**
  * Why a screen is not offering what you came for.
@@ -197,7 +194,9 @@ function SelectField({
           Nothing to choose from yet — this list is empty for this tenant.
         </span>
       ) : null}
-      {error ? <span className="text-xs text-destructive">{friendlyError(error).title}</span> : null}
+      {error ? (
+        <span className="text-xs text-destructive">{friendlyError(error).title}</span>
+      ) : null}
     </>
   );
 }
