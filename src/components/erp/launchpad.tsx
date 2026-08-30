@@ -112,18 +112,18 @@ export function Launchpad() {
                 account may open.
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
               {journey.map((group, i) => (
                 <div key={group} className="flex min-w-0 flex-col gap-2">
                   <div className="flex items-baseline gap-2 border-b border-border pb-1.5">
-                    <span className="font-mono text-[11px] font-semibold text-accent">
+                    <span className="font-mono text-xs font-semibold text-accent">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                     <h3 className="truncate font-display text-xs font-semibold uppercase tracking-wide">
                       {GROUP_LABELS[group]}
                     </h3>
                   </div>
-                  <p className="text-[11px] leading-snug text-muted-foreground">
+                  <p className="text-xs leading-snug text-muted-foreground">
                     {GROUP_BLURBS[group]}
                   </p>
                   <div className="flex flex-col gap-2">
