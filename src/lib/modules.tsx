@@ -1944,6 +1944,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/finance/account-determination",
+    titleKey: "nav.finance_account_determination",
+    title: "Account determination",
+    blurb:
+      "Posting classes and the matrix that decides the account and analysis — with a gap report and no suspense fallback.",
+    permission: "finance.configure",
+    group: "administer",
+  },
+  {
     path: "/administration/permissions",
     titleKey: "nav.administration_permissions",
     title: "Permissions",
