@@ -84,6 +84,17 @@ export type Database = {
         Args: { p_proposal_id: string }
         Returns: number
       }
+      erp_audit_log: {
+        Args: {
+          p_action?: string
+          p_actor?: string
+          p_from?: string
+          p_limit?: number
+          p_object_type?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       erp_available_to_promise: {
         Args: { p_item_id: string; p_on?: string; p_site_id: string }
         Returns: Json
