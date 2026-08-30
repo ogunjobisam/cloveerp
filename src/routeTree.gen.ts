@@ -13,9 +13,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
+import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
+import { Route as ProcurementIndexRouteImport } from './routes/procurement/index'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -40,6 +42,11 @@ const AdministrationPermissionsRoute =
     path: '/administration/permissions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
+  id: '/documents/$documentId',
+  path: '/documents/$documentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
   id: '/operations/assurance',
   path: '/operations/assurance',
@@ -55,6 +62,11 @@ const OperationsJobsRoute = OperationsJobsRouteImport.update({
   path: '/operations/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
+  id: '/procurement/',
+  path: '/procurement/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SalesIndexRoute = SalesIndexRouteImport.update({
   id: '/sales/',
   path: '/sales/',
@@ -66,9 +78,11 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/procurement/': typeof ProcurementIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -76,9 +90,11 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/procurement': typeof ProcurementIndexRoute
   '/sales': typeof SalesIndexRoute
 }
 export interface FileRoutesById {
@@ -87,9 +103,11 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/procurement/': typeof ProcurementIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
 export interface FileRouteTypes {
@@ -99,9 +117,11 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/documents/$documentId'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/procurement/'
     | '/sales/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -109,9 +129,11 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/documents/$documentId'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/procurement'
     | '/sales'
   id:
     | '__root__'
@@ -119,9 +141,11 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/documents/$documentId'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/procurement/'
     | '/sales/'
   fileRoutesById: FileRoutesById
 }
@@ -130,9 +154,11 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
+  DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
+  ProcurementIndexRoute: typeof ProcurementIndexRoute
   SalesIndexRoute: typeof SalesIndexRoute
 }
 
@@ -166,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdministrationPermissionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/documents/$documentId': {
+      id: '/documents/$documentId'
+      path: '/documents/$documentId'
+      fullPath: '/documents/$documentId'
+      preLoaderRoute: typeof DocumentsDocumentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/operations/assurance': {
       id: '/operations/assurance'
       path: '/operations/assurance'
@@ -187,6 +220,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/procurement/': {
+      id: '/procurement/'
+      path: '/procurement'
+      fullPath: '/procurement/'
+      preLoaderRoute: typeof ProcurementIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sales/': {
       id: '/sales/'
       path: '/sales'
@@ -202,9 +242,11 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
+  DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
+  ProcurementIndexRoute: ProcurementIndexRoute,
   SalesIndexRoute: SalesIndexRoute,
 }
 export const routeTree = rootRouteImport
