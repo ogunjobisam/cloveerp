@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { ErpSession } from "../../lib/erp";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { GROUP_LABELS, allTiles } from "../../lib/modules";
 import { TOUCH } from "./page";
 
 /**
@@ -37,150 +38,30 @@ type NavItem = {
   label: string;
   /** Absent means always visible. */
   permission?: string;
-  description: string;
+  group: "home" | "operate" | "govern" | "administer";
 };
 
+/**
+ * The rail, derived from the module registry.
+ *
+ * It used to be a hand-written list of twenty entries in the order they were
+ * built, which is why Inventory sat below Permissions and the whole thing read
+ * as a pile rather than a structure. Now it is Home plus the same tiles the
+ * launchpad renders, in the same three groups, so the two navigations can no
+ * longer disagree about what exists.
+ */
 const NAV: NavItem[] = [
-  {
-    to: "/",
-    labelKey: "nav.overview",
-    label: "Overview",
-    description: "Tenant, scope and platform state",
-  },
-  {
-    to: "/master-data",
-    labelKey: "nav.master_data",
-    label: "Master data",
-    permission: "master_data.read",
-    description: "The items and parties every document depends on",
-  },
-  {
-    to: "/sales",
-    labelKey: "nav.sales",
-    label: "Sales",
-    permission: "sales.read",
-    description: "Quotations, orders and deliveries",
-  },
-  {
-    to: "/procurement",
-    labelKey: "nav.procurement",
-    label: "Procurement",
-    permission: "procurement.read",
-    description: "Requisitions, purchase orders and goods receipts",
-  },
-  {
-    to: "/operations/jobs",
-    labelKey: "nav.operations_jobs",
-    label: "Scheduled jobs",
-    permission: "administration.jobs",
-    description: "What is running, what failed, and what has stopped running",
-  },
-  {
-    to: "/operations/integrations",
-    labelKey: "nav.operations_integrations",
-    label: "Integrations",
-    permission: "administration.integrate",
-    description: "Outbound gateway health and the queue that needs a decision",
-  },
-  {
-    to: "/operations/assurance",
-    labelKey: "nav.operations_assurance",
-    label: "Assurance",
-    permission: "administration.read",
-    description: "The structural checks the build runs on every push",
-  },
-  {
-    to: "/administration/configuration",
-    labelKey: "nav.administration_configuration",
-    label: "Configuration",
-    permission: "administration.configure",
-    description: "Install modules and promote the change sets that put them in force",
-  },
-  {
-    to: "/administration/permissions",
-    labelKey: "nav.administration_permissions",
-    label: "Permissions",
-    permission: "administration.roles",
-    description: "Principals, roles, and the grants between them",
-  },
-  {
-    to: "/inventory",
-    labelKey: "nav.inventory",
-    label: "Inventory",
-    permission: "inventory.read",
-    description: "Stock health, valuation, batches, expiry and counting",
-  },
-  {
-    to: "/production",
-    labelKey: "nav.production",
-    label: "Production",
-    permission: "production.read",
-    description: "Works orders and their progress against plan",
-  },
-  {
-    to: "/planning",
-    labelKey: "nav.planning",
-    label: "Planning",
-    permission: "planning.read",
-    description: "Planned orders and the exceptions worth acting on",
-  },
-  {
-    to: "/quality",
-    labelKey: "nav.quality",
-    label: "Quality and recall",
-    permission: "quality.read",
-    description: "Events, dispositions, supplier qualification and recall",
-  },
-  {
-    to: "/logistics",
-    labelKey: "nav.logistics",
-    label: "Logistics",
-    permission: "logistics.read",
-    description: "Shipments, carrier bookings and delivery performance",
-  },
-  {
-    to: "/finance",
-    labelKey: "nav.finance",
-    label: "Finance",
-    permission: "finance.read",
-    description: "Trial balance, periods, receivables, tax and assets",
-  },
-  {
-    to: "/reporting",
-    labelKey: "nav.reporting",
-    label: "Reporting",
-    permission: "reporting.read",
-    description: "Data quality, duplicates and specification coverage",
-  },
-  {
-    to: "/governance",
-    labelKey: "nav.governance",
-    label: "Change requests",
-    permission: "master_data.read",
-    description: "Proposed master data changes and the approvals on them",
-  },
-  {
-    to: "/master-data/imports",
-    labelKey: "nav.imports",
-    label: "Imports",
-    permission: "master_data.import",
-    description: "Staged batches, preview, validation, load and rollback",
-  },
-  {
-    to: "/administration/terminology",
-    labelKey: "nav.terminology",
-    label: "Terminology",
-    permission: "administration.configure",
-    description: "The wording of every label, per tenant",
-  },
-  {
-    to: "/administration/tenant",
-    labelKey: "nav.tenant",
-    label: "Tenant lifecycle",
-    permission: "administration.configure",
-    description: "Go-live, export and portability, deletion",
-  },
+  { to: "/", labelKey: "nav.overview", label: "Home", group: "home" },
+  ...allTiles().map((tile) => ({
+    to: tile.path,
+    labelKey: tile.titleKey,
+    label: tile.title,
+    ...(tile.permission ? { permission: tile.permission } : {}),
+    group: tile.group,
+  })),
 ];
+
+const NAV_GROUPS: NavItem["group"][] = ["home", "operate", "govern", "administer"];
 
 function ScopeSelect({
   label,
@@ -286,28 +167,41 @@ function NavList({
 
   return (
     <>
-      <ul className="flex flex-col gap-1">
-        {items.map((item) => {
-          const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-          return (
-            <li key={item.to}>
-              <Link
-                to={item.to}
-                onClick={onNavigate}
-                className={[
-                  TOUCH,
-                  "flex items-center rounded-md px-3 text-sm transition-colors",
-                  active
-                    ? "bg-primary/10 font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                ].join(" ")}
-              >
-                {t(item.labelKey, item.label)}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {NAV_GROUPS.map((group) => {
+        const inGroup = items.filter((i) => i.group === group);
+        if (inGroup.length === 0) return null;
+        return (
+          <div key={group} className="mb-4 last:mb-0">
+            {group === "home" ? null : (
+              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                {GROUP_LABELS[group]}
+              </p>
+            )}
+            <ul className="flex flex-col gap-1">
+              {inGroup.map((item) => {
+                const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+                return (
+                  <li key={item.to}>
+                    <Link
+                      to={item.to}
+                      onClick={onNavigate}
+                      className={[
+                        TOUCH,
+                        "flex items-center rounded-md px-3 text-sm transition-colors",
+                        active
+                          ? "bg-primary/10 font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {t(item.labelKey, item.label)}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
 
       {hidden > 0 ? (
         <p className="mt-4 px-3 text-xs text-muted-foreground">

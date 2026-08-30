@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { Gate } from "../components/erp/gate";
+import { Launchpad } from "../components/erp/launchpad";
 import { useErpSession } from "../components/erp/session-context";
 import { EmptyState, PageHeader, Prose } from "../components/erp/page";
 import { SeedDemoAction } from "../components/erp/seed";
@@ -58,7 +59,11 @@ function Overview() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Overview">Where you are, and what this account may do.</PageHeader>
+      <PageHeader title="Home">
+        Where you are, what this account may do, and every screen it can reach.
+      </PageHeader>
+
+      <Launchpad />
 
       <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold">Context</h2>
