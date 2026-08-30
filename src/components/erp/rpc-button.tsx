@@ -1,5 +1,6 @@
 import { ActionButton, ErrorNote } from "./action";
 import { useErpAction } from "./action";
+import { hasPermission } from "../../lib/erp";
 import { useErpSession } from "./gate";
 
 /**
@@ -30,7 +31,7 @@ export function RpcButton({
   const { session } = useErpSession();
   const action = useErpAction({ fn, invalidates });
 
-  const allowed = !permission || (session?.permissions ?? []).includes(permission);
+  const allowed = !permission || hasPermission(session, permission);
 
   return (
     <span className="inline-flex flex-col gap-1">

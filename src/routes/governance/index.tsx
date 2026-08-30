@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionButton } from "../../components/erp/action";
+import { RpcButton } from "../../components/erp/rpc-button";
 import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -58,19 +58,19 @@ function Governance() {
             header: "Decide",
             cell: (r) => (
               <span className="flex gap-2">
-                <ActionButton
+                <RpcButton
                   label="Approve"
                   fn="erp_decide_approval"
                   args={{ p_task_id: r["task_id"], p_decision: "approved" }}
                   permission="administration.approve"
-                  invalidate={["erp_my_approvals", "erp_change_requests"]}
+                  invalidates={["erp_my_approvals", "erp_change_requests"]}
                 />
-                <ActionButton
+                <RpcButton
                   label="Reject"
                   fn="erp_decide_approval"
                   args={{ p_task_id: r["task_id"], p_decision: "rejected" }}
                   permission="administration.approve"
-                  invalidate={["erp_my_approvals", "erp_change_requests"]}
+                  invalidates={["erp_my_approvals", "erp_change_requests"]}
                 />
               </span>
             ),
@@ -94,20 +94,20 @@ function Governance() {
             header: "Action",
             cell: (r) =>
               r["status"] === "draft" ? (
-                <ActionButton
+                <RpcButton
                   label="Submit"
                   fn="erp_submit_change_request"
                   args={{ p_change_request_id: r["change_request_id"] }}
                   permission="master_data.write"
-                  invalidate={["erp_change_requests", "erp_my_approvals"]}
+                  invalidates={["erp_change_requests", "erp_my_approvals"]}
                 />
               ) : r["status"] === "approved" ? (
-                <ActionButton
+                <RpcButton
                   label="Apply"
                   fn="erp_apply_change_request"
                   args={{ p_change_request_id: r["change_request_id"] }}
                   permission="master_data.write"
-                  invalidate={["erp_change_requests", "erp_items", "erp_parties"]}
+                  invalidates={["erp_change_requests", "erp_items", "erp_parties"]}
                 />
               ) : (
                 <span className="text-xs text-muted-foreground">—</span>
