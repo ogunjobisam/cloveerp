@@ -604,6 +604,7 @@ export type Database = {
       }
       erp_preview_import: { Args: { p_batch_id: string }; Returns: Json }
       erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
+      erp_principals: { Args: never; Returns: Json }
       erp_promise_date: {
         Args: { p_item_id: string; p_quantity: number; p_site_id: string }
         Returns: string
