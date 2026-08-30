@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { Gate, useErpSession } from "../../components/erp/gate";
+import { Gate } from "../../components/erp/gate";
+import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";

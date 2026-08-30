@@ -369,5 +369,3 @@ export function Gate({ children }: { children: ReactNode }) {
     </ErpSessionContext.Provider>
   );
 }
-
-export { ErpSessionContext, useErpSession } from "./session-context";

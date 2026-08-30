@@ -4,7 +4,8 @@ import { useState } from "react";
 
 import { ErrorNote, PermissionNote, useErpAction } from "../../components/erp/action";
 import { AutoPanel, StatusPill } from "../../components/erp/auto";
-import { Gate, useErpSession } from "../../components/erp/gate";
+import { Gate } from "../../components/erp/gate";
+import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { callErp, hasPermission } from "../../lib/erp";
@@ -160,9 +161,4 @@ function ExportPanel() {
       </div>
     </section>
   );
-}
-
-/** Kept for the query key used above; the panel refetches on tenant change. */
-export function useTenantSummary() {
-  return useQuery({ queryKey: ["erp_session", {}], queryFn: () => callErp("erp_session") });
 }
