@@ -142,6 +142,25 @@ export type Field =
       hint?: string;
     }
   | {
+      /** A fixed list — a database enum, or yes/no. Sent verbatim as text. */
+      kind: "choice";
+      name: string;
+      label: string;
+      required?: boolean;
+      hint?: string;
+      choices: { value: string; label: string }[];
+      /** Send `true`/`false` rather than the string. */
+      boolean?: boolean;
+    }
+  | {
+      /** The sites this session can see, from the session itself. */
+      kind: "site";
+      name: string;
+      label: string;
+      required?: boolean;
+      hint?: string;
+    }
+  | {
       kind: "select";
       name: string;
       label: string;
@@ -149,6 +168,7 @@ export type Field =
       hint?: string;
       options: { fn: string; args?: Record<string, unknown>; value: string; label: string[] };
     };
+
 
 function SelectField({
   field,
