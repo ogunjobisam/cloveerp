@@ -9,7 +9,9 @@ import type { ErpSession } from "../../lib/erp";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { GROUP_LABELS, allTiles } from "../../lib/modules";
+import { Logo } from "./logo";
 import { TOUCH } from "./page";
+
 
 /**
  * The application shell.
