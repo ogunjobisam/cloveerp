@@ -86,9 +86,9 @@ export function Table({ columns, children }: { columns: string[]; children: Reac
       <table className="w-full min-w-[36rem] text-left text-sm">
         <thead>
           <tr className="border-b border-border">
-            {columns.map((c) => (
+            {columns.map((c, i) => (
               <th
-                key={c}
+                key={`${c}-${i}`}
                 className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted-foreground"
               >
                 {c}
