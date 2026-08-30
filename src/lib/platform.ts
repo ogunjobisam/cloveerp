@@ -36,6 +36,41 @@ export type PlatformTenant = {
   entities: number;
   sites: number;
   open_invitations: number;
+  /** Which platform owner is accountable for this company, if any yet. */
+  owner_staff_id: string | null;
+  owner_email: string | null;
+  owner_name: string | null;
+  owned_by_me: boolean | null;
+  owner_since: string | null;
+  /** Set while an offer is open, so the row can say so rather than offer again. */
+  pending_transfer_to: string | null;
+};
+
+/**
+ * An offer to hand a company to another owner.
+ *
+ * The row outlives the decision: declined and withdrawn offers stay exactly
+ * where they are, because who was asked and refused is part of the record.
+ */
+export type OwnershipTransfer = {
+  id: string;
+  tenant_id: string;
+  tenant_code: string | null;
+  tenant_name: string | null;
+  from_staff_id: string;
+  from_email: string;
+  from_name: string;
+  to_staff_id: string;
+  to_email: string;
+  to_name: string;
+  status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+  reason: string | null;
+  response_note: string | null;
+  expires_at: string;
+  created_at: string;
+  settled_at: string | null;
+  is_mine_to_answer: boolean;
+  is_mine_to_withdraw: boolean;
 };
 
 export type PlatformStaff = {
