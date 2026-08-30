@@ -142,6 +142,17 @@ export function UserMenu({
           </>
         ) : null}
 
+        {platform.data?.is_staff ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/platform" onClick={onNavigate}>
+                {t("nav.platform_console", "Platform console")}
+              </Link>
+            </DropdownMenuItem>
+          </>
+        ) : null}
+
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onSignOut}>{t("action.sign_out", "Sign out")}</DropdownMenuItem>
       </DropdownMenuContent>
