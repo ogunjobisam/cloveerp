@@ -1,9 +1,11 @@
+import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ActionDialog, ActionButton, PermissionNote } from "../../components/erp/action";
-import { Gate, useErpSession } from "../../components/erp/gate";
+import { Gate } from "../../components/erp/gate";
+import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
@@ -92,7 +94,7 @@ function Terminology() {
           ) : error ? (
             <div role="alert">
               <p className="text-sm font-medium text-destructive">This did not load.</p>
-              <p className="mt-1 text-xs text-muted-foreground">{(error as Error).message}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
             </div>
           ) : (
             <Table columns={["Key", "Product text", "This tenant", "", ""]}>

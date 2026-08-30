@@ -10,9 +10,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { callErp, ErpError, hasPermission } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
+import { friendlyError } from "../../lib/errors";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
-import { useErpSession } from "./gate";
+import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 
 /**
@@ -74,29 +75,31 @@ export function ActionButton({
 }
 
 /**
- * Everything the database said, not just the first line.
+ * A failure, in words.
  *
- * `hint` is the field worth the most: the engine puts the next command to run
- * in it. `erp.create_item` refusing for want of a base unit names
- * `erp_create_uom`; `guard_live_configuration` names
- * `erp.promote_change_set`. Rendering only `message` threw that away.
+ * The database's own text is precise and unreadable — `duplicate key value
+ * violates unique constraint "change_set_tenant_id_code_key"` tells the person
+ * who pressed Install nothing. `friendlyError` turns it into a sentence and
+ * what to do next; the verbatim text stays, folded away, for support.
  */
 export function ErrorNote({ error }: { error: unknown }) {
   if (!error) return null;
-  const e = error as ErpError;
-  const denied = e instanceof ErpError && e.isPermissionDenied;
+  const f = friendlyError(error);
 
   return (
     <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-      <p className="break-words text-sm font-medium text-destructive">
-        {denied ? "The database refused this." : "This did not work."}
-      </p>
-      <p className="mt-1 break-words text-xs text-muted-foreground">{(e as Error).message}</p>
-      {e instanceof ErpError && e.details ? (
-        <p className="mt-1 break-words text-xs text-muted-foreground">{e.details}</p>
-      ) : null}
-      {e instanceof ErpError && e.hint ? (
-        <p className="mt-2 break-words text-xs text-foreground">{e.hint}</p>
+      <p className="break-words text-sm font-medium text-destructive">{f.title}</p>
+      {f.body ? <p className="mt-1 break-words text-xs text-muted-foreground">{f.body}</p> : null}
+      {f.hint ? <p className="mt-2 break-words text-xs text-foreground">{f.hint}</p> : null}
+      {f.technical ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline">
+            Technical detail
+          </summary>
+          <p className="mt-1 break-words font-mono text-[11px] text-muted-foreground">
+            {f.technical}
+          </p>
+        </details>
       ) : null}
     </div>
   );
@@ -191,7 +194,9 @@ function SelectField({
           Nothing to choose from yet — this list is empty for this tenant.
         </span>
       ) : null}
-      {error ? <span className="text-xs text-destructive">{(error as Error).message}</span> : null}
+      {error ? (
+        <span className="text-xs text-destructive">{friendlyError(error).title}</span>
+      ) : null}
     </>
   );
 }

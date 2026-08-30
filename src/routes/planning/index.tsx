@@ -72,7 +72,6 @@ function Planning() {
           { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
         ]}
       />
-
     </div>
   );
 }

@@ -58,7 +58,6 @@ function Production() {
           { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
         ]}
       />
-
     </div>
   );
 }

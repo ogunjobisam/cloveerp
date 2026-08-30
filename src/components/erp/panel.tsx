@@ -1,3 +1,4 @@
+import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -63,7 +64,7 @@ export function DataPanel<T>({
         ) : error ? (
           <div role="alert">
             <p className="text-sm font-medium text-destructive">This did not load.</p>
-            <p className="mt-1 text-xs text-muted-foreground">{(error as Error).message}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
           </div>
         ) : !data || data.length === 0 ? (
           <EmptyState message={empty} action={emptyAction} />

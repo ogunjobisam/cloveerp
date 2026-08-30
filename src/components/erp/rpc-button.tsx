@@ -1,7 +1,7 @@
 import { ActionButton, ErrorNote } from "./action";
 import { useErpAction } from "./action";
 import { hasPermission } from "../../lib/erp";
-import { useErpSession } from "./gate";
+import { useErpSession } from "./session-context";
 
 /**
  * One button, one function call, one honest failure.

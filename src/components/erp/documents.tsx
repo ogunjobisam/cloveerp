@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, type Currency } from "../../lib/money";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
-import { useErpSession } from "./gate";
+import { useErpSession } from "./session-context";
 import { Prose } from "./page";
 import { Pill, Table } from "./panel";
 
@@ -69,7 +69,6 @@ export function DocumentPanel({
     queryKey: ["erp_document_types", { p_base_type_code: baseType }],
     queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: baseType }),
   });
-
 
   const { data: currencies } = useQuery({
     queryKey: ["erp_currencies", {}],
@@ -154,7 +153,6 @@ export function DocumentPanel({
             is what creates one.
           </p>
         ) : isPending ? (
-
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : error ? (
           <ErrorNote error={error} />

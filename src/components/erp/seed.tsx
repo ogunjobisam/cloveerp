@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { callErp } from "../../lib/erp";
 import { ActionButton, ErrorNote } from "./action";
-import { useErpSession } from "./gate";
+import { useErpSession } from "./session-context";
 
 /**
  * The one action that turns an empty operational screen into a populated one.

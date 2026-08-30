@@ -1,9 +1,11 @@
+import { friendlyError } from "@/lib/errors";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ActionButton, ErrorNote, PermissionNote } from "../../components/erp/action";
-import { Gate, useErpSession } from "../../components/erp/gate";
+import { Gate } from "../../components/erp/gate";
+import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
@@ -226,7 +228,7 @@ function Configuration() {
       ) : error ? (
         <div role="alert" className="rounded-xl border border-border bg-card p-5">
           <p className="text-sm font-medium text-destructive">Change sets did not load.</p>
-          <p className="mt-1 text-xs text-muted-foreground">{(error as Error).message}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
         </div>
       ) : (
         <ChangeSetsPanel sets={data ?? []} onDone={invalidate} />
