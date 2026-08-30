@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { Wordmark } from "../components/erp/logo";
+import { OfferOwnership, Ownership } from "../components/erp/ownership";
 import { Pill, Table } from "../components/erp/panel";
 import { TOUCH } from "../components/erp/page";
 import { callErp, isConfigured, supabase } from "../lib/erp";
@@ -341,7 +342,7 @@ function Companies({ role }: { role: PlatformRole }) {
             No companies yet. Onboarding one is the first thing to do.
           </p>
         ) : (
-          <Table columns={["Company", "Status", "People", "Structure", "Actions"]}>
+          <Table columns={["Company", "Status", "Owner", "People", "Structure", "Actions"]}>
             {(tenants.data ?? []).map((t) => (
               <tr key={t.id} className="border-b border-border/60 last:border-0">
                 <td className="py-3 pr-4">
@@ -350,6 +351,21 @@ function Companies({ role }: { role: PlatformRole }) {
                 </td>
                 <td className="py-3 pr-4">
                   <Pill tone={statusTone(t.status)}>{t.status}</Pill>
+                </td>
+                <td className="py-3 pr-4 text-xs">
+                  {t.owner_email ? (
+                    <>
+                      <div className="text-sm">{t.owner_name ?? t.owner_email}</div>
+                      <div className="text-muted-foreground">{t.owner_email}</div>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">Unassigned</span>
+                  )}
+                  {t.pending_transfer_to ? (
+                    <div className="text-[11px] text-primary">
+                      offer open to {t.pending_transfer_to}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="py-3 pr-4 text-sm">
                   {t.principals}
@@ -435,6 +451,8 @@ function Companies({ role }: { role: PlatformRole }) {
                         ) : null}
                       </>
                     ) : null}
+
+                    <OfferOwnership tenant={t} role={role} />
                   </div>
                 </td>
               </tr>
@@ -636,6 +654,10 @@ function Activity() {
           <option value="platform.tenant_left">Company left</option>
           <option value="platform.admin_invited">Administrator invited</option>
           <option value="platform.tenant_status_changed">Status changed</option>
+          <option value="platform.ownership_offered">Ownership offered</option>
+          <option value="platform.ownership_accepted">Ownership accepted</option>
+          <option value="platform.ownership_declined">Ownership declined</option>
+          <option value="platform.ownership_cancelled">Ownership offer withdrawn</option>
           <option value="platform.staff_added">Staff added</option>
           <option value="platform.staff_role_changed">Staff role changed</option>
           <option value="platform.staff_revoked">Staff removed</option>
@@ -704,7 +726,7 @@ function Frame({ children, right }: { children: ReactNode; right?: ReactNode }) 
 function PlatformConsole() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<"companies" | "staff" | "activity">("companies");
+  const [tab, setTab] = useState<"companies" | "ownership" | "staff" | "activity">("companies");
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -792,6 +814,7 @@ function PlatformConsole() {
   const role = me.data.role as PlatformRole;
   const tabs: { key: typeof tab; label: string; show: boolean }[] = [
     { key: "companies", label: "Companies", show: true },
+    { key: "ownership", label: "Ownership", show: true },
     { key: "staff", label: "Staff", show: true },
     { key: "activity", label: "Activity", show: true },
   ];
@@ -831,6 +854,7 @@ function PlatformConsole() {
         </nav>
 
         {tab === "companies" ? <Companies role={role} /> : null}
+        {tab === "ownership" ? <Ownership /> : null}
         {tab === "staff" ? <Staff role={role} /> : null}
         {tab === "activity" ? <Activity /> : null}
       </div>
