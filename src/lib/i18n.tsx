@@ -47,6 +47,30 @@ export function ResourceProvider({
   );
 }
 
+/**
+ * The key for a piece of interface wording, derived from the wording itself.
+ *
+ * Screen chrome — column headings, action labels, empty states — is too
+ * numerous to name by hand, and a hand-named key drifts from the text it
+ * names. Deriving `ui.<slug>_<hash>` from the English source keeps the two in
+ * step, and `erp_ref.ui_key()` computes the identical key in the database, so
+ * the terminology screen can offer every one of them for renaming.
+ */
+export function uiKey(text: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
+  }
+  const slug =
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40)
+      .replace(/^_+|_+$/g, "") || "x";
+  return `ui.${slug}_${h.toString(36)}`;
+}
+
 /** The resolver. Every user-facing literal in a screen should pass through it. */
 export function useT() {
   const { resources, locale } = useContext(ResourceContext);
@@ -56,12 +80,22 @@ export function useT() {
     return value && value.length > 0 ? value : fallback;
   }
 
+  /**
+   * Interface wording, keyed by its own source text. The English in the call
+   * is the product's own copy — the dictionary row it seeds — so a tenant that
+   * renames it sees the new wording everywhere that phrase appears.
+   */
+  function ui(text: string): string {
+    const value = resources[uiKey(text)];
+    return value && value.length > 0 ? value : text;
+  }
+
   /** Whether a key is genuinely resolved, for the terminology screen. */
   function has(key: string): boolean {
     return Boolean(resources[key]);
   }
 
-  return { t, has, locale, resources };
+  return { t, ui, has, locale, resources };
 }
 
 /** Convenience for the common case: one key, one fallback, no other props. */

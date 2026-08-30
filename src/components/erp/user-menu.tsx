@@ -71,7 +71,10 @@ export function UserMenu({
   const name = session.principal?.display_name ?? "Signed in";
   const email = session.principal?.email ?? null;
   const mayAdminister = hasPermission(session, "administration.configure");
-  const switchable = (tenants ?? []).length > 1;
+  // One account belongs to exactly one company (spec §2). Platform staff are
+  // the exception, and their entry into a company is recorded — so the picker
+  // is offered to them alone, and the database refuses everybody else.
+  const switchable = Boolean(platform.data?.is_staff) && (tenants ?? []).length > 1;
 
   return (
     <DropdownMenu>
@@ -109,7 +112,7 @@ export function UserMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {t("nav.switch_tenant", "Switch tenant")}
+              {t("nav.enter_company", "Enter a company (recorded)")}
             </DropdownMenuLabel>
             {(tenants ?? []).map((tenant) => (
               <DropdownMenuItem

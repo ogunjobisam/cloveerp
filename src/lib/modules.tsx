@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { Column } from "../components/erp/auto";
 import { StatusPill, shortDate } from "../components/erp/auto";
+import type { InquirySpec } from "../components/erp/inquiry";
 import {
   pickFrom,
   pickItem,
@@ -81,6 +82,8 @@ export type ModuleDef = {
   reports: Panel[];
   /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
   actions?: ActionSpec[];
+  /** Reads that take arguments, so they cannot be a standing panel. */
+  inquiries?: InquirySpec[];
 };
 
 const num = (v: unknown): number => {
@@ -119,6 +122,49 @@ const zeroIsGood = (n: number, label: string) => ({
 });
 
 export const INVENTORY: ModuleDef = {
+  inquiries: [
+    {
+      label: "Available to promise",
+      description: "What can still be committed for one item at one site, on a date.",
+      permission: "inventory.read",
+      fn: "erp_available_to_promise",
+      fields: [pickItem(), pickSite(), { kind: "date", name: "p_on", label: "On" }],
+    },
+    {
+      label: "Batch genealogy",
+      description: "Everything one batch touched — what it was made from and where it went.",
+      permission: "inventory.read",
+      fn: "erp_batch_audit",
+      fields: [
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+      ],
+    },
+    {
+      label: "Temperature excursion impact",
+      description:
+        "What stock was standing in a place between two times, so an excursion can be scoped.",
+      permission: "inventory.read",
+      fn: "erp_excursion_impact",
+      fields: [
+        pickSite("p_site_id", "Site", false),
+        pickLocation("p_location_id", "Location", false),
+        {
+          kind: "text",
+          name: "p_from",
+          label: "From",
+          hint: "Date and time, e.g. 2026-08-30 06:00",
+        },
+        { kind: "text", name: "p_to", label: "To", hint: "Date and time, e.g. 2026-08-30 18:00" },
+      ],
+    },
+    {
+      label: "Redistribution suggestions",
+      description: "Where slow stock at one site would sell at another.",
+      permission: "inventory.read",
+      fn: "erp_redistribution_suggestions",
+      fields: [{ kind: "number", name: "p_days", label: "Days", hint: "Default 60." }],
+    },
+  ],
   key: "inventory",
   path: "/inventory",
   titleKey: "module.inventory",
@@ -444,6 +490,22 @@ export const INVENTORY: ModuleDef = {
 };
 
 export const FINANCE: ModuleDef = {
+  inquiries: [
+    {
+      label: "Credit position",
+      description: "Limit, exposure and what is left for one customer.",
+      permission: "finance.read",
+      fn: "erp_credit_position",
+      fields: [pickParty("customer")],
+    },
+    {
+      label: "Budget position",
+      description: "Budget against actual for one budget code.",
+      permission: "finance.read",
+      fn: "erp_budget_position",
+      fields: [{ kind: "text", name: "p_code", label: "Code", required: true }],
+    },
+  ],
   key: "finance",
   path: "/finance",
   titleKey: "module.finance",
@@ -795,6 +857,26 @@ export const FINANCE: ModuleDef = {
 };
 
 export const PLANNING: ModuleDef = {
+  inquiries: [
+    {
+      label: "Supply and demand",
+      description: "The projected balance for one item and site across the horizon.",
+      permission: "planning.read",
+      fn: "erp_supply_demand",
+      fields: [
+        pickItem(),
+        pickSite(),
+        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+      ],
+    },
+    {
+      label: "Calculated stocking policy",
+      description: "What the engine would set for one item and site, before adopting it.",
+      permission: "planning.read",
+      fn: "erp_calculate_policy",
+      fields: [pickItem(), pickSite()],
+    },
+  ],
   key: "planning",
   path: "/planning",
   titleKey: "module.planning",
@@ -918,6 +1000,53 @@ export const PLANNING: ModuleDef = {
 };
 
 export const PRODUCTION: ModuleDef = {
+  inquiries: [
+    {
+      label: "Component availability",
+      description: "Whether one works order can be released against what is on hand.",
+      permission: "production.read",
+      fn: "erp_works_order_availability",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+      ],
+    },
+    {
+      label: "Works order variance",
+      description: "Planned against actual materials and time, once it has run.",
+      permission: "production.read",
+      fn: "erp_works_order_variance",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+      ],
+    },
+    {
+      label: "Batch record",
+      description: "The manufacturing record for one works order, as issued.",
+      permission: "production.read",
+      fn: "erp_batch_record",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+      ],
+    },
+  ],
   key: "production",
   path: "/production",
   titleKey: "module.production",
@@ -1139,6 +1268,22 @@ export const PRODUCTION: ModuleDef = {
 };
 
 export const QUALITY: ModuleDef = {
+  inquiries: [
+    {
+      label: "Recall readiness",
+      description: "Whether the trace for a recall can be produced inside the regulatory clock.",
+      permission: "quality.read",
+      fn: "erp_recall_readiness",
+      fields: [pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall")],
+    },
+    {
+      label: "Recall evidence",
+      description: "The trace and the actions logged against one recall.",
+      permission: "quality.read",
+      fn: "erp_recall_evidence",
+      fields: [pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall")],
+    },
+  ],
   key: "quality",
   path: "/quality",
   titleKey: "module.quality",

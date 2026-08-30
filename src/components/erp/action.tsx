@@ -12,6 +12,7 @@ import {
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
+import { useT } from "../../lib/i18n";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
@@ -252,6 +253,7 @@ export function ActionDialog({
   onDone?: (result: unknown) => void;
 }) {
   const { session } = useErpSession();
+  const { ui } = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -303,8 +305,8 @@ export function ActionDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[85vh] w-[92vw] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
+          <DialogTitle>{ui(title)}</DialogTitle>
+          {description ? <DialogDescription>{ui(description)}</DialogDescription> : null}
         </DialogHeader>
 
         <form
@@ -317,7 +319,7 @@ export function ActionDialog({
           {fields.map((f) => (
             <label key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {f.label}
+                {ui(f.label)}
                 {f.kind === "money" ? ` (${f.currency})` : ""}
               </span>
 
@@ -356,7 +358,7 @@ export function ActionDialog({
                 />
               )}
 
-              {f.hint ? <span className="text-xs text-muted-foreground">{f.hint}</span> : null}
+              {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
             </label>
           ))}
 
@@ -364,10 +366,10 @@ export function ActionDialog({
 
           <div className="mt-2 flex flex-wrap justify-end gap-2">
             <ActionButton variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {ui("Cancel")}
             </ActionButton>
             <ActionButton type="submit" busy={action.isPending}>
-              {action.isPending ? "Working…" : submitLabel}
+              {action.isPending ? ui("Working…") : ui(submitLabel)}
             </ActionButton>
           </div>
         </form>

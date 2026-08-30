@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { useT } from "../../lib/i18n";
+
 import { DataPanel, Pill, Table } from "./panel";
 
 /**
@@ -36,16 +38,18 @@ export function AutoPanel<T extends Record<string, unknown>>({
   columns: Column<T>[];
   rowKey: (row: T, index: number) => string;
 }) {
+  const { ui } = useT();
+
   return (
     <DataPanel<T>
-      title={title}
-      {...(description ? { description } : {})}
+      title={ui(title)}
+      {...(description ? { description: ui(description) } : {})}
       fn={fn}
       {...(args ? { args } : {})}
-      empty={empty}
+      empty={ui(empty)}
     >
       {(rows) => (
-        <Table columns={columns.map((c) => c.header)}>
+        <Table columns={columns.map((c) => ui(c.header))}>
           {rows.map((row, i) => (
             <tr key={rowKey(row, i)} className="border-b border-border/50 last:border-0">
               {columns.map((c) => (
