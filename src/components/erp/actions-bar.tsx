@@ -24,7 +24,10 @@ export type ActionSpec = {
   fields?: Field[];
   /** Query keys — the `fn` names of the reads this action makes stale. */
   invalidates?: string[];
+  /** For arguments the form cannot express directly — arrays, mostly. */
+  mapArgs?: (values: Record<string, string>) => Record<string, unknown>;
   submitLabel?: string;
+
 };
 
 export function ActionBar({ actions, note }: { actions: ActionSpec[]; note?: string }) {
@@ -46,8 +49,10 @@ export function ActionBar({ actions, note }: { actions: ActionSpec[]; note?: str
             {...(a.permission ? { permission: a.permission } : {})}
             fn={a.fn}
             fields={a.fields ?? []}
+            {...(a.mapArgs ? { mapArgs: a.mapArgs } : {})}
             invalidates={a.invalidates ?? []}
             submitLabel={a.submitLabel ?? a.label}
+
           />
         ))}
       </div>
