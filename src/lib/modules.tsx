@@ -1936,6 +1936,14 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/administration/organisation",
+    titleKey: "nav.administration_organisation",
+    title: "Organisation and approval routing",
+    blurb: "Departments, membership, value bands and named approvers — who approves what, and why.",
+    permission: "administration.configure",
+    group: "administer",
+  },
+  {
     path: "/administration/permissions",
     titleKey: "nav.administration_permissions",
     title: "Permissions",
