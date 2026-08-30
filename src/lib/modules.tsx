@@ -565,6 +565,41 @@ export const PLANNING: ModuleDef = {
   blurb: "Planned orders and the exceptions worth acting on before they become shortages.",
   permission: "planning.read",
   group: "plan",
+  actions: [
+    {
+      label: "Run planning",
+      description: "Regenerate planned orders and exceptions for one site.",
+      permission: "planning.run",
+      fn: "erp_run_planning",
+      fields: [
+        pickSite(),
+        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+      ],
+      invalidates: ["erp_planned_orders", "erp_planner_workbench"],
+    },
+    {
+      label: "Run a forecast",
+      permission: "planning.forecast",
+      fn: "erp_run_forecast",
+      fields: [
+        { kind: "text", name: "p_forecast_code", label: "Forecast code", required: true },
+        { kind: "number", name: "p_periods", label: "Periods ahead" },
+        { kind: "number", name: "p_buckets", label: "History buckets" },
+      ],
+      invalidates: ["erp_planner_workbench", "erp_planned_orders"],
+    },
+    {
+      label: "Sign off a forecast",
+      permission: "planning.forecast",
+      fn: "erp_sign_off_forecast",
+      fields: [
+        { kind: "text", name: "p_version_id", label: "Forecast version id", required: true },
+        { kind: "text", name: "p_note", label: "Note" },
+      ],
+      invalidates: ["erp_planner_workbench"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open exceptions",
