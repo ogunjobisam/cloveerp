@@ -913,7 +913,7 @@ export const LOGISTICS: ModuleDef = {
     {
       label: "Record proof of delivery",
       permission: "logistics.despatch",
-      fn: "erp_record_pod",
+      fn: "erp_record_proof_of_delivery",
       fields: [
         pickFrom(
           "erp_shipments",
@@ -922,9 +922,11 @@ export const LOGISTICS: ModuleDef = {
           "p_shipment_id",
           "Shipment",
         ),
+        { kind: "date", name: "p_arrived_at", label: "Arrived on", required: true },
         { kind: "text", name: "p_signed_by", label: "Signed by", required: true },
         { kind: "text", name: "p_reference", label: "Reference", required: false },
       ],
+
       invalidates: ["erp_shipments", "erp_delivery_performance"],
     },
   ],
