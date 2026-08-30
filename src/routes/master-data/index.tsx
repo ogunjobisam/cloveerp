@@ -76,8 +76,8 @@ function MasterData() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Master data">
-        Items and parties. A document line needs an item and most documents need a party, so this
-        is where a tenant becomes able to transact.
+        Items and parties. A document line needs an item and most documents need a party, so this is
+        where a tenant becomes able to transact.
       </PageHeader>
 
       <Items mayWrite={mayWrite} />
@@ -233,9 +233,7 @@ function Parties({ mayWrite }: { mayWrite: boolean }) {
               <tr key={p.party_id} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{p.code}</td>
                 <td className="py-2 pr-4">{p.name}</td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">
-                  {p.country_code ?? "—"}
-                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">{p.country_code ?? "—"}</td>
                 <td className="py-2 pr-4">
                   <span className="flex flex-wrap gap-1">
                     {(p.roles ?? []).length === 0 ? (

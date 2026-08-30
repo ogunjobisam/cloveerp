@@ -70,7 +70,6 @@ export function DocumentPanel({
     queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: baseType }),
   });
 
-
   const { data: currencies } = useQuery({
     queryKey: ["erp_currencies", {}],
     queryFn: () => callErp<Currency[]>("erp_currencies"),
@@ -154,7 +153,6 @@ export function DocumentPanel({
             is what creates one.
           </p>
         ) : isPending ? (
-
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : error ? (
           <ErrorNote error={error} />

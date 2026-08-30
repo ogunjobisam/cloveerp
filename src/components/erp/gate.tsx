@@ -361,13 +361,12 @@ export function Gate({ children }: { children: ReactNode }) {
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>
       <ResourceProvider>
-      <Shell session={data} scope={scope} onScopeChange={changeScope} onSignOut={signOut}>
-        {children}
-      </Shell>
+        <Shell session={data} scope={scope} onScopeChange={changeScope} onSignOut={signOut}>
+          {children}
+        </Shell>
       </ResourceProvider>
     </ErpSessionContext.Provider>
   );
 }
 
 export { ErpSessionContext, useErpSession } from "./session-context";
-
