@@ -671,6 +671,23 @@ export const FINANCE: ModuleDef = {
   ],
   reports: [
     {
+      title: "Slow-moving stock provision",
+      description:
+        "One published policy: nothing under ninety days, a quarter to six months, half to a year, all of it beyond.",
+      fn: "erp_stock_provision",
+      empty: "Nothing is old enough to provide against.",
+      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
+      columns: [
+        { header: "Item", cell: "item_code" },
+        { header: "Name", cell: "item_name" },
+        { header: "Age band", cell: "bucket" },
+        { header: "Quantity", cell: "quantity", numeric: true },
+        { header: "Value (minor)", cell: "value_minor", numeric: true },
+        { header: "Provision %", cell: "provision_pct", numeric: true },
+        { header: "Provision (minor)", cell: "provision_minor", numeric: true },
+      ],
+    },
+    {
       title: "Trial balance",
       description: "Every account with a movement, by ledger.",
       fn: "erp_trial_balance",
