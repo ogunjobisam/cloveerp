@@ -307,6 +307,65 @@ function UkStrip() {
   );
 }
 
+type Shot = { src: string; alt: string; icon: LucideIcon; caption: string; label: string };
+
+const SHOTS: Shot[] = [
+  {
+    src: shotFinance,
+    alt: "ERPWare Finance module showing the trial balance, receivables ageing and slow-moving stock provision",
+    icon: PoundSterling,
+    label: "Finance",
+    caption: "Trial balance, receivables ageing and provisions — every figure traces to a posted document.",
+  },
+  {
+    src: shotWarehouse,
+    alt: "ERPWare Inventory and warehouse dashboard with stock value, cover KPIs and open count tasks",
+    icon: Boxes,
+    label: "Warehouse",
+    caption: "Stock health, valuation and count tasks, all derived from the perpetual inventory ledger.",
+  },
+  {
+    src: shotEncryption,
+    alt: "ERPWare encryption keys panel showing the per-tenant key register with rotation and destruction controls",
+    icon: Vault,
+    label: "Encryption keys",
+    caption: "Each company holds its own key in the platform vault — rotated or destroyed on your word alone.",
+  },
+];
+
+function Gallery() {
+  return (
+    <section className="py-12" aria-labelledby="gallery-heading">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+        Inside the product
+      </p>
+      <h2
+        id="gallery-heading"
+        className="mt-3 max-w-[24ch] font-display text-3xl font-medium leading-tight text-brand text-balance md:text-4xl"
+      >
+        Calm screens for busy days.
+      </h2>
+      <div className="mt-8 grid gap-4 md:grid-cols-3">
+        {SHOTS.map(({ src, alt, icon: Icon, label, caption }) => (
+          <figure
+            key={label}
+            className="overflow-hidden rounded-2xl border border-line bg-surface ring-1 ring-black/5"
+          >
+            <img src={src} alt={alt} className="w-full" loading="lazy" width={1440} height={900} />
+            <figcaption className="p-5">
+              <p className="flex items-center gap-2 font-display text-sm font-semibold text-brand">
+                <Icon className="size-4 text-accent" aria-hidden="true" />
+                {label}
+              </p>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink/65 text-pretty">{caption}</p>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Pricing() {
   return (
     <section className="py-12" id="pricing" aria-labelledby="pricing-heading">
