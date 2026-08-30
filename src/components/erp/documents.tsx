@@ -1,0 +1,185 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+
+import { callErp } from "../../lib/erp";
+import { formatMinor, minorUnitsOf, type Currency } from "../../lib/money";
+import { ActionButton, ActionDialog, ErrorNote } from "./action";
+import { useErpSession } from "./gate";
+import { Prose } from "./page";
+import { Pill, Table } from "./panel";
+
+/**
+ * A list of documents of one kind, with the action that creates another.
+ *
+ * The screen names a **base** type — `quotation`, `purchase_order` — which is
+ * product content and stable. The tenant's own type code, its numbering, its
+ * lifecycle and the permission required to raise one all come from
+ * `erp_document_types`. A tenant that calls its purchase orders something else
+ * still gets a working button.
+ *
+ * That indirection is the whole reason `/sales` and `/procurement` are two
+ * short files rather than two copies of this one.
+ */
+
+type Doc = {
+  document_id: string;
+  document_number: string;
+  document_type: string;
+  document_date: string;
+  currency: string;
+  party: string | null;
+  total_minor: number;
+  state: string | null;
+  state_name: string | null;
+  is_committed: boolean;
+};
+
+type DocType = {
+  document_type_id: string;
+  code: string;
+  name: string;
+  base_type_code: string;
+  requires_party: boolean;
+  requires_site: boolean;
+  /** The permission `erp.open_document` will actually authorise. */
+  create_permission: string;
+};
+
+export function DocumentPanel({
+  title,
+  description,
+  baseType,
+  /** Which party role the picker should offer — customers for sales, suppliers for buying. */
+  partyRole,
+  empty,
+}: {
+  title: string;
+  description: string;
+  baseType: string;
+  partyRole: string;
+  empty: string;
+}) {
+  const { session, scope } = useErpSession();
+
+  const { data: types } = useQuery({
+    queryKey: ["erp_document_types", { p_base_type_code: baseType }],
+    queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: baseType }),
+  });
+
+  const { data: currencies } = useQuery({
+    queryKey: ["erp_currencies", {}],
+    queryFn: () => callErp<Currency[]>("erp_currencies"),
+    staleTime: Infinity,
+  });
+
+  // A tenant may configure more than one type onto a base; the first active one
+  // is the sensible default and the others are reachable once there is a reason
+  // to choose between them.
+  const type = types?.[0];
+
+  const { data, isPending, error } = useQuery({
+    queryKey: ["erp_documents", { p_type_code: type?.code ?? "" }],
+    queryFn: () => callErp<Doc[]>("erp_documents", { p_type_code: type?.code ?? "" }),
+    enabled: Boolean(type),
+    refetchInterval: 30_000,
+  });
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">{description}</Prose>
+        </div>
+
+        {type ? (
+          <ActionDialog
+            trigger={<ActionButton>New</ActionButton>}
+            title={`New ${type.name.toLowerCase()}`}
+            description="Numbering, lifecycle and approvals come from the type this tenant configured."
+            // The permission the database checks, not one this screen guessed.
+            permission={type.create_permission}
+            fn="erp_create_document"
+            fields={[
+              {
+                kind: "select",
+                name: "p_party_id",
+                label: "Party",
+                required: type.requires_party,
+                options: {
+                  fn: "erp_parties",
+                  args: { p_role_kind: partyRole },
+                  value: "party_id",
+                  label: ["code", "name"],
+                },
+              },
+              { kind: "text", name: "p_their_ref", label: "Their reference" },
+              { kind: "date", name: "p_required_date", label: "Required date" },
+            ]}
+            mapArgs={(v) => ({
+              p_type_code: type.code,
+              p_party_id: v["p_party_id"] || null,
+              // The shell's scope selector already asked which site; a form
+              // that asks again is asking twice.
+              p_site_id: scope.siteId || session.sites[0]?.id || null,
+              p_their_ref: v["p_their_ref"] || null,
+              p_required_date: v["p_required_date"] || null,
+            })}
+            invalidates={["erp_documents"]}
+            submitLabel="Create"
+          />
+        ) : null}
+      </header>
+
+      <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
+        {!type ? (
+          <p className="text-sm text-muted-foreground">
+            No <code className="font-mono text-xs">{baseType}</code> type is configured for this
+            tenant. Installing the module that owns it on{" "}
+            <Link to="/administration/configuration" className="underline underline-offset-2">
+              Configuration
+            </Link>{" "}
+            is what creates one.
+          </p>
+        ) : isPending ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : error ? (
+          <ErrorNote error={error} />
+        ) : (data ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">{empty}</p>
+        ) : (
+          <Table columns={["Number", "Date", "Party", "Value", "State"]}>
+            {(data ?? []).map((d) => (
+              <tr key={d.document_id} className="border-b border-border/50 last:border-0">
+                <td className="py-2 pr-4">
+                  <Link
+                    to="/documents/$documentId"
+                    params={{ documentId: d.document_id }}
+                    className="font-mono text-xs underline underline-offset-2"
+                  >
+                    {d.document_number}
+                  </Link>
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">{d.document_date}</td>
+                <td className="py-2 pr-4">{d.party ?? "—"}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">
+                  {formatMinor(d.total_minor, d.currency, minorUnitsOf(currencies, d.currency))}
+                </td>
+                <td className="py-2 pr-4">
+                  {/*
+                    Committed is the distinction that matters operationally: it
+                    is the point past which the outside world believes the
+                    document, and for a delivery it is the moment stock left.
+                  */}
+                  <Pill tone={d.is_committed ? "ok" : "muted"}>
+                    {d.state_name ?? d.state ?? "—"}
+                  </Pill>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </div>
+    </section>
+  );
+}

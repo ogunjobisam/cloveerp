@@ -66,15 +66,25 @@ export function formatMinor(
 /**
  * What a person typed, to the integer the database expects.
  *
- * Rounds rather than truncates, because 1.005 typed against a two-place
- * currency is a person meaning 1.01, and returns null for anything that is not
- * a number so a caller can refuse instead of sending NaN.
+ * The direction that writes to the ledger, so both of its edge cases are
+ * failures I put here myself and a test caught:
+ *
+ *   - **Empty is not zero.** `Number("")` is `0`, and `0` is finite, so an
+ *     untouched price field became a price of nothing rather than a refusal.
+ *     A blank input is an absent answer; only a typed `0` is a zero.
+ *   - **Multiplying floats loses the rounding.** `1.005 * 100` is
+ *     `100.49999999999999`, so `Math.round` gave 100 where a person typing
+ *     1.005 against a two-place currency means 1.01. Fixing the scaled value
+ *     to more places than any currency has, before rounding, removes the
+ *     representation error without pretending to be decimal arithmetic.
  */
 export function toMinor(
   major: string | number,
   minorUnits: number = DEFAULT_MINOR_UNITS,
 ): number | null {
+  if (typeof major === "string" && major.trim() === "") return null;
   const n = typeof major === "number" ? major : Number(String(major).trim());
   if (!Number.isFinite(n)) return null;
-  return Math.round(n * 10 ** minorUnits);
+  // minor_units is constrained to 0..4, so six places is always slack enough.
+  return Math.round(Number((n * 10 ** minorUnits).toFixed(6)));
 }

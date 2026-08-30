@@ -46,6 +46,12 @@ const NAV: NavItem[] = [
     description: "Quotations, orders and deliveries",
   },
   {
+    to: "/procurement",
+    label: "Procurement",
+    permission: "procurement.read",
+    description: "Requisitions, purchase orders and goods receipts",
+  },
+  {
     to: "/operations/jobs",
     label: "Scheduled jobs",
     permission: "administration.jobs",
