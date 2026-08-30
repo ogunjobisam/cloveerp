@@ -127,6 +127,107 @@ export const INVENTORY: ModuleDef = {
   blurb: "Stock health, valuation, ageing, expiry and counting, all derived from the ledger.",
   permission: "inventory.read",
   group: "move",
+  actions: [
+    {
+      label: "Raise count tasks",
+      description: "Ask a counting programme for its next set of tasks.",
+      permission: "inventory.count",
+      fn: "erp_raise_count_tasks",
+      fields: [{ kind: "text", name: "p_programme_code", label: "Programme code", required: true }],
+      invalidates: ["erp_count_tasks", "erp_count_accuracy"],
+    },
+    {
+      label: "Record a count",
+      permission: "inventory.count",
+      fn: "erp_record_count",
+      fields: [
+        pickFrom(
+          "erp_count_tasks",
+          "task_id",
+          ["item", "location", "status"],
+          "p_task_id",
+          "Count task",
+        ),
+        { kind: "number", name: "p_quantity", label: "Counted quantity", required: true },
+      ],
+      invalidates: ["erp_count_tasks", "erp_count_accuracy", "erp_stock_health"],
+    },
+    {
+      label: "Post a count",
+      description: "Turn a counted task into a stock adjustment.",
+      permission: "inventory.count",
+      fn: "erp_post_count",
+      fields: [
+        pickFrom(
+          "erp_count_tasks",
+          "task_id",
+          ["item", "location", "status"],
+          "p_task_id",
+          "Count task",
+        ),
+      ],
+      invalidates: [
+        "erp_count_tasks",
+        "erp_count_accuracy",
+        "erp_stock_health",
+        "erp_stock_valuation",
+      ],
+    },
+    {
+      label: "Write off stock",
+      permission: "inventory.write_off",
+      fn: "erp_write_off_stock",
+      fields: [
+        pickItem(),
+        pickSite(),
+        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        reason("p_reason", "Reason", true),
+        pickFrom(
+          "erp_batches",
+          "batch_id",
+          ["batch_number", "item"],
+          "p_batch_id",
+          "Batch (if controlled)",
+        ),
+      ],
+      invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_stock_ageing", "erp_batches"],
+    },
+    {
+      label: "Split a batch",
+      permission: "inventory.adjust",
+      fn: "erp_split_batch",
+      fields: [
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        { kind: "text", name: "p_new_number", label: "New batch number", required: true },
+        { kind: "number", name: "p_quantity", label: "Quantity to split", required: true },
+        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        reason(),
+      ],
+      invalidates: ["erp_batches", "erp_stock_health"],
+    },
+    {
+      label: "Release a batch",
+      permission: "quality.release_batch",
+      fn: "erp_release_batch",
+      fields: [
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        pickSite(),
+        { kind: "text", name: "p_basis", label: "Basis", required: true },
+        { kind: "text", name: "p_signature", label: "Signature", required: true },
+      ],
+      invalidates: ["erp_batches", "erp_stock_health"],
+    },
+    {
+      label: "Apply calculated policy",
+      description: "Adopt the stocking policy the engine calculates for one item and site.",
+      permission: "inventory.adjust",
+      fn: "erp_apply_calculated_policy",
+      fields: [pickItem(), pickSite()],
+      invalidates: ["erp_stock_health"],
+    },
+  ],
+
   kpis: [
     {
       label: "Stock lines",
