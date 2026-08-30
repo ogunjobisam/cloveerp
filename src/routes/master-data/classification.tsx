@@ -129,9 +129,24 @@ function Classification() {
         )}
       </PageHeader>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <RpcButton
+          label="Seed a demo configuration"
+          fn="erp_seed_demo_configuration"
+          permission="administration.configure"
+          confirm="This adds sample axes, values, a code template, supplier defaults and a release area. Running it twice changes nothing the second time."
+          invalidates={[
+            "erp_classification_axes",
+            "erp_classification_values",
+            "erp_code_templates",
+            "erp_classification_gaps",
+            "erp_item_suppliers",
+            "erp_release_areas",
+          ]}
+        />
         <RefreshButton />
       </div>
+
 
       <div className="grid gap-4 xl:grid-cols-3">
         <ConfigTransfer
