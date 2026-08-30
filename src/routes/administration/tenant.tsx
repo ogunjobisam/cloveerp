@@ -116,6 +116,83 @@ function TenantLifecycle() {
 }
 
 /**
+ * Keys.
+ *
+ * A tenant's confidential material is encrypted under a key that belongs to
+ * that tenant alone. Rotation re-protects what is stored and then destroys the
+ * superseded key; deletion destroys every key outright. Destruction is the
+ * point — after it, the ciphertext is unreadable by anybody, including us,
+ * which is the only version of "deleted" that can be demonstrated rather than
+ * promised.
+ */
+function EncryptionKeysPanel() {
+  const rotate: ActionSpec = {
+    label: "Rotate the key",
+    title: "Rotate this company's encryption key",
+    description:
+      "A new key is created, everything protected is re-encrypted under it, and the old key is destroyed. There is no way back to the old key afterwards.",
+    permission: "administration.configure",
+    fn: "erp_rotate_tenant_key",
+    fields: [
+      {
+        kind: "text",
+        name: "p_purpose",
+        label: "Purpose",
+        hint: "Leave as tenant_data unless a separate key is in use.",
+      },
+      { kind: "text", name: "p_reason", label: "Reason", required: true },
+    ],
+    invalidates: ["erp_tenant_keys", "erp_protected_values"],
+    submitLabel: "Rotate and destroy the old key",
+  };
+
+  return (
+    <section className="flex min-w-0 flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <header>
+        <h2 className="text-sm font-semibold">Encryption keys</h2>
+        <Prose className="mt-0.5 text-xs text-muted-foreground">
+          Confidential tenant material is encrypted under this company's own key, held in the
+          platform key store rather than in the database. Rotating or deleting destroys the previous
+          key irreversibly.
+        </Prose>
+      </header>
+
+      <ActionBar actions={[rotate]} />
+
+      <AutoPanel
+        title="Key register"
+        description="Every key this company has held, and what became of it."
+        fn="erp_tenant_keys"
+        empty="No key has been issued yet."
+        rowKey={(r, i) => `${String(r["key_id"] ?? i)}`}
+        columns={[
+          { header: "Purpose", cell: "purpose" },
+          { header: "Version", cell: "key_version", numeric: true },
+          { header: "State", cell: (r) => <StatusPill value={r["state"]} /> },
+          { header: "Activated", cell: (r) => shortDate(r["activated_at"]) },
+          { header: "Destroyed", cell: (r) => shortDate(r["destroyed_at"]) },
+          { header: "Witness", cell: "witness" },
+          { header: "Protected values", cell: "protected_values", numeric: true },
+        ]}
+      />
+
+      <AutoPanel
+        title="Protected values"
+        description="Stored encrypted under the key above; unreadable once it is destroyed."
+        fn="erp_protected_values"
+        empty="Nothing is stored under the key yet."
+        rowKey={(r, i) => `${String(r["code"] ?? i)}`}
+        columns={[
+          { header: "Name", cell: "code" },
+          { header: "Key version", cell: "key_version", numeric: true },
+          { header: "Updated", cell: (r) => shortDate(r["updated_at"]) },
+        ]}
+      />
+    </section>
+  );
+}
+
+/**
  * Demonstration history.
  *
  * Master data alone leaves every dashboard at zero, because a dashboard reads
