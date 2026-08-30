@@ -27,13 +27,13 @@ function Tile({ tile, dense = false }: { tile: TileDef; dense?: boolean }) {
   return (
     <Link
       to={tile.path}
-      className={`${TOUCH} group relative flex min-w-0 items-start gap-3 overflow-hidden rounded-xl border border-border bg-card p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg`}
+      className={`${TOUCH} group relative flex min-w-0 items-start gap-3 overflow-hidden rounded-xl border border-border bg-card p-3.5 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg`}
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
-        <Icon className="size-4.5" />
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
+        <Icon className="size-4" />
       </span>
       <span className="flex min-w-0 flex-col gap-1">
-        <span className="truncate text-sm font-semibold text-foreground">
+        <span className="text-sm font-semibold leading-snug text-foreground">
           {t(tile.titleKey, tile.title)}
         </span>
         {dense ? null : (
@@ -42,7 +42,9 @@ function Tile({ tile, dense = false }: { tile: TileDef; dense?: boolean }) {
           </span>
         )}
       </span>
-      <ArrowRight className="ml-auto size-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+      {dense ? null : (
+        <ArrowRight className="ml-auto size-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+      )}
     </Link>
   );
 }
