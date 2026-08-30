@@ -58,7 +58,7 @@ begin
     from erp.tenant_key k where k.tenant_id = v_tenant and k.purpose = p_purpose;
 
   v_ref := vault.create_secret(
-    encode(public.gen_random_bytes(32), 'base64'),
+    encode(extensions.gen_random_bytes(32), 'base64'),
     'erpware:' || v_tenant::text || ':' || p_purpose || ':v' || v_version,
     'ERPWare per-tenant data key');
 
@@ -132,7 +132,7 @@ begin
     from vault.decrypted_secrets s where s.id = v_old_ref::uuid;
 
   v_new_version := v_old_version + 1;
-  v_new_material := encode(public.gen_random_bytes(32), 'base64');
+  v_new_material := encode(extensions.gen_random_bytes(32), 'base64');
 
   insert into erp.tenant_key (tenant_id, purpose, kms_key_ref, key_version,
                               activated_at, created_by, updated_by)
@@ -147,8 +147,8 @@ begin
   -- before the old key stops existing. After this point the old key is of no
   -- use to anybody, which is the only honest moment to destroy it.
   update erp.tenant_secret s
-     set ciphertext = public.pgp_sym_encrypt(
-           public.pgp_sym_decrypt(s.ciphertext, v_old_material), v_new_material),
+     set ciphertext = extensions.pgp_sym_encrypt(
+           extensions.pgp_sym_decrypt(s.ciphertext, v_old_material), v_new_material),
          key_version = v_new_version,
          updated_at = now(), updated_by = erp.current_principal_id()
    where s.tenant_id = v_tenant;
@@ -227,7 +227,7 @@ begin
    order by k.key_version desc limit 1;
 
   insert into erp.tenant_secret (tenant_id, code, ciphertext, key_version, created_by, updated_by)
-  values (v_tenant, p_code, public.pgp_sym_encrypt(p_value, v_material), v_version,
+  values (v_tenant, p_code, extensions.pgp_sym_encrypt(p_value, v_material), v_version,
           erp.current_principal_id(), erp.current_principal_id())
   on conflict (tenant_id, code) do update
      set ciphertext = excluded.ciphertext, key_version = excluded.key_version,
@@ -248,7 +248,7 @@ begin
   select s.ciphertext into v_cipher from erp.tenant_secret s
    where s.tenant_id = v_tenant and s.code = p_code;
   if v_cipher is null then return null; end if;
-  return public.pgp_sym_decrypt(v_cipher, erp.tenant_key_material('tenant_data'));
+  return extensions.pgp_sym_decrypt(v_cipher, erp.tenant_key_material('tenant_data'));
 end $$;
 
 -- --- public surface ------------------------------------------------------
@@ -687,3 +687,22 @@ revoke all on function erp.seed_demo_operations() from public, anon, authenticat
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('erp', 'seed_demo_billing', 'Demonstration billing history; internal only, called by the seeded operations builder.')
 on conflict do nothing;
+-- corrective amendments applied after first deploy -------------------------
+
+alter table erp.tenant_key drop constraint if exists tenant_key_purpose_check;
+alter table erp.tenant_key add constraint tenant_key_purpose_check
+  check (purpose = any (array['data','storage','export','backup','tenant_data']));
+
+insert into erp_ref.event_type
+  (code, version, aggregate_type, module_code, name_key, description, payload_schema)
+values
+  ('tenant.key_created', 1, 'tenant_key', 'administration', 'event.tenant.key_created',
+   'A per-tenant encryption key was created and stored in the platform key store.',
+   jsonb_build_object('type', 'object')),
+  ('tenant.key_rotated', 1, 'tenant_key', 'administration', 'event.tenant.key_rotated',
+   'A tenant key was rotated; values were re-protected and the previous key destroyed.',
+   jsonb_build_object('type', 'object')),
+  ('tenant.key_destroyed', 1, 'tenant_key', 'administration', 'event.tenant.key_destroyed',
+   'A tenant key was irreversibly destroyed.',
+   jsonb_build_object('type', 'object'))
+on conflict (code, version) do nothing;
