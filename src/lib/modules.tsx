@@ -746,6 +746,146 @@ export const QUALITY: ModuleDef = {
   blurb: "Events, dispositions, supplier qualification and recall — each with a clock.",
   permission: "quality.read",
   group: "govern",
+  actions: [
+    {
+      label: "Raise a quality event",
+      permission: "quality.inspect",
+      fn: "erp_raise_quality_event",
+      fields: [
+        {
+          kind: "choice",
+          name: "p_kind",
+          label: "Kind",
+          required: true,
+          choices: [
+            { value: "deviation", label: "Deviation" },
+            { value: "non_conformance", label: "Non-conformance" },
+            { value: "complaint", label: "Complaint" },
+            { value: "excursion", label: "Excursion" },
+            { value: "near_miss", label: "Near miss" },
+            { value: "audit_finding", label: "Audit finding" },
+          ],
+        },
+        { kind: "text", name: "p_title", label: "Title", required: true },
+        {
+          kind: "choice",
+          name: "p_severity",
+          label: "Severity",
+          required: true,
+          choices: [
+            { value: "low", label: "Low" },
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High" },
+            { value: "critical", label: "Critical" },
+          ],
+        },
+        pickSite("p_site_id", "Site", false),
+        {
+          kind: "select",
+          name: "p_item_id",
+          label: "Item",
+          options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+      ],
+      invalidates: ["erp_quality_events", "erp_open_quality_events"],
+    },
+    {
+      label: "Record an inspection result",
+      permission: "quality.inspect",
+      fn: "erp_record_inspection_result",
+      fields: [
+        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        { kind: "text", name: "p_characteristic", label: "Characteristic", required: true },
+        { kind: "number", name: "p_numeric_value", label: "Measured value" },
+        { kind: "text", name: "p_text_value", label: "Observed value" },
+        { kind: "text", name: "p_instrument", label: "Instrument" },
+      ],
+      invalidates: ["erp_open_inspections", "erp_quality_events"],
+    },
+    {
+      label: "Disposition an inspection",
+      permission: "quality.disposition",
+      fn: "erp_disposition_inspection",
+      fields: [
+        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        {
+          kind: "choice",
+          name: "p_disposition",
+          label: "Disposition",
+          required: true,
+          choices: [
+            { value: "accept", label: "Accept" },
+            { value: "accept_with_concession", label: "Accept with concession" },
+            { value: "rework", label: "Rework" },
+            { value: "reject", label: "Reject" },
+            { value: "quarantine", label: "Quarantine" },
+            { value: "destroy", label: "Destroy" },
+          ],
+        },
+        { kind: "text", name: "p_note", label: "Note" },
+      ],
+      invalidates: ["erp_open_inspections", "erp_quality_events", "erp_batches"],
+    },
+    {
+      label: "Raise a recall",
+      permission: "quality.recall",
+      fn: "erp_raise_recall",
+      fields: [
+        { kind: "text", name: "p_title", label: "Title", required: true },
+        reason("p_reason", "Reason", true),
+        { kind: "text", name: "p_classification", label: "Classification", required: true },
+        {
+          kind: "text",
+          name: "p_batch_ids",
+          label: "Batch ids",
+          required: true,
+          hint: "Comma separated.",
+        },
+      ],
+      invalidates: ["erp_recalls"],
+      mapArgs: (v) => ({
+        p_title: v["p_title"],
+        p_reason: v["p_reason"],
+        p_classification: v["p_classification"],
+        p_batch_ids: String(v["p_batch_ids"] ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }),
+    },
+    {
+      label: "Log a recall action",
+      permission: "quality.recall",
+      fn: "erp_log_recall_action",
+      fields: [
+        pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall"),
+        { kind: "text", name: "p_action_kind", label: "Action", required: true },
+        { kind: "number", name: "p_quantity_recovered", label: "Quantity recovered" },
+        { kind: "text", name: "p_note", label: "Note" },
+      ],
+      invalidates: ["erp_recalls"],
+    },
+    {
+      label: "Close a quality event",
+      permission: "quality.disposition",
+      fn: "erp_close_quality_event",
+      fields: [
+        pickFrom(
+          "erp_quality_events",
+          "quality_event_id",
+          ["title", "status"],
+          "p_event_id",
+          "Event",
+        ),
+        { kind: "text", name: "p_root_cause", label: "Root cause", required: true },
+        { kind: "text", name: "p_corrective_action", label: "Corrective action", required: true },
+        { kind: "text", name: "p_preventive_action", label: "Preventive action", required: true },
+      ],
+      invalidates: ["erp_quality_events", "erp_open_quality_events"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open events",
