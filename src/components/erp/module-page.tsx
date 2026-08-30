@@ -43,14 +43,14 @@ function panelOf(p: Panel) {
 }
 
 export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNode }) {
-  const { t } = useT();
+  const { t, ui } = useT();
   const [tab, setTab] = useState<Tab>("dashboard");
   const title = t(def.titleKey, def.title);
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "work", label: "Work", badge: def.worklists.length },
-    { id: "reports", label: "Reports", badge: def.reports.length },
+    { id: "dashboard", label: ui("Dashboard") },
+    { id: "work", label: ui("Work"), badge: def.worklists.length },
+    { id: "reports", label: ui("Reports"), badge: def.reports.length },
   ];
 
   return (
@@ -60,15 +60,15 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           <div className="min-w-0 flex-1">
             <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
               <Link to="/" className="hover:text-foreground hover:underline">
-                Home
+                {ui("Home")}
               </Link>
               <span className="px-1.5">/</span>
-              <span>{GROUP_LABELS[def.group]}</span>
+              <span>{ui(GROUP_LABELS[def.group])}</span>
               <span className="px-1.5">/</span>
               <span className="text-foreground">{title}</span>
             </nav>
             <h1 className="mt-1 truncate text-xl font-semibold">{title}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{def.blurb}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{ui(def.blurb)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {actions}

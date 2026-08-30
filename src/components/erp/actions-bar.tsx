@@ -1,3 +1,4 @@
+import { useT } from "../../lib/i18n";
 import { ActionButton, ActionDialog, type Field } from "./action";
 
 /**
@@ -30,19 +31,20 @@ export type ActionSpec = {
 };
 
 export function ActionBar({ actions, note }: { actions: ActionSpec[]; note?: string }) {
+  const { ui } = useT();
   if (actions.length === 0) return null;
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Actions
+        {ui("Actions")}
       </h2>
-      {note ? <p className="mt-1 text-sm text-muted-foreground">{note}</p> : null}
+      {note ? <p className="mt-1 text-sm text-muted-foreground">{ui(note)}</p> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {actions.map((a) => (
           <ActionDialog
             key={`${a.fn}-${a.label}`}
-            trigger={<ActionButton variant="secondary">{a.label}</ActionButton>}
+            trigger={<ActionButton variant="secondary">{ui(a.label)}</ActionButton>}
             title={a.title ?? a.label}
             {...(a.description ? { description: a.description } : {})}
             {...(a.permission ? { permission: a.permission } : {})}

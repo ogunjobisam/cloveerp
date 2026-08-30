@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { callErp } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
+import { useT } from "../../lib/i18n";
 import type { Chart, Kpi, Row } from "../../lib/modules";
 
 /**
@@ -24,6 +25,7 @@ const TONE = {
 } as const;
 
 export function KpiTile({ kpi }: { kpi: Kpi }) {
+  const { ui } = useT();
   const { data, isPending, error } = useQuery({
     queryKey: [kpi.fn, kpi.args ?? {}],
     queryFn: () => callErp<Row[]>(kpi.fn, kpi.args ?? {}),
@@ -35,7 +37,7 @@ export function KpiTile({ kpi }: { kpi: Kpi }) {
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
       <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {kpi.label}
+        {ui(kpi.label)}
       </p>
 
       {isPending ? (
@@ -53,7 +55,7 @@ export function KpiTile({ kpi }: { kpi: Kpi }) {
             {result.value}
           </p>
           {result.hint ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{result.hint}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{ui(result.hint)}</p>
           ) : null}
         </>
       ) : (
@@ -87,6 +89,7 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
  * insight gained.
  */
 export function MiniBars({ chart }: { chart: Chart }) {
+  const { ui } = useT();
   const { data, isPending, error } = useQuery({
     queryKey: [chart.fn, chart.args ?? {}],
     queryFn: () => callErp<Row[]>(chart.fn, chart.args ?? {}),
@@ -104,9 +107,9 @@ export function MiniBars({ chart }: { chart: Chart }) {
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
       <header className="border-b border-border px-4 py-4 sm:px-5">
-        <h2 className="text-sm font-semibold">{chart.title}</h2>
+        <h2 className="text-sm font-semibold">{ui(chart.title)}</h2>
         {chart.description ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">{chart.description}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{ui(chart.description)}</p>
         ) : null}
       </header>
 
@@ -119,7 +122,7 @@ export function MiniBars({ chart }: { chart: Chart }) {
             <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
           </div>
         ) : bars.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{chart.empty}</p>
+          <p className="text-sm text-muted-foreground">{ui(chart.empty)}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {bars.map(([label, value]) => (
