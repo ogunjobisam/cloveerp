@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
+import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
+
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
@@ -111,6 +113,29 @@ function Permissions() {
         <span className="font-medium">{session.tenant?.name}</span> by the database, not by this
         screen.
       </PageHeader>
+
+      <ActionBar
+        note="Bringing a principal into this tenant. An invitation returns a single-use token to hand over."
+        actions={[
+          {
+            label: "Invite a person",
+            permission: "administration.users",
+            fn: "erp_invite_principal",
+            fields: [
+              { kind: "text", name: "p_email", label: "Email", required: true },
+              { kind: "text", name: "p_display_name", label: "Name", required: true },
+            ],
+            invalidates: ["erp_permissions_directory"],
+          },
+          {
+            label: "Create a service principal",
+            permission: "administration.users",
+            fn: "erp_create_service_principal",
+            fields: [{ kind: "text", name: "p_display_name", label: "Name", required: true }],
+            invalidates: ["erp_permissions_directory"],
+          },
+        ]}
+      />
 
       {isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

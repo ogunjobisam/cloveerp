@@ -2,6 +2,14 @@ import type { ReactNode } from "react";
 
 import type { Column } from "../components/erp/auto";
 import { StatusPill, shortDate } from "../components/erp/auto";
+import {
+  pickFrom,
+  pickItem,
+  pickParty,
+  pickSite,
+  reason,
+  type ActionSpec,
+} from "../components/erp/actions-bar";
 
 /**
  * One description of every module, used by every surface that talks about it.
@@ -70,6 +78,8 @@ export type ModuleDef = {
   chart?: Chart;
   worklists: Panel[];
   reports: Panel[];
+  /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
+  actions?: ActionSpec[];
 };
 
 const num = (v: unknown): number => {
@@ -115,6 +125,107 @@ export const INVENTORY: ModuleDef = {
   blurb: "Stock health, valuation, ageing, expiry and counting, all derived from the ledger.",
   permission: "inventory.read",
   group: "move",
+  actions: [
+    {
+      label: "Raise count tasks",
+      description: "Ask a counting programme for its next set of tasks.",
+      permission: "inventory.count",
+      fn: "erp_raise_count_tasks",
+      fields: [{ kind: "text", name: "p_programme_code", label: "Programme code", required: true }],
+      invalidates: ["erp_count_tasks", "erp_count_accuracy"],
+    },
+    {
+      label: "Record a count",
+      permission: "inventory.count",
+      fn: "erp_record_count",
+      fields: [
+        pickFrom(
+          "erp_count_tasks",
+          "task_id",
+          ["item", "location", "status"],
+          "p_task_id",
+          "Count task",
+        ),
+        { kind: "number", name: "p_quantity", label: "Counted quantity", required: true },
+      ],
+      invalidates: ["erp_count_tasks", "erp_count_accuracy", "erp_stock_health"],
+    },
+    {
+      label: "Post a count",
+      description: "Turn a counted task into a stock adjustment.",
+      permission: "inventory.count",
+      fn: "erp_post_count",
+      fields: [
+        pickFrom(
+          "erp_count_tasks",
+          "task_id",
+          ["item", "location", "status"],
+          "p_task_id",
+          "Count task",
+        ),
+      ],
+      invalidates: [
+        "erp_count_tasks",
+        "erp_count_accuracy",
+        "erp_stock_health",
+        "erp_stock_valuation",
+      ],
+    },
+    {
+      label: "Write off stock",
+      permission: "inventory.write_off",
+      fn: "erp_write_off_stock",
+      fields: [
+        pickItem(),
+        pickSite(),
+        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        reason("p_reason", "Reason", true),
+        pickFrom(
+          "erp_batches",
+          "batch_id",
+          ["batch_number", "item"],
+          "p_batch_id",
+          "Batch (if controlled)",
+        ),
+      ],
+      invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_stock_ageing", "erp_batches"],
+    },
+    {
+      label: "Split a batch",
+      permission: "inventory.adjust",
+      fn: "erp_split_batch",
+      fields: [
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        { kind: "text", name: "p_new_number", label: "New batch number", required: true },
+        { kind: "number", name: "p_quantity", label: "Quantity to split", required: true },
+        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        reason(),
+      ],
+      invalidates: ["erp_batches", "erp_stock_health"],
+    },
+    {
+      label: "Release a batch",
+      permission: "quality.release_batch",
+      fn: "erp_release_batch",
+      fields: [
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        pickSite(),
+        { kind: "text", name: "p_basis", label: "Basis", required: true },
+        { kind: "text", name: "p_signature", label: "Signature", required: true },
+      ],
+      invalidates: ["erp_batches", "erp_stock_health"],
+    },
+    {
+      label: "Apply calculated policy",
+      description: "Adopt the stocking policy the engine calculates for one item and site.",
+      permission: "inventory.adjust",
+      fn: "erp_apply_calculated_policy",
+      fields: [pickItem(), pickSite()],
+      invalidates: ["erp_stock_health"],
+    },
+  ],
+
   kpis: [
     {
       label: "Stock lines",
@@ -267,6 +378,133 @@ export const FINANCE: ModuleDef = {
   blurb: "Trial balance, periods, receivables, tax and assets, read from the posted ledger.",
   permission: "finance.read",
   group: "settle",
+  actions: [
+    {
+      label: "Open a period close",
+      permission: "finance.close_period",
+      fn: "erp_open_period_close",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "status"],
+          "p_fiscal_period_id",
+          "Period",
+        ),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status"],
+    },
+    {
+      label: "Complete a close task",
+      permission: "finance.close_period",
+      fn: "erp_complete_close_task",
+      fields: [
+        { kind: "text", name: "p_task_id", label: "Task id", required: true },
+        { kind: "text", name: "p_waiver_reason", label: "Waiver reason" },
+      ],
+      invalidates: ["erp_close_status"],
+    },
+    {
+      label: "Close a period",
+      permission: "finance.close_period",
+      fn: "erp_close_period",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "status"],
+          "p_fiscal_period_id",
+          "Period",
+        ),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_trial_balance"],
+    },
+    {
+      label: "Reopen a period",
+      permission: "finance.reopen_period",
+      fn: "erp_reopen_period",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "status"],
+          "p_fiscal_period_id",
+          "Period",
+        ),
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status"],
+    },
+    {
+      label: "Propose a payment run",
+      permission: "finance.approve_payment",
+      fn: "erp_propose_payment_run",
+      fields: [
+        { kind: "date", name: "p_payment_date", label: "Payment date" },
+        { kind: "text", name: "p_currency", label: "Currency", hint: "Three-letter code." },
+      ],
+      invalidates: ["erp_payment_runs", "erp_payables_ageing"],
+    },
+    {
+      label: "Approve a payment run",
+      permission: "finance.approve_payment",
+      fn: "erp_approve_payment_run",
+      fields: [{ kind: "text", name: "p_proposal_id", label: "Proposal id", required: true }],
+      invalidates: ["erp_payment_runs", "erp_payables_ageing"],
+    },
+    {
+      label: "Apply cash",
+      permission: "finance.post",
+      fn: "erp_apply_cash",
+      fields: [
+        pickParty("customer"),
+        {
+          kind: "number",
+          name: "p_amount_minor",
+          label: "Amount",
+          required: true,
+          hint: "In minor units — pence, cents.",
+        },
+        { kind: "text", name: "p_currency", label: "Currency", required: true },
+        { kind: "text", name: "p_reference", label: "Reference" },
+      ],
+      invalidates: ["erp_receivables_ageing", "erp_dunning_worklist", "erp_trial_balance"],
+    },
+    {
+      label: "Invoice a delivery",
+      permission: "sales.invoice",
+      fn: "erp_invoice_from_delivery",
+      fields: [
+        pickFrom(
+          "erp_documents",
+          "document_id",
+          ["document_number", "status"],
+          "p_delivery_id",
+          "Delivery",
+          { p_type_code: null, p_limit: 100 },
+        ),
+        {
+          kind: "choice",
+          name: "p_allow_self_invoice",
+          label: "Allow self-invoice",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+        },
+      ],
+      invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
+    },
+    {
+      label: "Allocate a landed cost",
+      permission: "finance.post",
+      fn: "erp_allocate_landed_cost",
+      fields: [{ kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true }],
+      invalidates: ["erp_trial_balance", "erp_stock_valuation"],
+    },
+  ],
+
   kpis: [
     {
       label: "Receivables",
@@ -452,6 +690,41 @@ export const PLANNING: ModuleDef = {
   blurb: "Planned orders and the exceptions worth acting on before they become shortages.",
   permission: "planning.read",
   group: "plan",
+  actions: [
+    {
+      label: "Run planning",
+      description: "Regenerate planned orders and exceptions for one site.",
+      permission: "planning.run",
+      fn: "erp_run_planning",
+      fields: [
+        pickSite(),
+        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+      ],
+      invalidates: ["erp_planned_orders", "erp_planner_workbench"],
+    },
+    {
+      label: "Run a forecast",
+      permission: "planning.forecast",
+      fn: "erp_run_forecast",
+      fields: [
+        { kind: "text", name: "p_forecast_code", label: "Forecast code", required: true },
+        { kind: "number", name: "p_periods", label: "Periods ahead" },
+        { kind: "number", name: "p_buckets", label: "History buckets" },
+      ],
+      invalidates: ["erp_planner_workbench", "erp_planned_orders"],
+    },
+    {
+      label: "Sign off a forecast",
+      permission: "planning.forecast",
+      fn: "erp_sign_off_forecast",
+      fields: [
+        { kind: "text", name: "p_version_id", label: "Forecast version id", required: true },
+        { kind: "text", name: "p_note", label: "Note" },
+      ],
+      invalidates: ["erp_planner_workbench"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open exceptions",
@@ -534,6 +807,128 @@ export const PRODUCTION: ModuleDef = {
   blurb: "Works orders and their progress against plan, quantity by quantity.",
   permission: "production.read",
   group: "make",
+  actions: [
+    {
+      label: "Raise a works order",
+      permission: "production.order",
+      fn: "erp_raise_works_order",
+      fields: [
+        pickItem(),
+        pickSite(),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        {
+          kind: "choice",
+          name: "p_kind",
+          label: "Kind",
+          required: true,
+          choices: [
+            { value: "assembly", label: "Assembly" },
+            { value: "kitting", label: "Kitting" },
+            { value: "rework", label: "Rework" },
+            { value: "repackaging", label: "Repackaging" },
+            { value: "disassembly", label: "Disassembly" },
+          ],
+        },
+        { kind: "date", name: "p_planned_end", label: "Planned finish" },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+    {
+      label: "Release a works order",
+      permission: "production.release",
+      fn: "erp_release_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        {
+          kind: "choice",
+          name: "p_allow_shortage",
+          label: "Release despite shortages",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+        },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+    {
+      label: "Issue components",
+      permission: "production.execute",
+      fn: "erp_issue_to_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        pickItem("p_component_item_id", "Component"),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
+    },
+    {
+      label: "Book operation time",
+      permission: "production.execute",
+      fn: "erp_book_operation_time",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        { kind: "number", name: "p_operation_seq", label: "Operation", required: true },
+        { kind: "number", name: "p_minutes", label: "Minutes", required: true },
+        { kind: "number", name: "p_completed", label: "Completed" },
+        { kind: "number", name: "p_scrapped", label: "Scrapped" },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+    {
+      label: "Receive output",
+      permission: "production.execute",
+      fn: "erp_receive_works_order_output",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        { kind: "text", name: "p_batch_number", label: "Batch number" },
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
+    },
+    {
+      label: "Close a works order",
+      permission: "production.execute",
+      fn: "erp_close_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+      ],
+      invalidates: ["erp_works_orders", "erp_shop_floor"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open works orders",
@@ -633,6 +1028,146 @@ export const QUALITY: ModuleDef = {
   blurb: "Events, dispositions, supplier qualification and recall — each with a clock.",
   permission: "quality.read",
   group: "govern",
+  actions: [
+    {
+      label: "Raise a quality event",
+      permission: "quality.inspect",
+      fn: "erp_raise_quality_event",
+      fields: [
+        {
+          kind: "choice",
+          name: "p_kind",
+          label: "Kind",
+          required: true,
+          choices: [
+            { value: "deviation", label: "Deviation" },
+            { value: "non_conformance", label: "Non-conformance" },
+            { value: "complaint", label: "Complaint" },
+            { value: "excursion", label: "Excursion" },
+            { value: "near_miss", label: "Near miss" },
+            { value: "audit_finding", label: "Audit finding" },
+          ],
+        },
+        { kind: "text", name: "p_title", label: "Title", required: true },
+        {
+          kind: "choice",
+          name: "p_severity",
+          label: "Severity",
+          required: true,
+          choices: [
+            { value: "low", label: "Low" },
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High" },
+            { value: "critical", label: "Critical" },
+          ],
+        },
+        pickSite("p_site_id", "Site", false),
+        {
+          kind: "select",
+          name: "p_item_id",
+          label: "Item",
+          options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+      ],
+      invalidates: ["erp_quality_events", "erp_open_quality_events"],
+    },
+    {
+      label: "Record an inspection result",
+      permission: "quality.inspect",
+      fn: "erp_record_inspection_result",
+      fields: [
+        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        { kind: "text", name: "p_characteristic", label: "Characteristic", required: true },
+        { kind: "number", name: "p_numeric_value", label: "Measured value" },
+        { kind: "text", name: "p_text_value", label: "Observed value" },
+        { kind: "text", name: "p_instrument", label: "Instrument" },
+      ],
+      invalidates: ["erp_open_inspections", "erp_quality_events"],
+    },
+    {
+      label: "Disposition an inspection",
+      permission: "quality.disposition",
+      fn: "erp_disposition_inspection",
+      fields: [
+        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        {
+          kind: "choice",
+          name: "p_disposition",
+          label: "Disposition",
+          required: true,
+          choices: [
+            { value: "accept", label: "Accept" },
+            { value: "accept_with_concession", label: "Accept with concession" },
+            { value: "rework", label: "Rework" },
+            { value: "reject", label: "Reject" },
+            { value: "quarantine", label: "Quarantine" },
+            { value: "destroy", label: "Destroy" },
+          ],
+        },
+        { kind: "text", name: "p_note", label: "Note" },
+      ],
+      invalidates: ["erp_open_inspections", "erp_quality_events", "erp_batches"],
+    },
+    {
+      label: "Raise a recall",
+      permission: "quality.recall",
+      fn: "erp_raise_recall",
+      fields: [
+        { kind: "text", name: "p_title", label: "Title", required: true },
+        reason("p_reason", "Reason", true),
+        { kind: "text", name: "p_classification", label: "Classification", required: true },
+        {
+          kind: "text",
+          name: "p_batch_ids",
+          label: "Batch ids",
+          required: true,
+          hint: "Comma separated.",
+        },
+      ],
+      invalidates: ["erp_recalls"],
+      mapArgs: (v) => ({
+        p_title: v["p_title"],
+        p_reason: v["p_reason"],
+        p_classification: v["p_classification"],
+        p_batch_ids: String(v["p_batch_ids"] ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }),
+    },
+    {
+      label: "Log a recall action",
+      permission: "quality.recall",
+      fn: "erp_log_recall_action",
+      fields: [
+        pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall"),
+        { kind: "text", name: "p_action_kind", label: "Action", required: true },
+        { kind: "number", name: "p_quantity_recovered", label: "Quantity recovered" },
+        { kind: "text", name: "p_note", label: "Note" },
+      ],
+      invalidates: ["erp_recalls"],
+    },
+    {
+      label: "Close a quality event",
+      permission: "quality.disposition",
+      fn: "erp_close_quality_event",
+      fields: [
+        pickFrom(
+          "erp_quality_events",
+          "quality_event_id",
+          ["title", "status"],
+          "p_event_id",
+          "Event",
+        ),
+        { kind: "text", name: "p_root_cause", label: "Root cause", required: true },
+        { kind: "text", name: "p_corrective_action", label: "Corrective action", required: true },
+        { kind: "text", name: "p_preventive_action", label: "Preventive action", required: true },
+      ],
+      invalidates: ["erp_quality_events", "erp_open_quality_events"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open events",
@@ -738,6 +1273,94 @@ export const LOGISTICS: ModuleDef = {
   blurb: "Shipments, carrier bookings and delivery performance, with cost landing on stock.",
   permission: "logistics.read",
   group: "move",
+  actions: [
+    {
+      label: "Plan a shipment",
+      description: "Group deliveries leaving one site on one day.",
+      permission: "logistics.plan",
+      fn: "erp_plan_shipment",
+      fields: [
+        pickSite(),
+        {
+          kind: "text",
+          name: "p_delivery_ids",
+          label: "Delivery ids",
+          required: true,
+          hint: "Comma separated.",
+        },
+        { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: true },
+      ],
+      invalidates: ["erp_shipments", "erp_open_shipments"],
+      mapArgs: (v) => ({
+        p_site_id: v["p_site_id"],
+        p_planned_despatch: v["p_planned_despatch"],
+        p_delivery_ids: String(v["p_delivery_ids"] ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }),
+    },
+    {
+      label: "Select a carrier",
+      permission: "logistics.plan",
+      fn: "erp_select_carrier",
+      fields: [
+        pickFrom(
+          "erp_shipments",
+          "shipment_id",
+          ["reference", "status"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        { kind: "date", name: "p_required_by", label: "Required by", required: false },
+      ],
+      invalidates: ["erp_shipments", "erp_open_shipments"],
+    },
+    {
+      label: "Book a shipment",
+      permission: "logistics.despatch",
+      fn: "erp_book_shipment",
+      fields: [
+        pickFrom(
+          "erp_shipments",
+          "shipment_id",
+          ["reference", "status"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        { kind: "text", name: "p_carrier_code", label: "Carrier code", required: true },
+        { kind: "text", name: "p_service_code", label: "Service code", required: true },
+        {
+          kind: "number",
+          name: "p_cost_minor",
+          label: "Cost",
+          required: true,
+          hint: "In minor units — pence, cents.",
+        },
+      ],
+      invalidates: ["erp_shipments", "erp_open_shipments", "erp_delivery_performance"],
+    },
+    {
+      label: "Record proof of delivery",
+      permission: "logistics.despatch",
+      fn: "erp_record_proof_of_delivery",
+      fields: [
+        pickFrom(
+          "erp_shipments",
+          "shipment_id",
+          ["reference", "status"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        { kind: "date", name: "p_arrived_at", label: "Arrived on", required: true },
+        { kind: "text", name: "p_signed_by", label: "Signed by", required: true },
+        { kind: "text", name: "p_reference", label: "Reference", required: false },
+      ],
+
+      invalidates: ["erp_shipments", "erp_delivery_performance"],
+    },
+  ],
+
   kpis: [
     {
       label: "Open shipments",

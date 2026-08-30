@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { ActionBar } from "../../components/erp/actions-bar";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
+
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { useT } from "../../lib/i18n";
@@ -41,6 +43,78 @@ function Governance() {
         a specific record, shown as a before-and-after, approved by whoever the rule names, and only
         then applied — with the whole sequence kept.
       </PageHeader>
+
+      <ActionBar
+        note="Proposing a change, and the mass change that proposes the same edit against many records."
+        actions={[
+          {
+            label: "Open a change request",
+            permission: "master_data.write",
+            fn: "erp_open_change_request",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_object_type",
+                label: "Object",
+                required: true,
+                choices: [
+                  { value: "item", label: "Item" },
+                  { value: "party", label: "Party" },
+                ],
+              },
+              { kind: "text", name: "p_object_id", label: "Record id", required: true },
+              {
+                kind: "text",
+                name: "p_proposed",
+                label: "Proposed change",
+                required: true,
+                hint: 'JSON, for example {"name":"New name"}.',
+              },
+              { kind: "text", name: "p_reason", label: "Reason" },
+            ],
+            invalidates: ["erp_change_requests", "erp_my_approvals"],
+            mapArgs: (v) => ({
+              p_object_type: v["p_object_type"],
+              p_object_id: v["p_object_id"],
+              p_proposed: JSON.parse(v["p_proposed"] ?? "{}"),
+              ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
+            }),
+          },
+          {
+            label: "Open a mass change",
+            permission: "master_data.write",
+            fn: "erp_open_mass_change",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_object_type",
+                label: "Object",
+                required: true,
+                choices: [
+                  { value: "item", label: "Item" },
+                  { value: "party", label: "Party" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "p_selector",
+                label: "Selector",
+                required: true,
+                hint: 'JSON, for example {"item_class":"finished_good"}.',
+              },
+              { kind: "text", name: "p_changes", label: "Changes", required: true, hint: "JSON." },
+              { kind: "text", name: "p_reason", label: "Reason" },
+            ],
+            invalidates: ["erp_change_requests"],
+            mapArgs: (v) => ({
+              p_object_type: v["p_object_type"],
+              p_selector: JSON.parse(v["p_selector"] ?? "{}"),
+              p_changes: JSON.parse(v["p_changes"] ?? "{}"),
+              ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
+            }),
+          },
+        ]}
+      />
 
       <AutoPanel
         title="My approvals"

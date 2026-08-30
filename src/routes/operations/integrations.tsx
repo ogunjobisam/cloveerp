@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
+
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { SeedDemoAction } from "../../components/erp/seed";
@@ -46,6 +48,22 @@ function Integrations() {
         Every outbound write goes through the gateway. Nothing here can send anything — it reports
         what the gateway is doing and what needs a person.
       </PageHeader>
+
+      <ActionBar
+        note="Replaying a message is the one thing a person does to the gateway by hand."
+        actions={[
+          {
+            label: "Replay a message",
+            permission: "administration.integrate",
+            fn: "erp_replay_message",
+            fields: [
+              { kind: "number", name: "p_message_id", label: "Message id", required: true },
+              { kind: "text", name: "p_reason", label: "Reason", required: true },
+            ],
+            invalidates: ["erp_integration_backlog", "erp_integration_health"],
+          },
+        ]}
+      />
 
       <DataPanel<Backlog>
         title="Needs a decision"

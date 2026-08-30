@@ -1,9 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { SeedDemoAction } from "../../components/erp/seed";
+
+/** The things a kill switch can point at, from `erp.kill_target_kind`. */
+const KILL_TARGETS = [
+  { value: "rule_set", label: "Rule set" },
+  { value: "rule", label: "Rule" },
+  { value: "state_machine", label: "State machine" },
+  { value: "approval_chain", label: "Approval chain" },
+  { value: "job", label: "Job" },
+  { value: "command_class", label: "Command class" },
+  { value: "integration", label: "Integration" },
+  { value: "event_consumer", label: "Event consumer" },
+];
 
 export const Route = createFileRoute("/operations/jobs")({
   head: () => ({ meta: [{ title: "Scheduled jobs — ERPWare" }] }),
@@ -44,6 +57,55 @@ function Jobs() {
         A job that fails is loud. A job that stops being scheduled is silent, and silence looks
         exactly like success — so it is reported first.
       </PageHeader>
+
+      <ActionBar
+        note="Running a job by hand, and the kill switches that stop one from running at all."
+        actions={[
+          {
+            label: "Trigger a job",
+            permission: "administration.jobs",
+            fn: "erp_trigger_job",
+            fields: [
+              { kind: "text", name: "p_job_code", label: "Job code", required: true },
+              { kind: "text", name: "p_reason", label: "Reason" },
+            ],
+            invalidates: ["erp_silent_jobs", "erp_job_health"],
+          },
+          {
+            label: "Set a kill switch",
+            permission: "administration.jobs",
+            fn: "erp_set_kill_switch",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_kind",
+                label: "Target",
+                required: true,
+                choices: KILL_TARGETS,
+              },
+              { kind: "text", name: "p_key", label: "Key", required: true },
+              { kind: "text", name: "p_reason", label: "Reason", required: true },
+            ],
+            invalidates: ["erp_job_health", "erp_silent_jobs"],
+          },
+          {
+            label: "Clear a kill switch",
+            permission: "administration.jobs",
+            fn: "erp_clear_kill_switch",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_kind",
+                label: "Target",
+                required: true,
+                choices: KILL_TARGETS,
+              },
+              { kind: "text", name: "p_key", label: "Key", required: true },
+            ],
+            invalidates: ["erp_job_health", "erp_silent_jobs"],
+          },
+        ]}
+      />
 
       <DataPanel<Silent>
         title="Jobs that have stopped running"

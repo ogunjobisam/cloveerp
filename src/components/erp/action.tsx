@@ -142,6 +142,25 @@ export type Field =
       hint?: string;
     }
   | {
+      /** A fixed list — a database enum, or yes/no. Sent verbatim as text. */
+      kind: "choice";
+      name: string;
+      label: string;
+      required?: boolean;
+      hint?: string;
+      choices: { value: string; label: string }[];
+      /** Send `true`/`false` rather than the string. */
+      boolean?: boolean;
+    }
+  | {
+      /** The sites this session can see, from the session itself. */
+      kind: "site";
+      name: string;
+      label: string;
+      required?: boolean;
+      hint?: string;
+    }
+  | {
       kind: "select";
       name: string;
       label: string;
@@ -264,6 +283,7 @@ export function ActionDialog({
       if (f.kind === "number") args[f.name] = Number(raw);
       else if (f.kind === "money")
         args[f.name] = toMinor(raw, minorUnitsOf(currencies, f.currency));
+      else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
     }
     return args;
@@ -307,6 +327,23 @@ export function ActionDialog({
                   value={values[f.name] ?? ""}
                   onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
                 />
+              ) : f.kind === "choice" || f.kind === "site" ? (
+                <select
+                  required={f.required ?? false}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                >
+                  <option value="">Choose…</option>
+                  {(f.kind === "site"
+                    ? session.sites.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))
+                    : f.choices
+                  ).map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <input
                   type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}

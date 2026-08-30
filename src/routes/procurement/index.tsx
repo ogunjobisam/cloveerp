@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { ActionBar, pickFrom, pickParty } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -33,6 +34,70 @@ function Procurement() {
         Requisition to purchase order to goods receipt. Receiving posts stock inbound through the
         same bridge a delivery uses outbound.
       </PageHeader>
+
+      <ActionBar
+        note="Receiving, matching and supplier qualification — the verbs between the documents."
+        actions={[
+          {
+            label: "Receive against an order",
+            permission: "procurement.receive",
+            fn: "erp_receive_against",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "status"],
+                "p_receipt_id",
+                "Receipt",
+                { p_limit: 100 },
+              ),
+              { kind: "text", name: "p_order_line_id", label: "Order line id", required: true },
+              { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+              pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+            ],
+            invalidates: ["erp_grni", "erp_match_workbench"],
+          },
+          {
+            label: "Invoice against an order",
+            permission: "procurement.match",
+            fn: "erp_invoice_against",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "status"],
+                "p_invoice_id",
+                "Invoice",
+                { p_limit: 100 },
+              ),
+              { kind: "text", name: "p_order_line_id", label: "Order line id", required: true },
+              { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+              {
+                kind: "number",
+                name: "p_unit_price_minor",
+                label: "Unit price",
+                hint: "In minor units — pence, cents.",
+              },
+            ],
+            invalidates: ["erp_match_workbench", "erp_grni"],
+          },
+          {
+            label: "Qualify a supplier",
+            permission: "procurement.order",
+            fn: "erp_qualify_supplier",
+            fields: [pickParty("supplier"), { kind: "text", name: "p_note", label: "Note" }],
+            invalidates: ["erp_supplier_qualification"],
+          },
+          {
+            label: "Allocate a landed cost",
+            permission: "procurement.match",
+            fn: "erp_allocate_landed_cost",
+            fields: [
+              { kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true },
+            ],
+          },
+        ]}
+      />
 
       <DocumentPanel
         title="Requisitions"
