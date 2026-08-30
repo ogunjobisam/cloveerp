@@ -5,6 +5,7 @@ import { useT } from "../../lib/i18n";
 import { GROUP_LABELS, type ModuleDef, type Panel } from "../../lib/modules";
 import { ActionBar } from "./actions-bar";
 import { AutoPanel } from "./auto";
+import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
 import { RefreshButton, TOUCH } from "./page";
 
