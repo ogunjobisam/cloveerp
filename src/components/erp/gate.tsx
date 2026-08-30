@@ -264,6 +264,19 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
           </p>
         </div>
 
+        {/* The owner of the product arrives here on day one, belonging to no
+            tenant at all. The console has to be reachable from exactly here. */}
+        {platform.data?.is_staff || platform.data?.claimable ? (
+          <p className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-3 text-center text-xs">
+            {platform.data.is_staff
+              ? "You are platform staff."
+              : "This deployment has no owner yet."}{" "}
+            <Link to="/platform" className="font-medium underline underline-offset-2">
+              Open the platform console
+            </Link>
+          </p>
+        ) : null}
+
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <button type="button" onClick={onSignOut} className="underline underline-offset-2">
             Sign out
