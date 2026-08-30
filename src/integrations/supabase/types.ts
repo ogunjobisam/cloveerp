@@ -184,6 +184,18 @@ export type Database = {
       erp_change_requests: { Args: { p_object_type?: string }; Returns: Json }
       erp_change_sets: { Args: never; Returns: Json }
       erp_claim_invitation: { Args: { p_token: string }; Returns: Json }
+      erp_classification_axes: { Args: never; Returns: Json }
+      erp_classification_gaps: { Args: { p_limit?: number }; Returns: Json }
+      erp_classification_values: { Args: { p_axis_id?: string }; Returns: Json }
+      erp_classify_item: {
+        Args: {
+          p_axis_id: string
+          p_item_id: string
+          p_valid_from?: string
+          p_value_id: string
+        }
+        Returns: Json
+      }
       erp_clear_kill_switch: {
         Args: {
           p_key: string
@@ -218,6 +230,8 @@ export type Database = {
         Args: { p_works_order_id: string }
         Returns: Json
       }
+      erp_code_divergences: { Args: { p_limit?: number }; Returns: Json }
+      erp_code_templates: { Args: never; Returns: Json }
       erp_commit_allocation: {
         Args: {
           p_allocation_id: string
@@ -277,6 +291,16 @@ export type Database = {
       }
       erp_count_accuracy: { Args: never; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
+      erp_create_classified_item: {
+        Args: {
+          p_classification?: Json
+          p_is_batch_controlled?: boolean
+          p_item_class: string
+          p_name: string
+          p_template_id: string
+        }
+        Returns: Json
+      }
       erp_create_document: {
         Args: {
           p_party_id?: string
@@ -468,6 +492,8 @@ export type Database = {
         }
         Returns: number
       }
+      erp_item_classification: { Args: { p_item_id: string }; Returns: Json }
+      erp_item_code_assignments: { Args: { p_limit?: number }; Returns: Json }
       erp_item_posting_classes: { Args: { p_limit?: number }; Returns: Json }
       erp_items: { Args: { p_search?: string }; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
@@ -667,6 +693,10 @@ export type Database = {
         Returns: Json
       }
       erp_preview_import: { Args: { p_batch_id: string }; Returns: Json }
+      erp_preview_item_code: {
+        Args: { p_classification?: Json; p_template_id: string }
+        Returns: Json
+      }
       erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
       erp_principals: { Args: never; Returns: Json }
       erp_promise_date: {
@@ -1087,6 +1117,39 @@ export type Database = {
           p_upper_bound_minor?: number
           p_use_line_manager?: boolean
           p_vacancy?: string
+        }
+        Returns: Json
+      }
+      erp_upsert_classification_axis: {
+        Args: {
+          p_code: string
+          p_is_mandatory?: boolean
+          p_item_classes?: string
+          p_name: string
+          p_name_key?: string
+          p_seq?: number
+        }
+        Returns: Json
+      }
+      erp_upsert_classification_value: {
+        Args: {
+          p_abbreviation: string
+          p_axis_id: string
+          p_code: string
+          p_name: string
+          p_name_key?: string
+          p_parent_value_id?: string
+        }
+        Returns: Json
+      }
+      erp_upsert_code_template: {
+        Args: {
+          p_casing?: string
+          p_code: string
+          p_entity_id?: string
+          p_item_classes?: string
+          p_name: string
+          p_segments: Json
         }
         Returns: Json
       }
