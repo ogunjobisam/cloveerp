@@ -6,9 +6,19 @@
  * drains once and returns rather than looping; point a schedule at it.
  *
  * Deploy:
- *   supabase functions deploy dispatch --no-verify-jwt=false
+ *   supabase functions deploy dispatch
  *   supabase secrets set ERPWARE_DATABASE_URL=... ERPWARE_TENANTS=... \
  *                        ERPWARE_PRINCIPALS=... ERPWARE_SYSTEMS=...
+ *
+ * No flags: supabase/config.toml carries verify_jwt and the import map now, so
+ * the deploy and the preview branches agree by construction rather than by
+ * whoever remembers the flag. That block is also what makes this function
+ * deploy at all — an undeclared function is skipped.
+ *
+ * The imports below carry explicit .ts extensions and the core they reach does
+ * too, because Deno requires them. Without that this file did not resolve past
+ * its own first import, which nothing noticed until `deno check` was run on it
+ * for the first time.
  *
  * The database connection must be a role that bypasses row-level security:
  * erp.set_job_principal() checks erp.session_is_trusted() and refuses

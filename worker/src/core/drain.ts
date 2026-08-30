@@ -1,7 +1,7 @@
-import type { TenantBinding, WorkerConfig } from "./config";
-import { resolveCredential } from "./config";
-import { asPrincipal, type Sql } from "./db";
-import { handlerFor, registeredCodes } from "./handlers";
+import type { TenantBinding, WorkerConfig } from "./config.ts";
+import { resolveCredential } from "./config.ts";
+import { asPrincipal, type Sql } from "./db.ts";
+import { handlerFor, registeredCodes } from "./handlers.ts";
 
 export type DrainReport = {
   jobsClaimed: number;

@@ -192,17 +192,26 @@ promoted through B6 exactly as a customer's own change would be.
 push: an empty PostgreSQL 17.6, the host bootstrap (~80 lines — the entire
 Supabase surface), then every migration with `--single-transaction`.
 
-**Eleven structural assertions** read the catalogue and need no fixtures.
-**Four adversarial suites** — 81 cases — build their own tenants, attack them,
-and destroy them.
+**Twenty structural assertions** read the catalogue and need no fixtures.
+**Sixteen adversarial suites** — 386 cases — build their own tenants, attack
+them, and destroy them. (These counts were stale in this document for some
+time, which is its own small illustration: a number nothing checks is a number
+that drifts.)
 
 Each suite asserts its own case count. That is not ceremony: a suite that
 quietly loses a case reports success, and this repository has lost three
-isolation cases exactly that way.
+isolation cases exactly that way. A suite must also leave nothing behind — one
+did not, and could therefore only ever run once.
 
 Two things the workflow checks that applying migrations to a long-lived
 database structurally cannot: that the sequence still applies to an _empty_
 cluster, and that the generators are idempotent.
+
+A second job covers the product's TypeScript, which for a long time nothing
+built: `bun run typecheck` for the dispatch worker, and `deno check` for the
+Edge Function that shares its core. The schema being green while the worker
+does not compile should be two answers, not one — and for a while it was
+neither, because nobody asked the second question.
 
 ---
 
@@ -228,6 +237,7 @@ scratch, or by an assertion, or by running the thing.
 | The two tenant-creation doors built two different tenants                 | Trying to configure one of them            |
 | 58 operations were reachable from nowhere                                 | Counting the public API against `erp.*`    |
 | A test suite left its tenant behind, so it could only run once            | Re-reading my own merged code              |
+| The Edge Function had never compiled                                      | A warning on a passing check               |
 
 The last three of the merge batch arrived when a second line of work merged.
 The assertions caught all of them within minutes.
@@ -256,6 +266,18 @@ The suite also fabricates rows in `auth.users`, which is the platform's identity
 table rather than the product's and has no foreign key to cascade along, so
 those survived too. **The green tick again described the run, not the artefact.**
 
+The one after it came from a ⚠️ next to a check that passed. The Supabase
+branching integration warned that only functions declared in `config.toml` are
+deployed to preview branches, and `supabase/functions/dispatch` was not declared
+— so it was skipped. Following that up found something larger than a missing
+config block: the function had never compiled. Its shared core
+(`worker/src/core/`) uses extensionless relative imports, which Deno refuses, so
+module resolution failed at the first hop past `index.ts`. A `deno check` on the
+file reported twenty errors. Nothing in this repository had ever run one: the
+build is a PostgreSQL build, and the two TypeScript entrypoints that talk to the
+schema were outside it. A deploy command sat in the file's own header comment,
+and the file it described could not be deployed.
+
 ### The lesson
 
 **Verify the artefact, not the green tick.** Twice in this build a change was
@@ -280,6 +302,16 @@ the log was not.
 - **Local development on PostgreSQL 16** runs `pg_jsonschema` 0.3.3, which does
   not enforce `required`. Three gateway cases fail locally and pass on CI's
   17.6 image.
+- **The Edge Function is verified by `deno check`, not by a deploy.** It now
+  builds, and it runs: pointed at a local ERPWare database it authenticates,
+  refuses a wrong shared secret with a 403, and returns B1's own
+  `ERPWARE_UNKNOWN_PRINCIPAL` for a fabricated principal. What is still
+  unverified is the Supabase CLI's bundler, which needs Docker or an
+  authenticated deploy — neither available where this was fixed. The function
+  imports its core from `worker/src/core/`, outside `supabase/functions/`, and
+  whether the bundler follows a path out of that directory is the open
+  question. The preview branch on the pull request that declared it is the
+  first real test of that.
 
 ---
 

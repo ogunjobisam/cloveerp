@@ -1,1 +1,24 @@
 project_id = "xpzffnnhnhcqyjqcueja"
+
+# The dispatch worker's cron entrypoint.
+#
+# It exists in the repository either way; what this block changes is that it is
+# now *declared*. An undeclared function is skipped by the branching
+# integration, whose warning — "Only Functions declared in config.toml will be
+# automatically deployed to branches" — was the only thing that ever said so.
+# Until this block, the one component of the product that is not SQL was
+# deployed solely by a person running the command in its own header comment.
+#
+# Only two settings, and both earn their place. entrypoint and enabled are
+# omitted deliberately: their defaults are already ./functions/dispatch/index.ts
+# and true, and a line that restates a default is a line that can drift from one.
+#
+#   import_map  is load-bearing. worker/src/core/db.ts imports the bare
+#               specifier "postgres", which Deno cannot resolve on its own.
+#               Without this the function does not build at all.
+#   verify_jwt  matches the deploy flag documented in the function's header.
+#               The shared secret it checks is a second gate, not the only one:
+#               the work is already gated by B1, but the request rate is not.
+[functions.dispatch]
+verify_jwt = true
+import_map = "./functions/import_map.json"

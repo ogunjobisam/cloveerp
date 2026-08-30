@@ -1,6 +1,6 @@
 import postgres from "postgres";
 
-import type { TenantBinding } from "./config";
+import type { TenantBinding } from "./config.ts";
 
 export type Sql = ReturnType<typeof postgres>;
 

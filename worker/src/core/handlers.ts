@@ -1,4 +1,4 @@
-import type { Sql } from "./db";
+import type { Sql } from "./db.ts";
 
 /**
  * What a scheduled job actually does.
