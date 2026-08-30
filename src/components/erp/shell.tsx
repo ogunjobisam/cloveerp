@@ -64,6 +64,12 @@ const NAV: NavItem[] = [
     description: "The structural checks the build runs on every push",
   },
   {
+    to: "/administration/configuration",
+    label: "Configuration",
+    permission: "administration.configure",
+    description: "Install modules and promote the change sets that put them in force",
+  },
+  {
     to: "/administration/permissions",
     label: "Permissions",
     permission: "administration.roles",
