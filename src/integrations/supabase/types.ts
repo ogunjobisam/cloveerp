@@ -452,7 +452,58 @@ export type Database = {
       }
       erp_planner_workbench: { Args: { p_site_id?: string }; Returns: Json }
       erp_planning_exceptions: { Args: { p_limit?: number }; Returns: Json }
+      erp_platform_add_staff: {
+        Args: { p_display_name: string; p_email: string; p_role: string }
+        Returns: Json
+      }
       erp_platform_assurance: { Args: never; Returns: Json }
+      erp_platform_audit: {
+        Args: { p_action?: string; p_limit?: number; p_tenant_id?: string }
+        Returns: Json
+      }
+      erp_platform_claim_ownership: {
+        Args: { p_display_name?: string }
+        Returns: Json
+      }
+      erp_platform_enter_tenant: {
+        Args: { p_reason: string; p_tenant_id: string }
+        Returns: Json
+      }
+      erp_platform_invite_admin: {
+        Args: { p_display_name: string; p_email: string; p_tenant_id: string }
+        Returns: Json
+      }
+      erp_platform_leave_tenant: {
+        Args: { p_tenant_id: string }
+        Returns: Json
+      }
+      erp_platform_me: { Args: never; Returns: Json }
+      erp_platform_onboard_company: {
+        Args: {
+          p_admin_display_name: string
+          p_admin_email: string
+          p_base_currency?: string
+          p_code: string
+          p_country_code?: string
+          p_name: string
+          p_timezone?: string
+        }
+        Returns: Json
+      }
+      erp_platform_revoke_staff: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: Json
+      }
+      erp_platform_set_staff_role: {
+        Args: { p_id: string; p_role: string }
+        Returns: Json
+      }
+      erp_platform_set_tenant_status: {
+        Args: { p_reason?: string; p_status: string; p_tenant_id: string }
+        Returns: Json
+      }
+      erp_platform_staff: { Args: never; Returns: Json }
+      erp_platform_tenants: { Args: never; Returns: Json }
       erp_post_count: { Args: { p_task_id: string }; Returns: number }
       erp_preview_import: { Args: { p_batch_id: string }; Returns: Json }
       erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
