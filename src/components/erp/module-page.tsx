@@ -146,8 +146,12 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
       ) : null}
 
       {tab === "reports" ? (
-        <div className="flex min-w-0 flex-col gap-4">{def.reports.map(panelOf)}</div>
+        <div className="flex min-w-0 flex-col gap-4">
+          {def.reports.map(panelOf)}
+          <InquiryBoard inquiries={def.inquiries ?? []} />
+        </div>
       ) : null}
+
     </div>
   );
 }
