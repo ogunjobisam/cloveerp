@@ -14,7 +14,6 @@ import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
 import { UserMenu } from "./user-menu";
 
-
 /**
  * The application shell.
  *
@@ -260,7 +259,6 @@ export function Shell({
               <span style={{ color: brand.total }}>{brand.suffix}</span>
             </span>
           </Link>
-
 
           <div className="flex min-w-0 flex-1 flex-col leading-tight md:flex-none">
             <span className="truncate text-sm font-medium">

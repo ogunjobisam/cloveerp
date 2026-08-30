@@ -41,10 +41,7 @@ export function BrandingPanel({ locale = "en" }: { locale?: string }) {
 
   async function save() {
     setSaved(false);
-    for (const [field, key] of Object.entries(BRAND_KEYS) as [
-      keyof typeof BRAND_KEYS,
-      string,
-    ][]) {
+    for (const [field, key] of Object.entries(BRAND_KEYS) as [keyof typeof BRAND_KEYS, string][]) {
       const value = draft[field].trim();
       if (value === (initial[field] ?? "")) continue;
       await set.mutateAsync({ p_resource_key: key, p_locale: locale, p_text: value });

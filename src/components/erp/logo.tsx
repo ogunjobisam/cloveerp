@@ -76,7 +76,9 @@ export function BrandMark({ size = 28, className }: { size?: number; className?:
     );
   }
 
-  return <Logo size={size} ink={brand.ink} total={brand.total} {...(className ? { className } : {})} />;
+  return (
+    <Logo size={size} ink={brand.ink} total={brand.total} {...(className ? { className } : {})} />
+  );
 }
 
 /** Mark plus wordmark. The closing letters carry the total colour. */
