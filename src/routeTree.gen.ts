@@ -26,6 +26,7 @@ import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
 import { Route as MasterDataImportsRouteImport } from './routes/master-data/imports'
+import { Route as MasterDataItemSupplyRouteImport } from './routes/master-data/item-supply'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
@@ -126,6 +127,11 @@ const MasterDataImportsRoute = MasterDataImportsRouteImport.update({
   path: '/master-data/imports',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MasterDataItemSupplyRoute = MasterDataItemSupplyRouteImport.update({
+  id: '/master-data/item-supply',
+  path: '/master-data/item-supply',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
   id: '/operations/assurance',
   path: '/operations/assurance',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
+  '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -213,6 +220,7 @@ export interface FileRoutesByTo {
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
+  '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
+  '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/master-data/imports'
+    | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/master-data/imports'
+    | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/master-data/imports'
+    | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -357,6 +369,7 @@ export interface RootRouteChildren {
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
+  MasterDataItemSupplyRoute: typeof MasterDataItemSupplyRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
@@ -494,6 +507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MasterDataImportsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/master-data/item-supply': {
+      id: '/master-data/item-supply'
+      path: '/master-data/item-supply'
+      fullPath: '/master-data/item-supply'
+      preLoaderRoute: typeof MasterDataItemSupplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/operations/assurance': {
       id: '/operations/assurance'
       path: '/operations/assurance'
@@ -573,6 +593,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,
+  MasterDataItemSupplyRoute: MasterDataItemSupplyRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
