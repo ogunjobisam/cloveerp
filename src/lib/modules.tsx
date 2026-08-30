@@ -2,6 +2,15 @@ import type { ReactNode } from "react";
 
 import type { Column } from "../components/erp/auto";
 import { StatusPill, shortDate } from "../components/erp/auto";
+import {
+  pickFrom,
+  pickItem,
+  pickParty,
+  pickSite,
+  reason,
+  type ActionSpec,
+} from "../components/erp/actions-bar";
+
 
 /**
  * One description of every module, used by every surface that talks about it.
@@ -70,7 +79,10 @@ export type ModuleDef = {
   chart?: Chart;
   worklists: Panel[];
   reports: Panel[];
+  /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
+  actions?: ActionSpec[];
 };
+
 
 const num = (v: unknown): number => {
   const n = Number(v);
