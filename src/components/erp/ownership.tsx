@@ -166,7 +166,7 @@ export function Ownership() {
   });
 
   const respond = useMutation({
-    mutationFn: (v: { id: string; accept: boolean; note?: string }) =>
+    mutationFn: (v: { id: string; accept: boolean; note?: string | undefined }) =>
       callErp("erp_platform_respond_ownership_transfer", {
         p_transfer_id: v.id,
         p_accept: v.accept,
@@ -176,7 +176,7 @@ export function Ownership() {
   });
 
   const withdraw = useMutation({
-    mutationFn: (v: { id: string; reason?: string }) =>
+    mutationFn: (v: { id: string; reason?: string | undefined }) =>
       callErp("erp_platform_cancel_ownership_transfer", {
         p_transfer_id: v.id,
         p_reason: v.reason ?? null,
