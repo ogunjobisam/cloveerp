@@ -167,7 +167,8 @@ jobs:
             "erp_test.assert_quality_logistics_suite()" \
             "erp_test.assert_finance_depth_suite()" \
             "erp_test.assert_bootstrap_window_suite()" \
-            "erp_test.assert_master_data_doors_suite()"
+            "erp_test.assert_master_data_doors_suite()" \
+            "erp_test.assert_document_authorisation_suite()"
           do
             $PSQL -tAc "select $s;"
           done
