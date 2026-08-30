@@ -442,7 +442,13 @@ as $$
                      p_country_code::char(2), p_legal_name))
 $$;
 
-revoke all on function public.erp_create_party_with_roles(text, text, text[], text, text) from public;
+-- `from public, anon`, as every other wrapper in the repository does.
+-- Revoking from PUBLIC alone leaves the explicit grant Supabase's default
+-- privileges give anon, so the function stays reachable unauthenticated —
+-- which the preview branch caught and a local build cannot, because the
+-- CI host bootstrap creates anon without those default grants.
+revoke all on function public.erp_create_party_with_roles(text, text, text[], text, text)
+  from public, anon;
 grant execute on function public.erp_create_party_with_roles(text, text, text[], text, text) to authenticated;
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values

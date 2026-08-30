@@ -103,6 +103,23 @@ grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
 grant select on auth.users to authenticated, service_role;
 
+-- Supabase's default privileges on the public schema, which are the reason
+-- every wrapper in this repository says `revoke ... from public, anon` rather
+-- than `from public`.
+--
+-- Without this line a new function is reachable by nobody until it is granted,
+-- so a migration that forgets to revoke from anon still passes. On a real
+-- project the opposite is true: a function created in the public schema is
+-- executable by anon the moment it exists, and revoking from PUBLIC does not
+-- take away the explicit grant.
+--
+-- The rule in erp.public_api_report() that no public function may be
+-- executable by anon was therefore unfalsifiable here — it could only ever
+-- pass. Found when a Supabase preview branch rejected a function this build
+-- had just called safe.
+alter default privileges in schema public
+  grant execute on functions to anon, authenticated, service_role;
+
 -- A note on the claims GUC, which needs no setup --------------------------
 --
 -- PostgreSQL allows any session to set a custom GUC in a namespaced parameter,
