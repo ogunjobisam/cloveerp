@@ -31,6 +31,8 @@ import { TOUCH } from "./page";
 
 type NavItem = {
   to: string;
+  /** Resource key; `label` is the fallback used until the key resolves. */
+  labelKey: string;
   label: string;
   /** Absent means always visible. */
   permission?: string;
@@ -38,54 +40,115 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { to: "/", label: "Overview", description: "Tenant, scope and platform state" },
-  {
-    to: "/master-data",
-    label: "Master data",
+  { to: "/", labelKey: "nav.overview", label: "Overview", description: "Tenant, scope and platform state" },
+  { to: "/master-data", labelKey: "nav.master_data", label: "Master data",
     permission: "master_data.read",
     description: "The items and parties every document depends on",
   },
-  {
-    to: "/sales",
-    label: "Sales",
+  { to: "/sales", labelKey: "nav.sales", label: "Sales",
     permission: "sales.read",
     description: "Quotations, orders and deliveries",
   },
-  {
-    to: "/procurement",
-    label: "Procurement",
+  { to: "/procurement", labelKey: "nav.procurement", label: "Procurement",
     permission: "procurement.read",
     description: "Requisitions, purchase orders and goods receipts",
   },
-  {
-    to: "/operations/jobs",
-    label: "Scheduled jobs",
+  { to: "/operations/jobs", labelKey: "nav.operations_jobs", label: "Scheduled jobs",
     permission: "administration.jobs",
     description: "What is running, what failed, and what has stopped running",
   },
-  {
-    to: "/operations/integrations",
-    label: "Integrations",
+  { to: "/operations/integrations", labelKey: "nav.operations_integrations", label: "Integrations",
     permission: "administration.integrate",
     description: "Outbound gateway health and the queue that needs a decision",
   },
-  {
-    to: "/operations/assurance",
-    label: "Assurance",
+  { to: "/operations/assurance", labelKey: "nav.operations_assurance", label: "Assurance",
     permission: "administration.read",
     description: "The structural checks the build runs on every push",
   },
-  {
-    to: "/administration/configuration",
-    label: "Configuration",
+  { to: "/administration/configuration", labelKey: "nav.administration_configuration", label: "Configuration",
     permission: "administration.configure",
     description: "Install modules and promote the change sets that put them in force",
   },
-  {
-    to: "/administration/permissions",
-    label: "Permissions",
+  { to: "/administration/permissions", labelKey: "nav.administration_permissions", label: "Permissions",
     permission: "administration.roles",
     description: "Principals, roles, and the grants between them",
+  },
+  {
+    to: "/inventory",
+    labelKey: "nav.inventory",
+    label: "Inventory",
+    permission: "inventory.read",
+    description: "Stock health, valuation, batches, expiry and counting",
+  },
+  {
+    to: "/production",
+    labelKey: "nav.production",
+    label: "Production",
+    permission: "production.read",
+    description: "Works orders and their progress against plan",
+  },
+  {
+    to: "/planning",
+    labelKey: "nav.planning",
+    label: "Planning",
+    permission: "planning.read",
+    description: "Planned orders and the exceptions worth acting on",
+  },
+  {
+    to: "/quality",
+    labelKey: "nav.quality",
+    label: "Quality and recall",
+    permission: "quality.read",
+    description: "Events, dispositions, supplier qualification and recall",
+  },
+  {
+    to: "/logistics",
+    labelKey: "nav.logistics",
+    label: "Logistics",
+    permission: "logistics.read",
+    description: "Shipments, carrier bookings and delivery performance",
+  },
+  {
+    to: "/finance",
+    labelKey: "nav.finance",
+    label: "Finance",
+    permission: "finance.read",
+    description: "Trial balance, periods, receivables, tax and assets",
+  },
+  {
+    to: "/reporting",
+    labelKey: "nav.reporting",
+    label: "Reporting",
+    permission: "reporting.read",
+    description: "Data quality, duplicates and specification coverage",
+  },
+  {
+    to: "/governance",
+    labelKey: "nav.governance",
+    label: "Change requests",
+    permission: "master_data.read",
+    description: "Proposed master data changes and the approvals on them",
+  },
+  {
+    to: "/master-data/imports",
+    labelKey: "nav.imports",
+    label: "Imports",
+    permission: "master_data.import",
+    description: "Staged batches, preview, validation, load and rollback",
+  },
+  {
+    to: "/administration/terminology",
+    labelKey: "nav.terminology",
+    label: "Terminology",
+    permission: "administration.configure",
+    description: "The wording of every label, per tenant",
+  },
+  {
+    to: "/administration/tenant",
+    labelKey: "nav.tenant",
+    label: "Tenant lifecycle",
+    permission: "administration.configure",
+    description: "Go-live, export and portability, deletion",
   },
 ];
 
@@ -207,7 +270,7 @@ function NavList({
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 ].join(" ")}
               >
-                {item.label}
+                {t(item.labelKey, item.label)}
               </Link>
             </li>
           );
