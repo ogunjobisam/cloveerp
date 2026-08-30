@@ -204,3 +204,53 @@ jobs:
           after=$(shape)
           echo "policies/triggers before: $before   after: $after"
           test "$before" = "$after"
+
+  # ---------------------------------------------------------------------------
+  # The part of the product that is not SQL
+  #
+  # Everything above builds the schema. Nothing built the two TypeScript
+  # entrypoints that talk to it, and it showed: the Edge Function did not
+  # compile at all. Its shared core used extensionless relative imports, which
+  # Deno refuses, so module resolution failed at the first hop past index.ts —
+  # twenty errors from a `deno check`, on a file whose header documents a deploy
+  # command. Nothing here ran it, nothing deployed it, and the branching
+  # integration skipped it because it was not declared in config.toml. The only
+  # notice anyone got was a warning on a passing check.
+  #
+  # A separate job because it needs no database, and because "the schema is
+  # fine, the worker does not compile" should be two answers rather than one.
+  # ---------------------------------------------------------------------------
+  typescript:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Deno and Bun
+        # Deno from npm rather than a marketplace action: it is one line, it
+        # pins nothing this repository does not already trust, and it is the
+        # same route used to verify the fix locally.
+        run: |
+          set -euo pipefail
+          npm install -g deno@2
+          npm install -g bun
+          deno --version
+          bun --version
+
+      - name: The dispatch worker typechecks
+        # It is imported by the Edge Function below, so a break here breaks
+        # both. Cheap, and previously unbuilt by anything.
+        run: |
+          set -euo pipefail
+          cd worker
+          bun install --frozen-lockfile
+          bun run typecheck
+
+      - name: The Edge Function builds
+        # deno check resolves the whole import graph and typechecks it, which
+        # is what the Edge Runtime will do to it. This is the check that was
+        # missing: it fails on exactly the defect that shipped.
+        run: |
+          set -euo pipefail
+          deno check --import-map supabase/functions/import_map.json \
+            supabase/functions/dispatch/index.ts

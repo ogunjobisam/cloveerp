@@ -5,9 +5,9 @@
  * in supabase/functions/dispatch drives exactly the same core on a cron; the
  * only difference is who decides when a pass happens.
  */
-import { loadConfig } from "./core/config";
-import { connect } from "./core/db";
-import { assertHandlersExist, drainOnce } from "./core/drain";
+import { loadConfig } from "./core/config.ts";
+import { connect } from "./core/db.ts";
+import { assertHandlersExist, drainOnce } from "./core/drain.ts";
 
 async function main() {
   const cfg = loadConfig();

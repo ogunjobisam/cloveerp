@@ -7,6 +7,11 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
+    // The shared core is imported by two runtimes. Deno (and the
+    // Supabase Edge Runtime it powers) require an explicit extension on a
+    // relative specifier; Bun and this compiler accept one. So the
+    // extension is written, and this flag is what lets tsc read it.
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "types": ["node"]
   },

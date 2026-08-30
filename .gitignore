@@ -16,6 +16,9 @@ dist-ssr
 .nitro
 *.local
 
+# Supabase CLI scratch — written by any `supabase` invocation in this tree.
+supabase/.temp/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
