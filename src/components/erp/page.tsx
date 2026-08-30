@@ -104,6 +104,11 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
  * "Nothing here" is a fact; it is only useful next to the action that changes
  * it. Where there is genuinely nothing to offer — a report that is empty
  * because the system is healthy — the action is omitted rather than invented.
+ *
+ * The action itself is an `ActionButton` from ./action. There was an
+ * `EmptyAction` here once; it was exported, imported by nothing, and every
+ * call site hand-rolled the same classes regardless. One button definition
+ * is better than two, and better than two of which one is unused.
  */
 export function EmptyState({ message, action }: { message: string; action?: ReactNode }) {
   return (
@@ -111,25 +116,5 @@ export function EmptyState({ message, action }: { message: string; action?: Reac
       <p className="text-sm text-muted-foreground">{message}</p>
       {action}
     </div>
-  );
-}
-
-export function EmptyAction({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
-    >
-      {children}
-    </button>
   );
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { ActionButton, ErrorNote, PermissionNote } from "../../components/erp/action";
 import { Gate, useErpSession } from "../../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
@@ -204,11 +205,7 @@ function Configuration() {
         <PageHeader title="Configuration">
           Installing a module authors a change set; promoting it puts the configuration in force.
         </PageHeader>
-        <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
-          This account does not hold{" "}
-          <code className="font-mono text-xs">administration.configure</code>, so installing is not
-          offered. Absence of a grant is a refusal, not a default.
-        </p>
+        <PermissionNote code="administration.configure" />
       </div>
     );
   }
@@ -291,7 +288,7 @@ function ModulesPanel({ onDone }: { onDone: () => void }) {
 
 function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void }) {
   const [value, setValue] = useState(m.param?.initial ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const install = useMutation({
@@ -319,7 +316,7 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
     },
     onError: (e) => {
       setOutcome(null);
-      setError((e as Error).message);
+      setError(e);
     },
   });
 
@@ -346,32 +343,33 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
           </label>
         ) : null}
 
-        <button
-          type="button"
+        <ActionButton
           onClick={() => {
             setError(null);
             setOutcome(null);
             install.mutate();
           }}
-          disabled={install.isPending}
-          className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
+          busy={install.isPending}
         >
           {install.isPending ? "Installing…" : "Install"}
-        </button>
+        </ActionButton>
       </div>
 
       {outcome ? <p className="mt-2 text-xs text-muted-foreground">{outcome}</p> : null}
+      {/* configure_sales refuses with ERPWARE_NO_LEDGER and a hint naming
+          erp.configure_finance(). That hint is the whole answer, and the old
+          markup dropped it. */}
       {error ? (
-        <p role="alert" className="mt-2 break-words text-xs text-destructive">
-          {error}
-        </p>
+        <div className="mt-2">
+          <ErrorNote error={error} />
+        </div>
       ) : null}
     </div>
   );
 }
 
 function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => void }) {
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const approve = useMutation({
     mutationFn: (id: string) => callErp("erp_approve_change_set", { p_change_set_id: id }),
@@ -379,7 +377,7 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
       setError(null);
       onDone();
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => setError(e),
   });
 
   const promote = useMutation({
@@ -388,7 +386,7 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
       setError(null);
       onDone();
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => setError(e),
   });
 
   const busy = approve.isPending || promote.isPending;
@@ -425,8 +423,8 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
                 <td className="py-2 pr-4">
                   <div className="flex flex-wrap gap-2">
                     {s.status === "ready" ? (
-                      <button
-                        type="button"
+                      <ActionButton
+                        variant="secondary"
                         onClick={() => approve.mutate(s.change_set_id)}
                         disabled={busy || s.is_own}
                         title={
@@ -434,20 +432,14 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
                             ? "You authored this change set, so you may not approve it."
                             : undefined
                         }
-                        className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-3 text-sm font-medium disabled:opacity-50`}
                       >
                         Approve
-                      </button>
+                      </ActionButton>
                     ) : null}
                     {s.status === "approved" ? (
-                      <button
-                        type="button"
-                        onClick={() => promote.mutate(s.change_set_id)}
-                        disabled={busy}
-                        className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
-                      >
+                      <ActionButton onClick={() => promote.mutate(s.change_set_id)} disabled={busy}>
                         Promote
-                      </button>
+                      </ActionButton>
                     ) : null}
                     {s.status === "ready" && s.is_own ? (
                       <span className="self-center text-xs text-muted-foreground">
@@ -462,9 +454,9 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
         )}
 
         {error ? (
-          <p role="alert" className="mt-3 break-words text-sm text-destructive">
-            {error}
-          </p>
+          <div className="mt-3">
+            <ErrorNote error={error} />
+          </div>
         ) : null}
       </div>
     </section>

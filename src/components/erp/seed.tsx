@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { callErp } from "../../lib/erp";
+import { ActionButton, ErrorNote } from "./action";
 import { useErpSession } from "./gate";
-import { TOUCH } from "./page";
 
 /**
  * The one action that turns an empty operational screen into a populated one.
@@ -28,19 +28,11 @@ export function SeedDemoAction({ label = "Explore with demo data" }: { label?: s
   if (session.tenant?.code.startsWith("demo-")) return null;
 
   return (
-    <div>
-      <button
-        onClick={() => mutation.mutate()}
-        disabled={mutation.isPending}
-        className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
-      >
+    <div className="flex flex-col gap-2">
+      <ActionButton onClick={() => mutation.mutate()} busy={mutation.isPending}>
         {mutation.isPending ? "Seeding…" : label}
-      </button>
-      {mutation.error ? (
-        <p role="alert" className="mt-2 text-sm text-destructive">
-          {(mutation.error as Error).message}
-        </p>
-      ) : null}
+      </ActionButton>
+      <ErrorNote error={mutation.error} />
     </div>
   );
 }

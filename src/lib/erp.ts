@@ -48,6 +48,46 @@ export type ErpSession = {
 };
 
 /**
+ * An error from the database, with everything the database said.
+ *
+ * The engine raises `ERPWARE_*` errors carrying a `hint` that is often the
+ * next command to run — `erp.create_item` names `erp_create_uom`,
+ * `guard_live_configuration` names `erp.promote_change_set`. Throwing only
+ * `error.message` discarded all of it, which turned a refusal that explains
+ * itself into one that does not.
+ */
+export class ErpError extends Error {
+  readonly code: string | undefined;
+  readonly details: string | undefined;
+  readonly hint: string | undefined;
+
+  constructor(
+    message: string,
+    parts: { code?: string | undefined; details?: string | undefined; hint?: string | undefined },
+  ) {
+    super(message);
+    this.name = "ErpError";
+    this.code = parts.code;
+    this.details = parts.details;
+    this.hint = parts.hint;
+  }
+
+  /** The `ERPWARE_*` token the engine leads its message with, if there is one. */
+  get erpwareCode(): string | null {
+    return /^(ERPWARE_[A-Z_]+)/.exec(this.message)?.[1] ?? null;
+  }
+
+  /**
+   * 42501 is what `erp.authorise()` raises. Worth distinguishing because it is
+   * the one failure a screen should treat as an answer rather than a fault:
+   * the database decided, and it decided no.
+   */
+  get isPermissionDenied(): boolean {
+    return this.code === "42501" || this.erpwareCode === "ERPWARE_PERMISSION_DENIED";
+  }
+}
+
+/**
  * Calling a `public.erp_*` function.
  *
  * Errors are surfaced rather than swallowed. A screen that renders empty when
@@ -70,11 +110,16 @@ export async function callErp<T>(fn: string, args: Record<string, unknown> = {})
     // project this build is pointed at — which is a deployment problem, not a
     // code one, and says so.
     if (error.code === "PGRST202") {
-      throw new Error(
+      throw new ErpError(
         `${fn} does not exist on this project. The ERPWare migrations may not have been applied to it.`,
+        { code: error.code },
       );
     }
-    throw new Error(error.message);
+    throw new ErpError(error.message, {
+      code: error.code,
+      details: error.details ?? undefined,
+      hint: error.hint ?? undefined,
+    });
   }
 
   return data as T;
