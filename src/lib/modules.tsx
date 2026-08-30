@@ -837,23 +837,27 @@ export const REPORTING: ModuleDef = {
   group: "govern",
   kpis: [
     {
-      label: "Data quality",
+      label: "Party data quality",
       fn: "erp_data_quality",
+      args: { p_object_type: "party" },
       compute: (rows) => {
         if (rows.length === 0) return null;
-        const pct = Math.round(avg(rows, "score_pct"));
+        const pct = Math.round(avg(rows, "score"));
         return {
           value: `${pct}%`,
-          hint: "average across checks",
+          hint: "average party record score",
           tone: pct >= 95 ? "ok" : pct >= 80 ? "warn" : "bad",
         };
       },
     },
     {
-      label: "Failing records",
+      label: "Records with errors",
       fn: "erp_data_quality",
-      compute: (rows) => zeroIsGood(sum(rows, "failing"), "across all checks"),
+      args: { p_object_type: "party" },
+      compute: (rows) =>
+        zeroIsGood(rows.filter((r) => num(r["errors"]) > 0).length, "parties failing a rule"),
     },
+
     {
       label: "Duplicate candidates",
       fn: "erp_duplicate_candidates",
