@@ -8,6 +8,8 @@ import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
+import { Wordmark } from "./logo";
+
 
 /**
  * The auth boundary.
