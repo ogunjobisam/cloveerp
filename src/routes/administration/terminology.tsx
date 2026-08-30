@@ -98,8 +98,8 @@ function Terminology() {
             </div>
           ) : (
             <Table columns={["Key", "Product text", "This tenant", "", ""]}>
-              {rows.slice(0, 300).map((r) => (
-                <tr key={`${r.resource_key}-${r.locale}`} className="border-b border-border/50">
+              {rows.slice(0, 300).map((r, i) => (
+                <tr key={`${r.resource_key}-${r.locale}-${i}`} className="border-b border-border/50">
                   <td className="py-2 pr-4 font-mono text-xs">{r.resource_key}</td>
                   <td className="py-2 pr-4">{r.product_text ?? "—"}</td>
                   <td className="py-2 pr-4">{r.tenant_text ?? "—"}</td>
