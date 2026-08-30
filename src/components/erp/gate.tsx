@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
 import { Shell, type Scope } from "./shell";
+import { ErpSessionContext } from "./session-context";
 
 /**
  * The auth boundary.
@@ -368,13 +369,5 @@ export function Gate({ children }: { children: ReactNode }) {
   );
 }
 
-export const ErpSessionContext = createContext<{
-  session: ErpSession;
-  scope: Scope;
-} | null>(null);
+export { ErpSessionContext, useErpSession } from "./session-context";
 
-export function useErpSession() {
-  const ctx = useContext(ErpSessionContext);
-  if (!ctx) throw new Error("useErpSession must be used inside the authenticated shell");
-  return ctx;
-}
