@@ -1005,7 +1005,7 @@ export const PRODUCTION: ModuleDef = {
         pickFrom(
           "erp_works_orders",
           "works_order_id",
-          ["number", "item", "status"],
+          ["order_number", "status"],
           "p_works_order_id",
           "Works order",
         ),
@@ -1020,7 +1020,7 @@ export const PRODUCTION: ModuleDef = {
         pickFrom(
           "erp_works_orders",
           "works_order_id",
-          ["number", "item", "status"],
+          ["order_number", "status"],
           "p_works_order_id",
           "Works order",
         ),
@@ -1035,7 +1035,7 @@ export const PRODUCTION: ModuleDef = {
         pickFrom(
           "erp_works_orders",
           "works_order_id",
-          ["number", "item", "status"],
+          ["order_number", "status"],
           "p_works_order_id",
           "Works order",
         ),
@@ -1270,7 +1270,7 @@ export const QUALITY: ModuleDef = {
       permission: "quality.read",
       fn: "erp_recall_readiness",
       fields: [
-        pickFrom("erp_recalls", "recall_id", ["code", "status"], "p_recall_id", "Recall"),
+        pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall"),
       ],
     },
     {
@@ -1279,7 +1279,7 @@ export const QUALITY: ModuleDef = {
       permission: "quality.read",
       fn: "erp_recall_evidence",
       fields: [
-        pickFrom("erp_recalls", "recall_id", ["code", "status"], "p_recall_id", "Recall"),
+        pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall"),
       ],
     },
   ],
