@@ -76,7 +76,7 @@ function ItemSupply() {
             fn: "erp_set_item_supplier",
             fields: [
               pickItem(),
-              { ...pickParty("p_party_id", "Supplier", true), required: true },
+              { ...pickParty("supplier", "p_party_id", "Supplier"), required: true },
               { kind: "site", name: "p_site_id", label: "Site (leave empty for everywhere)" },
               { kind: "number", name: "p_preference_rank", label: "Preference rank" },
               {
