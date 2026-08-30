@@ -37,10 +37,11 @@ export const Route = createFileRoute("/administration/terminology")({
 });
 
 type Resource = {
-  resource_key: string;
+  key: string;
   locale: string;
-  product_text: string | null;
-  tenant_text: string | null;
+  product_value: string | null;
+  override: string | null;
+  module_code: string | null;
 };
 
 function Terminology() {
@@ -56,7 +57,7 @@ function Terminology() {
 
   const rows = (data ?? []).filter((r) =>
     filter
-      ? `${r.resource_key} ${r.product_text ?? ""} ${r.tenant_text ?? ""}`
+      ? `${r.key} ${r.product_value ?? ""} ${r.override ?? ""}`
           .toLowerCase()
           .includes(filter.toLowerCase())
       : true,
@@ -99,17 +100,17 @@ function Terminology() {
           ) : (
             <Table columns={["Key", "Product text", "This tenant", "", ""]}>
               {rows.slice(0, 300).map((r, i) => (
-                <tr key={`${r.resource_key}-${r.locale}-${i}`} className="border-b border-border/50">
-                  <td className="py-2 pr-4 font-mono text-xs">{r.resource_key}</td>
-                  <td className="py-2 pr-4">{r.product_text ?? "—"}</td>
-                  <td className="py-2 pr-4">{r.tenant_text ?? "—"}</td>
+                <tr key={`${r.key}-${r.locale}-${i}`} className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono text-xs">{r.key}</td>
+                  <td className="py-2 pr-4">{r.product_value ?? "—"}</td>
+                  <td className="py-2 pr-4">{r.override ?? "—"}</td>
                   <td className="py-2 pr-4">
-                    {r.tenant_text ? <Pill tone="warn">Overridden</Pill> : null}
+                    {r.override ? <Pill tone="warn">Overridden</Pill> : null}
                   </td>
                   <td className="py-2 pr-4">
                     <ActionDialog
                       trigger={<ActionButton variant="secondary">Reword</ActionButton>}
-                      title={`Reword ${r.resource_key}`}
+                      title={`Reword ${r.key}`}
                       description="This wording applies to this tenant only, in this locale."
                       permission="administration.configure"
                       fn="erp_set_resource_override"
@@ -122,7 +123,7 @@ function Terminology() {
                         },
                       ]}
                       mapArgs={(values) => ({
-                        p_resource_key: r.resource_key,
+                        p_resource_key: r.key,
                         p_locale: r.locale,
                         p_text: values["p_text"],
                       })}
