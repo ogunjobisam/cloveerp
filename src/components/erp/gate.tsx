@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
+import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
 import { Shell, type Scope } from "./shell";
 
@@ -358,9 +359,11 @@ export function Gate({ children }: { children: ReactNode }) {
 
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>
+      <ResourceProvider>
       <Shell session={data} scope={scope} onScopeChange={changeScope} onSignOut={signOut}>
         {children}
       </Shell>
+      </ResourceProvider>
     </ErpSessionContext.Provider>
   );
 }

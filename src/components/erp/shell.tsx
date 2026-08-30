@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import type { ErpSession } from "../../lib/erp";
 import { callErp, hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 import { TOUCH } from "./page";
 
 /**
@@ -252,6 +253,8 @@ function NavList({
   hidden: number;
   onNavigate?: () => void;
 }) {
+  const { t } = useT();
+
   return (
     <>
       <ul className="flex flex-col gap-1">
