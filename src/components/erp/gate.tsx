@@ -71,6 +71,18 @@ function SignIn() {
     setBusy(false);
   }
 
+  async function signInWithGoogle() {
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase!.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    // On success the browser navigates away to Google; only failures return here.
+    if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
+    setBusy(false);
+  }
+
   return (
     <Centred>
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
