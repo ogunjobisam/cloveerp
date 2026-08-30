@@ -95,8 +95,8 @@ function Hero() {
           </h1>
           <p className="mt-5 max-w-[46ch] text-base leading-relaxed text-ink/70 text-pretty md:text-lg">
             ERPWare runs planning, procurement, production, warehousing, sales and finance as one
-            governed system — every document state-machined, every pound accounted for, every
-            action audited.
+            governed system — every document state-machined, every pound accounted for, every action
+            audited.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link
@@ -315,21 +315,24 @@ const SHOTS: Shot[] = [
     alt: "ERPWare Finance module showing the trial balance, receivables ageing and slow-moving stock provision",
     icon: PoundSterling,
     label: "Finance",
-    caption: "Trial balance, receivables ageing and provisions — every figure traces to a posted document.",
+    caption:
+      "Trial balance, receivables ageing and provisions — every figure traces to a posted document.",
   },
   {
     src: shotWarehouse,
     alt: "ERPWare Inventory and warehouse dashboard with stock value, cover KPIs and open count tasks",
     icon: Boxes,
     label: "Warehouse",
-    caption: "Stock health, valuation and count tasks, all derived from the perpetual inventory ledger.",
+    caption:
+      "Stock health, valuation and count tasks, all derived from the perpetual inventory ledger.",
   },
   {
     src: shotEncryption,
     alt: "ERPWare encryption keys panel showing the per-tenant key register with rotation and destruction controls",
     icon: Vault,
     label: "Encryption keys",
-    caption: "Each company holds its own key in the platform vault — rotated or destroyed on your word alone.",
+    caption:
+      "Each company holds its own key in the platform vault — rotated or destroyed on your word alone.",
   },
 ];
 

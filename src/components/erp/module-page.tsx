@@ -152,7 +152,6 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           <InquiryBoard inquiries={def.inquiries ?? []} />
         </div>
       ) : null}
-
     </div>
   );
 }

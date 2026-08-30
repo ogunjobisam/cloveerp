@@ -98,7 +98,6 @@ export function useT() {
   return { t, ui, has, locale, resources };
 }
 
-
 /** Convenience for the common case: one key, one fallback, no other props. */
 export function T({ k, fallback }: { k: string; fallback: string }) {
   const { t } = useT();

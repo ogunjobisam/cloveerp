@@ -148,7 +148,12 @@ export const INVENTORY: ModuleDef = {
       fields: [
         pickSite("p_site_id", "Site", false),
         pickLocation("p_location_id", "Location", false),
-        { kind: "text", name: "p_from", label: "From", hint: "Date and time, e.g. 2026-08-30 06:00" },
+        {
+          kind: "text",
+          name: "p_from",
+          label: "From",
+          hint: "Date and time, e.g. 2026-08-30 06:00",
+        },
         { kind: "text", name: "p_to", label: "To", hint: "Date and time, e.g. 2026-08-30 18:00" },
       ],
     },
@@ -1269,18 +1274,14 @@ export const QUALITY: ModuleDef = {
       description: "Whether the trace for a recall can be produced inside the regulatory clock.",
       permission: "quality.read",
       fn: "erp_recall_readiness",
-      fields: [
-        pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall"),
-      ],
+      fields: [pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall")],
     },
     {
       label: "Recall evidence",
       description: "The trace and the actions logged against one recall.",
       permission: "quality.read",
       fn: "erp_recall_evidence",
-      fields: [
-        pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall"),
-      ],
+      fields: [pickFrom("erp_recalls", "recall_id", ["title", "status"], "p_recall_id", "Recall")],
     },
   ],
   key: "quality",
