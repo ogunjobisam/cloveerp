@@ -26,6 +26,7 @@ import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
 import { Route as LogisticsReleaseAreasRouteImport } from './routes/logistics/release-areas'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
+import { Route as MasterDataClassificationRouteImport } from './routes/master-data/classification'
 import { Route as MasterDataImportsRouteImport } from './routes/master-data/imports'
 import { Route as MasterDataItemSupplyRouteImport } from './routes/master-data/item-supply'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
@@ -128,6 +129,12 @@ const MasterDataIndexRoute = MasterDataIndexRouteImport.update({
   path: '/master-data/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MasterDataClassificationRoute =
+  MasterDataClassificationRouteImport.update({
+    id: '/master-data/classification',
+    path: '/master-data/classification',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const MasterDataImportsRoute = MasterDataImportsRouteImport.update({
   id: '/master-data/imports',
   path: '/master-data/imports',
@@ -197,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
+  '/master-data/classification': typeof MasterDataClassificationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -227,6 +235,7 @@ export interface FileRoutesByTo {
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
+  '/master-data/classification': typeof MasterDataClassificationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -258,6 +267,7 @@ export interface FileRoutesById {
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
+  '/master-data/classification': typeof MasterDataClassificationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/logistics/release-areas'
+    | '/master-data/classification'
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/logistics/release-areas'
+    | '/master-data/classification'
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
@@ -350,6 +362,7 @@ export interface FileRouteTypes {
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/logistics/release-areas'
+    | '/master-data/classification'
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
@@ -381,6 +394,7 @@ export interface RootRouteChildren {
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
   LogisticsReleaseAreasRoute: typeof LogisticsReleaseAreasRoute
+  MasterDataClassificationRoute: typeof MasterDataClassificationRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
   MasterDataItemSupplyRoute: typeof MasterDataItemSupplyRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
@@ -520,6 +534,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MasterDataIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/master-data/classification': {
+      id: '/master-data/classification'
+      path: '/master-data/classification'
+      fullPath: '/master-data/classification'
+      preLoaderRoute: typeof MasterDataClassificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/master-data/imports': {
       id: '/master-data/imports'
       path: '/master-data/imports'
@@ -613,6 +634,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
   LogisticsReleaseAreasRoute: LogisticsReleaseAreasRoute,
+  MasterDataClassificationRoute: MasterDataClassificationRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,
   MasterDataItemSupplyRoute: MasterDataItemSupplyRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
