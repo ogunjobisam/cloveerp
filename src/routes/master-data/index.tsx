@@ -2,11 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
-import { Gate } from "../../components/erp/gate";
+import { Gate, useErpSession } from "../../components/erp/gate";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
-import { useErpSession } from "../../components/erp/gate";
 
 /**
  * Items and parties.
