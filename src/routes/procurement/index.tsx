@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickParty } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  pickFrom,
+  pickItem,
+  pickLine,
+  pickParty,
+  pickSite,
+} from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -80,6 +87,18 @@ function Procurement() {
               },
             ],
             invalidates: ["erp_match_workbench", "erp_grni"],
+          },
+          {
+            label: "Resolve a purchase price",
+            description: "What should this supplier charge for this item today, and on what basis?",
+            permission: "procurement.order",
+            fn: "erp_resolve_purchase_price",
+            fields: [
+              pickItem(),
+              pickParty("supplier"),
+              { kind: "number", name: "p_quantity", label: "Quantity" },
+              pickSite("p_site_id", "Site", false),
+            ],
           },
           {
             label: "Qualify a supplier",

@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { AutoPanel } from "../../components/erp/auto";
 import {
   ActionBar,
   pickFrom,
   pickItem,
+  pickLine,
   pickParty,
   pickSite,
   reason,
@@ -70,12 +72,7 @@ function Sales() {
             permission: "sales.order",
             fn: "erp_reserve_for_line",
             fields: [
-              {
-                kind: "text",
-                name: "p_document_line_id",
-                label: "Document line id",
-                required: true,
-              },
+              pickLine("sales_order", "p_document_line_id", "Order line"),
               { kind: "text", name: "p_policy_code", label: "Policy code" },
             ],
           },
@@ -122,6 +119,25 @@ function Sales() {
               },
             ],
           },
+        ]}
+      />
+
+      <AutoPanel
+        title="Release sequence"
+        description="Open demand in the order it should be released: promise date first, then credit standing, then value."
+        fn="erp_release_sequence"
+        empty="Nothing open to release."
+        rowKey={(r, i) => String(r["line_id"] ?? i)}
+        columns={[
+          { header: "#", cell: "rank", numeric: true },
+          { header: "Order", cell: "document_number" },
+          { header: "Customer", cell: "customer" },
+          { header: "Item", cell: "item" },
+          { header: "Quantity", cell: "quantity", numeric: true },
+          { header: "Required", cell: "required_date" },
+          { header: "Credit", cell: "credit_status" },
+          { header: "Available", cell: "available", numeric: true },
+          { header: "Ship in full", cell: "can_ship_in_full" },
         ]}
       />
 
