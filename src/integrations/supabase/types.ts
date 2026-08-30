@@ -262,6 +262,10 @@ export type Database = {
         Args: { p_quantity?: number; p_task_id: string }
         Returns: Json
       }
+      erp_configuration_columns: {
+        Args: { p_object_type?: string }
+        Returns: Json
+      }
       erp_configure_finance: {
         Args: { p_currency?: string; p_fiscal_year?: number }
         Returns: string
@@ -457,6 +461,10 @@ export type Database = {
         Returns: Json
       }
       erp_expiry_horizon: { Args: { p_days?: number }; Returns: Json }
+      erp_export_configuration: {
+        Args: { p_object_type: string }
+        Returns: Json
+      }
       erp_export_tenant: { Args: never; Returns: Json }
       erp_fiscal_periods: { Args: never; Returns: Json }
       erp_fixed_asset_register: { Args: { p_as_at?: string }; Returns: Json }
@@ -474,6 +482,10 @@ export type Database = {
       }
       erp_grni: { Args: never; Returns: Json }
       erp_import_batches: { Args: { p_limit?: number }; Returns: Json }
+      erp_import_configuration: {
+        Args: { p_dry_run?: boolean; p_object_type: string; p_rows: Json }
+        Returns: Json
+      }
       erp_inspections: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_backlog: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_health: { Args: never; Returns: Json }
@@ -991,6 +1003,7 @@ export type Database = {
         Returns: Json
       }
       erp_seed_demo: { Args: never; Returns: Json }
+      erp_seed_demo_configuration: { Args: never; Returns: Json }
       erp_seed_demo_operations: { Args: never; Returns: Json }
       erp_select_carrier: {
         Args: { p_required_by?: string; p_shipment_id: string }
@@ -1262,6 +1275,7 @@ export type Database = {
         Args: { p_kind?: string; p_limit?: number; p_site_id?: string }
         Returns: Json
       }
+      erp_wave_print_readiness: { Args: { p_wave_id: string }; Returns: Json }
       erp_works_order_availability: {
         Args: { p_works_order_id: string }
         Returns: Json

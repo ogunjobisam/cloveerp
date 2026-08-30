@@ -5,6 +5,8 @@ import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, RefreshButton } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { RpcButton } from "../../components/erp/rpc-button";
+import { ConfigTransfer } from "../../components/erp/transfer";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/master-data/classification")({
@@ -128,8 +130,43 @@ function Classification() {
         )}
       </PageHeader>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <RpcButton
+          label="Seed a demo configuration"
+          fn="erp_seed_demo_configuration"
+          permission="administration.configure"
+          confirm="This adds sample axes, values, a code template, supplier defaults and a release area. Running it twice changes nothing the second time."
+          invalidates={[
+            "erp_classification_axes",
+            "erp_classification_values",
+            "erp_code_templates",
+            "erp_classification_gaps",
+            "erp_item_suppliers",
+            "erp_release_areas",
+          ]}
+        />
         <RefreshButton />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ConfigTransfer
+          objectType="classification_axis"
+          title="Axes as a file"
+          description="Download what is configured, edit it, check it, load it."
+          invalidates={["erp_classification_axes", "erp_classification_gaps"]}
+        />
+        <ConfigTransfer
+          objectType="classification_value"
+          title="Values as a file"
+          description="Each row names its axis by code; a parent value may be named the same way."
+          invalidates={["erp_classification_values", "erp_classification_gaps"]}
+        />
+        <ConfigTransfer
+          objectType="code_template"
+          title="Code templates as a file"
+          description="Segments travel as JSON in a single column, so a template round-trips intact."
+          invalidates={["erp_code_templates", "erp_code_divergences"]}
+        />
       </div>
 
       <ActionBar

@@ -5,6 +5,7 @@ import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, RefreshButton } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { ConfigTransfer } from "../../components/erp/transfer";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/master-data/item-supply")({
@@ -66,6 +67,13 @@ function ItemSupply() {
       <div className="flex justify-end">
         <RefreshButton />
       </div>
+
+      <ConfigTransfer
+        objectType="item_supplier"
+        title="Default suppliers as a file"
+        description="Items, parties and sites are named by code, so a file written elsewhere still loads here."
+        invalidates={["erp_item_suppliers", "erp_supplier_qualification"]}
+      />
 
       <ActionBar
         note="Set the default once. Replenishment, planning and manual purchasing all resolve through it, so a missing default is a stopped order, not a silent guess."
