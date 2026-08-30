@@ -41,10 +41,9 @@ function toCsv(columns: string[], rows: Row[]): string {
     const s = v === null || v === undefined ? "" : String(v);
     return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
   };
-  return [
-    columns.join(","),
-    ...rows.map((r) => columns.map((c) => cell(r[c])).join(",")),
-  ].join("\r\n");
+  return [columns.join(","), ...rows.map((r) => columns.map((c) => cell(r[c])).join(","))].join(
+    "\r\n",
+  );
 }
 
 /** The same grammar read back, including quoted fields that contain newlines. */
@@ -178,9 +177,7 @@ export function ConfigTransfer({
   return (
     <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <h3 className="text-sm font-semibold">{title}</h3>
-      {description ? (
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      ) : null}
+      {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <ActionButton
@@ -251,8 +248,8 @@ export function ConfigTransfer({
       {result ? (
         <div className="mt-4">
           <p className="text-xs text-muted-foreground">
-            {result.dry_run ? ui("Checked") : ui("Loaded")} — {result.accepted}{" "}
-            {ui("accepted")}, {result.rejected} {ui("rejected")}
+            {result.dry_run ? ui("Checked") : ui("Loaded")} — {result.accepted} {ui("accepted")},{" "}
+            {result.rejected} {ui("rejected")}
           </p>
           <div className="mt-2">
             <Table columns={[ui("Row"), ui("Record"), ui("Outcome"), ui("Why")]}>

@@ -75,7 +75,6 @@ function ItemSupply() {
         invalidates={["erp_item_suppliers", "erp_supplier_qualification"]}
       />
 
-
       <ActionBar
         note="Set the default once. Replenishment, planning and manual purchasing all resolve through it, so a missing default is a stopped order, not a silent guess."
         actions={[

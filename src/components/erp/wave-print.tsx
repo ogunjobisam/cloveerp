@@ -126,9 +126,7 @@ export function WavePrintReadiness() {
           </div>
 
           {r.lines.length > 0 ? (
-            <Table
-              columns={[ui("Item"), ui("Wanted"), ui("Allocated"), ui("Short"), ui("Why")]}
-            >
+            <Table columns={[ui("Item"), ui("Wanted"), ui("Allocated"), ui("Short"), ui("Why")]}>
               {r.lines.map((l) => (
                 <tr key={l.item_code} className="border-b border-border/60 last:border-0">
                   <td className="py-2 pr-4 font-mono text-xs">{l.item_code}</td>
@@ -150,7 +148,10 @@ export function WavePrintReadiness() {
               <p className="text-xs font-medium">{ui("Replenishment raised by this wave")}</p>
               <Table columns={[ui("Item"), ui("Quantity"), ui("Status")]}>
                 {r.replenishment_tasks.map((t, i) => (
-                  <tr key={`${t.item_code}-${i}`} className="border-b border-border/60 last:border-0">
+                  <tr
+                    key={`${t.item_code}-${i}`}
+                    className="border-b border-border/60 last:border-0"
+                  >
                     <td className="py-2 pr-4 font-mono text-xs">{t.item_code}</td>
                     <td className="py-2 pr-4 tabular-nums">{t.quantity}</td>
                     <td className="py-2 pr-4">

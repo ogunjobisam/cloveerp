@@ -111,7 +111,6 @@ function ReleaseAreas() {
         invalidates={["erp_release_areas", "erp_release_area_locations"]}
       />
 
-
       <ActionBar
         note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and item classes it serves."
         actions={[

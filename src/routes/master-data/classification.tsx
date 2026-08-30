@@ -148,7 +148,6 @@ function Classification() {
         <RefreshButton />
       </div>
 
-
       <div className="grid gap-4 xl:grid-cols-3">
         <ConfigTransfer
           objectType="classification_axis"
@@ -169,7 +168,6 @@ function Classification() {
           invalidates={["erp_code_templates", "erp_code_divergences"]}
         />
       </div>
-
 
       <ActionBar
         note="Axes are the questions asked of every item; values are the permitted answers."
