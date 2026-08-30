@@ -178,7 +178,7 @@ export const INVENTORY: ModuleDef = {
       fields: [
         pickItem(),
         pickSite(),
-        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        pickLocation(),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         reason("p_reason", "Reason", true),
         pickFrom(
@@ -199,7 +199,7 @@ export const INVENTORY: ModuleDef = {
         pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
         { kind: "text", name: "p_new_number", label: "New batch number", required: true },
         { kind: "number", name: "p_quantity", label: "Quantity to split", required: true },
-        { kind: "text", name: "p_location_id", label: "Location id", required: false },
+        pickLocation(),
         reason(),
       ],
       invalidates: ["erp_batches", "erp_stock_health"],
@@ -399,7 +399,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.close_period",
       fn: "erp_complete_close_task",
       fields: [
-        { kind: "text", name: "p_task_id", label: "Task id", required: true },
+        pickFrom("erp_close_status", "task_id", ["code", "status"], "p_task_id", "Close task"),
         { kind: "text", name: "p_waiver_reason", label: "Waiver reason" },
       ],
       invalidates: ["erp_close_status"],
@@ -449,7 +449,15 @@ export const FINANCE: ModuleDef = {
       label: "Approve a payment run",
       permission: "finance.approve_payment",
       fn: "erp_approve_payment_run",
-      fields: [{ kind: "text", name: "p_proposal_id", label: "Proposal id", required: true }],
+      fields: [
+        pickFrom(
+          "erp_payment_proposals",
+          "proposal_id",
+          ["reference", "payment_date", "status"],
+          "p_proposal_id",
+          "Payment proposal",
+        ),
+      ],
       invalidates: ["erp_payment_runs", "erp_payables_ageing"],
     },
     {
@@ -500,7 +508,15 @@ export const FINANCE: ModuleDef = {
       label: "Allocate a landed cost",
       permission: "finance.post",
       fn: "erp_allocate_landed_cost",
-      fields: [{ kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true }],
+      fields: [
+        pickFrom(
+          "erp_landed_costs",
+          "landed_cost_id",
+          ["charge_code", "description", "receipt"],
+          "p_landed_cost_id",
+          "Landed cost",
+        ),
+      ],
       invalidates: ["erp_trial_balance", "erp_stock_valuation"],
     },
   ],
@@ -718,7 +734,13 @@ export const PLANNING: ModuleDef = {
       permission: "planning.forecast",
       fn: "erp_sign_off_forecast",
       fields: [
-        { kind: "text", name: "p_version_id", label: "Forecast version id", required: true },
+        pickFrom(
+          "erp_forecast_versions",
+          "version_id",
+          ["forecast", "version", "status"],
+          "p_version_id",
+          "Forecast version",
+        ),
         { kind: "text", name: "p_note", label: "Note" },
       ],
       invalidates: ["erp_planner_workbench"],
@@ -1077,7 +1099,13 @@ export const QUALITY: ModuleDef = {
       permission: "quality.inspect",
       fn: "erp_record_inspection_result",
       fields: [
-        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        pickFrom(
+          "erp_inspections",
+          "inspection_id",
+          ["item", "batch", "status"],
+          "p_inspection_id",
+          "Inspection",
+        ),
         { kind: "text", name: "p_characteristic", label: "Characteristic", required: true },
         { kind: "number", name: "p_numeric_value", label: "Measured value" },
         { kind: "text", name: "p_text_value", label: "Observed value" },
@@ -1090,7 +1118,13 @@ export const QUALITY: ModuleDef = {
       permission: "quality.disposition",
       fn: "erp_disposition_inspection",
       fields: [
-        { kind: "text", name: "p_inspection_id", label: "Inspection id", required: true },
+        pickFrom(
+          "erp_inspections",
+          "inspection_id",
+          ["item", "batch", "status"],
+          "p_inspection_id",
+          "Inspection",
+        ),
         {
           kind: "choice",
           name: "p_disposition",

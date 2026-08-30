@@ -51,7 +51,7 @@ function Procurement() {
                 "Receipt",
                 { p_limit: 100 },
               ),
-              { kind: "text", name: "p_order_line_id", label: "Order line id", required: true },
+              pickLine("purchase_order"),
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },
               pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
             ],
@@ -70,7 +70,7 @@ function Procurement() {
                 "Invoice",
                 { p_limit: 100 },
               ),
-              { kind: "text", name: "p_order_line_id", label: "Order line id", required: true },
+              pickLine("purchase_order"),
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },
               {
                 kind: "number",
@@ -93,7 +93,13 @@ function Procurement() {
             permission: "procurement.match",
             fn: "erp_allocate_landed_cost",
             fields: [
-              { kind: "text", name: "p_landed_cost_id", label: "Landed cost id", required: true },
+              pickFrom(
+                "erp_landed_costs",
+                "landed_cost_id",
+                ["charge_code", "description", "receipt"],
+                "p_landed_cost_id",
+                "Landed cost",
+              ),
             ],
           },
         ]}
