@@ -13,7 +13,7 @@ import {
 import { callErp, hasPermission } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
-import { useErpSession } from "./gate";
+import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 
 /**

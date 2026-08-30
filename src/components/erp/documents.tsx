@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, type Currency } from "../../lib/money";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
-import { useErpSession } from "./gate";
+import { useErpSession } from "./session-context";
 import { Prose } from "./page";
 import { Pill, Table } from "./panel";
 
