@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
+import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
@@ -52,6 +53,11 @@ const AdministrationPermissionsRoute =
     path: '/administration/permissions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdministrationTenantRoute = AdministrationTenantRouteImport.update({
+  id: '/administration/tenant',
+  path: '/administration/tenant',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
@@ -138,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/administration/tenant': typeof AdministrationTenantRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/administration/tenant': typeof AdministrationTenantRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/administration/tenant': typeof AdministrationTenantRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -207,6 +216,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/administration/tenant'
     | '/documents/$documentId'
     | '/master-data/imports'
     | '/operations/assurance'
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/administration/tenant'
     | '/documents/$documentId'
     | '/master-data/imports'
     | '/operations/assurance'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/administration/tenant'
     | '/documents/$documentId'
     | '/master-data/imports'
     | '/operations/assurance'
@@ -274,6 +286,7 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
+  AdministrationTenantRoute: typeof AdministrationTenantRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
@@ -320,6 +333,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/permissions'
       fullPath: '/administration/permissions'
       preLoaderRoute: typeof AdministrationPermissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/tenant': {
+      id: '/administration/tenant'
+      path: '/administration/tenant'
+      fullPath: '/administration/tenant'
+      preLoaderRoute: typeof AdministrationTenantRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents/$documentId': {
@@ -442,6 +462,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
+  AdministrationTenantRoute: AdministrationTenantRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
