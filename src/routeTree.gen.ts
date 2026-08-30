@@ -14,6 +14,7 @@ import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
+import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
@@ -45,6 +46,11 @@ const AdministrationPermissionsRoute =
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasterDataIndexRoute = MasterDataIndexRouteImport.update({
+  id: '/master-data/',
+  path: '/master-data/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/master-data/': typeof MasterDataIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/master-data': typeof MasterDataIndexRoute
   '/procurement': typeof ProcurementIndexRoute
   '/sales': typeof SalesIndexRoute
 }
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/master-data/': typeof MasterDataIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/master-data/'
     | '/procurement/'
     | '/sales/'
   fileRoutesByTo: FileRoutesByTo
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/master-data'
     | '/procurement'
     | '/sales'
   id:
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/master-data/'
     | '/procurement/'
     | '/sales/'
   fileRoutesById: FileRoutesById
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
+  MasterDataIndexRoute: typeof MasterDataIndexRoute
   ProcurementIndexRoute: typeof ProcurementIndexRoute
   SalesIndexRoute: typeof SalesIndexRoute
 }
@@ -197,6 +210,13 @@ declare module '@tanstack/react-router' {
       path: '/documents/$documentId'
       fullPath: '/documents/$documentId'
       preLoaderRoute: typeof DocumentsDocumentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-data/': {
+      id: '/master-data/'
+      path: '/master-data'
+      fullPath: '/master-data/'
+      preLoaderRoute: typeof MasterDataIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/operations/assurance': {
@@ -246,6 +266,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
+  MasterDataIndexRoute: MasterDataIndexRoute,
   ProcurementIndexRoute: ProcurementIndexRoute,
   SalesIndexRoute: SalesIndexRoute,
 }

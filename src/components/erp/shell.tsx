@@ -40,6 +40,12 @@ type NavItem = {
 const NAV: NavItem[] = [
   { to: "/", label: "Overview", description: "Tenant, scope and platform state" },
   {
+    to: "/master-data",
+    label: "Master data",
+    permission: "master_data.read",
+    description: "The items and parties every document depends on",
+  },
+  {
     to: "/sales",
     label: "Sales",
     permission: "sales.read",
