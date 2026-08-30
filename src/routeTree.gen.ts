@@ -14,6 +14,7 @@ import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
+import { Route as AdministrationTerminologyRouteImport } from './routes/administration/terminology'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
@@ -58,6 +59,12 @@ const AdministrationTenantRoute = AdministrationTenantRouteImport.update({
   path: '/administration/tenant',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministrationTerminologyRoute =
+  AdministrationTerminologyRouteImport.update({
+    id: '/administration/terminology',
+    path: '/administration/terminology',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
@@ -145,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
+  '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -168,6 +176,7 @@ export interface FileRoutesByTo {
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
+  '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -192,6 +201,7 @@ export interface FileRoutesById {
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
+  '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/administration/configuration'
     | '/administration/permissions'
     | '/administration/tenant'
+    | '/administration/terminology'
     | '/documents/$documentId'
     | '/master-data/imports'
     | '/operations/assurance'
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/administration/configuration'
     | '/administration/permissions'
     | '/administration/tenant'
+    | '/administration/terminology'
     | '/documents/$documentId'
     | '/master-data/imports'
     | '/operations/assurance'
@@ -263,6 +275,7 @@ export interface FileRouteTypes {
     | '/administration/configuration'
     | '/administration/permissions'
     | '/administration/tenant'
+    | '/administration/terminology'
     | '/documents/$documentId'
     | '/master-data/imports'
     | '/operations/assurance'
@@ -287,6 +300,7 @@ export interface RootRouteChildren {
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   AdministrationTenantRoute: typeof AdministrationTenantRoute
+  AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
@@ -340,6 +354,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/tenant'
       fullPath: '/administration/tenant'
       preLoaderRoute: typeof AdministrationTenantRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/terminology': {
+      id: '/administration/terminology'
+      path: '/administration/terminology'
+      fullPath: '/administration/terminology'
+      preLoaderRoute: typeof AdministrationTerminologyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents/$documentId': {
@@ -463,6 +484,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   AdministrationTenantRoute: AdministrationTenantRoute,
+  AdministrationTerminologyRoute: AdministrationTerminologyRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
