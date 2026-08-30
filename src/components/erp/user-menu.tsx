@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { callErp, hasPermission, type ErpSession } from "../../lib/erp";
+import { usePlatformMe } from "../../lib/platform";
 import { useT } from "../../lib/i18n";
 import { TOUCH } from "./page";
 
