@@ -284,7 +284,9 @@ export function ActionDialog({
       if (f.kind === "number") args[f.name] = Number(raw);
       else if (f.kind === "money")
         args[f.name] = toMinor(raw, minorUnitsOf(currencies, f.currency));
+      else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
+
     }
     return args;
   }
