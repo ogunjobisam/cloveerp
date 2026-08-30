@@ -8,6 +8,8 @@ import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
+import { Wordmark } from "./logo";
+
 
 /**
  * The auth boundary.
@@ -72,7 +74,9 @@ function SignIn() {
   return (
     <Centred>
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
-        <h1 className="text-lg font-semibold">Sign in to ERPWare</h1>
+        <Wordmark size={30} />
+        <h1 className="mt-4 text-lg font-semibold">Sign in to ERPWare</h1>
+
         <p className="mt-1 text-sm text-muted-foreground">
           Your tenant is derived from your account. It is never chosen here.
         </p>
