@@ -21,6 +21,9 @@ import {
 
 import warehouseImg from "../assets/landing-warehouse.jpg";
 import financeImg from "../assets/landing-finance.jpg";
+import shotFinance from "../assets/product-finance.png";
+import shotWarehouse from "../assets/product-warehouse.png";
+import shotEncryption from "../assets/product-encryption.png";
 import { Logo, Wordmark } from "../components/erp/logo";
 
 export const Route = createFileRoute("/product")({
