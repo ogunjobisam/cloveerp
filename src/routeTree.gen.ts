@@ -20,6 +20,7 @@ import { Route as AdministrationTenantRouteImport } from './routes/administratio
 import { Route as AdministrationTerminologyRouteImport } from './routes/administration/terminology'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
+import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
@@ -94,6 +95,12 @@ const FinanceIndexRoute = FinanceIndexRouteImport.update({
   path: '/finance/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceAccountDeterminationRoute =
+  FinanceAccountDeterminationRouteImport.update({
+    id: '/finance/account-determination',
+    path: '/finance/account-determination',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
   id: '/governance/',
   path: '/governance/',
@@ -176,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
+  '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
@@ -203,6 +211,7 @@ export interface FileRoutesByTo {
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
+  '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
@@ -231,6 +240,7 @@ export interface FileRoutesById {
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
+  '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/administration/tenant'
     | '/administration/terminology'
     | '/documents/$documentId'
+    | '/finance/account-determination'
     | '/master-data/imports'
     | '/operations/assurance'
     | '/operations/integrations'
@@ -287,6 +298,7 @@ export interface FileRouteTypes {
     | '/administration/tenant'
     | '/administration/terminology'
     | '/documents/$documentId'
+    | '/finance/account-determination'
     | '/master-data/imports'
     | '/operations/assurance'
     | '/operations/integrations'
@@ -314,6 +326,7 @@ export interface FileRouteTypes {
     | '/administration/tenant'
     | '/administration/terminology'
     | '/documents/$documentId'
+    | '/finance/account-determination'
     | '/master-data/imports'
     | '/operations/assurance'
     | '/operations/integrations'
@@ -342,6 +355,7 @@ export interface RootRouteChildren {
   AdministrationTenantRoute: typeof AdministrationTenantRoute
   AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
+  FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
@@ -436,6 +450,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance/'
       preLoaderRoute: typeof FinanceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finance/account-determination': {
+      id: '/finance/account-determination'
+      path: '/finance/account-determination'
+      fullPath: '/finance/account-determination'
+      preLoaderRoute: typeof FinanceAccountDeterminationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/governance/': {
@@ -550,6 +571,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationTenantRoute: AdministrationTenantRoute,
   AdministrationTerminologyRoute: AdministrationTerminologyRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
+  FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
