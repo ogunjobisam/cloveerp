@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { callErp, hasPermission, type ErpSession } from "../../lib/erp";
+import { usePlatformMe } from "../../lib/platform";
 import { useT } from "../../lib/i18n";
 import { TOUCH } from "./page";
 
@@ -56,6 +57,10 @@ export function UserMenu({
     queryKey: ["erp_my_tenants"],
     queryFn: () => callErp<MyTenant[]>("erp_my_tenants"),
   });
+
+  // Asked on every signed-in account: the console is only offered to the
+  // platform's own staff, and that is not a tenant permission.
+  const platform = usePlatformMe();
 
   const choose = useMutation({
     mutationFn: (tenantId: string) => callErp("erp_set_active_tenant", { p_tenant_id: tenantId }),
@@ -137,6 +142,17 @@ export function UserMenu({
             <DropdownMenuItem asChild>
               <Link to="/administration/terminology" onClick={onNavigate}>
                 {t("nav.terminology", "Terminology & branding")}
+              </Link>
+            </DropdownMenuItem>
+          </>
+        ) : null}
+
+        {platform.data?.is_staff ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/platform" onClick={onNavigate}>
+                {t("nav.platform_console", "Platform console")}
               </Link>
             </DropdownMenuItem>
           </>

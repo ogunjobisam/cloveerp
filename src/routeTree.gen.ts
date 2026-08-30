@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
@@ -36,6 +37,11 @@ import { Route as SalesIndexRouteImport } from './routes/sales/index'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformRoute = PlatformRouteImport.update({
+  id: '/platform',
+  path: '/platform',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductRoute = ProductRouteImport.update({
@@ -154,6 +160,7 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
@@ -205,6 +213,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
@@ -232,6 +241,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/platform'
     | '/product'
     | '/administration/audit'
     | '/administration/configuration'
@@ -257,6 +267,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/platform'
     | '/product'
     | '/administration/audit'
     | '/administration/configuration'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/platform'
     | '/product'
     | '/administration/audit'
     | '/administration/configuration'
@@ -308,6 +320,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform': {
+      id: '/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof PlatformRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/product': {
@@ -500,6 +520,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
