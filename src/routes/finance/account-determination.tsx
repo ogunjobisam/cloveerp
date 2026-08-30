@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { type Field } from "../../components/erp/action";
-import { ActionBar, pickFrom, pickItem, pickParty, reason } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom, pickItem, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, RefreshButton } from "../../components/erp/page";
@@ -67,6 +67,14 @@ const pickClass = (kind: "item" | "party", name: string, label: string): Field =
     value: "posting_class_id",
     label: ["code", "name"],
   },
+});
+
+const pickAnyParty = (name = "p_party_id", label = "Party", required = true): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_parties", value: "party_id", label: ["code", "name"] },
 });
 
 const pickEntity = (name = "p_entity_id", label = "Company", required = false): Field => ({
@@ -230,7 +238,7 @@ function AccountDetermination() {
             permission: "finance.configure",
             fn: "erp_set_party_posting_class",
             fields: [
-              pickParty("customer"),
+              pickAnyParty(),
               {
                 ...pickClass("party", "p_posting_class_id", "Posting class"),
                 required: true,
@@ -498,7 +506,7 @@ function AccountDetermination() {
                 choices: TRANSACTION_TYPES,
               },
               { ...pickItem(), required: false },
-              pickParty("customer", "p_party_id", "Party", false),
+              pickAnyParty("p_party_id", "Party", false),
               pickEntity(),
               { kind: "text", name: "p_reason_code", label: "Reason code" },
             ],
