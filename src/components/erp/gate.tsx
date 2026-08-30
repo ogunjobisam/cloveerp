@@ -368,13 +368,5 @@ export function Gate({ children }: { children: ReactNode }) {
   );
 }
 
-export const ErpSessionContext = createContext<{
-  session: ErpSession;
-  scope: Scope;
-} | null>(null);
+export { ErpSessionContext, useErpSession } from "./session-context";
 
-export function useErpSession() {
-  const ctx = useContext(ErpSessionContext);
-  if (!ctx) throw new Error("useErpSession must be used inside the authenticated shell");
-  return ctx;
-}
