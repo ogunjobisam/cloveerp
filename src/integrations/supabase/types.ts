@@ -30,6 +30,10 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_add_party_role: {
+        Args: { p_party_id: string; p_role_kind: string }
+        Returns: Json
+      }
       erp_allocate_landed_cost: {
         Args: { p_landed_cost_id: string }
         Returns: number
@@ -210,6 +214,24 @@ export type Database = {
           p_site_id?: string
           p_their_ref?: string
           p_type_code: string
+        }
+        Returns: Json
+      }
+      erp_create_item: {
+        Args: {
+          p_code: string
+          p_is_batch_controlled?: boolean
+          p_item_class?: string
+          p_name: string
+        }
+        Returns: Json
+      }
+      erp_create_party: {
+        Args: {
+          p_code: string
+          p_country_code?: string
+          p_name: string
+          p_role_kind?: string
         }
         Returns: Json
       }
