@@ -1970,7 +1970,6 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
-
     path: "/finance/account-determination",
     titleKey: "nav.finance_account_determination",
     title: "Account determination",

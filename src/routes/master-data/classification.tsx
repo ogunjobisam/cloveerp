@@ -315,7 +315,14 @@ function Classification() {
       >
         {(rows) => (
           <Table
-            columns={[ui("Axis"), ui("Code"), ui("Name"), ui("Abbreviation"), ui("Parent"), ui("Status")]}
+            columns={[
+              ui("Axis"),
+              ui("Code"),
+              ui("Name"),
+              ui("Abbreviation"),
+              ui("Parent"),
+              ui("Status"),
+            ]}
           >
             {rows.map((v) => (
               <tr key={v.value_id} className="border-b border-border/60 last:border-0">
@@ -341,7 +348,14 @@ function Classification() {
       >
         {(rows) => (
           <Table
-            columns={[ui("Code"), ui("Name"), ui("Version"), ui("Segments"), ui("Next number"), ui("Status")]}
+            columns={[
+              ui("Code"),
+              ui("Name"),
+              ui("Version"),
+              ui("Segments"),
+              ui("Next number"),
+              ui("Status"),
+            ]}
           >
             {rows.map((t) => (
               <tr key={t.template_id} className="border-b border-border/60 last:border-0">

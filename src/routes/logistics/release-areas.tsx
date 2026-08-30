@@ -167,7 +167,12 @@ function ReleaseAreas() {
             fn: "erp_open_release_wave",
             fields: [
               pickArea(),
-              { kind: "text", name: "p_code", label: "Code", hint: "Left empty, one is generated." },
+              {
+                kind: "text",
+                name: "p_code",
+                label: "Code",
+                hint: "Left empty, one is generated.",
+              },
               { kind: "text", name: "p_note", label: "Note" },
             ],
             invalidates,
@@ -202,7 +207,9 @@ function ReleaseAreas() {
 
       <DataPanel<Area>
         title={ui("Release areas")}
-        description={ui("What each area serves, how it replenishes, and what is sitting in it now.")}
+        description={ui(
+          "What each area serves, how it replenishes, and what is sitting in it now.",
+        )}
         fn="erp_release_areas"
         empty={ui("No release areas yet. Allocation runs against the whole site until one exists.")}
       >
