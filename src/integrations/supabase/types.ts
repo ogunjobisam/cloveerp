@@ -166,6 +166,7 @@ export type Database = {
         Returns: undefined
       }
       erp_close_status: { Args: { p_fiscal_period_id: string }; Returns: Json }
+      erp_close_tasks: { Args: { p_limit?: number }; Returns: Json }
       erp_close_works_order: {
         Args: { p_works_order_id: string }
         Returns: Json
