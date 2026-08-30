@@ -561,6 +561,11 @@ export type Database = {
         }
         Returns: string
       }
+      erp_protected_values: { Args: never; Returns: Json }
+      erp_put_protected_value: {
+        Args: { p_code: string; p_value: string }
+        Returns: Json
+      }
       erp_qualify_supplier: {
         Args: { p_note?: string; p_party_id: string; p_valid_for?: string }
         Returns: undefined
@@ -629,6 +634,7 @@ export type Database = {
         }
         Returns: string
       }
+      erp_read_protected_value: { Args: { p_code: string }; Returns: Json }
       erp_recall_evidence: { Args: { p_recall_id: string }; Returns: Json }
       erp_recall_readiness: { Args: { p_recall_id?: string }; Returns: Json }
       erp_recalls: { Args: never; Returns: Json }
@@ -757,6 +763,10 @@ export type Database = {
         Args: { p_reason: string; p_snapshot_id: string }
         Returns: string
       }
+      erp_rotate_tenant_key: {
+        Args: { p_purpose?: string; p_reason?: string }
+        Returns: Json
+      }
       erp_run_forecast: {
         Args: {
           p_buckets?: number
@@ -861,6 +871,7 @@ export type Database = {
         Returns: Json
       }
       erp_tax_report: { Args: { p_from: string; p_to: string }; Returns: Json }
+      erp_tenant_keys: { Args: never; Returns: Json }
       erp_transition_document: {
         Args: {
           p_document_id: string
