@@ -104,6 +104,14 @@ function ReleaseAreas() {
         <RefreshButton />
       </div>
 
+      <ConfigTransfer
+        objectType="release_area"
+        title="Release areas as a file"
+        description="Sites and locations are named by code; the download doubles as the upload template."
+        invalidates={["erp_release_areas", "erp_release_area_locations"]}
+      />
+
+
       <ActionBar
         note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and item classes it serves."
         actions={[
