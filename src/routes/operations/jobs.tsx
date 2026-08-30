@@ -1,9 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { SeedDemoAction } from "../../components/erp/seed";
+
+/** The things a kill switch can point at, from `erp.kill_target_kind`. */
+const KILL_TARGETS = [
+  { value: "rule_set", label: "Rule set" },
+  { value: "rule", label: "Rule" },
+  { value: "state_machine", label: "State machine" },
+  { value: "approval_chain", label: "Approval chain" },
+  { value: "job", label: "Job" },
+  { value: "command_class", label: "Command class" },
+  { value: "integration", label: "Integration" },
+  { value: "event_consumer", label: "Event consumer" },
+];
+
 
 export const Route = createFileRoute("/operations/jobs")({
   head: () => ({ meta: [{ title: "Scheduled jobs — ERPWare" }] }),
