@@ -76,6 +76,11 @@ export type Database = {
         Args: { p_mass_change_id: string }
         Returns: number
       }
+      erp_approval_bands: {
+        Args: { p_department_id?: string; p_object_type?: string }
+        Returns: Json
+      }
+      erp_approval_routing_stamps: { Args: { p_limit?: number }; Returns: Json }
       erp_approve_change_set: {
         Args: { p_change_set_id: string }
         Returns: Json
@@ -83,6 +88,35 @@ export type Database = {
       erp_approve_payment_run: {
         Args: { p_proposal_id: string }
         Returns: number
+      }
+      erp_approver_assignments: {
+        Args: { p_object_type?: string }
+        Returns: Json
+      }
+      erp_assign_department: {
+        Args: {
+          p_app_user_id: string
+          p_department_id: string
+          p_is_primary?: boolean
+          p_valid_from?: string
+          p_valid_to?: string
+        }
+        Returns: Json
+      }
+      erp_assign_named_approver: {
+        Args: {
+          p_approver_user_id: string
+          p_lower_bound_minor?: number
+          p_mode?: string
+          p_object_type: string
+          p_reason?: string
+          p_subject_id: string
+          p_subject_kind: string
+          p_upper_bound_minor?: number
+          p_valid_from?: string
+          p_valid_to?: string
+        }
+        Returns: Json
       }
       erp_audit_log: {
         Args: {
@@ -270,6 +304,13 @@ export type Database = {
         Returns: Json
       }
       erp_delivery_performance: { Args: { p_days?: number }; Returns: Json }
+      erp_department_members: {
+        Args: { p_department_id?: string }
+        Returns: Json
+      }
+      erp_departments: { Args: never; Returns: Json }
+      erp_dimension_rules: { Args: never; Returns: Json }
+      erp_dimensions: { Args: never; Returns: Json }
       erp_disposition_inspection: {
         Args: {
           p_disposition:
@@ -305,6 +346,14 @@ export type Database = {
       erp_dunning_worklist: { Args: never; Returns: Json }
       erp_duplicate_candidates: {
         Args: { p_object_type: string }
+        Returns: Json
+      }
+      erp_end_approver_assignment: {
+        Args: { p_assignment_id: string }
+        Returns: Json
+      }
+      erp_end_department_membership: {
+        Args: { p_membership_id: string; p_valid_to?: string }
         Returns: Json
       }
       erp_excursion_impact: {
@@ -543,8 +592,19 @@ export type Database = {
       erp_platform_staff: { Args: never; Returns: Json }
       erp_platform_tenants: { Args: never; Returns: Json }
       erp_post_count: { Args: { p_task_id: string }; Returns: number }
+      erp_preview_approval_chain: {
+        Args: {
+          p_currency?: string
+          p_department_id?: string
+          p_object_type: string
+          p_requester?: string
+          p_value_minor: number
+        }
+        Returns: Json
+      }
       erp_preview_import: { Args: { p_batch_id: string }; Returns: Json }
       erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
+      erp_principals: { Args: never; Returns: Json }
       erp_promise_date: {
         Args: { p_item_id: string; p_quantity: number; p_site_id: string }
         Returns: string
@@ -752,6 +812,7 @@ export type Database = {
       }
       erp_resource_catalog: { Args: { p_locale?: string }; Returns: Json }
       erp_resources: { Args: { p_locale?: string }; Returns: Json }
+      erp_retire_approval_band: { Args: { p_band_id: string }; Returns: Json }
       erp_return_reasons: { Args: { p_days?: number }; Returns: Json }
       erp_reverse_mass_change: {
         Args: { p_mass_change_id: string }
@@ -796,6 +857,10 @@ export type Database = {
         Returns: Json
       }
       erp_session: { Args: never; Returns: Json }
+      erp_set_account_dimension_requirements: {
+        Args: { p_account_id: string; p_dimension_codes: string }
+        Returns: Json
+      }
       erp_set_active_tenant: { Args: { p_tenant_id: string }; Returns: Json }
       erp_set_kill_switch: {
         Args: {
@@ -847,6 +912,16 @@ export type Database = {
         }
         Returns: string
       }
+      erp_stamp_approval_routing: {
+        Args: {
+          p_currency?: string
+          p_department_id?: string
+          p_object_id: string
+          p_object_type: string
+          p_value_minor: number
+        }
+        Returns: Json
+      }
       erp_stock_ageing: { Args: never; Returns: Json }
       erp_stock_health: { Args: never; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
@@ -883,6 +958,48 @@ export type Database = {
       erp_trial_balance: { Args: never; Returns: Json }
       erp_trigger_job: {
         Args: { p_job_code: string; p_reason?: string }
+        Returns: Json
+      }
+      erp_upsert_approval_band: {
+        Args: {
+          p_approver_role_code?: string
+          p_approver_user_id?: string
+          p_currency?: string
+          p_department_id: string
+          p_escalate_after_hours?: number
+          p_is_parallel?: boolean
+          p_lower_bound_minor?: number
+          p_object_type: string
+          p_rerun_lower_bands?: boolean
+          p_seq: number
+          p_tolerance_pct?: number
+          p_upper_bound_minor?: number
+          p_use_line_manager?: boolean
+          p_vacancy?: string
+        }
+        Returns: Json
+      }
+      erp_upsert_department: {
+        Args: {
+          p_code: string
+          p_default_cost_centre?: string
+          p_entity_id?: string
+          p_manager_user_id?: string
+          p_name: string
+          p_parent_department_id?: string
+          p_valid_from?: string
+        }
+        Returns: Json
+      }
+      erp_upsert_dimension_rule: {
+        Args: {
+          p_code: string
+          p_condition: Json
+          p_effect?: string
+          p_entity_id?: string
+          p_message?: string
+          p_name: string
+        }
         Returns: Json
       }
       erp_validate_import: { Args: { p_batch_id: string }; Returns: Json }
