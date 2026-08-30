@@ -413,8 +413,14 @@ function Organisation() {
                 name: "p_kind",
                 label: "Kind of cover",
                 choices: [
-                  { value: "delegation", label: "Delegation — the original stays the approver of record" },
-                  { value: "substitution", label: "Substitution — the delegate takes the decision as their own" },
+                  {
+                    value: "delegation",
+                    label: "Delegation — the original stays the approver of record",
+                  },
+                  {
+                    value: "substitution",
+                    label: "Substitution — the delegate takes the decision as their own",
+                  },
                 ],
               },
               { kind: "date", name: "p_valid_from", label: "From" },

@@ -158,7 +158,6 @@ function Document() {
   );
 }
 
-
 type ChainStep = {
   seq: number;
   source: string;
@@ -190,8 +189,7 @@ type Stamp = {
 function ApprovalChain({ documentId }: { documentId: string }) {
   const { data, error } = useQuery({
     queryKey: ["erp_document_approval_chain", { p_document_id: documentId }],
-    queryFn: () =>
-      callErp<Stamp[]>("erp_document_approval_chain", { p_document_id: documentId }),
+    queryFn: () => callErp<Stamp[]>("erp_document_approval_chain", { p_document_id: documentId }),
   });
 
   const stamp = useErpAction({
@@ -213,7 +211,10 @@ function ApprovalChain({ documentId }: { documentId: string }) {
               : "Nothing has been stamped on this document yet. Stamping records the chain, the rule version behind each step, and any cover in force."}
           </Prose>
         </div>
-        <ActionButton busy={stamp.isPending} onClick={() => stamp.mutate({ p_document_id: documentId })}>
+        <ActionButton
+          busy={stamp.isPending}
+          onClick={() => stamp.mutate({ p_document_id: documentId })}
+        >
           Stamp the approval chain
         </ActionButton>
       </header>
@@ -228,7 +229,9 @@ function ApprovalChain({ documentId }: { documentId: string }) {
               <tr key={s.seq} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 tabular-nums">{s.seq}</td>
                 <td className="py-2 pr-4">
-                  {s.source === "named_assignment" ? "Named assignment" : `Band ${s.band_seq ?? ""}`}
+                  {s.source === "named_assignment"
+                    ? "Named assignment"
+                    : `Band ${s.band_seq ?? ""}`}
                 </td>
                 <td className="py-2 pr-4 tabular-nums">{s.rule_version ?? "—"}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{s.approver_user_id ?? "—"}</td>
