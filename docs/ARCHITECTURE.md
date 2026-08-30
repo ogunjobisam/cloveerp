@@ -302,16 +302,16 @@ the log was not.
 - **Local development on PostgreSQL 16** runs `pg_jsonschema` 0.3.3, which does
   not enforce `required`. Three gateway cases fail locally and pass on CI's
   17.6 image.
-- **The Edge Function is verified by `deno check`, not by a deploy.** It now
-  builds, and it runs: pointed at a local ERPWare database it authenticates,
-  refuses a wrong shared secret with a 403, and returns B1's own
-  `ERPWARE_UNKNOWN_PRINCIPAL` for a fabricated principal. What is still
-  unverified is the Supabase CLI's bundler, which needs Docker or an
-  authenticated deploy — neither available where this was fixed. The function
-  imports its core from `worker/src/core/`, outside `supabase/functions/`, and
-  whether the bundler follows a path out of that directory is the open
-  question. The preview branch on the pull request that declared it is the
-  first real test of that.
+- **The Edge Function has never run on a schedule.** It builds (`deno check`),
+  it deploys (the preview branch on the pull request that declared it reported
+  Edge Functions green, which also settled the open question of whether the
+  bundler follows the import out of `supabase/functions/` into
+  `worker/src/core/` — it does), and it runs: pointed at a local ERPWare
+  database it refuses a wrong shared secret with a 403, connects with the npm
+  `postgres` driver, and returns B1's own `ERPWARE_UNKNOWN_PRINCIPAL` for a
+  fabricated principal. What has not happened is a real pass: no schedule
+  points at it and no secrets are set, so nothing has yet drained an outbox
+  through it in anger.
 
 ---
 
