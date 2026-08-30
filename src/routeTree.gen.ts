@@ -24,6 +24,7 @@ import { Route as FinanceAccountDeterminationRouteImport } from './routes/financ
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
+import { Route as LogisticsReleaseAreasRouteImport } from './routes/logistics/release-areas'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
 import { Route as MasterDataImportsRouteImport } from './routes/master-data/imports'
 import { Route as MasterDataItemSupplyRouteImport } from './routes/master-data/item-supply'
@@ -117,6 +118,11 @@ const LogisticsIndexRoute = LogisticsIndexRouteImport.update({
   path: '/logistics/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LogisticsReleaseAreasRoute = LogisticsReleaseAreasRouteImport.update({
+  id: '/logistics/release-areas',
+  path: '/logistics/release-areas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MasterDataIndexRoute = MasterDataIndexRouteImport.update({
   id: '/master-data/',
   path: '/master-data/',
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | '/administration/terminology'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/logistics/release-areas'
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/administration/terminology'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/logistics/release-areas'
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
@@ -338,6 +349,7 @@ export interface FileRouteTypes {
     | '/administration/terminology'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/logistics/release-areas'
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
+  LogisticsReleaseAreasRoute: typeof LogisticsReleaseAreasRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
   MasterDataItemSupplyRoute: typeof MasterDataItemSupplyRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
@@ -493,6 +506,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LogisticsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/logistics/release-areas': {
+      id: '/logistics/release-areas'
+      path: '/logistics/release-areas'
+      fullPath: '/logistics/release-areas'
+      preLoaderRoute: typeof LogisticsReleaseAreasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/master-data/': {
       id: '/master-data/'
       path: '/master-data'
@@ -592,6 +612,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationTerminologyRoute: AdministrationTerminologyRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
+  LogisticsReleaseAreasRoute: LogisticsReleaseAreasRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,
   MasterDataItemSupplyRoute: MasterDataItemSupplyRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
