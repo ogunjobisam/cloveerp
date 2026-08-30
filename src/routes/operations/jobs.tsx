@@ -45,6 +45,56 @@ function Jobs() {
         exactly like success — so it is reported first.
       </PageHeader>
 
+      <ActionBar
+        note="Running a job by hand, and the kill switches that stop one from running at all."
+        actions={[
+          {
+            label: "Trigger a job",
+            permission: "administration.jobs",
+            fn: "erp_trigger_job",
+            fields: [
+              { kind: "text", name: "p_job_code", label: "Job code", required: true },
+              { kind: "text", name: "p_reason", label: "Reason" },
+            ],
+            invalidates: ["erp_silent_jobs", "erp_job_health"],
+          },
+          {
+            label: "Set a kill switch",
+            permission: "administration.jobs",
+            fn: "erp_set_kill_switch",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_kind",
+                label: "Target",
+                required: true,
+                choices: KILL_TARGETS,
+              },
+              { kind: "text", name: "p_key", label: "Key", required: true },
+              { kind: "text", name: "p_reason", label: "Reason", required: true },
+            ],
+            invalidates: ["erp_job_health", "erp_silent_jobs"],
+          },
+          {
+            label: "Clear a kill switch",
+            permission: "administration.jobs",
+            fn: "erp_clear_kill_switch",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_kind",
+                label: "Target",
+                required: true,
+                choices: KILL_TARGETS,
+              },
+              { kind: "text", name: "p_key", label: "Key", required: true },
+            ],
+            invalidates: ["erp_job_health", "erp_silent_jobs"],
+          },
+        ]}
+      />
+
+
       <DataPanel<Silent>
         title="Jobs that have stopped running"
         description="Overdue against their own schedule. Suppressed during a planned outage."
