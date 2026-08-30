@@ -16,6 +16,7 @@ import { Route as AdministrationPermissionsRouteImport } from './routes/administ
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
+import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
@@ -61,6 +62,11 @@ const FinanceIndexRoute = FinanceIndexRouteImport.update({
 const InventoryIndexRoute = InventoryIndexRouteImport.update({
   id: '/inventory/',
   path: '/inventory/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogisticsIndexRoute = LogisticsIndexRouteImport.update({
+  id: '/logistics/',
+  path: '/logistics/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MasterDataIndexRoute = MasterDataIndexRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance/': typeof FinanceIndexRoute
   '/inventory/': typeof InventoryIndexRoute
+  '/logistics/': typeof LogisticsIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
   '/planning/': typeof PlanningIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance': typeof FinanceIndexRoute
   '/inventory': typeof InventoryIndexRoute
+  '/logistics': typeof LogisticsIndexRoute
   '/master-data': typeof MasterDataIndexRoute
   '/planning': typeof PlanningIndexRoute
   '/procurement': typeof ProcurementIndexRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance/': typeof FinanceIndexRoute
   '/inventory/': typeof InventoryIndexRoute
+  '/logistics/': typeof LogisticsIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
   '/planning/': typeof PlanningIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/operations/jobs'
     | '/finance/'
     | '/inventory/'
+    | '/logistics/'
     | '/master-data/'
     | '/planning/'
     | '/procurement/'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/operations/jobs'
     | '/finance'
     | '/inventory'
+    | '/logistics'
     | '/master-data'
     | '/planning'
     | '/procurement'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/operations/jobs'
     | '/finance/'
     | '/inventory/'
+    | '/logistics/'
     | '/master-data/'
     | '/planning/'
     | '/procurement/'
@@ -232,6 +244,7 @@ export interface RootRouteChildren {
   OperationsJobsRoute: typeof OperationsJobsRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   InventoryIndexRoute: typeof InventoryIndexRoute
+  LogisticsIndexRoute: typeof LogisticsIndexRoute
   MasterDataIndexRoute: typeof MasterDataIndexRoute
   PlanningIndexRoute: typeof PlanningIndexRoute
   ProcurementIndexRoute: typeof ProcurementIndexRoute
@@ -289,6 +302,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory/'
       preLoaderRoute: typeof InventoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logistics/': {
+      id: '/logistics/'
+      path: '/logistics'
+      fullPath: '/logistics/'
+      preLoaderRoute: typeof LogisticsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/master-data/': {
@@ -368,6 +388,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsJobsRoute: OperationsJobsRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   InventoryIndexRoute: InventoryIndexRoute,
+  LogisticsIndexRoute: LogisticsIndexRoute,
   MasterDataIndexRoute: MasterDataIndexRoute,
   PlanningIndexRoute: PlanningIndexRoute,
   ProcurementIndexRoute: ProcurementIndexRoute,
