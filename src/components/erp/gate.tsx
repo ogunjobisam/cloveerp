@@ -131,6 +131,22 @@ function SignIn() {
           {busy ? "Signing in…" : "Sign in"}
         </button>
 
+        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <button
+          type="button"
+          onClick={signInWithGoogle}
+          disabled={busy}
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+        >
+          <GoogleGlyph />
+          Continue with Google
+        </button>
+
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <Link to="/product" className="underline underline-offset-2">
             About ERPWare
