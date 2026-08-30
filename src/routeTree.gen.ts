@@ -13,12 +13,23 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
+import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
+import { Route as AdministrationTerminologyRouteImport } from './routes/administration/terminology'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
+import { Route as FinanceIndexRouteImport } from './routes/finance/index'
+import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
+import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
+import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
 import { Route as MasterDataIndexRouteImport } from './routes/master-data/index'
+import { Route as MasterDataImportsRouteImport } from './routes/master-data/imports'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
+import { Route as PlanningIndexRouteImport } from './routes/planning/index'
 import { Route as ProcurementIndexRouteImport } from './routes/procurement/index'
+import { Route as ProductionIndexRouteImport } from './routes/production/index'
+import { Route as QualityIndexRouteImport } from './routes/quality/index'
+import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -43,14 +54,50 @@ const AdministrationPermissionsRoute =
     path: '/administration/permissions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdministrationTenantRoute = AdministrationTenantRouteImport.update({
+  id: '/administration/tenant',
+  path: '/administration/tenant',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdministrationTerminologyRoute =
+  AdministrationTerminologyRouteImport.update({
+    id: '/administration/terminology',
+    path: '/administration/terminology',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceIndexRoute = FinanceIndexRouteImport.update({
+  id: '/finance/',
+  path: '/finance/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
+  id: '/governance/',
+  path: '/governance/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryIndexRoute = InventoryIndexRouteImport.update({
+  id: '/inventory/',
+  path: '/inventory/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogisticsIndexRoute = LogisticsIndexRouteImport.update({
+  id: '/logistics/',
+  path: '/logistics/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MasterDataIndexRoute = MasterDataIndexRouteImport.update({
   id: '/master-data/',
   path: '/master-data/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasterDataImportsRoute = MasterDataImportsRouteImport.update({
+  id: '/master-data/imports',
+  path: '/master-data/imports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
@@ -68,9 +115,29 @@ const OperationsJobsRoute = OperationsJobsRouteImport.update({
   path: '/operations/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlanningIndexRoute = PlanningIndexRouteImport.update({
+  id: '/planning/',
+  path: '/planning/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProcurementIndexRoute = ProcurementIndexRouteImport.update({
   id: '/procurement/',
   path: '/procurement/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductionIndexRoute = ProductionIndexRouteImport.update({
+  id: '/production/',
+  path: '/production/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QualityIndexRoute = QualityIndexRouteImport.update({
+  id: '/quality/',
+  path: '/quality/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingIndexRoute = ReportingIndexRouteImport.update({
+  id: '/reporting/',
+  path: '/reporting/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SalesIndexRoute = SalesIndexRouteImport.update({
@@ -84,12 +151,23 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/administration/tenant': typeof AdministrationTenantRoute
+  '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
+  '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/finance/': typeof FinanceIndexRoute
+  '/governance/': typeof GovernanceIndexRoute
+  '/inventory/': typeof InventoryIndexRoute
+  '/logistics/': typeof LogisticsIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
+  '/planning/': typeof PlanningIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
+  '/production/': typeof ProductionIndexRoute
+  '/quality/': typeof QualityIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -97,12 +175,23 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/administration/tenant': typeof AdministrationTenantRoute
+  '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
+  '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/finance': typeof FinanceIndexRoute
+  '/governance': typeof GovernanceIndexRoute
+  '/inventory': typeof InventoryIndexRoute
+  '/logistics': typeof LogisticsIndexRoute
   '/master-data': typeof MasterDataIndexRoute
+  '/planning': typeof PlanningIndexRoute
   '/procurement': typeof ProcurementIndexRoute
+  '/production': typeof ProductionIndexRoute
+  '/quality': typeof QualityIndexRoute
+  '/reporting': typeof ReportingIndexRoute
   '/sales': typeof SalesIndexRoute
 }
 export interface FileRoutesById {
@@ -111,12 +200,23 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
+  '/administration/tenant': typeof AdministrationTenantRoute
+  '/administration/terminology': typeof AdministrationTerminologyRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
+  '/master-data/imports': typeof MasterDataImportsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/finance/': typeof FinanceIndexRoute
+  '/governance/': typeof GovernanceIndexRoute
+  '/inventory/': typeof InventoryIndexRoute
+  '/logistics/': typeof LogisticsIndexRoute
   '/master-data/': typeof MasterDataIndexRoute
+  '/planning/': typeof PlanningIndexRoute
   '/procurement/': typeof ProcurementIndexRoute
+  '/production/': typeof ProductionIndexRoute
+  '/quality/': typeof QualityIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/sales/': typeof SalesIndexRoute
 }
 export interface FileRouteTypes {
@@ -126,12 +226,23 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/administration/tenant'
+    | '/administration/terminology'
     | '/documents/$documentId'
+    | '/master-data/imports'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/finance/'
+    | '/governance/'
+    | '/inventory/'
+    | '/logistics/'
     | '/master-data/'
+    | '/planning/'
     | '/procurement/'
+    | '/production/'
+    | '/quality/'
+    | '/reporting/'
     | '/sales/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -139,12 +250,23 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/administration/tenant'
+    | '/administration/terminology'
     | '/documents/$documentId'
+    | '/master-data/imports'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/finance'
+    | '/governance'
+    | '/inventory'
+    | '/logistics'
     | '/master-data'
+    | '/planning'
     | '/procurement'
+    | '/production'
+    | '/quality'
+    | '/reporting'
     | '/sales'
   id:
     | '__root__'
@@ -152,12 +274,23 @@ export interface FileRouteTypes {
     | '/product'
     | '/administration/configuration'
     | '/administration/permissions'
+    | '/administration/tenant'
+    | '/administration/terminology'
     | '/documents/$documentId'
+    | '/master-data/imports'
     | '/operations/assurance'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/finance/'
+    | '/governance/'
+    | '/inventory/'
+    | '/logistics/'
     | '/master-data/'
+    | '/planning/'
     | '/procurement/'
+    | '/production/'
+    | '/quality/'
+    | '/reporting/'
     | '/sales/'
   fileRoutesById: FileRoutesById
 }
@@ -166,12 +299,23 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
+  AdministrationTenantRoute: typeof AdministrationTenantRoute
+  AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
+  MasterDataImportsRoute: typeof MasterDataImportsRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
+  FinanceIndexRoute: typeof FinanceIndexRoute
+  GovernanceIndexRoute: typeof GovernanceIndexRoute
+  InventoryIndexRoute: typeof InventoryIndexRoute
+  LogisticsIndexRoute: typeof LogisticsIndexRoute
   MasterDataIndexRoute: typeof MasterDataIndexRoute
+  PlanningIndexRoute: typeof PlanningIndexRoute
   ProcurementIndexRoute: typeof ProcurementIndexRoute
+  ProductionIndexRoute: typeof ProductionIndexRoute
+  QualityIndexRoute: typeof QualityIndexRoute
+  ReportingIndexRoute: typeof ReportingIndexRoute
   SalesIndexRoute: typeof SalesIndexRoute
 }
 
@@ -205,6 +349,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdministrationPermissionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/administration/tenant': {
+      id: '/administration/tenant'
+      path: '/administration/tenant'
+      fullPath: '/administration/tenant'
+      preLoaderRoute: typeof AdministrationTenantRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/terminology': {
+      id: '/administration/terminology'
+      path: '/administration/terminology'
+      fullPath: '/administration/terminology'
+      preLoaderRoute: typeof AdministrationTerminologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/documents/$documentId': {
       id: '/documents/$documentId'
       path: '/documents/$documentId'
@@ -212,11 +370,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocumentsDocumentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/': {
+      id: '/finance/'
+      path: '/finance'
+      fullPath: '/finance/'
+      preLoaderRoute: typeof FinanceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/governance/': {
+      id: '/governance/'
+      path: '/governance'
+      fullPath: '/governance/'
+      preLoaderRoute: typeof GovernanceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory/': {
+      id: '/inventory/'
+      path: '/inventory'
+      fullPath: '/inventory/'
+      preLoaderRoute: typeof InventoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/logistics/': {
+      id: '/logistics/'
+      path: '/logistics'
+      fullPath: '/logistics/'
+      preLoaderRoute: typeof LogisticsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/master-data/': {
       id: '/master-data/'
       path: '/master-data'
       fullPath: '/master-data/'
       preLoaderRoute: typeof MasterDataIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-data/imports': {
+      id: '/master-data/imports'
+      path: '/master-data/imports'
+      fullPath: '/master-data/imports'
+      preLoaderRoute: typeof MasterDataImportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/operations/assurance': {
@@ -240,11 +433,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/planning/': {
+      id: '/planning/'
+      path: '/planning'
+      fullPath: '/planning/'
+      preLoaderRoute: typeof PlanningIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/procurement/': {
       id: '/procurement/'
       path: '/procurement'
       fullPath: '/procurement/'
       preLoaderRoute: typeof ProcurementIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/production/': {
+      id: '/production/'
+      path: '/production'
+      fullPath: '/production/'
+      preLoaderRoute: typeof ProductionIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quality/': {
+      id: '/quality/'
+      path: '/quality'
+      fullPath: '/quality/'
+      preLoaderRoute: typeof QualityIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/': {
+      id: '/reporting/'
+      path: '/reporting'
+      fullPath: '/reporting/'
+      preLoaderRoute: typeof ReportingIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sales/': {
@@ -262,12 +483,23 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
+  AdministrationTenantRoute: AdministrationTenantRoute,
+  AdministrationTerminologyRoute: AdministrationTerminologyRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
+  MasterDataImportsRoute: MasterDataImportsRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
+  FinanceIndexRoute: FinanceIndexRoute,
+  GovernanceIndexRoute: GovernanceIndexRoute,
+  InventoryIndexRoute: InventoryIndexRoute,
+  LogisticsIndexRoute: LogisticsIndexRoute,
   MasterDataIndexRoute: MasterDataIndexRoute,
+  PlanningIndexRoute: PlanningIndexRoute,
   ProcurementIndexRoute: ProcurementIndexRoute,
+  ProductionIndexRoute: ProductionIndexRoute,
+  QualityIndexRoute: QualityIndexRoute,
+  ReportingIndexRoute: ReportingIndexRoute,
   SalesIndexRoute: SalesIndexRoute,
 }
 export const routeTree = rootRouteImport
