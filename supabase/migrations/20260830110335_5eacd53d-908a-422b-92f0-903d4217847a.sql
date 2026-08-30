@@ -687,3 +687,22 @@ revoke all on function erp.seed_demo_operations() from public, anon, authenticat
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('erp', 'seed_demo_billing', 'Demonstration billing history; internal only, called by the seeded operations builder.')
 on conflict do nothing;
+-- corrective amendments applied after first deploy -------------------------
+
+alter table erp.tenant_key drop constraint if exists tenant_key_purpose_check;
+alter table erp.tenant_key add constraint tenant_key_purpose_check
+  check (purpose = any (array['data','storage','export','backup','tenant_data']));
+
+insert into erp_ref.event_type
+  (code, version, aggregate_type, module_code, name_key, description, payload_schema)
+values
+  ('tenant.key_created', 1, 'tenant_key', 'administration', 'event.tenant.key_created',
+   'A per-tenant encryption key was created and stored in the platform key store.',
+   jsonb_build_object('type', 'object')),
+  ('tenant.key_rotated', 1, 'tenant_key', 'administration', 'event.tenant.key_rotated',
+   'A tenant key was rotated; values were re-protected and the previous key destroyed.',
+   jsonb_build_object('type', 'object')),
+  ('tenant.key_destroyed', 1, 'tenant_key', 'administration', 'event.tenant.key_destroyed',
+   'A tenant key was irreversibly destroyed.',
+   jsonb_build_object('type', 'object'))
+on conflict (code, version) do nothing;
