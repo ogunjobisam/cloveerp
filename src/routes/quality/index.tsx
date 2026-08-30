@@ -58,22 +58,6 @@ function Quality() {
       />
 
       <AutoPanel
-        title="Inspections"
-        description="Awaiting disposition. Stock stays unavailable until one is recorded."
-        fn="erp_inspections"
-        empty="Nothing awaiting inspection."
-        rowKey={(r) => String(r["inspection_id"])}
-        columns={[
-          { header: "Reference", cell: "reference" },
-          { header: "Item", cell: "item" },
-          { header: "Batch", cell: "batch" },
-          { header: "Quantity", cell: "quantity", numeric: true },
-          { header: "Disposition", cell: (r) => <StatusPill value={r["disposition"]} /> },
-          { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
-        ]}
-      />
-
-      <AutoPanel
         title="Recalls"
         description="Scope, clock and progress. The deadline is a configured regulatory clock, not a note."
         fn="erp_recalls"
@@ -92,7 +76,7 @@ function Quality() {
       <AutoPanel
         title="Supplier qualification"
         description="Who is approved to supply what, and until when."
-        fn="erp_supplier_qualifications"
+        fn="erp_supplier_qualification"
         empty="No supplier qualifications recorded."
         rowKey={(r, i) => `${String(r["party"] ?? i)}-${i}`}
         columns={[

@@ -59,21 +59,6 @@ function Production() {
         ]}
       />
 
-      <AutoPanel
-        title="Operation progress"
-        description="Booked time against standard, by operation."
-        fn="erp_operation_progress"
-        empty="No time booked."
-        rowKey={(r, i) => `${String(r["works_order"] ?? i)}-${String(r["operation_seq"] ?? i)}`}
-        columns={[
-          { header: "Works order", cell: "works_order" },
-          { header: "Seq", cell: "operation_seq", numeric: true },
-          { header: "Operation", cell: "operation" },
-          { header: "Minutes", cell: "minutes_booked", numeric: true },
-          { header: "Completed", cell: "quantity_completed", numeric: true },
-          { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
-        ]}
-      />
     </div>
   );
 }

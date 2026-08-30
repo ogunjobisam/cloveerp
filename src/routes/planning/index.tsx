@@ -73,35 +73,6 @@ function Planning() {
         ]}
       />
 
-      <AutoPanel
-        title="Demand signals"
-        description="What the plan is answering: orders, forecast and dependent demand."
-        fn="erp_demand_signals"
-        empty="No demand recorded."
-        rowKey={(r, i) => `${String(r["item"] ?? i)}-${i}`}
-        columns={[
-          { header: "Item", cell: "item" },
-          { header: "Site", cell: "site" },
-          { header: "Source", cell: "source" },
-          { header: "Quantity", cell: "quantity", numeric: true },
-          { header: "Due", cell: (r) => shortDate(r["due_on"]) },
-        ]}
-      />
-
-      <AutoPanel
-        title="Supply commitments"
-        description="What is already inbound against that demand."
-        fn="erp_supply_commitments"
-        empty="Nothing inbound."
-        rowKey={(r, i) => `${String(r["item"] ?? i)}-${i}`}
-        columns={[
-          { header: "Item", cell: "item" },
-          { header: "Site", cell: "site" },
-          { header: "Source", cell: "source" },
-          { header: "Quantity", cell: "quantity", numeric: true },
-          { header: "Expected", cell: (r) => shortDate(r["expected_on"]) },
-        ]}
-      />
     </div>
   );
 }
