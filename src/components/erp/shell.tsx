@@ -311,11 +311,12 @@ export function Shell({
           </button>
 
           <Link to="/" className={`${TOUCH} flex shrink-0 items-center gap-2`}>
-            <span className="grid size-7 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              e
+            <Logo size={28} />
+            <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] md:inline">
+              ERPWare
             </span>
-            <span className="hidden text-base font-semibold md:inline">ERPWare</span>
           </Link>
+
 
           <div className="flex min-w-0 flex-1 flex-col leading-tight md:flex-none">
             <span className="truncate text-sm font-medium">
