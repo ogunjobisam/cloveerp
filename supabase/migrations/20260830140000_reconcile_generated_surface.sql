@@ -802,6 +802,74 @@ insert into erp_ref.resource (key, locale, value) values
   ('event.tenant.key_destroyed',           'en', 'Tenant key destroyed')
 on conflict (key, locale) do update set value = excluded.value;
 
+-- ── 6a. A SET clause silently disabled a COMMIT ─────────────────────────────
+--
+-- 0033 defines erp_test.assert_context_not_leaked() as a procedure, and says
+-- in a comment directly above it why it is the one routine in the repository
+-- without `set search_path`:
+--
+--   PostgreSQL refuses transaction control inside a routine that carries a SET
+--   clause, so a procedure that must COMMIT cannot have one. Every identifier
+--   below is fully schema-qualified instead, which is what the SET clause was
+--   buying anyway.
+--
+-- 20260830072141 added the SET clause regardless — one line, silencing the one
+-- Supabase-linter warning the codebase had:
+--
+--   alter procedure erp_test.assert_context_not_leaked() set search_path = '';
+--
+-- The procedure exists to prove that tenant context does not survive a commit
+-- on a pooled connection, which it can only do by committing. With the SET
+-- clause it raises "invalid transaction termination" at its first COMMIT and
+-- proves nothing. The body was already fully qualified, so the clause bought
+-- exactly nothing and cost the check.
+--
+-- This was invisible for the same reason as everything else here: the step
+-- that runs it is the last one in the job, and the job had not reached it
+-- since.
+
+alter procedure erp_test.assert_context_not_leaked() reset search_path;
+
+-- And a guard, so the next linter fix cannot quietly do it again. A routine
+-- that performs transaction control and carries a SET clause is not a style
+-- question: it raises at run time, and only on the path that commits.
+
+create or replace function erp.assert_transaction_control_routines()
+returns text
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  v_count integer; v_detail text;
+begin
+  select count(*), string_agg(format('  %I.%I carries %s', n.nspname, p.proname,
+                                     array_to_string(p.proconfig, ', ')), E'\n')
+    into v_count, v_detail
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('erp', 'erp_ref', 'erp_meta', 'erp_ai', 'erp_test')
+     and p.prokind = 'p'
+     and p.proconfig is not null
+     and p.prosrc ~* '\mcommit\M';
+
+  if v_count > 0 then
+    raise exception
+      'ERPWARE_TRANSACTION_CONTROL_BLOCKED: % procedure(s) commit but carry a '
+      'SET clause, which PostgreSQL refuses at run time', v_count
+      using errcode = 'P0001', detail = v_detail,
+            hint = 'Schema-qualify the body and RESET the setting; a routine '
+                   'that must COMMIT cannot carry one.';
+  end if;
+
+  return format('%s procedures perform transaction control, none blocked',
+    (select count(*) from pg_catalog.pg_proc p2
+      join pg_catalog.pg_namespace n2 on n2.oid = p2.pronamespace
+     where n2.nspname like 'erp%' and p2.prokind = 'p'
+       and p2.prosrc ~* '\mcommit\M'));
+end;
+$$;
+
 -- ── 7. Run the generators ───────────────────────────────────────────────────
 --
 -- The single largest cause of the 183 findings, and the cheapest to fix: the
@@ -831,4 +899,5 @@ select erp.assert_attribution_coverage();
 select erp.assert_public_api_safe();
 select erp.assert_part5_coverage();
 select erp.assert_resource_coverage('en');
+select erp.assert_transaction_control_routines();
 
