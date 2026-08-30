@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductRouteImport } from './routes/product'
+import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
@@ -27,6 +28,12 @@ const ProductRoute = ProductRouteImport.update({
   path: '/product',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministrationConfigurationRoute =
+  AdministrationConfigurationRouteImport.update({
+    id: '/administration/configuration',
+    path: '/administration/configuration',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdministrationPermissionsRoute =
   AdministrationPermissionsRouteImport.update({
     id: '/administration/permissions',
@@ -57,6 +64,7 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
@@ -76,6 +85,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/product'
+    | '/administration/configuration'
     | '/administration/permissions'
     | '/operations/assurance'
     | '/operations/integrations'
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/product'
+    | '/administration/configuration'
     | '/administration/permissions'
     | '/operations/assurance'
     | '/operations/integrations'
@@ -105,6 +117,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/product'
+    | '/administration/configuration'
     | '/administration/permissions'
     | '/operations/assurance'
     | '/operations/integrations'
@@ -115,6 +128,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProductRoute: typeof ProductRoute
+  AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
@@ -136,6 +150,13 @@ declare module '@tanstack/react-router' {
       path: '/product'
       fullPath: '/product'
       preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/configuration': {
+      id: '/administration/configuration'
+      path: '/administration/configuration'
+      fullPath: '/administration/configuration'
+      preLoaderRoute: typeof AdministrationConfigurationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/permissions': {
@@ -179,6 +200,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProductRoute: ProductRoute,
+  AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
