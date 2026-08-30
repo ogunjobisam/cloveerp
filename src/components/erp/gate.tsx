@@ -1,3 +1,4 @@
+import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
@@ -345,7 +346,7 @@ export function Gate({ children }: { children: ReactNode }) {
     return (
       <Centred>
         <h1 className="text-lg font-semibold">Could not load your session</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{(error as Error).message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{friendlyError(error).title}</p>
         <button
           onClick={signOut}
           className="mt-5 rounded-md border border-input px-4 py-2 text-sm font-medium"

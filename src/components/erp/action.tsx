@@ -197,7 +197,7 @@ function SelectField({
           Nothing to choose from yet — this list is empty for this tenant.
         </span>
       ) : null}
-      {error ? <span className="text-xs text-destructive">{(error as Error).message}</span> : null}
+      {error ? <span className="text-xs text-destructive">{friendlyError(error).title}</span> : null}
     </>
   );
 }
