@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductRouteImport } from './routes/product'
+import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
@@ -40,6 +41,11 @@ const IndexRoute = IndexRouteImport.update({
 const ProductRoute = ProductRouteImport.update({
   id: '/product',
   path: '/product',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdministrationAuditRoute = AdministrationAuditRouteImport.update({
+  id: '/administration/audit',
+  path: '/administration/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdministrationConfigurationRoute =
@@ -149,6 +155,7 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
@@ -173,6 +180,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
@@ -198,6 +206,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/product': typeof ProductRoute
+  '/administration/audit': typeof AdministrationAuditRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
@@ -224,6 +233,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/product'
+    | '/administration/audit'
     | '/administration/configuration'
     | '/administration/permissions'
     | '/administration/tenant'
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/product'
+    | '/administration/audit'
     | '/administration/configuration'
     | '/administration/permissions'
     | '/administration/tenant'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/product'
+    | '/administration/audit'
     | '/administration/configuration'
     | '/administration/permissions'
     | '/administration/tenant'
@@ -297,6 +309,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProductRoute: typeof ProductRoute
+  AdministrationAuditRoute: typeof AdministrationAuditRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   AdministrationTenantRoute: typeof AdministrationTenantRoute
@@ -333,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/product'
       fullPath: '/product'
       preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/audit': {
+      id: '/administration/audit'
+      path: '/administration/audit'
+      fullPath: '/administration/audit'
+      preLoaderRoute: typeof AdministrationAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/configuration': {
@@ -481,6 +501,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProductRoute: ProductRoute,
+  AdministrationAuditRoute: AdministrationAuditRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   AdministrationTenantRoute: AdministrationTenantRoute,
