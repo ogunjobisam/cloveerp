@@ -146,6 +146,7 @@ function SignIn() {
  */
 function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   const queryClient = useQueryClient();
+  const platform = usePlatformMe();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [token, setToken] = useState("");
