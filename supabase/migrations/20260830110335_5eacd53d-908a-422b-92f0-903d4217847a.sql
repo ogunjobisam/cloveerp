@@ -147,8 +147,8 @@ begin
   -- before the old key stops existing. After this point the old key is of no
   -- use to anybody, which is the only honest moment to destroy it.
   update erp.tenant_secret s
-     set ciphertext = public.pgp_sym_encrypt(
-           public.pgp_sym_decrypt(s.ciphertext, v_old_material), v_new_material),
+     set ciphertext = extensions.pgp_sym_encrypt(
+           extensions.pgp_sym_decrypt(s.ciphertext, v_old_material), v_new_material),
          key_version = v_new_version,
          updated_at = now(), updated_by = erp.current_principal_id()
    where s.tenant_id = v_tenant;
@@ -227,7 +227,7 @@ begin
    order by k.key_version desc limit 1;
 
   insert into erp.tenant_secret (tenant_id, code, ciphertext, key_version, created_by, updated_by)
-  values (v_tenant, p_code, public.pgp_sym_encrypt(p_value, v_material), v_version,
+  values (v_tenant, p_code, extensions.pgp_sym_encrypt(p_value, v_material), v_version,
           erp.current_principal_id(), erp.current_principal_id())
   on conflict (tenant_id, code) do update
      set ciphertext = excluded.ciphertext, key_version = excluded.key_version,
@@ -248,7 +248,7 @@ begin
   select s.ciphertext into v_cipher from erp.tenant_secret s
    where s.tenant_id = v_tenant and s.code = p_code;
   if v_cipher is null then return null; end if;
-  return public.pgp_sym_decrypt(v_cipher, erp.tenant_key_material('tenant_data'));
+  return extensions.pgp_sym_decrypt(v_cipher, erp.tenant_key_material('tenant_data'));
 end $$;
 
 -- --- public surface ------------------------------------------------------
