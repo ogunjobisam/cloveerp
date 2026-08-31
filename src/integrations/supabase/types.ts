@@ -347,8 +347,28 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_create_party_with_roles: {
+        Args: {
+          p_code: string
+          p_country_code?: string
+          p_legal_name?: string
+          p_name: string
+          p_role_kinds?: string[]
+        }
+        Returns: Json
+      }
       erp_create_service_principal: {
         Args: { p_display_name: string }
+        Returns: Json
+      }
+      erp_create_uom: {
+        Args: {
+          p_code: string
+          p_decimals?: number
+          p_is_base?: boolean
+          p_name: string
+          p_uom_class?: string
+        }
         Returns: Json
       }
       erp_credit_position: { Args: { p_party_id: string }; Returns: Json }
@@ -529,7 +549,10 @@ export type Database = {
         Args: { p_item_id?: string; p_site_id?: string }
         Returns: Json
       }
-      erp_items: { Args: { p_search?: string }; Returns: Json }
+      erp_items: {
+        Args: { p_limit?: number; p_search?: string }
+        Returns: Json
+      }
       erp_job_health: { Args: never; Returns: Json }
       erp_landed_costs: { Args: { p_limit?: number }; Returns: Json }
       erp_ledgers: { Args: never; Returns: Json }
@@ -629,7 +652,7 @@ export type Database = {
       erp_part5_coverage: { Args: { p_section?: string }; Returns: Json }
       erp_part5_summary: { Args: never; Returns: Json }
       erp_parties: {
-        Args: { p_role_kind?: string; p_search?: string }
+        Args: { p_limit?: number; p_role_kind?: string; p_search?: string }
         Returns: Json
       }
       erp_party_posting_classes: { Args: { p_limit?: number }; Returns: Json }
@@ -1138,6 +1161,7 @@ export type Database = {
       }
       erp_tax_report: { Args: { p_from: string; p_to: string }; Returns: Json }
       erp_tenant_keys: { Args: never; Returns: Json }
+      erp_tenant_state: { Args: never; Returns: Json }
       erp_transition_document: {
         Args: {
           p_document_id: string
@@ -1151,6 +1175,7 @@ export type Database = {
         Args: { p_job_code: string; p_reason?: string }
         Returns: Json
       }
+      erp_uoms: { Args: never; Returns: Json }
       erp_upsert_account_determination: {
         Args: {
           p_account_id: string
