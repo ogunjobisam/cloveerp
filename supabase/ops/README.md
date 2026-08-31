@@ -174,10 +174,15 @@ They were checked one at a time rather than assumed:
 | `request_approval` | the two supersede/cancel `UPDATE`s run in the opposite order, over the same set |
 
 No gate, guard, permission check or tenant scope differs in any of them. They
-are left alone deliberately: rewriting the state machine, the approval router
-and the integration gateway on production to add an unused variable would be
-risk without benefit. Bringing them to `main`'s text belongs in a reviewed
-change, not in a repair script.
+were left alone during the repair itself: rewriting the state machine, the
+approval router and the integration gateway by hand-typing them through a tool
+channel would have been risk without benefit.
+
+`20260901_eight_inert_routines.sql` is the reviewed change that closes them,
+for a database reachable by `psql`. It fixes no defect — it exists so that a
+body-level comparison between production and `main` comes back clean, which is
+what makes the *next* drift visible. Running it is optional and the file says
+so.
 
 Note also that the earlier claim that production matched "repository minus the
 eight migrations" was established on counts and presence, not on body content.
