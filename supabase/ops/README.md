@@ -110,3 +110,81 @@ It does not install any module. Installing sales, procurement and master data on
 production is a separate decision and a separate change, and it should follow
 this rather than precede it: installing onto a schema that does not match the
 repository is how the divergence widened in the first place.
+
+### Applied — 31 August 2026
+
+Applied to `xpzffnnhnhcqyjqcueja` in thirteen migrations named `reconcile_*`,
+because the only channel available was the Supabase MCP tool rather than a
+`psql` connection: the project has no stored database password anywhere in the
+repository or environment, and the egress proxy refuses both `api.supabase.com`
+and the project host. Each part was verified against a local build of `main`
+before the next was applied.
+
+Twelve of the thirteen dimensions below now match that build **exactly**:
+
+| | on `main` | on production |
+|---|---|---|
+| `erp_ref` / `erp_meta` / `erp_ai` / `erp_test` / `public` routines | — | identical |
+| triggers in the `erp*` schemas | 593 | 593, identical |
+| policies | 240 | 240, identical |
+| write register | 206 | 206, identical |
+| `SECURITY DEFINER` register | 55 | 55, identical |
+| base-type permissions | 13 | 13, identical |
+| English resources | 688 | 688, identical |
+| Part 5 register | 90 | 90, identical |
+| `erp` routines | 440 | 440, **8 differ** — see below |
+
+All 22 assertions pass on production. Two of them failed on the first attempt
+and both failures were real:
+
+- `assert_isolation()` — six `erp` functions were `SECURITY DEFINER` with no
+  register row. Fixed by the six rows the script carries.
+- `assert_transaction_control_routines()` — `erp_test.assert_context_not_leaked`
+  still carried the `SET search_path` a linter had added, which PostgreSQL
+  refuses to let a procedure commit under. This is the guard written for
+  exactly that defect catching it in production, on its first run there.
+
+The generator step did what it was written to do: 559 → 593 triggers, and the
+audit and attribution coverage reports went from 20 and 14 findings to none.
+
+### Two things this exercise found that the script does not fix
+
+**Production's function bodies have had their comments stripped.** Every
+`--` comment is gone from every routine on that database, so `md5(prosrc)`
+differs from `main` for essentially all 779 of them while the code is
+identical. This is why the verification above compares bodies with comments
+removed and whitespace collapsed; a raw comparison reports hundreds of
+differences that are not differences. It also means production can never be
+made byte-identical to `main` without rewriting every function, which would
+be a large change of no behavioural value. Nothing reads a comment: the gate
+detection in `erp.public_api_report()` matches on call text, not commentary.
+
+**Eight `erp` routines differ beyond comments, and all eight are inert.**
+They were checked one at a time rather than assumed:
+
+| routine | difference |
+|---|---|
+| `perform_transition` | `main` declares `v_effects jsonb`, never used |
+| `open_approval_seq` | `main` initialises `v_made := 0`, always assigned before use |
+| `audit_coverage_report` | one string literal on production, two adjacent ones on `main` |
+| `decide_approval_task` | production parenthesises the `CASE` before the cast |
+| `evaluate_legislation_rules` | `main` selects `b.pack_version`, never referenced |
+| `run_legislation_conformance` | the same unused selected column |
+| `submit_command` | `main` declares `v_req` in an inner block, production in the outer one |
+| `request_approval` | the two supersede/cancel `UPDATE`s run in the opposite order, over the same set |
+
+No gate, guard, permission check or tenant scope differs in any of them. They
+were left alone during the repair itself: rewriting the state machine, the
+approval router and the integration gateway by hand-typing them through a tool
+channel would have been risk without benefit.
+
+`20260901_eight_inert_routines.sql` is the reviewed change that closes them,
+for a database reachable by `psql`. It fixes no defect — it exists so that a
+body-level comparison between production and `main` comes back clean, which is
+what makes the *next* drift visible. Running it is optional and the file says
+so.
+
+Note also that the earlier claim that production matched "repository minus the
+eight migrations" was established on counts and presence, not on body content.
+It held for the shape and not for the text, which is how these eight went
+unnoticed until the digests were compared.
