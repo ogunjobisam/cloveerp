@@ -139,7 +139,8 @@ jobs:
             "erp.assert_resource_coverage('en')" \
             "erp.assert_transaction_control_routines()" \
             "erp.assert_document_create_permissions()" \
-            "erp.assert_configuration_promotable()"
+            "erp.assert_configuration_promotable()" \
+            "erp.assert_determination_coverage()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -175,7 +176,8 @@ jobs:
             "erp_test.assert_reference_reads_suite()" \
             "erp_test.assert_transition_menu_suite()" \
             "erp_test.assert_tenant_deletion_suite()" \
-            "erp_test.assert_addendum_b_promotion_suite()"
+            "erp_test.assert_addendum_b_promotion_suite()" \
+            "erp_test.assert_determination_coverage_suite()"
           do
             $PSQL -tAc "select $s;"
           done

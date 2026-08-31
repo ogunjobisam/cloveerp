@@ -164,6 +164,7 @@ function AccountDetermination() {
     "erp_account_determination_rules",
     "erp_posting_overrides",
     "erp_determination_coverage",
+    "erp_determination_coverage_report",
   ];
 
   return (
@@ -507,6 +508,19 @@ function AccountDetermination() {
             label: "What is not covered yet?",
             description:
               "Every posting class, transaction type and company combination with no rule behind it.",
+            fields: [],
+          },
+          {
+            // The rules on this screen are one of two account-selection
+            // mechanisms, and journals are raised by the other one — a
+            // document type's posting rule, resolved against the chart of
+            // accounts of the company the document is on. This report covers
+            // both, so an account retired out from under a live rule shows up
+            // here rather than at the first posting after month end.
+            fn: "erp_determination_coverage_report",
+            label: "What could stop a posting?",
+            description:
+              "Both mechanisms: the determination rules on this screen, and the posting rules that actually raise journals. Nothing falls into suspense, so each finding is a refusal waiting to happen.",
             fields: [],
           },
         ]}
