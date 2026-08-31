@@ -1936,6 +1936,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/administration/onboarding",
+    titleKey: "nav.administration_onboarding",
+    title: "Onboarding interview",
+    blurb:
+      "Questions about how this organisation works, turned into a change set per configuration surface.",
+    permission: "administration.configure",
+    group: "administer",
+  },
+  {
     path: "/administration/organisation",
     titleKey: "nav.administration_organisation",
     title: "Organisation and approval routing",

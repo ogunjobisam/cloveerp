@@ -178,7 +178,8 @@ jobs:
             "erp_test.assert_tenant_deletion_suite()" \
             "erp_test.assert_addendum_b_promotion_suite()" \
             "erp_test.assert_determination_coverage_suite()" \
-            "erp_test.assert_policy_register_suite()"
+            "erp_test.assert_policy_register_suite()" \
+            "erp_test.assert_onboarding_interview_suite()"
           do
             $PSQL -tAc "select $s;"
           done
