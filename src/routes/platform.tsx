@@ -4,6 +4,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
+  Archive,
   Building2,
   ClipboardList,
   Copy,
@@ -225,8 +226,40 @@ function Companies({ role }: { role: PlatformRole }) {
     },
   });
 
+  /**
+   * The one control here that removes data.
+   *
+   * "Mark ended" beside it writes a status and nothing else, which is why it no
+   * longer says Delete. This is the button that actually empties an organisation, so
+   * it asks for the code to be typed rather than accepting a click, and the
+   * database refuses it on an organisation that is still active.
+   */
+  const purge = useMutation({
+    mutationFn: (v: { id: string; code: string; reason: string }) =>
+      callErp<{ code: string }>("erp_platform_purge_tenant", {
+        p_tenant_id: v.id,
+        p_confirm_code: v.code,
+        p_reason: v.reason,
+      }),
+    onSuccess: refresh,
+  });
+
+  /** Finishes every deletion request whose grace period has elapsed. */
+  const sweep = useMutation({
+    mutationFn: (days: number) =>
+      callErp<{ purged: number }>("erp_platform_purge_due_tenants", { p_grace_days: days }),
+    onSuccess: refresh,
+  });
+
   const busyError =
-    onboard.error ?? setStatus.error ?? invite.error ?? enter.error ?? tenants.error ?? null;
+    onboard.error ??
+    setStatus.error ??
+    invite.error ??
+    enter.error ??
+    purge.error ??
+    sweep.error ??
+    tenants.error ??
+    null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -235,7 +268,7 @@ function Companies({ role }: { role: PlatformRole }) {
 
       {mayOperate ? (
         <Card
-          title="Onboard a company"
+          title="Onboard an organisation"
           icon={<Plus className="size-4 text-primary" />}
           description="Creates the tenant, its root entity, its administrator role, and a single-use invitation for its first administrator."
           action={
@@ -257,7 +290,7 @@ function Companies({ role }: { role: PlatformRole }) {
               className="grid gap-3 sm:grid-cols-2"
             >
               <label className="block text-sm font-medium">
-                Company name
+                Organisation name
                 <input
                   required
                   value={form.name}
@@ -318,31 +351,66 @@ function Companies({ role }: { role: PlatformRole }) {
                   disabled={onboard.isPending}
                   className={`${TOUCH} w-full rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60 sm:w-auto`}
                 >
-                  {onboard.isPending ? "Creating…" : "Create company"}
+                  {onboard.isPending ? "Creating…" : "Create organisation"}
                 </button>
               </div>
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">
-              The invitation token appears once, here, when the company is created.
+              The invitation token appears once, here, when the organisation is created.
             </p>
           )}
         </Card>
       ) : null}
 
       <Card
-        title="Companies"
+        title="Organisations"
         icon={<Building2 className="size-4 text-primary" />}
-        description="Every tenant on this deployment."
+        description="Every organisation on this deployment. Suspending and marking ended change a status; purging is the only thing here that removes data."
       >
+        {atLeast(role, "owner") ? (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+              When an administrator requests deletion, their organisation is suspended and its keys
+              are destroyed, but its rows remain until they are purged. The sweep finishes every
+              request older than the grace period. Nothing runs it on a schedule yet.
+            </p>
+            <button
+              type="button"
+              disabled={sweep.isPending}
+              onClick={() => {
+                const days = window.prompt(
+                  "Purge every organisation whose deletion was requested more than how many days ago?",
+                  "7",
+                );
+                if (days === null) return;
+                const n = Number(days);
+                if (!Number.isFinite(n) || n < 0) return;
+                sweep.mutate(n);
+              }}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
+            >
+              <Trash2 className="size-3.5" />
+              {sweep.isPending ? "Sweeping…" : "Run deletion sweep"}
+            </button>
+          </div>
+        ) : null}
+
+        {sweep.isSuccess ? (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Sweep purged {sweep.data?.purged ?? 0}{" "}
+            {(sweep.data?.purged ?? 0) === 1 ? "organisation" : "organisations"}.
+          </p>
+        ) : null}
+
         {tenants.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (tenants.data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No companies yet. Onboarding one is the first thing to do.
+            No organisations yet. Onboarding one is the first thing to do.
           </p>
         ) : (
-          <Table columns={["Company", "Status", "Owner", "People", "Structure", "Actions"]}>
+          <Table columns={["Organisation", "Status", "Owner", "People", "Structure", "Actions"]}>
             {(tenants.data ?? []).map((t) => (
               <tr key={t.id} className="border-b border-border/60 last:border-0">
                 <td className="py-3 pr-4">
@@ -434,19 +502,47 @@ function Companies({ role }: { role: PlatformRole }) {
                           </button>
                         ) : null}
 
+                        {/* A status, and only a status. It used to say Delete
+                            and remove nothing, which is the whole reason
+                            organisations piled up here. */}
                         {atLeast(role, "owner") && t.status !== "deleted" ? (
                           <button
                             type="button"
                             onClick={() => {
                               const reason = window.prompt(
-                                `Mark ${t.name} deleted? Type the reason to confirm.`,
+                                `Mark ${t.name} as ended? This records a status and removes no ` +
+                                  `data — purging is a separate step. Reason:`,
                               );
                               if (reason) setStatus.mutate({ id: t.id, status: "deleted", reason });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
+                          >
+                            <Archive className="size-3.5" />
+                            Mark ended
+                          </button>
+                        ) : null}
+
+                        {/* This one empties it. Owner only, refused by the
+                            database on an active company, and the code has to
+                            be typed rather than a dialog dismissed. */}
+                        {atLeast(role, "owner") && t.status !== "active" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const code = window.prompt(
+                                `Purge ${t.name} permanently?\n\n` +
+                                  `Every row belonging to it is removed and cannot be recovered. ` +
+                                  `Export first if the data is wanted.\n\n` +
+                                  `Type its code (${t.code}) to confirm:`,
+                              );
+                              if (!code) return;
+                              const reason = window.prompt("Why is it being purged?");
+                              if (reason && reason.trim()) purge.mutate({ id: t.id, code, reason });
                             }}
                             className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
                           >
                             <Trash2 className="size-3.5" />
-                            Delete
+                            Purge
                           </button>
                         ) : null}
                       </>
@@ -649,9 +745,9 @@ function Activity() {
           className="rounded-md border border-input bg-background px-2 py-2 text-xs"
         >
           <option value="">All actions</option>
-          <option value="platform.company_onboarded">Company onboarded</option>
-          <option value="platform.tenant_entered">Company entered</option>
-          <option value="platform.tenant_left">Company left</option>
+          <option value="platform.company_onboarded">Organisation onboarded</option>
+          <option value="platform.tenant_entered">Organisation entered</option>
+          <option value="platform.tenant_left">Organisation left</option>
           <option value="platform.admin_invited">Administrator invited</option>
           <option value="platform.tenant_status_changed">Status changed</option>
           <option value="platform.ownership_offered">Ownership offered</option>
@@ -671,7 +767,7 @@ function Activity() {
       ) : (rows.data ?? []).length === 0 ? (
         <p className="text-sm text-muted-foreground">Nothing recorded under this filter.</p>
       ) : (
-        <Table columns={["When", "Who", "Action", "Company", "Detail"]}>
+        <Table columns={["When", "Who", "Action", "Organisation", "Detail"]}>
           {(rows.data ?? []).map((r) => (
             <tr key={r.id} className="border-b border-border/60 last:border-0 align-top">
               <td className="py-3 pr-4 text-xs text-muted-foreground">
@@ -813,7 +909,7 @@ function PlatformConsole() {
 
   const role = me.data.role as PlatformRole;
   const tabs: { key: typeof tab; label: string; show: boolean }[] = [
-    { key: "companies", label: "Companies", show: true },
+    { key: "companies", label: "Organisations", show: true },
     { key: "ownership", label: "Ownership", show: true },
     { key: "staff", label: "Staff", show: true },
     { key: "activity", label: "Activity", show: true },

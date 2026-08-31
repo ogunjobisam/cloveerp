@@ -13,12 +13,14 @@ export type DrainReport = {
   commandsClaimed: number;
   commandsSucceeded: number;
   commandsFailed: number;
+  tenantsPurged: number;
 };
 
 const empty = (): DrainReport => ({
   jobsClaimed: 0, jobsSucceeded: 0, jobsFailed: 0,
   messagesClaimed: 0, messagesSent: 0, messagesFailed: 0,
   commandsClaimed: 0, commandsSucceeded: 0, commandsFailed: 0,
+  tenantsPurged: 0,
 });
 
 /**
@@ -225,8 +227,30 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
 }
 
 /** One pass over everything that is due, for every tenant this worker serves. */
+/**
+ * Companies whose deletion grace period has elapsed.
+ *
+ * Deliberately not an erp.job, and the reason is worth stating where somebody
+ * would otherwise try to "fix" it: erp.job.tenant_id is NOT NULL and drainJobs
+ * claims runs under a per-tenant binding, so a sweep scheduled that way would
+ * belong to one arbitrary company and run under its context while deleting
+ * others. Purging companies is platform work, so it runs once per pass on the
+ * service connection rather than inside the binding loop.
+ *
+ * An administrator's deletion request is what sets deleted_at; a suspension
+ * alone never does. So this only ever finishes something somebody asked for.
+ */
+async function sweepDeletedTenants(sql: Sql, out: DrainReport) {
+  const purged = await sql`select code from erp.purge_due_tenants()`;
+  out.tenantsPurged += purged.length;
+  for (const row of purged) {
+    console.log(`[erpware] purged company ${String(row["code"])}: grace period elapsed`);
+  }
+}
+
 export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainReport> {
   const out = empty();
+  await sweepDeletedTenants(sql, out);
   for (const binding of cfg.bindings) {
     await drainJobs(sql, binding, cfg, out);
     await drainOutbox(sql, binding, cfg, out);

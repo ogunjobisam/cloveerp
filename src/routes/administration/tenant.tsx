@@ -16,16 +16,16 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/administration/tenant")({
   head: () => ({
     meta: [
-      { title: "Tenant lifecycle — ERPWare" },
+      { title: "Organisation lifecycle — ERPWare" },
       {
         name: "description",
         content:
-          "Go-live readiness, tenant data export and portability, and deletion with destruction of tenant-scoped material.",
+          "Go-live readiness, organisation data export and portability, and deletion that removes the data rather than promising to.",
       },
-      { property: "og:title", content: "Tenant lifecycle — ERPWare" },
+      { property: "og:title", content: "Organisation lifecycle — ERPWare" },
       {
         property: "og:description",
-        content: "Go-live, export and portability, and tenant deletion.",
+        content: "Go-live, export and portability, and deletion that deletes.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -45,9 +45,17 @@ function TenantLifecycle() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("module.tenant_lifecycle", "Tenant lifecycle")}>
-        A tenant is not only rows. It starts (go-live), it can leave (export), and it can end
-        (deletion) — and each of those is an operation with a record, not an support request.
+      <PageHeader title={t("module.tenant_lifecycle", "Organisation lifecycle")}>
+        Everything here acts on{" "}
+        <strong className="font-semibold text-foreground">
+          {session.tenant?.name ?? "the organisation you are signed in to"}
+        </strong>
+        {session.tenant?.code ? (
+          <span className="font-mono text-xs text-muted-foreground"> ({session.tenant.code})</span>
+        ) : null}{" "}
+        and nothing else — every other organisation on this deployment is reached from the platform
+        console. An organisation is not only rows: it starts (go-live), it can leave (export), and
+        it can end — and each of those is an operation with a record rather than a support request.
       </PageHeader>
 
       {mayAdminister ? null : <PermissionNote code="administration.configure" />}
@@ -56,8 +64,8 @@ function TenantLifecycle() {
         <header className="border-b border-border px-4 py-4 sm:px-5">
           <h2 className="text-sm font-semibold">Go-live</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            Going live freezes the tenant identifier and turns on the controls that only make sense
-            against real data. It reports what is still missing rather than refusing silently.
+            Going live freezes the organisation identifier and turns on the controls that only make
+            sense against real data. It reports what is still missing rather than refusing silently.
           </Prose>
         </header>
         <div className="px-4 py-4 sm:px-5">
@@ -83,19 +91,19 @@ function TenantLifecycle() {
         <header className="border-b border-border px-4 py-4 sm:px-5">
           <h2 className="text-sm font-semibold">Deletion</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            Requesting deletion suspends the tenant immediately and schedules the purge. Tenant
-            terminology overrides, cached material and — decisively — the tenant's encryption keys
-            are destroyed at request time, so anything encrypted under them is unreadable from that
-            moment. Remaining operational data is removed by the purge, which is deliberately not
-            instant so that a mistaken request can be caught.
+            Requesting deletion suspends this organisation immediately. Terminology overrides,
+            cached material and — decisively — its encryption keys are destroyed at request time, so
+            anything encrypted under them is unreadable from that moment. Its remaining rows are not
+            removed here: that is a separate, deliberate step performed by a platform owner, which
+            is what gives a mistaken request time to be caught.
           </Prose>
         </header>
         <div className="px-4 py-4 sm:px-5">
           <RpcButton
-            label="Request tenant deletion"
+            label="Request deletion"
             fn="erp_request_tenant_deletion"
             permission="administration.configure"
-            confirm="Suspend this tenant and schedule deletion of its data? Export first if the data is wanted."
+            confirm="Suspend this organisation and destroy its encryption keys? The keys cannot be recovered. Export first if the data is wanted."
             invalidates={["erp_session", "erp_my_tenants"]}
           />
         </div>
@@ -103,7 +111,7 @@ function TenantLifecycle() {
 
       <AutoPanel
         title="Platform assurance"
-        description="What the platform itself says about this tenant's configuration and isolation."
+        description="What the platform itself says about this organisation's configuration and isolation."
         fn="erp_platform_assurance"
         empty="No assurance checks reported."
         rowKey={(r, i) => `${String(r["check_code"] ?? i)}-${i}`}
@@ -120,8 +128,8 @@ function TenantLifecycle() {
 /**
  * Keys.
  *
- * A tenant's confidential material is encrypted under a key that belongs to
- * that tenant alone. Rotation re-protects what is stored and then destroys the
+ * An organisation's confidential material is encrypted under a key that
+ * belongs to that organisation alone. Rotation re-protects what is stored and then destroys the
  * superseded key; deletion destroys every key outright. Destruction is the
  * point — after it, the ciphertext is unreadable by anybody, including us,
  * which is the only version of "deleted" that can be demonstrated rather than
@@ -130,7 +138,7 @@ function TenantLifecycle() {
 function EncryptionKeysPanel() {
   const rotate: ActionSpec = {
     label: "Rotate the key",
-    title: "Rotate this company's encryption key",
+    title: "Rotate this organisation's encryption key",
     description:
       "A new key is created, everything protected is re-encrypted under it, and the old key is destroyed. There is no way back to the old key afterwards.",
     permission: "administration.configure",
@@ -153,9 +161,9 @@ function EncryptionKeysPanel() {
       <header>
         <h2 className="text-sm font-semibold">Encryption keys</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
-          Confidential tenant material is encrypted under this company's own key, held in the
-          platform key store rather than in the database. Rotating or deleting destroys the previous
-          key irreversibly.
+          Confidential material is encrypted under this organisation's own key, held in the platform
+          key store rather than in the database. Rotating or deleting destroys the previous key
+          irreversibly.
         </Prose>
       </header>
 
@@ -163,7 +171,7 @@ function EncryptionKeysPanel() {
 
       <AutoPanel
         title="Key register"
-        description="Every key this company has held, and what became of it."
+        description="Every key this organisation has held, and what became of it."
         fn="erp_tenant_keys"
         empty="No key has been issued yet."
         rowKey={(r, i) => `${String(r["key_id"] ?? i)}`}
@@ -200,7 +208,7 @@ function EncryptionKeysPanel() {
  * Master data alone leaves every dashboard at zero, because a dashboard reads
  * movements, not records. This builds a short operating history — purchase,
  * receipt, putaway, production, a customer order, counts, a planning run — and
- * says plainly which of those steps it could not complete in this tenant
+ * says plainly which of those steps it could not complete in this organisation
  * rather than failing the lot.
  */
 function DemoOperationsPanel() {
@@ -253,8 +261,8 @@ function ExportPanel() {
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Export and portability</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
-          A structured export of this tenant's own data — configuration, master data, documents and
-          balances — in a form that can be read without this application.
+          A structured export of this organisation's own data — configuration, master data,
+          documents and balances — in a form that can be read without this application.
         </Prose>
       </header>
       <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">

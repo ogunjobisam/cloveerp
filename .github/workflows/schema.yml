@@ -172,7 +172,8 @@ jobs:
             "erp_test.assert_master_data_doors_suite()" \
             "erp_test.assert_document_authorisation_suite()" \
             "erp_test.assert_reference_reads_suite()" \
-            "erp_test.assert_transition_menu_suite()"
+            "erp_test.assert_transition_menu_suite()" \
+            "erp_test.assert_tenant_deletion_suite()"
           do
             $PSQL -tAc "select $s;"
           done

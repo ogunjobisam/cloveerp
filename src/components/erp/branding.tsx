@@ -77,7 +77,7 @@ export function BrandingPanel({ locale = "en" }: { locale?: string }) {
             <span style={{ color: brand.total }}>{brand.suffix}</span>
           </span>
           <span className="ml-auto text-xs text-muted-foreground">
-            {brand.isDefault ? "Product identity" : "Tenant identity"}
+            {brand.isDefault ? "Product identity" : "Organisation identity"}
           </span>
         </div>
 

@@ -37,7 +37,9 @@ async function main() {
     try {
       const report = await drainOnce(sql, cfg);
       const did =
-        report.jobsClaimed + report.messagesClaimed + report.commandsClaimed > 0;
+        report.jobsClaimed + report.messagesClaimed + report.commandsClaimed +
+          report.tenantsPurged >
+        0;
       if (did) console.log(`[erpware] ${JSON.stringify(report)}`);
     } catch (err) {
       // A pass that throws is this process failing, not the work failing —
