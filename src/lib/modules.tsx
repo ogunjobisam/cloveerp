@@ -2006,8 +2006,8 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/administration/tenant",
     titleKey: "nav.tenant",
-    title: "Tenant lifecycle",
-    blurb: "Go-live, export and portability, deletion.",
+    title: "Organisation lifecycle",
+    blurb: "Go-live, export and portability, and deletion that deletes.",
     permission: "administration.configure",
     group: "administer",
   },

@@ -1,9 +1,9 @@
 -- A deletion that deletes.
 --
--- Two things in this product offered to delete a company and neither removed a
+-- Two things in this product offered to delete an organisation and neither removed a
 -- single row.
 --
---   public.erp_request_tenant_deletion suspends the company, destroys its
+--   public.erp_request_tenant_deletion suspends the organisation, destroys its
 --   encryption keys irreversibly, and returns a note promising that "remaining
 --   operational data is removed by the scheduled purge".
 --
@@ -16,10 +16,10 @@
 -- nothing to judge.
 --
 -- The result is the worst state available: the keys are destroyed, so whatever
--- was encrypted under them is already unreadable, and every row stays. A
--- company in that state cannot be finished by anyone using the product.
+-- was encrypted under them is already unreadable, and every row stays. An
+-- organisation in that state cannot be finished by anyone using the product.
 --
--- The one mechanism that does remove a company is the purge window in
+-- The one mechanism that does remove an organisation is the purge window in
 -- erp.begin_tenant_purge, and erp.session_is_trusted() restricts it to a role
 -- that bypasses RLS — which no signed-in caller ever is. So it was reachable
 -- from a backend session and from no screen.
@@ -46,8 +46,8 @@ declare
   v_gone integer;
 begin
   -- Owner, not operator. This matches erp_platform_set_tenant_status, which
-  -- already draws the line in the same place: an operator may suspend a
-  -- company, only an owner may end one.
+  -- already draws the line in the same place: an operator may suspend an
+  -- organisation, only an owner may end one.
   v := erp_meta.require_platform('owner');
 
   select * into v_t from erp.tenant where id = p_tenant_id;
@@ -55,12 +55,12 @@ begin
     raise exception 'ERPWARE_UNKNOWN_TENANT' using errcode = '23503';
   end if;
 
-  -- Purging is the second half of a two-step, and refusing an active company
+  -- Purging is the second half of a two-step, and refusing an active organisation
   -- is what makes it one. Suspension is the reversible half; it is also the
   -- half somebody else has a chance to notice.
   if v_t.status = 'active'::erp.tenant_status then
     raise exception
-      'ERPWARE_TENANT_STILL_ACTIVE: % is active; a company is suspended before '
+      'ERPWARE_TENANT_STILL_ACTIVE: % is active; an organisation is suspended before '
       'it is purged', v_t.code
       using errcode = '42501',
             hint = 'Suspend it first, or let its administrator request '
@@ -69,27 +69,27 @@ begin
 
   if v_t.code is distinct from btrim(coalesce(p_confirm_code, '')) then
     raise exception
-      'ERPWARE_VALIDATION: the company code must be typed exactly to confirm '
+      'ERPWARE_VALIDATION: the organisation code must be typed exactly to confirm '
       'the purge'
       using errcode = '22023';
   end if;
 
   if coalesce(btrim(p_reason), '') = '' then
-    raise exception 'ERPWARE_REASON_REQUIRED: purging a company needs a reason'
+    raise exception 'ERPWARE_REASON_REQUIRED: purging an organisation needs a reason'
       using errcode = '22023';
   end if;
 
   -- Recorded before the rows go, for two reasons: erp_meta.platform_log reads
   -- the code back out of erp.tenant, and there is deliberately no foreign key
   -- from erp_meta.platform_audit to erp.tenant — so this record survives the
-  -- company it describes, which is the only version of the audit worth having.
+  -- organisation it describes, which is the only version of the audit worth having.
   perform erp_meta.platform_log(
     v, 'platform.tenant_purged', p_tenant_id, v_t.code, p_reason,
     jsonb_build_object('status_before', v_t.status::text,
                        'deleted_at', v_t.deleted_at));
 
   -- The one window in which append-only rows may be removed. It takes the
-  -- whole company or nothing: erp.forbid_mutation() matches the window against
+  -- whole organisation or nothing: erp.forbid_mutation() matches the window against
   -- old.tenant_id row by row, so it can never be used to remove one
   -- inconvenient record.
   perform erp.begin_tenant_purge(p_tenant_id);
@@ -98,10 +98,10 @@ begin
   perform erp.end_tenant_purge();
 
   -- Belt and braces. A cascade that quietly removed nothing, or somehow more
-  -- than one company, should not return success.
+  -- than one organisation, should not return success.
   if v_gone <> 1 then
     raise exception
-      'ERPWARE_PURGE_INCOMPLETE: expected to remove one company, removed %',
+      'ERPWARE_PURGE_INCOMPLETE: expected to remove one organisation, removed %',
       v_gone
       using errcode = 'P0001';
   end if;
@@ -110,14 +110,14 @@ begin
     'tenant_id', p_tenant_id,
     'code', v_t.code,
     'purged', true,
-    'note', 'Every row belonging to this company has been removed. The '
+    'note', 'Every row belonging to this organisation has been removed. The '
             'platform audit record of the purge remains, deliberately.');
 end $$;
 
 comment on function public.erp_platform_purge_tenant(uuid, text, text) is
-  'Removes a suspended or ended company and everything belonging to it. The '
-  'only door onto erp.begin_tenant_purge, owner-gated, and refused on a '
-  'company that is still active.';
+  'Removes a suspended or ended organisation and everything belonging to it. The '
+  'only door onto erp.begin_tenant_purge, owner-gated, and refused on an '
+  'organisation that is still active.';
 
 revoke all on function public.erp_platform_purge_tenant(uuid, text, text)
   from public, anon;
@@ -128,7 +128,7 @@ grant execute on function public.erp_platform_purge_tenant(uuid, text, text)
 --
 -- The body is unchanged except for the closing note. Until a scheduled purge
 -- exists, saying one will happen is the part that misleads: an administrator
--- reads it, believes the company is on its way out, and it never is.
+-- reads it, believes the organisation is on its way out, and it never is.
 
 create or replace function public.erp_request_tenant_deletion(p_confirm_code text, p_reason text)
 returns jsonb
@@ -142,7 +142,7 @@ begin
 
   select t.code into v_code from erp.tenant t where t.id = v_tenant;
   if v_code is distinct from btrim(coalesce(p_confirm_code, '')) then
-    raise exception 'ERPWARE_VALIDATION: the tenant code must be typed exactly to confirm deletion';
+    raise exception 'ERPWARE_VALIDATION: the organisation code must be typed exactly to confirm deletion';
   end if;
   if p_reason is null or btrim(p_reason) = '' then
     raise exception 'ERPWARE_VALIDATION: a reason is required';
@@ -162,12 +162,12 @@ begin
   delete from erp.resource_override o where o.tenant_id = v_tenant;
   get diagnostics v_overrides = row_count;
 
-  v_keys := erp.destroy_tenant_keys('tenant deletion: ' || btrim(p_reason));
+  v_keys := erp.destroy_tenant_keys('organisation deletion: ' || btrim(p_reason));
 
   return jsonb_build_object('tenant_id', v_tenant, 'status', 'suspended',
                             'overrides_destroyed', v_overrides,
                             'keys_destroyed', v_keys,
-                            'note', 'This company is suspended and its encryption keys have been '
+                            'note', 'This organisation is suspended and its encryption keys have been '
                                     'destroyed immediately and irreversibly, so anything encrypted '
                                     'under them is already unreadable. Its remaining rows are still '
                                     'here: removing them is a separate, deliberate step performed by '
@@ -183,10 +183,10 @@ end $$;
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_platform_purge_tenant', 'erp_meta.require_platform',
-   'Removes a company and everything belonging to it. Gated on the platform '
+   'Removes an organisation and everything belonging to it. Gated on the platform '
    'staff list at owner rank rather than on erp.authorise(), because it is '
    'performed above every tenant and no tenant context could scope it. Refuses '
-   'an active company, demands its code typed exactly and a stated reason, and '
+   'an active organisation, demands its code typed exactly and a stated reason, and '
    'records the purge in erp_meta.platform_audit before the rows go.')
 on conflict (function_name) do update
   set gate = excluded.gate, rationale = excluded.rationale;
@@ -204,7 +204,7 @@ on conflict (schema_name, function_name) do update
 --
 -- Both halves of the two-step, and every refusal that makes it a two-step
 -- rather than a button. The refusals matter more than the success: a purge
--- that an operator could reach, or that took an active company, would be a
+-- that an operator could reach, or that took an active organisation, would be a
 -- worse product than one that deletes nothing.
 
 create or replace function erp_test.tenant_deletion_suite()
@@ -216,7 +216,7 @@ declare
   ra record; rb record;
   ow uuid := gen_random_uuid();   -- platform owner
   op uuid := gen_random_uuid();   -- platform operator
-  ad uuid := gen_random_uuid();   -- tenant administrator, company B
+  ad uuid := gen_random_uuid();   -- tenant administrator, organisation B
   v_ok boolean; v_msg text; res jsonb; v_audit bigint;
 begin
   select * into ra from erp.provision_tenant(
@@ -242,21 +242,21 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', op)::text, true);
   begin
     perform public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a', 'testing');
-    v_ok := false; v_msg := 'an operator purged a company';
+    v_ok := false; v_msg := 'an operator purged an organisation';
   exception when others then
     v_ok := sqlerrm like 'ERPWARE_PLATFORM_ROLE_TOO_LOW%'; v_msg := left(sqlerrm, 70);
   end;
-  return query select 'an operator may not purge a company', v_ok, v_msg;
+  return query select 'an operator may not purge an organisation', v_ok, v_msg;
 
   perform set_config('request.jwt.claims', json_build_object('sub', ow)::text, true);
 
   begin
     perform public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a', 'testing');
-    v_ok := false; v_msg := 'an active company was purged in one step';
+    v_ok := false; v_msg := 'an active organisation was purged in one step';
   exception when others then
     v_ok := sqlerrm like 'ERPWARE_TENANT_STILL_ACTIVE%'; v_msg := left(sqlerrm, 70);
   end;
-  return query select 'and an active company is refused even to an owner',
+  return query select 'and an active organisation is refused even to an owner',
     v_ok, v_msg;
 
   update erp.tenant set status = 'suspended'::erp.tenant_status
@@ -268,7 +268,7 @@ begin
   exception when others then
     v_ok := sqlerrm like 'ERPWARE_VALIDATION%'; v_msg := left(sqlerrm, 70);
   end;
-  return query select 'the company code must be typed exactly', v_ok, v_msg;
+  return query select 'the organisation code must be typed exactly', v_ok, v_msg;
 
   begin
     perform public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a', '   ');
@@ -285,14 +285,14 @@ begin
   res := public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a',
                                           'suite: proving deletion deletes');
 
-  return query select 'an owner purges a suspended company',
+  return query select 'an owner purges a suspended organisation',
     (res ->> 'purged')::boolean, coalesce(res ->> 'code', '(no code returned)');
 
-  return query select 'and the company is actually gone',
+  return query select 'and the organisation is actually gone',
     not exists (select 1 from erp.tenant t where t.id = ra.tenant_id),
     'the whole point: before this migration nothing in the product removed a row';
 
-  -- The tables a company is made of. If a cascade were missing, the delete
+  -- The tables an organisation is made of. If a cascade were missing, the delete
   -- above would have raised rather than left an orphan — but asserting it
   -- states what "purged" is supposed to mean.
   return query select 'and nothing tenant-scoped survives it',
@@ -300,7 +300,7 @@ begin
       and not exists (select 1 from erp.environment e where e.tenant_id = ra.tenant_id)
       and not exists (select 1 from erp.change_set c where c.tenant_id = ra.tenant_id)
       and not exists (select 1 from erp.role r       where r.tenant_id = ra.tenant_id),
-    'app_user, environment, change_set and role all follow the company';
+    'app_user, environment, change_set and role all follow the organisation';
 
   select count(*) into v_audit from erp_meta.platform_audit a
    where a.tenant_id = ra.tenant_id and a.action = 'platform.tenant_purged';
@@ -326,7 +326,7 @@ begin
   return query select 'and it no longer promises a purge that never happens',
     (res ->> 'note') not like '%scheduled purge%',
     'the note said data "is removed by the scheduled purge"; no such purge '
-    'exists, and an administrator reading that believed the company was on its '
+    'exists, and an administrator reading that believed the organisation was on its '
     'way out';
 
   perform set_config('request.jwt.claims', json_build_object('sub', ow)::text, true);
@@ -351,7 +351,7 @@ begin
       and not exists (select 1 from erp_meta.platform_staff s
                        where s.email like '%@zzpurge.test')
       and not exists (select 1 from auth.users u where u.id in (ow, op, ad)),
-    'both companies, both staff rows and all three fabricated subjects';
+    'both organisations, both staff rows and all three fabricated subjects';
 end $$;
 
 create or replace function erp_test.assert_tenant_deletion_suite()

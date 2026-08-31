@@ -107,7 +107,7 @@ function Overview() {
             Where you are, what this account may do, and every screen it can reach.
           </PageHeader>
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Tenant" value={session.tenant?.name ?? "—"} icon={Building2} />
+            <Field label="Organisation" value={session.tenant?.name ?? "—"} icon={Building2} />
             <Field
               label="Principal"
               value={session.principal?.display_name ?? "—"}

@@ -2,7 +2,7 @@
 --
 -- 20260831170000 gave the purge a door, but it is a door somebody has to walk
 -- through. An administrator who requests deletion still waits for a platform
--- owner to notice. This adds the sweep that finishes it: every company whose
+-- owner to notice. This adds the sweep that finishes it: every organisation whose
 -- deletion was requested longer ago than the grace period is purged.
 --
 -- A NOTE ON WHERE THIS DOES NOT LIVE, because the obvious answer is wrong.
@@ -13,13 +13,13 @@
 --
 --   erp.job.tenant_id is NOT NULL, and worker/src/core/drain.ts claims runs
 --   under a per-tenant binding (asPrincipal). A sweep scheduled that way would
---   belong to one arbitrary company and would run with that company's context
---   while deleting other companies. That is a privilege inversion, and wiring
+--   belong to one arbitrary organisation and would run with that organisation's context
+--   while deleting other organisations. That is a privilege inversion, and wiring
 --   it would be worse than leaving the gap: it would look scheduled and be
 --   unsound.
 --
--- The job framework is tenant-scoped on purpose — a company schedules work
--- inside its own tenancy. Purging companies is platform work. So the sweep is
+-- The job framework is tenant-scoped on purpose — an organisation schedules work
+-- inside its own tenancy. Purging organisations is platform work. So the sweep is
 -- a platform function with an owner-gated door, callable today from the
 -- console, and callable by a cron against the dispatch function later.
 --
@@ -47,8 +47,8 @@ begin
   end if;
 
   -- deleted_at is the marker of intent, and only two things set it:
-  -- erp_request_tenant_deletion, and an owner marking a company ended. A
-  -- company merely suspended has suspended_at and no deleted_at, so it is
+  -- erp_request_tenant_deletion, and an owner marking an organisation ended. An
+  -- organisation merely suspended has suspended_at and no deleted_at, so it is
   -- never swept — suspension is not a deletion request.
   for r in
     select t.id, t.code, t.deleted_at
@@ -78,10 +78,10 @@ begin
 end $$;
 
 comment on function erp.purge_due_tenants(interval) is
-  'Purges every company whose deletion was requested longer ago than the grace '
+  'Purges every organisation whose deletion was requested longer ago than the grace '
   'period. Platform work, not tenant work: it is deliberately not an erp.job, '
   'because erp.job is tenant-scoped and a sweep scheduled that way would run '
-  'under one company''s context while deleting others.';
+  'under one organisation''s context while deleting others.';
 
 -- ── The door ─────────────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ begin
 
   return jsonb_build_object(
     'purged', jsonb_array_length(v_rows),
-    'companies', v_rows,
+    'organisations', v_rows,
     'grace_days', p_grace_days);
 end $$;
 
@@ -130,9 +130,9 @@ grant execute on function public.erp_platform_purge_due_tenants(integer)
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_platform_purge_due_tenants', 'erp_meta.require_platform',
-   'Runs the deletion sweep, removing every company whose deletion was '
+   'Runs the deletion sweep, removing every organisation whose deletion was '
    'requested longer ago than the grace period. Owner-gated on the platform '
-   'staff list, because purging companies is performed above every tenant and '
+   'staff list, because purging organisations is performed above every tenant and '
    'no tenant context could scope it.')
 on conflict (function_name) do update
   set gate = excluded.gate, rationale = excluded.rationale;
@@ -144,7 +144,7 @@ insert into erp_meta.security_definer_allowance (schema_name, function_name, rat
    'a definer function owned by the schema owner. The caller stays '
    'authenticated and must clear erp_meta.require_platform(''owner'') first.'),
   ('erp', 'purge_due_tenants',
-   'Opens a purge window per company and removes it. Reachable only through '
+   'Opens a purge window per organisation and removes it. Reachable only through '
    'the owner-gated public door above, or by a trusted backend session.')
 on conflict (schema_name, function_name) do update
   set rationale = excluded.rationale;
@@ -164,7 +164,7 @@ declare
   ra record; rb record; rc record; rd record; re record;
   ow uuid := gen_random_uuid();   -- platform owner
   op uuid := gen_random_uuid();   -- platform operator
-  ad uuid := gen_random_uuid();   -- tenant administrator, company B
+  ad uuid := gen_random_uuid();   -- tenant administrator, organisation B
   v_ok boolean; v_msg text; res jsonb; v_audit bigint;
 begin
   select * into ra from erp.provision_tenant(
@@ -196,11 +196,11 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', op)::text, true);
   begin
     perform public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a', 'testing');
-    v_ok := false; v_msg := 'an operator purged a company';
+    v_ok := false; v_msg := 'an operator purged an organisation';
   exception when others then
     v_ok := sqlerrm like 'ERPWARE_PLATFORM_ROLE_TOO_LOW%'; v_msg := left(sqlerrm, 70);
   end;
-  return query select 'an operator may not purge a company', v_ok, v_msg;
+  return query select 'an operator may not purge an organisation', v_ok, v_msg;
 
   begin
     perform public.erp_platform_purge_due_tenants(0);
@@ -214,11 +214,11 @@ begin
 
   begin
     perform public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a', 'testing');
-    v_ok := false; v_msg := 'an active company was purged in one step';
+    v_ok := false; v_msg := 'an active organisation was purged in one step';
   exception when others then
     v_ok := sqlerrm like 'ERPWARE_TENANT_STILL_ACTIVE%'; v_msg := left(sqlerrm, 70);
   end;
-  return query select 'and an active company is refused even to an owner',
+  return query select 'and an active organisation is refused even to an owner',
     v_ok, v_msg;
 
   update erp.tenant set status = 'suspended'::erp.tenant_status
@@ -230,7 +230,7 @@ begin
   exception when others then
     v_ok := sqlerrm like 'ERPWARE_VALIDATION%'; v_msg := left(sqlerrm, 70);
   end;
-  return query select 'the company code must be typed exactly', v_ok, v_msg;
+  return query select 'the organisation code must be typed exactly', v_ok, v_msg;
 
   begin
     perform public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a', '   ');
@@ -247,14 +247,14 @@ begin
   res := public.erp_platform_purge_tenant(ra.tenant_id, 'zzpurge-a',
                                           'suite: proving deletion deletes');
 
-  return query select 'an owner purges a suspended company',
+  return query select 'an owner purges a suspended organisation',
     (res ->> 'purged')::boolean, coalesce(res ->> 'code', '(no code returned)');
 
-  return query select 'and the company is actually gone',
+  return query select 'and the organisation is actually gone',
     not exists (select 1 from erp.tenant t where t.id = ra.tenant_id),
     'the whole point: before this migration nothing in the product removed a row';
 
-  -- The tables a company is made of. If a cascade were missing, the delete
+  -- The tables an organisation is made of. If a cascade were missing, the delete
   -- above would have raised rather than left an orphan — but asserting it
   -- states what "purged" is supposed to mean.
   return query select 'and nothing tenant-scoped survives it',
@@ -262,7 +262,7 @@ begin
       and not exists (select 1 from erp.environment e where e.tenant_id = ra.tenant_id)
       and not exists (select 1 from erp.change_set c where c.tenant_id = ra.tenant_id)
       and not exists (select 1 from erp.role r       where r.tenant_id = ra.tenant_id),
-    'app_user, environment, change_set and role all follow the company';
+    'app_user, environment, change_set and role all follow the organisation';
 
   select count(*) into v_audit from erp_meta.platform_audit a
    where a.tenant_id = ra.tenant_id and a.action = 'platform.tenant_purged';
@@ -288,7 +288,7 @@ begin
   return query select 'and it no longer promises a purge that never happens',
     (res ->> 'note') not like '%scheduled purge%',
     'the note said data "is removed by the scheduled purge"; no such purge '
-    'existed, and an administrator reading that believed the company was on '
+    'existed, and an administrator reading that believed the organisation was on '
     'its way out';
 
   perform set_config('request.jwt.claims', json_build_object('sub', ow)::text, true);
@@ -315,7 +315,7 @@ begin
 
   res := public.erp_platform_purge_due_tenants(7);
 
-  return query select 'the sweep takes a company past its grace period',
+  return query select 'the sweep takes an organisation past its grace period',
     (res ->> 'purged')::integer = 1
       and not exists (select 1 from erp.tenant t where t.id = rc.tenant_id),
     format('purged %s', res ->> 'purged');
@@ -357,7 +357,7 @@ begin
       and not exists (select 1 from erp_meta.platform_staff s
                        where s.email like '%@zzpurge.test')
       and not exists (select 1 from auth.users u where u.id in (ow, op, ad)),
-    'five companies, both staff rows and all three fabricated subjects';
+    'five organisations, both staff rows and all three fabricated subjects';
 end $$;
 
 create or replace function erp_test.assert_tenant_deletion_suite()
