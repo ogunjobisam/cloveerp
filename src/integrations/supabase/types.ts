@@ -722,6 +722,14 @@ export type Database = {
         Args: { p_limit?: number; p_tenant_id?: string }
         Returns: Json
       }
+      erp_platform_purge_due_tenants: {
+        Args: { p_grace_days?: number }
+        Returns: Json
+      }
+      erp_platform_purge_tenant: {
+        Args: { p_confirm_code: string; p_reason: string; p_tenant_id: string }
+        Returns: Json
+      }
       erp_platform_respond_ownership_transfer: {
         Args: { p_accept: boolean; p_note?: string; p_transfer_id: string }
         Returns: Json
