@@ -14,6 +14,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
+import { useCurrencies } from "./currencies";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 
@@ -258,13 +259,9 @@ export function ActionDialog({
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
 
-  const { data: currencies } = useQuery({
-    queryKey: ["erp_currencies", {}],
-    queryFn: () => callErp<Currency[]>("erp_currencies"),
-    // Product content: identical for every tenant and effectively immutable.
-    staleTime: Infinity,
-    enabled: fields.some((f) => f.kind === "money"),
-  });
+  // Only fetched when something on this form takes a price.
+  const takesMoney = fields.some((f) => f.kind === "money");
+  const { currencies, error: currencyError } = useCurrencies(takesMoney);
 
   const action = useMutation({
     mutationFn: () => callErp<unknown>(fn, buildArgs()),
@@ -363,12 +360,28 @@ export function ActionDialog({
           ))}
 
           <ErrorNote error={action.error} />
+          {/* minorUnitsOf falls back to two places when it does not know the
+              currency, which is right when the currency is unknown and wrong
+              when the *table* is missing: for a nil-decimal currency it would
+              multiply the typed amount by a hundred on its way to the ledger.
+              So a failed lookup blocks pricing instead of guessing. */}
+          {currencyError ? (
+            <p className="text-xs text-destructive">
+              {ui(
+                "The currency list could not be loaded, so an amount cannot be converted safely. Nothing has been submitted.",
+              )}
+            </p>
+          ) : null}
 
           <div className="mt-2 flex flex-wrap justify-end gap-2">
             <ActionButton variant="secondary" onClick={() => setOpen(false)}>
               {ui("Cancel")}
             </ActionButton>
-            <ActionButton type="submit" busy={action.isPending}>
+            <ActionButton
+              type="submit"
+              busy={action.isPending}
+              disabled={takesMoney && Boolean(currencyError)}
+            >
               {action.isPending ? ui("Working…") : ui(submitLabel)}
             </ActionButton>
           </div>

@@ -405,9 +405,7 @@ function AccountDetermination() {
         empty={ui("No items yet.")}
       >
         {(rows) => (
-          <Table
-            columns={[ui("Item"), ui("Name"), ui("Posting class"), ui("From"), ui("Reason")]}
-          >
+          <Table columns={[ui("Item"), ui("Name"), ui("Posting class"), ui("From"), ui("Reason")]}>
             {rows.map((i) => (
               <tr key={i.item_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{i.item_code}</td>
@@ -465,14 +463,7 @@ function AccountDetermination() {
       >
         {(rows) => (
           <Table
-            columns={[
-              ui("When"),
-              ui("Object"),
-              ui("Line"),
-              ui("Account"),
-              ui("Reason"),
-              ui("By"),
-            ]}
+            columns={[ui("When"), ui("Object"), ui("Line"), ui("Account"), ui("Reason"), ui("By")]}
           >
             {rows.map((o) => (
               <tr key={o.override_id} className="border-b border-border/60 last:border-0">

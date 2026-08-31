@@ -6,7 +6,8 @@ import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
-import { formatMinor, minorUnitsOf, type Currency } from "../../lib/money";
+import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
+import { useCurrencies } from "../../components/erp/currencies";
 
 /**
  * One document, whatever kind of document it is.
@@ -90,11 +91,7 @@ function Document() {
     queryFn: () => callErp<Payload>("erp_document", { p_document_id: documentId }),
   });
 
-  const { data: currencies } = useQuery({
-    queryKey: ["erp_currencies", {}],
-    queryFn: () => callErp<Currency[]>("erp_currencies"),
-    staleTime: Infinity,
-  });
+  const { currencies } = useCurrencies();
 
   if (isPending) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (error) {
@@ -385,9 +382,14 @@ function Lines({
               p_document_id: documentId,
               p_item_id: v["p_item_id"],
               p_quantity: Number(v["p_quantity"] ?? 0),
-              p_unit_price_minor: Math.round(
-                Number(v["p_unit_price_minor"] ?? 0) * 10 ** minorUnits,
-              ),
+              // toMinor, not a hand-rolled multiply. The two bugs it exists
+              // for are both reachable from this form: Number("") is 0, so an
+              // untouched price field would post a price of nothing rather
+              // than leaving it unpriced; and 1.005 * 100 is 100.49999…, so
+              // rounding the raw product gives 1.00 where the typist meant
+              // 1.01. Null when it refuses — an absent price is a line the
+              // pricing policies may still fill, and zero is a decision.
+              p_unit_price_minor: toMinor((v["p_unit_price_minor"] ?? "") as string, minorUnits),
               p_description: v["p_description"] || null,
             })}
             invalidates={["erp_document", "erp_documents"]}

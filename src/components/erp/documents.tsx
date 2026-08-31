@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 
 import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, type Currency } from "../../lib/money";
+import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import { useErpSession } from "./session-context";
 import { Prose } from "./page";
@@ -70,11 +71,7 @@ export function DocumentPanel({
     queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: baseType }),
   });
 
-  const { data: currencies } = useQuery({
-    queryKey: ["erp_currencies", {}],
-    queryFn: () => callErp<Currency[]>("erp_currencies"),
-    staleTime: Infinity,
-  });
+  const { currencies } = useCurrencies();
 
   // A tenant may configure more than one type onto a base; the first active one
   // is the sensible default and the others are reachable once there is a reason
