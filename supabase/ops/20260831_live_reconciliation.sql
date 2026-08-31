@@ -350,7 +350,12 @@ begin
   if v_uom is null then
     select u.id into v_uom
       from erp.uom u
-     where u.tenant_id = v_tenant and u.is_base and u.status = 'active'
+     where u.tenant_id = v_tenant
+       and u.is_base
+       -- Stock is a quantity. Without this a tenant whose base length is CM
+       -- gets CM as the stock unit of its next item, because CM sorts first.
+       and u.uom_class = 'quantity'::erp.uom_class
+       and u.status = 'active'
      order by u.code
      limit 1;
   end if;
@@ -1603,9 +1608,7 @@ CREATE OR REPLACE FUNCTION erp_test.assert_master_data_doors_suite()
 AS $function$
 declare
   v_pass integer; v_total integer; v_detail text;
-  -- Seventeen: eight on the doors, three on the completed pipeline, five
-  -- refusals, and the purge.
-  c_expected constant integer := 17;
+  c_expected constant integer := 18;
 begin
   create temporary table if not exists zz_doors_result
     (case_name text, passed boolean, detail text) on commit drop;
@@ -2186,7 +2189,7 @@ declare
   a2 uuid := gen_random_uuid();
   v_uom uuid; v_item uuid; v_party uuid; v_batch uuid;
   v_second uuid; v_tok text; res jsonb;
-  v_ok boolean; v_msg text; v_err integer; v_loaded integer; v_prev jsonb;
+  v_ok boolean; v_msg text; v_item2 uuid; v_err integer; v_loaded integer; v_prev jsonb;
 begin
   select * into r from erp.provision_tenant(
     'zzdoors', 'Doors Suite', 'admin@zzdoors.test', 'Doors Admin');
@@ -2224,6 +2227,23 @@ begin
              where u.id = v_uom and u.tenant_id = r.tenant_id
                and u.code = 'EA' and u.is_base and u.status = 'active'),
     'nothing in the product could create one before this migration';
+
+  -- A tenant holding a base unit in more than one class, which
+  -- uom_one_base_per_class explicitly permits. CM sorts before EA, so a
+  -- resolution that ignores the class stocks a widget in centimetres.
+  perform erp.create_uom('CM', 'Centimetre', 'length'::erp.uom_class,
+                         2::smallint, true);
+
+  -- erp.create_item directly, not the public wrapper: the wrapper resolves
+  -- through erp.ensure_base_uom(), which was corrected separately, so calling
+  -- it here would test the half that was already right.
+  v_item2 := erp.create_item('WIDGET2', 'Widget the second');
+
+  return query select 'an item is stocked in a quantity, not a length',
+    (select u.uom_class from erp.uom u
+       join erp.item i on i.stock_uom_id = u.id where i.id = v_item2)
+      = 'quantity'::erp.uom_class,
+    'CM sorts before EA, so ordering by code across every class picks it';
 
   v_item := (public.erp_create_item('WIDGET', 'Widget') ->> 'item_id')::uuid;
 

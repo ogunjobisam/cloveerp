@@ -47,6 +47,7 @@ MISSING=(
   20260830140000_reconcile_generated_surface.sql
   20260830150000_revoke_anon_execute.sql
   20260831130000_document_create_permission.sql
+  20260831150000_create_item_base_uom_class.sql
 )
 
 is_missing () {
