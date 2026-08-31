@@ -83,11 +83,11 @@ function TenantLifecycle() {
         <header className="border-b border-border px-4 py-4 sm:px-5">
           <h2 className="text-sm font-semibold">Deletion</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            Requesting deletion suspends the tenant immediately and schedules the purge. Tenant
-            terminology overrides, cached material and — decisively — the tenant's encryption keys
-            are destroyed at request time, so anything encrypted under them is unreadable from that
-            moment. Remaining operational data is removed by the purge, which is deliberately not
-            instant so that a mistaken request can be caught.
+            Requesting deletion suspends this company immediately. Terminology overrides, cached
+            material and — decisively — its encryption keys are destroyed at request time, so
+            anything encrypted under them is unreadable from that moment. Its remaining rows are not
+            removed here: that is a separate, deliberate step performed by a platform owner, which
+            is what gives a mistaken request time to be caught.
           </Prose>
         </header>
         <div className="px-4 py-4 sm:px-5">
@@ -95,7 +95,7 @@ function TenantLifecycle() {
             label="Request tenant deletion"
             fn="erp_request_tenant_deletion"
             permission="administration.configure"
-            confirm="Suspend this tenant and schedule deletion of its data? Export first if the data is wanted."
+            confirm="Suspend this company and destroy its encryption keys? The keys cannot be recovered. Export first if the data is wanted."
             invalidates={["erp_session", "erp_my_tenants"]}
           />
         </div>
