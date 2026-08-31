@@ -137,7 +137,8 @@ jobs:
             "erp.assert_finance_depth_sane()" \
             "erp.assert_part5_coverage()" \
             "erp.assert_resource_coverage('en')" \
-            "erp.assert_transaction_control_routines()"
+            "erp.assert_transaction_control_routines()" \
+            "erp.assert_document_create_permissions()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
