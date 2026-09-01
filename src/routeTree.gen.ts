@@ -32,6 +32,7 @@ import { Route as MasterDataClassificationRouteImport } from './routes/master-da
 import { Route as MasterDataImportsRouteImport } from './routes/master-data/imports'
 import { Route as MasterDataItemSupplyRouteImport } from './routes/master-data/item-supply'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
+import { Route as OperationsContinuityRouteImport } from './routes/operations/continuity'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
 import { Route as PlanningIndexRouteImport } from './routes/planning/index'
@@ -163,6 +164,11 @@ const OperationsAssuranceRoute = OperationsAssuranceRouteImport.update({
   path: '/operations/assurance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperationsContinuityRoute = OperationsContinuityRouteImport.update({
+  id: '/operations/continuity',
+  path: '/operations/continuity',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperationsIntegrationsRoute = OperationsIntegrationsRouteImport.update({
   id: '/operations/integrations',
   path: '/operations/integrations',
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
+  '/operations/continuity': typeof OperationsContinuityRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance/': typeof FinanceIndexRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
+  '/operations/continuity': typeof OperationsContinuityRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance': typeof FinanceIndexRoute
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   '/master-data/imports': typeof MasterDataImportsRoute
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
+  '/operations/continuity': typeof OperationsContinuityRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/finance/': typeof FinanceIndexRoute
@@ -325,6 +334,7 @@ export interface FileRouteTypes {
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
+    | '/operations/continuity'
     | '/operations/integrations'
     | '/operations/jobs'
     | '/finance/'
@@ -358,6 +368,7 @@ export interface FileRouteTypes {
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
+    | '/operations/continuity'
     | '/operations/integrations'
     | '/operations/jobs'
     | '/finance'
@@ -391,6 +402,7 @@ export interface FileRouteTypes {
     | '/master-data/imports'
     | '/master-data/item-supply'
     | '/operations/assurance'
+    | '/operations/continuity'
     | '/operations/integrations'
     | '/operations/jobs'
     | '/finance/'
@@ -425,6 +437,7 @@ export interface RootRouteChildren {
   MasterDataImportsRoute: typeof MasterDataImportsRoute
   MasterDataItemSupplyRoute: typeof MasterDataItemSupplyRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
+  OperationsContinuityRoute: typeof OperationsContinuityRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
@@ -603,6 +616,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsAssuranceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/operations/continuity': {
+      id: '/operations/continuity'
+      path: '/operations/continuity'
+      fullPath: '/operations/continuity'
+      preLoaderRoute: typeof OperationsContinuityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/operations/integrations': {
       id: '/operations/integrations'
       path: '/operations/integrations'
@@ -681,6 +701,7 @@ const rootRouteChildren: RootRouteChildren = {
   MasterDataImportsRoute: MasterDataImportsRoute,
   MasterDataItemSupplyRoute: MasterDataItemSupplyRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
+  OperationsContinuityRoute: OperationsContinuityRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
   FinanceIndexRoute: FinanceIndexRoute,

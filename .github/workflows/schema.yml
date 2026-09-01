@@ -228,7 +228,10 @@ jobs:
             "erp_test.assert_output_suite()" \
             "erp_test.assert_device_suite()" \
             "erp_test.assert_release_suite()" \
-            "erp_test.assert_support_suite()"
+            "erp_test.assert_support_suite()" \
+            "erp_test.assert_promotion_completeness_suite()" \
+            "erp_test.assert_device_boundary_suite()" \
+            "erp_test.assert_incident_operations_suite()"
           do
             $PSQL -tAc "select $s;"
           done
