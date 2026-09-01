@@ -107,7 +107,7 @@ function Items({ mayWrite }: { mayWrite: boolean }) {
         {mayWrite ? (
           <ActionDialog
             trigger={<ActionButton>New item</ActionButton>}
-            title="New item"
+            title="New product"
             description="A code and a name are the minimum. Everything else is maintainable afterwards."
             permission="master_data.write"
             fn="erp_create_item"
@@ -184,7 +184,7 @@ function Parties({ mayWrite }: { mayWrite: boolean }) {
         {mayWrite ? (
           <ActionDialog
             trigger={<ActionButton>New party</ActionButton>}
-            title="New party"
+            title="New business partner"
             description="The role given here is the first one; more can be added afterwards."
             permission="master_data.write"
             fn="erp_create_party"
