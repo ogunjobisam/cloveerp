@@ -15,7 +15,8 @@ import { Card, Fail } from "../components/platform/kit";
 import { Companies } from "../components/platform/organisations";
 import { Staff } from "../components/platform/staff";
 import { Activity } from "../components/platform/activity";
-import { Decisions } from "../components/platform/decisions";
+import { Decisions, ProductDecisions } from "../components/platform/decisions";
+import { Plans } from "../components/platform/plans";
 import { Overview } from "../components/platform/overview";
 import { Diagnostics } from "../components/platform/diagnostics";
 import { Queue } from "../components/platform/queue";
@@ -95,6 +96,7 @@ const AREAS: {
     views: [
       { key: "organisations", label: "All organisations" },
       { key: "ownership", label: "Ownership transfers" },
+      { key: "plans", label: "Plans and subscriptions" },
     ],
   },
   {
@@ -117,6 +119,7 @@ const AREAS: {
       { key: "staff", label: "Staff" },
       { key: "activity", label: "Activity" },
       { key: "decisions", label: "Decisions" },
+      { key: "product", label: "Product decisions" },
     ],
   },
 ];
@@ -322,6 +325,8 @@ function PlatformConsole() {
           {currentView === "staff" ? <Staff role={role} /> : null}
           {currentView === "activity" ? <Activity /> : null}
           {currentView === "decisions" ? <Decisions /> : null}
+          {currentView === "product" ? <ProductDecisions /> : null}
+          {currentView === "plans" ? <Plans /> : null}
         </div>
       </div>
     </Frame>

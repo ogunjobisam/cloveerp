@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
+import { Route as AdministrationCommercialRouteImport } from './routes/administration/commercial'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationOnboardingRouteImport } from './routes/administration/onboarding'
 import { Route as AdministrationOrganisationRouteImport } from './routes/administration/organisation'
@@ -33,13 +34,16 @@ import { Route as MasterDataImportsRouteImport } from './routes/master-data/impo
 import { Route as MasterDataItemSupplyRouteImport } from './routes/master-data/item-supply'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsContinuityRouteImport } from './routes/operations/continuity'
+import { Route as OperationsDevicesRouteImport } from './routes/operations/devices'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
+import { Route as OperationsOutputRouteImport } from './routes/operations/output'
 import { Route as PlanningIndexRouteImport } from './routes/planning/index'
 import { Route as ProcurementIndexRouteImport } from './routes/procurement/index'
 import { Route as ProductionIndexRouteImport } from './routes/production/index'
 import { Route as QualityIndexRouteImport } from './routes/quality/index'
 import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
+import { Route as ReportingReproducibilityRouteImport } from './routes/reporting/reproducibility'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -62,6 +66,12 @@ const AdministrationAuditRoute = AdministrationAuditRouteImport.update({
   path: '/administration/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministrationCommercialRoute =
+  AdministrationCommercialRouteImport.update({
+    id: '/administration/commercial',
+    path: '/administration/commercial',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdministrationConfigurationRoute =
   AdministrationConfigurationRouteImport.update({
     id: '/administration/configuration',
@@ -169,6 +179,11 @@ const OperationsContinuityRoute = OperationsContinuityRouteImport.update({
   path: '/operations/continuity',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperationsDevicesRoute = OperationsDevicesRouteImport.update({
+  id: '/operations/devices',
+  path: '/operations/devices',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperationsIntegrationsRoute = OperationsIntegrationsRouteImport.update({
   id: '/operations/integrations',
   path: '/operations/integrations',
@@ -177,6 +192,11 @@ const OperationsIntegrationsRoute = OperationsIntegrationsRouteImport.update({
 const OperationsJobsRoute = OperationsJobsRouteImport.update({
   id: '/operations/jobs',
   path: '/operations/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OperationsOutputRoute = OperationsOutputRouteImport.update({
+  id: '/operations/output',
+  path: '/operations/output',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlanningIndexRoute = PlanningIndexRouteImport.update({
@@ -204,6 +224,12 @@ const ReportingIndexRoute = ReportingIndexRouteImport.update({
   path: '/reporting/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingReproducibilityRoute =
+  ReportingReproducibilityRouteImport.update({
+    id: '/reporting/reproducibility',
+    path: '/reporting/reproducibility',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const SalesIndexRoute = SalesIndexRouteImport.update({
   id: '/sales/',
   path: '/sales/',
@@ -215,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
+  '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
@@ -230,8 +257,11 @@ export interface FileRoutesByFullPath {
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/continuity': typeof OperationsContinuityRoute
+  '/operations/devices': typeof OperationsDevicesRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/operations/output': typeof OperationsOutputRoute
+  '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
   '/governance/': typeof GovernanceIndexRoute
   '/inventory/': typeof InventoryIndexRoute
@@ -249,6 +279,7 @@ export interface FileRoutesByTo {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
+  '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
@@ -264,8 +295,11 @@ export interface FileRoutesByTo {
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/continuity': typeof OperationsContinuityRoute
+  '/operations/devices': typeof OperationsDevicesRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/operations/output': typeof OperationsOutputRoute
+  '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance': typeof FinanceIndexRoute
   '/governance': typeof GovernanceIndexRoute
   '/inventory': typeof InventoryIndexRoute
@@ -284,6 +318,7 @@ export interface FileRoutesById {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/audit': typeof AdministrationAuditRoute
+  '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
@@ -299,8 +334,11 @@ export interface FileRoutesById {
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/continuity': typeof OperationsContinuityRoute
+  '/operations/devices': typeof OperationsDevicesRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
+  '/operations/output': typeof OperationsOutputRoute
+  '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
   '/governance/': typeof GovernanceIndexRoute
   '/inventory/': typeof InventoryIndexRoute
@@ -320,6 +358,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/administration/audit'
+    | '/administration/commercial'
     | '/administration/configuration'
     | '/administration/onboarding'
     | '/administration/organisation'
@@ -335,8 +374,11 @@ export interface FileRouteTypes {
     | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/continuity'
+    | '/operations/devices'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/operations/output'
+    | '/reporting/reproducibility'
     | '/finance/'
     | '/governance/'
     | '/inventory/'
@@ -354,6 +396,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/administration/audit'
+    | '/administration/commercial'
     | '/administration/configuration'
     | '/administration/onboarding'
     | '/administration/organisation'
@@ -369,8 +412,11 @@ export interface FileRouteTypes {
     | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/continuity'
+    | '/operations/devices'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/operations/output'
+    | '/reporting/reproducibility'
     | '/finance'
     | '/governance'
     | '/inventory'
@@ -388,6 +434,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/administration/audit'
+    | '/administration/commercial'
     | '/administration/configuration'
     | '/administration/onboarding'
     | '/administration/organisation'
@@ -403,8 +450,11 @@ export interface FileRouteTypes {
     | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/continuity'
+    | '/operations/devices'
     | '/operations/integrations'
     | '/operations/jobs'
+    | '/operations/output'
+    | '/reporting/reproducibility'
     | '/finance/'
     | '/governance/'
     | '/inventory/'
@@ -423,6 +473,7 @@ export interface RootRouteChildren {
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
+  AdministrationCommercialRoute: typeof AdministrationCommercialRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationOnboardingRoute: typeof AdministrationOnboardingRoute
   AdministrationOrganisationRoute: typeof AdministrationOrganisationRoute
@@ -438,8 +489,11 @@ export interface RootRouteChildren {
   MasterDataItemSupplyRoute: typeof MasterDataItemSupplyRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsContinuityRoute: typeof OperationsContinuityRoute
+  OperationsDevicesRoute: typeof OperationsDevicesRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
+  OperationsOutputRoute: typeof OperationsOutputRoute
+  ReportingReproducibilityRoute: typeof ReportingReproducibilityRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   GovernanceIndexRoute: typeof GovernanceIndexRoute
   InventoryIndexRoute: typeof InventoryIndexRoute
@@ -481,6 +535,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/audit'
       fullPath: '/administration/audit'
       preLoaderRoute: typeof AdministrationAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/commercial': {
+      id: '/administration/commercial'
+      path: '/administration/commercial'
+      fullPath: '/administration/commercial'
+      preLoaderRoute: typeof AdministrationCommercialRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/configuration': {
@@ -623,6 +684,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsContinuityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/operations/devices': {
+      id: '/operations/devices'
+      path: '/operations/devices'
+      fullPath: '/operations/devices'
+      preLoaderRoute: typeof OperationsDevicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/operations/integrations': {
       id: '/operations/integrations'
       path: '/operations/integrations'
@@ -635,6 +703,13 @@ declare module '@tanstack/react-router' {
       path: '/operations/jobs'
       fullPath: '/operations/jobs'
       preLoaderRoute: typeof OperationsJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/operations/output': {
+      id: '/operations/output'
+      path: '/operations/output'
+      fullPath: '/operations/output'
+      preLoaderRoute: typeof OperationsOutputRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/planning/': {
@@ -672,6 +747,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/reproducibility': {
+      id: '/reporting/reproducibility'
+      path: '/reporting/reproducibility'
+      fullPath: '/reporting/reproducibility'
+      preLoaderRoute: typeof ReportingReproducibilityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sales/': {
       id: '/sales/'
       path: '/sales'
@@ -687,6 +769,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,
+  AdministrationCommercialRoute: AdministrationCommercialRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationOnboardingRoute: AdministrationOnboardingRoute,
   AdministrationOrganisationRoute: AdministrationOrganisationRoute,
@@ -702,8 +785,11 @@ const rootRouteChildren: RootRouteChildren = {
   MasterDataItemSupplyRoute: MasterDataItemSupplyRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsContinuityRoute: OperationsContinuityRoute,
+  OperationsDevicesRoute: OperationsDevicesRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
+  OperationsOutputRoute: OperationsOutputRoute,
+  ReportingReproducibilityRoute: ReportingReproducibilityRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   GovernanceIndexRoute: GovernanceIndexRoute,
   InventoryIndexRoute: InventoryIndexRoute,
