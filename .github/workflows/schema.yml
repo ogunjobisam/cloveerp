@@ -159,7 +159,8 @@ jobs:
             "erp.assert_starter_vocabularies_sound()" \
             "erp.assert_vocabulary_aligned()" \
             "erp.assert_packs_installable()" \
-            "erp.assert_job_handlers_resolvable()"
+            "erp.assert_job_handlers_resolvable()" \
+            "erp.assert_validation_environment_available()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -200,7 +201,8 @@ jobs:
             "erp_test.assert_policy_register_suite()" \
             "erp_test.assert_onboarding_interview_suite()" \
             "erp_test.assert_superadmin_suite()" \
-            "erp_test.assert_starter_pack_acceptance()"
+            "erp_test.assert_starter_pack_acceptance()" \
+            "erp_test.assert_validation_environment_suite()"
           do
             $PSQL -tAc "select $s;"
           done
