@@ -145,7 +145,8 @@ jobs:
             "erp.assert_capabilities_sound()" \
             "erp.assert_starter_vocabularies_sound()" \
             "erp.assert_vocabulary_aligned()" \
-            "erp.assert_packs_installable()"
+            "erp.assert_packs_installable()" \
+            "erp.assert_job_handlers_resolvable()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'

@@ -1501,13 +1501,17 @@ begin
          where a.tenant_id = v_tenant and a.entity_id = v_entity
            and a.code = (p ->> 'code');
       else
-        if v_entity is null then
-          raise exception
-            'ERPWARE_PROMOTION_UNKNOWN_ENTITY: an account needs an entity and the payload names none'
-            using errcode = '23503';
-        end if;
+        -- A tenant-neutral pack cannot know an organisation's company codes,
+        -- so an item that names none lands on the primary company — the same
+        -- fallback the budget and release_area branches already use for the
+        -- same reason. Refusing instead would make the account kind
+        -- unreachable from a pack, which is the one place it is most wanted.
         perform erp.upsert_account(
-          p ->> 'entity', p ->> 'code', p ->> 'name',
+          coalesce(nullif(p ->> 'entity', ''),
+                   (select e.code from erp.entity e
+                     where e.tenant_id = v_tenant and e.status = 'active'
+                     order by e.code limit 1)),
+          p ->> 'code', p ->> 'name',
           (p ->> 'account_type')::erp.account_type,
           nullif(p ->> 'control_kind', '')::erp.control_account_kind,
           p ->> 'group_code',
@@ -1515,6 +1519,30 @@ begin
           coalesce(string_to_array(nullif(p ->> 'requires_dimensions', ''), ','), '{}'),
           nullif(p ->> 'currency', '')::character(3),
           nullif(p ->> 'parent', ''));
+      end if;
+
+    -- §9.1's scheduled jobs. erp.upsert_job() exists and erp.run_due_jobs()
+    -- runs them; what was missing was a way for a pack to carry one.
+    when 'job' then
+      if i.operation = 'remove' then
+        update erp.job j set is_enabled = false, updated_at = now()
+         where j.tenant_id = v_tenant and j.code = (p ->> 'code');
+      else
+        perform erp.upsert_job(
+          p ->> 'code', p ->> 'name', p ->> 'handler_code',
+          coalesce(p ->> 'schedule_kind', 'interval'),
+          (p ->> 'interval_seconds')::integer,
+          (p ->> 'at_time')::time,
+          p ->> 'days_of_week',
+          (p ->> 'day_of_month')::integer,
+          coalesce(p ->> 'timezone', 'UTC'),
+          coalesce(p -> 'parameters', '{}'::jsonb),
+          (p ->> 'timeout_seconds')::integer,
+          (p ->> 'max_silence_seconds')::integer,
+          -- §9.1: "Shipped disabled, enabled per tenant." A pack that switched
+          -- on eleven jobs on an organisation's first day would be a pack that
+          -- starts doing work nobody asked for.
+          coalesce((p ->> 'is_enabled')::boolean, false));
       end if;
 
     when 'location' then
@@ -1548,7 +1576,7 @@ begin
     else
       raise exception 'ERPWARE_PROMOTION_UNKNOWN_KIND: % cannot be promoted', i.object_kind
         using errcode = '23514',
-              hint = 'Promotable kinds: config, terminology, legislation_binding, event_subscription, role, rule_set, state_machine, approval_chain, posting_rule, data_quality_rule, field_approval_rule, costing_policy, count_programme, receipt_tolerance, match_tolerance, budget, planning_policy, pricing_policy, inspection_plan, carrier, close_task, dunning_policy, department, approval_band, approver_assignment, posting_class, account_determination, classification_axis, classification_value, code_template, release_area, capability, uom, reason_code, calendar, sod_rule, numbering_rule, notification_template, kpi, report, account, location';
+              hint = 'Promotable kinds: config, terminology, legislation_binding, event_subscription, role, rule_set, state_machine, approval_chain, posting_rule, data_quality_rule, field_approval_rule, costing_policy, count_programme, receipt_tolerance, match_tolerance, budget, planning_policy, pricing_policy, inspection_plan, carrier, close_task, dunning_policy, department, approval_band, approver_assignment, posting_class, account_determination, classification_axis, classification_value, code_template, release_area, capability, uom, reason_code, calendar, sod_rule, numbering_rule, notification_template, kpi, report, account, location, job';
   end case;
 end;
 $$;
