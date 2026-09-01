@@ -181,7 +181,7 @@ export function Companies({ role }: { role: PlatformRole }) {
         <Card
           title="Onboard an organisation"
           icon={<Plus className="size-4 text-primary" />}
-          description="Creates the tenant, its root entity, its administrator role, and a single-use invitation for its first administrator."
+          description="Creates the organisation, its root company, its administrator role, and a single-use invitation for its first administrator."
           action={
             <button
               type="button"

@@ -16,6 +16,7 @@ import { Route as AdministrationAuditRouteImport } from './routes/administration
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
 import { Route as AdministrationOnboardingRouteImport } from './routes/administration/onboarding'
 import { Route as AdministrationOrganisationRouteImport } from './routes/administration/organisation'
+import { Route as AdministrationPacksRouteImport } from './routes/administration/packs'
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
 import { Route as AdministrationTerminologyRouteImport } from './routes/administration/terminology'
@@ -78,6 +79,11 @@ const AdministrationOrganisationRoute =
     path: '/administration/organisation',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdministrationPacksRoute = AdministrationPacksRouteImport.update({
+  id: '/administration/packs',
+  path: '/administration/packs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministrationPermissionsRoute =
   AdministrationPermissionsRouteImport.update({
     id: '/administration/permissions',
@@ -206,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
+  '/administration/packs': typeof AdministrationPacksRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
@@ -238,6 +245,7 @@ export interface FileRoutesByTo {
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
+  '/administration/packs': typeof AdministrationPacksRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/administration/configuration': typeof AdministrationConfigurationRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
+  '/administration/packs': typeof AdministrationPacksRoute
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
@@ -305,6 +314,7 @@ export interface FileRouteTypes {
     | '/administration/configuration'
     | '/administration/onboarding'
     | '/administration/organisation'
+    | '/administration/packs'
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
@@ -337,6 +347,7 @@ export interface FileRouteTypes {
     | '/administration/configuration'
     | '/administration/onboarding'
     | '/administration/organisation'
+    | '/administration/packs'
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/administration/configuration'
     | '/administration/onboarding'
     | '/administration/organisation'
+    | '/administration/packs'
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
@@ -402,6 +414,7 @@ export interface RootRouteChildren {
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
   AdministrationOnboardingRoute: typeof AdministrationOnboardingRoute
   AdministrationOrganisationRoute: typeof AdministrationOrganisationRoute
+  AdministrationPacksRoute: typeof AdministrationPacksRoute
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   AdministrationTenantRoute: typeof AdministrationTenantRoute
   AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
@@ -476,6 +489,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/organisation'
       fullPath: '/administration/organisation'
       preLoaderRoute: typeof AdministrationOrganisationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/packs': {
+      id: '/administration/packs'
+      path: '/administration/packs'
+      fullPath: '/administration/packs'
+      preLoaderRoute: typeof AdministrationPacksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/permissions': {
@@ -650,6 +670,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
   AdministrationOnboardingRoute: AdministrationOnboardingRoute,
   AdministrationOrganisationRoute: AdministrationOrganisationRoute,
+  AdministrationPacksRoute: AdministrationPacksRoute,
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   AdministrationTenantRoute: AdministrationTenantRoute,
   AdministrationTerminologyRoute: AdministrationTerminologyRoute,

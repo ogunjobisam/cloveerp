@@ -52,6 +52,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The immutability check compares this branch against its merge base,
+          # which a depth-1 checkout does not have.
+          fetch-depth: 0
+
+      - name: A migration is written once
+        # The one class of mistake this workflow structurally cannot catch by
+        # building. Everything below stands the schema up from NOTHING, so a
+        # migration edited after it was pushed is simply part of the file that
+        # gets replayed — green here, and invisible on every environment that
+        # has already applied it. A Supabase preview branch found one four
+        # commits after it was made, which is three commits too late.
+        run: supabase/ci/migrations_immutable.sh
 
       - name: Install the psql client
         run: |
@@ -141,7 +154,12 @@ jobs:
             "erp.assert_document_create_permissions()" \
             "erp.assert_configuration_promotable()" \
             "erp.assert_determination_coverage()" \
-            "erp.assert_diagnostics_registered()"
+            "erp.assert_diagnostics_registered()" \
+            "erp.assert_capabilities_sound()" \
+            "erp.assert_starter_vocabularies_sound()" \
+            "erp.assert_vocabulary_aligned()" \
+            "erp.assert_packs_installable()" \
+            "erp.assert_job_handlers_resolvable()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -181,7 +199,8 @@ jobs:
             "erp_test.assert_determination_coverage_suite()" \
             "erp_test.assert_policy_register_suite()" \
             "erp_test.assert_onboarding_interview_suite()" \
-            "erp_test.assert_superadmin_suite()"
+            "erp_test.assert_superadmin_suite()" \
+            "erp_test.assert_starter_pack_acceptance()"
           do
             $PSQL -tAc "select $s;"
           done
@@ -192,6 +211,19 @@ jobs:
         # transaction must be gone in the next, or a pooled connection carries
         # it to whoever is served next.
         run: $PSQL -c 'call erp_test.assert_context_not_leaked();'
+
+      - name: Every screen string has a row it can be renamed by
+        # The terminology layer's premise is that renaming is a glossary change
+        # with no code impact. That is only true of strings erp_ref.resource
+        # holds — and when this step was written, 128 of the app's 201 ui()
+        # literals had no row at any locale. Two thirds of the screen chrome
+        # could not be renamed by a tenant, and was invisible to
+        # erp.terminology_alignment_report(), which reads that table and
+        # therefore showed zero drift over strings it could not see.
+        #
+        # A migration seeds what exists on the day it is written. Only this
+        # notices the two hundred and second.
+        run: supabase/ci/screen_strings.sh
 
       - name: The generators are idempotent
         # Row security, append-only guards, attribution and audit coverage are

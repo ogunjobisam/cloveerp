@@ -71,7 +71,7 @@ function ItemSupply() {
       <ConfigTransfer
         objectType="item_supplier"
         title="Default suppliers as a file"
-        description="Items, parties and sites are named by code, so a file written elsewhere still loads here."
+        description="Products, business partners and sites are named by code, so a file written elsewhere still loads here."
         invalidates={["erp_item_suppliers", "erp_supplier_qualification"]}
       />
 

@@ -355,7 +355,7 @@ function Lines({
           <ActionDialog
             trigger={<ActionButton>Add line</ActionButton>}
             title="Add a line"
-            description="The item list is this tenant's own; an empty one means no items have been created yet."
+            description="The product list is this organisation's own; an empty one means no products have been created yet."
             fn="erp_add_document_line"
             fields={[
               {

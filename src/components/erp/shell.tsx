@@ -282,7 +282,7 @@ export function Shell({
           {/* Everything here is in the drawer below md. */}
           <div className="ml-auto hidden items-end gap-3 md:flex">
             <ScopeSelect
-              label="Entity"
+              label="Company"
               value={scope.entityId}
               onChange={(entityId) => onScopeChange({ entityId, siteId: "" })}
               options={session.entities}
@@ -313,7 +313,7 @@ export function Shell({
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">
             <ScopeSelect
-              label="Entity"
+              label="Company"
               value={scope.entityId}
               onChange={(entityId) => onScopeChange({ entityId, siteId: "" })}
               options={session.entities}

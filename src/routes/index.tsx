@@ -108,13 +108,9 @@ function Overview() {
           </PageHeader>
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Organisation" value={session.tenant?.name ?? "—"} icon={Building2} />
+            <Field label="User" value={session.principal?.display_name ?? "—"} icon={UserRound} />
             <Field
-              label="Principal"
-              value={session.principal?.display_name ?? "—"}
-              icon={UserRound}
-            />
-            <Field
-              label="Entity"
+              label="Company"
               value={entity ? `${entity.code} — ${entity.name}` : "All"}
               icon={Landmark}
             />
@@ -125,9 +121,9 @@ function Overview() {
             />
           </dl>
           <Prose className="text-xs text-muted-foreground">
-            The tenant is derived from your account, never chosen. Everything below is scoped to it
-            by the database rather than by this page — narrowing entity or site changes what is
-            shown, not what is permitted.
+            The organisation is derived from your account, never chosen. Everything below is scoped
+            to it by the database rather than by this page — narrowing company or site changes what
+            is shown, not what is permitted.
           </Prose>
         </div>
       </section>
@@ -137,7 +133,7 @@ function Overview() {
       <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)] sm:p-5">
         <h2 className="font-display text-sm font-semibold">Scope</h2>
         <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <ScopeList title="Entities" rows={session.entities} icon={Landmark} />
+          <ScopeList title="Companies" rows={session.entities} icon={Landmark} />
           <ScopeList title="Sites" rows={session.sites} icon={MapPin} />
         </div>
       </section>
