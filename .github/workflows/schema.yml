@@ -52,6 +52,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The immutability check compares this branch against its merge base,
+          # which a depth-1 checkout does not have.
+          fetch-depth: 0
+
+      - name: A migration is written once
+        # The one class of mistake this workflow structurally cannot catch by
+        # building. Everything below stands the schema up from NOTHING, so a
+        # migration edited after it was pushed is simply part of the file that
+        # gets replayed — green here, and invisible on every environment that
+        # has already applied it. A Supabase preview branch found one four
+        # commits after it was made, which is three commits too late.
+        run: supabase/ci/migrations_immutable.sh
 
       - name: Install the psql client
         run: |

@@ -1,0 +1,17 @@
+# Migrations edited after they were pushed, and the migration that repairs each.
+#
+# A migration is written once. Where that rule was broken, the repair is a NEW
+# migration re-applying the definition — because an edit to an applied file
+# reaches no environment that has already run it, and is invisible to a build
+# that starts from an empty database.
+#
+# One line per file: <edited migration> <repairing migration>
+#
+# A file in this register is exempt from supabase/ci/migrations_immutable.sh.
+# Adding a line is a deliberate act with a repair beside it; the check refuses
+# an entry whose repairing migration does not exist, so an exemption cannot be
+# a way of silencing the check.
+
+20260903120000_pack_installable_surfaces.sql  20260903155000_reapply_edited_definitions.sql
+20260903130000_terminology_alignment.sql      20260903155000_reapply_edited_definitions.sql
+20260903140000_content_packs.sql              20260903155000_reapply_edited_definitions.sql
