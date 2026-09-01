@@ -1,0 +1,7 @@
+{
+  "//": "The Edge Function's import graph reaches worker/src, which sits beside a package.json. Without this, Deno switches to node_modules resolution and fails whenever worker dependencies have not been installed. Resolving npm: specifiers from Deno's own cache keeps `deno check` independent of any bun install.",
+  "nodeModulesDir": "none",
+  "imports": {
+    "postgres": "npm:postgres@^3.4.5"
+  }
+}
