@@ -161,14 +161,42 @@ begin
 
   -- Second: duplicate codes. Two items in one pack claiming the same object
   -- differ only in which lands last, which is not a decision anybody made.
+  --
+  -- Stated as identical payloads under different keys, not as a shared code.
+  -- The first version grouped by object_kind and payload->>'code', and the
+  -- base pack refused to apply because of it: reason codes are unique per
+  -- CATEGORY, so ORDERED_IN_ERROR exists under both return-to-supplier and
+  -- customer return, and WRONG_QUANTITY, CUSTOMER_REQUEST and
+  -- SYSTEM_CORRECTION likewise. Four false positives out of four findings. The
+  -- object_key already carries the full identity — category|code here,
+  -- kind|code for a posting class — and the primary key makes it unique, so
+  -- the only duplicate left to find is the same row written twice under two
+  -- names.
   select 'blocking',
-         format('%s items in this pack claim %s %L',
-                count(*), pi.object_kind, pi.payload ->> 'code'),
+         format('%s items in this pack write an identical %s payload under '
+                'different keys, so all but one are dead',
+                count(*), pi.object_kind),
+         p_pack_code || ' / ' || string_agg(pi.object_key, ', ' order by pi.object_key)
+    from erp_ref.pack_item pi
+   where pi.pack_code = p_pack_code
+   group by pi.object_kind, pi.payload
+  having count(*) > 1
+
+  union all
+
+  -- And the authoring error that would silently break §11.7: an object_key
+  -- that does not agree with the code in its own payload. The key is what
+  -- erp.plan_content_pack() matches against the manifest, so a key naming one
+  -- thing and a payload writing another makes the item permanently missing —
+  -- it lands, and the next application plans it again for ever.
+  select 'blocking',
+         format('%s %s writes code %L, which its own key does not name',
+                pi.object_kind, pi.object_key, pi.payload ->> 'code'),
          p_pack_code
     from erp_ref.pack_item pi
-   where pi.pack_code = p_pack_code and pi.payload ? 'code'
-   group by pi.object_kind, pi.payload ->> 'code'
-  having count(*) > 1
+   where pi.pack_code = p_pack_code
+     and pi.payload ? 'code'
+     and position(upper(pi.payload ->> 'code') in upper(pi.object_key)) = 0
 
   union all
 
