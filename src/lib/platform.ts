@@ -120,3 +120,92 @@ export function usePlatformMe(enabled = true) {
     staleTime: 60_000,
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* The superadmin console's reads.                                            */
+/* -------------------------------------------------------------------------- */
+
+export type DiagnosticCheck = {
+  code: string;
+  title: string;
+  kind: "assertion" | "report";
+  scope: "platform" | "tenant";
+  blurb: string;
+  runs_in_ci: boolean;
+  has_detail: boolean;
+  function: string;
+};
+
+/**
+ * `ok` is deliberately nullable: a tenant-scoped check run outside an
+ * organisation is neither passing nor failing, and reporting it as failed would
+ * be a claim about the organisation rather than about the check.
+ */
+export type CheckResult = {
+  code: string;
+  title?: string;
+  check: string;
+  scope: "platform" | "tenant";
+  blurb?: string;
+  ok: boolean | null;
+  summary: string | null;
+  detail: string | null;
+  findings: Record<string, unknown>[];
+};
+
+export type JobHandler = {
+  code: string;
+  description: string;
+  runs_in_database: boolean;
+  default_timeout_seconds: number;
+};
+
+export type DrainResult = {
+  claimed: number;
+  succeeded: number;
+  failed: number;
+  needs_worker: number;
+  organisations: {
+    organisation: string;
+    runs: { job: string; outcome: string; error?: string }[];
+  }[];
+};
+
+export type MyTenancy = {
+  tenant_id: string;
+  code: string;
+  name: string;
+  status: string;
+  principal_status: string;
+  is_active: boolean;
+  holds_administrator: boolean;
+  is_current: boolean;
+};
+
+export type TenantConfiguration = {
+  tenant_id: string;
+  code: string;
+  name: string;
+  status: string;
+  is_live: boolean;
+  has_self_environment: boolean;
+  entities: number;
+  sites: number;
+  principals: number;
+  ledgers: number;
+  accounts: number;
+  document_types: number;
+  posting_rules: number;
+  jobs: number;
+  modules_installed: string[];
+  change_sets_awaiting: number;
+  determination_findings: number;
+};
+
+export type DeploymentState = {
+  migrations_known: boolean;
+  migrations: { version: string; name: string | null }[];
+  counts: Record<string, number>;
+  registers: Record<string, number>;
+  generated_at: string;
+};
