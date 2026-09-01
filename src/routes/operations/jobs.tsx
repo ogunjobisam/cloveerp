@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -61,6 +61,53 @@ function Jobs() {
       <ActionBar
         note="Running a job by hand, and the kill switches that stop one from running at all."
         actions={[
+          {
+            // The screen had panels, a trigger and two kill switches, and no way
+            // to bring a job into existence — so it had never shown a row and
+            // "Trigger a job" could only ever fail.
+            label: "Define a job",
+            permission: "administration.jobs",
+            fn: "erp_upsert_job",
+            fields: [
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name", required: true },
+              pickFrom("erp_job_handlers", "code", ["code"], "p_handler_code", "Handler"),
+              {
+                kind: "choice",
+                name: "p_schedule_kind",
+                label: "Runs",
+                required: true,
+                choices: [
+                  { value: "interval", label: "Every N seconds" },
+                  { value: "daily", label: "Daily at a time" },
+                  { value: "weekly", label: "Weekly" },
+                  { value: "monthly", label: "Monthly" },
+                  { value: "manual", label: "Only when triggered" },
+                ],
+              },
+              {
+                kind: "number",
+                name: "p_interval_seconds",
+                label: "Interval (seconds)",
+                hint: "For an interval schedule. At least 30.",
+              },
+              {
+                kind: "text",
+                name: "p_at_time",
+                label: "At (HH:MM)",
+                hint: "Daily, weekly or monthly.",
+              },
+              {
+                kind: "text",
+                name: "p_days_of_week",
+                label: "Days of week",
+                hint: "Weekly only. ISO numbers, 1 = Monday, comma separated.",
+              },
+              { kind: "number", name: "p_day_of_month", label: "Day of month" },
+              { kind: "text", name: "p_timezone", label: "Timezone", hint: "Defaults to UTC." },
+            ],
+            invalidates: ["erp_silent_jobs", "erp_job_health", "erp_job_handlers"],
+          },
           {
             label: "Trigger a job",
             permission: "administration.jobs",

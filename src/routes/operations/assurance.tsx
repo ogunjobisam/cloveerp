@@ -13,15 +13,26 @@ export const Route = createFileRoute("/operations/assurance")({
   ),
 });
 
-type Check = { check: string; ok: boolean; detail: string | null };
+/** Shaped by erp.run_diagnostic(). `ok` is null for a check that needs an
+ *  organisation and was run without one — neither passing nor failing. */
+type Check = {
+  check: string;
+  code?: string;
+  title?: string;
+  blurb?: string;
+  ok: boolean | null;
+  summary?: string | null;
+  detail: string | null;
+};
 
 function Assurance() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Assurance">
-        The structural checks that run on every push. Each one fails the build rather than warning,
-        so anything not green here is something the platform would refuse to ship with — shown
-        against this database as it stands right now.
+        Every structural check this product runs against itself, read from the same register CI runs
+        and erp.assert_diagnostics_registered() polices — so a check added to the product appears
+        here without a deployment. Each one fails the build rather than warning, so anything not
+        green is something the platform would refuse to ship with.
       </PageHeader>
 
       <DataPanel<Check>
@@ -33,12 +44,25 @@ function Assurance() {
         {(rows) => (
           <Table columns={["Check", "Result", "Detail"]}>
             {rows.map((r) => (
-              <tr key={r.check} className="border-b border-border/50 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{r.check}</td>
+              <tr key={r.check} className="border-b border-border/50 align-top last:border-0">
                 <td className="py-2 pr-4">
-                  {r.ok ? <Pill tone="ok">Holds</Pill> : <Pill tone="bad">Violated</Pill>}
+                  <div className="text-sm">{r.title ?? r.check}</div>
+                  {r.blurb ? (
+                    <div className="mt-0.5 text-xs text-muted-foreground">{r.blurb}</div>
+                  ) : null}
                 </td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">{r.detail ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  {r.ok === null ? (
+                    <Pill tone="muted">Needs an organisation</Pill>
+                  ) : r.ok ? (
+                    <Pill tone="ok">Holds</Pill>
+                  ) : (
+                    <Pill tone="bad">Violated</Pill>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.summary ?? r.detail ?? "—"}
+                </td>
               </tr>
             ))}
           </Table>

@@ -114,11 +114,21 @@ function TenantLifecycle() {
         description="What the platform itself says about this organisation's configuration and isolation."
         fn="erp_platform_assurance"
         empty="No assurance checks reported."
-        rowKey={(r, i) => `${String(r["check_code"] ?? i)}-${i}`}
+        rowKey={(r, i) => `${String(r["code"] ?? i)}-${i}`}
         columns={[
-          { header: "Check", cell: "check_code" },
-          { header: "Detail", cell: "detail" },
-          { header: "Result", cell: (r) => <StatusPill value={r["state"] ?? r["result"]} /> },
+          // check_code / state / result were none of them keys this RPC returns,
+          // so two of these three columns had always rendered blank.
+          { header: "Check", cell: (r) => String(r["title"] ?? r["check"] ?? "") },
+          {
+            header: "Result",
+            cell: (r) =>
+              r["ok"] === null ? (
+                <StatusPill value="not run" />
+              ) : (
+                <StatusPill value={r["ok"] ? "holds" : "violated"} />
+              ),
+          },
+          { header: "Detail", cell: (r) => String(r["summary"] ?? r["detail"] ?? "—") },
         ]}
       />
     </div>
