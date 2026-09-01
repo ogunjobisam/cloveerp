@@ -37,8 +37,8 @@ type Device = {
 };
 
 /** Shaped by erp_device_actions(): every action in the organisation, newest
- *  first. `applied` is the one that changed stock; `conflicted` carries the
- *  reason it did not. */
+ *  first. `applied` is the one that changed stock and carries what the module
+ *  returned; `conflicted` carries the reason it did not. */
 type Action = {
   id: string;
   device: string;
@@ -50,8 +50,25 @@ type Action = {
   captured_at: string;
   received_at: string;
   applied_at: string | null;
+  applied_result: string | null;
   conflict_reason: string | null;
   payload: Record<string, unknown>;
+};
+
+/** Shaped by erp_device_task_handlers(): the twenty-two steps of §14.3 and,
+ *  for each, the module function a queued action applies through — or the
+ *  register's sentence on why nothing applies it yet. */
+type TaskHandler = {
+  code: string;
+  name: string;
+  task_group: string;
+  seq: number;
+  module_code: string | null;
+  sql_function: string | null;
+  payload_keys: { key: string; type: string; required: boolean }[];
+  writes_nothing: boolean;
+  not_handled_reason: string | null;
+  note: string;
 };
 
 /** Shaped by erp_scan_rules(). A rule with no product class is the step's
@@ -160,6 +177,20 @@ function Devices() {
             ],
             invalidates: ["erp_scan_rules", "erp_device_operations"],
           },
+          {
+            label: "Apply my queued actions",
+            permission: "inventory.move",
+            fn: "erp_drain_device_actions",
+            fields: [
+              {
+                kind: "text",
+                name: "p_device_code",
+                label: "Device code",
+                hint: "Leave empty to apply your queued actions on every device. Only actions captured under your own session apply; anyone else's are held for them.",
+              },
+            ],
+            invalidates: ["erp_device_actions", "erp_device_operations"],
+          },
         ]}
       />
 
@@ -221,12 +252,12 @@ function Devices() {
 
       <DataPanel<Action>
         title="Action queue"
-        description="Every action received from a device, newest first. Received is the act of capture reaching the server; applied is the moment stock moved. A conflict names what it collided with."
+        description="Every action received from a device, newest first. Received is the act of capture reaching the server; applied is the moment the module that owns the step did the work, and the outcome is what it returned. A conflict names what it collided with, in the module's own words."
         fn="erp_device_actions"
         empty="No device has sent an action yet."
       >
         {(rows) => (
-          <Table columns={["Received", "Device", "Step", "Input", "State", "Applied", "Reason"]}>
+          <Table columns={["Received", "Device", "Step", "Input", "State", "Applied", "Outcome"]}>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-border/50 align-top last:border-0">
                 <td className="py-2 pr-4 text-xs text-muted-foreground">
@@ -250,7 +281,57 @@ function Devices() {
                   <Pill tone={actionTone(r.status)}>{r.status}</Pill>
                 </td>
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{when(r.applied_at)}</td>
-                <td className="py-2 text-xs text-muted-foreground">{r.conflict_reason ?? "—"}</td>
+                <td className="py-2 text-xs text-muted-foreground">
+                  {r.status === "applied" ? (
+                    <span className="font-mono">{r.applied_result ?? "done"}</span>
+                  ) : (
+                    (r.conflict_reason ?? "—")
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<TaskHandler>
+        title="What each step applies"
+        description="Product data, the same for every organisation. For each of §14.3's steps, the module function a queued action applies through and what its payload must carry — or, where nothing applies it yet, the reason an action for it conflicts rather than waits. The build fails if a step has neither."
+        fn="erp_device_task_handlers"
+        empty="No step is registered, which is itself unexpected."
+      >
+        {(rows) => (
+          <Table columns={["Step", "Applies through", "Payload", "Note"]}>
+            {rows.map((r) => (
+              <tr key={r.code} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-4">
+                  <div className="text-sm">{r.name}</div>
+                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    {r.code} · {r.task_group}
+                  </div>
+                </td>
+                <td className="py-2 pr-4">
+                  {r.sql_function ? (
+                    <>
+                      <Pill tone="ok">{r.module_code}</Pill>
+                      <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                        {r.sql_function}
+                      </div>
+                    </>
+                  ) : r.writes_nothing ? (
+                    <Pill tone="muted">Reads only</Pill>
+                  ) : (
+                    <Pill tone="warn">Not yet</Pill>
+                  )}
+                </td>
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {r.payload_keys.length > 0
+                    ? r.payload_keys.map((k) => (k.required ? k.key : `${k.key}?`)).join(", ")
+                    : "—"}
+                </td>
+                <td className="py-2 text-xs text-muted-foreground">
+                  {r.not_handled_reason ?? r.note}
+                </td>
               </tr>
             ))}
           </Table>
