@@ -1,0 +1,42 @@
+# Migrations that create a public door without asserting the boundary in the
+# same migration.
+#
+# Specification v1.2 §16.2: "A migration that adds a callable function must
+# register it and pass the boundary assertion in the same migration, so an
+# ungoverned entry point cannot survive its own transaction."
+#
+# Every file below predates that discipline — they are the dashboard-named
+# migrations of 29 and 30 August, and a migration is written once, so they
+# cannot be corrected in place. They are listed here rather than the check
+# being softened, because a rule with a visible list of exceptions is a rule,
+# and a rule with a lowered bar is not.
+#
+# This is NOT a claim that those migrations left an ungoverned door behind.
+# erp.assert_public_api_safe() runs on every build against the whole schema and
+# is green: no ungoverned entry point exists today. What was missing is the
+# guarantee that one could not survive its own transaction in future, which is
+# what supabase/ci/boundary_in_migration.sh now enforces for everything after
+# this list.
+#
+# Nothing may be added to this list. A new migration that needs to be here is a
+# new migration that should call the assertion instead.
+20260829171240_d5d77f76-a3ae-42f8-990d-fdebd968ffa9.sql
+20260829171344_88a0a547-d465-448e-93a1-baf513372a7f.sql
+20260830013841_b7c199c4-08d2-4ce8-bd3f-4a37bde649df.sql
+20260830014600_178953d1-eb2d-4d65-b892-eb953b9a773e.sql
+20260830023322_0a7b689b-876a-448b-a8b6-760d4eee1627.sql
+20260830072109_6badfa4b-b856-407b-b04e-0db40b4a9187.sql
+20260830091046_ad905a9f-fe00-4810-961e-441bae0f46a0.sql
+20260830092629_036dd008-bf45-40b4-aa79-98b2ba9a257a.sql
+20260830100930_2e4e7bee-7a7a-4a56-91a6-51b963d817bb.sql
+20260830101002_5b830425-a4d3-427c-8a38-097d82f7d29b.sql
+20260830101136_945cc605-708a-4a66-9dc5-be3326b134f2.sql
+20260830110335_5eacd53d-908a-422b-92f0-903d4217847a.sql
+20260830124417_4b31cbec-ee04-4033-a577-2ae4a7080e8a.sql
+20260830130124_35fccfef-2152-42b6-8161-4ba1dfd01de1.sql
+20260830130349_5ef703bc-ad39-4831-b06e-34e7da0a4ad6.sql
+20260830131225_61551e32-8078-49e9-b216-a0aba3fc59d0.sql
+20260830131741_9cdd9fa0-f59f-4fa2-ada6-06278aa73671.sql
+20260830132420_c74d2cbe-f212-4e2b-88a6-688eb02c241d.sql
+20260830132704_58b3eed8-7b0e-4209-9277-6c5518179df5.sql
+20260830134027_1c560857-6c5a-4344-b941-40066fdef595.sql

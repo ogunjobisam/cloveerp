@@ -57,6 +57,14 @@ jobs:
           # which a depth-1 checkout does not have.
           fetch-depth: 0
 
+      - name: An ungoverned entry point cannot survive its own transaction
+        # §16.2. The build already runs erp.assert_public_api_safe() over the
+        # whole schema, which catches an ungoverned door eventually. This closes
+        # "eventually": a migration that creates a public function and does not
+        # assert lands green on any environment that applies it, and the door
+        # exists there until some later build happens to check.
+        run: supabase/ci/boundary_in_migration.sh
+
       - name: A migration is written once
         # The one class of mistake this workflow structurally cannot catch by
         # building. Everything below stands the schema up from NOTHING, so a
@@ -162,7 +170,14 @@ jobs:
             "erp.assert_job_handlers_resolvable()" \
             "erp.assert_validation_environment_available()" \
             "erp.assert_acceptance_clauses_sound()" \
-            "erp.assert_output_templates_sound()"
+            "erp.assert_output_templates_sound()" \
+            "erp.assert_product_decisions_enforced()" \
+            "erp.assert_entitlements_enforceable()" \
+            "erp.assert_reports_reproducible()" \
+            "erp.assert_output_integrity()" \
+            "erp.assert_device_operations_sound()" \
+            "erp.assert_release_integrity()" \
+            "erp.assert_support_discipline()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -207,7 +222,13 @@ jobs:
             "erp_test.assert_validation_environment_suite()" \
             "erp_test.assert_document_spine_suite()" \
             "erp_test.assert_chart_alternative_suite()" \
-            "erp_test.assert_output_template_suite()"
+            "erp_test.assert_output_template_suite()" \
+            "erp_test.assert_commercial_suite()" \
+            "erp_test.assert_reporting_suite()" \
+            "erp_test.assert_output_suite()" \
+            "erp_test.assert_device_suite()" \
+            "erp_test.assert_release_suite()" \
+            "erp_test.assert_support_suite()"
           do
             $PSQL -tAc "select $s;"
           done
