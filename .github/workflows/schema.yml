@@ -196,6 +196,19 @@ jobs:
         # it to whoever is served next.
         run: $PSQL -c 'call erp_test.assert_context_not_leaked();'
 
+      - name: Every screen string has a row it can be renamed by
+        # The terminology layer's premise is that renaming is a glossary change
+        # with no code impact. That is only true of strings erp_ref.resource
+        # holds — and when this step was written, 128 of the app's 201 ui()
+        # literals had no row at any locale. Two thirds of the screen chrome
+        # could not be renamed by a tenant, and was invisible to
+        # erp.terminology_alignment_report(), which reads that table and
+        # therefore showed zero drift over strings it could not see.
+        #
+        # A migration seeds what exists on the day it is written. Only this
+        # notices the two hundred and second.
+        run: supabase/ci/screen_strings.sh
+
       - name: The generators are idempotent
         # Row security, append-only guards, attribution and audit coverage are
         # all GENERATED from the table registry, and every migration ends by
