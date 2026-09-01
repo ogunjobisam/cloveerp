@@ -176,7 +176,8 @@ jobs:
             "erp.assert_reports_reproducible()" \
             "erp.assert_output_integrity()" \
             "erp.assert_device_operations_sound()" \
-            "erp.assert_release_integrity()"
+            "erp.assert_release_integrity()" \
+            "erp.assert_support_discipline()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -226,7 +227,8 @@ jobs:
             "erp_test.assert_reporting_suite()" \
             "erp_test.assert_output_suite()" \
             "erp_test.assert_device_suite()" \
-            "erp_test.assert_release_suite()"
+            "erp_test.assert_release_suite()" \
+            "erp_test.assert_support_suite()"
           do
             $PSQL -tAc "select $s;"
           done
