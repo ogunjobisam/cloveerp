@@ -70,6 +70,19 @@ export type Database = {
         Args: { p_line_id: string; p_quantity: number; p_reason: string }
         Returns: undefined
       }
+      erp_answer_interview: {
+        Args: { p_answer: Json; p_question_code: string; p_session_id: string }
+        Returns: Json
+      }
+      erp_answer_pack_decision: {
+        Args: {
+          p_answer: Json
+          p_object_key: string
+          p_object_kind: string
+          p_pack_code: string
+        }
+        Returns: Json
+      }
       erp_apply_calculated_policy: {
         Args: { p_item_id: string; p_site_id: string }
         Returns: undefined
@@ -91,9 +104,17 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: Json
       }
+      erp_apply_content_pack: {
+        Args: { p_change_set_code?: string; p_pack_code: string }
+        Returns: Json
+      }
       erp_apply_mass_change: {
         Args: { p_mass_change_id: string }
         Returns: number
+      }
+      erp_apply_preset: {
+        Args: { p_code: string; p_reason?: string }
+        Returns: Json
       }
       erp_approval_audit: {
         Args: { p_limit?: number; p_object_type?: string }
@@ -195,8 +216,10 @@ export type Database = {
         Args: { p_command_id: string; p_reason: string }
         Returns: undefined
       }
+      erp_capabilities: { Args: never; Returns: Json }
       erp_change_requests: { Args: { p_object_type?: string }; Returns: Json }
       erp_change_sets: { Args: never; Returns: Json }
+      erp_chart_alternative: { Args: never; Returns: Json }
       erp_claim_invitation: { Args: { p_token: string }; Returns: Json }
       erp_classification_axes: { Args: never; Returns: Json }
       erp_classification_gaps: { Args: { p_limit?: number }; Returns: Json }
@@ -307,6 +330,7 @@ export type Database = {
         Args: { p_home_country?: string; p_standard_rate?: number }
         Returns: string
       }
+      erp_content_packs: { Args: never; Returns: Json }
       erp_count_accuracy: { Args: never; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
       erp_create_classified_item: {
@@ -399,6 +423,7 @@ export type Database = {
       }
       erp_departments: { Args: never; Returns: Json }
       erp_determination_coverage: { Args: never; Returns: Json }
+      erp_determination_coverage_report: { Args: never; Returns: Json }
       erp_determine_account: {
         Args: {
           p_entity_id?: string
@@ -489,6 +514,7 @@ export type Database = {
       erp_fiscal_periods: { Args: never; Returns: Json }
       erp_fixed_asset_register: { Args: { p_as_at?: string }; Returns: Json }
       erp_forecast_versions: { Args: { p_limit?: number }; Returns: Json }
+      erp_glossary: { Args: never; Returns: Json }
       erp_go_live: { Args: never; Returns: Json }
       erp_grant_role: {
         Args: {
@@ -510,6 +536,7 @@ export type Database = {
       erp_integration_backlog: { Args: { p_limit?: number }; Returns: Json }
       erp_integration_health: { Args: never; Returns: Json }
       erp_intercompany_position: { Args: never; Returns: Json }
+      erp_interview_questions: { Args: { p_session_id: string }; Returns: Json }
       erp_invite_principal: {
         Args: { p_display_name: string; p_email: string }
         Returns: Json
@@ -553,6 +580,7 @@ export type Database = {
         Args: { p_limit?: number; p_search?: string }
         Returns: Json
       }
+      erp_job_handlers: { Args: never; Returns: Json }
       erp_job_health: { Args: never; Returns: Json }
       erp_landed_costs: { Args: { p_limit?: number }; Returns: Json }
       erp_ledgers: { Args: never; Returns: Json }
@@ -638,6 +666,7 @@ export type Database = {
         Args: { p_code?: string; p_note?: string; p_release_area_id: string }
         Returns: Json
       }
+      erp_output_templates: { Args: never; Returns: Json }
       erp_override_posting_account: {
         Args: {
           p_account_id: string
@@ -649,6 +678,8 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_pack_acceptance: { Args: never; Returns: Json }
+      erp_pack_plan: { Args: { p_pack_code: string }; Returns: Json }
       erp_part5_coverage: { Args: { p_section?: string }; Returns: Json }
       erp_part5_summary: { Args: never; Returns: Json }
       erp_parties: {
@@ -689,6 +720,8 @@ export type Database = {
         Args: { p_display_name?: string }
         Returns: Json
       }
+      erp_platform_deployment_state: { Args: never; Returns: Json }
+      erp_platform_diagnostics: { Args: never; Returns: Json }
       erp_platform_enter_tenant: {
         Args: { p_reason: string; p_tenant_id: string }
         Returns: Json
@@ -702,6 +735,7 @@ export type Database = {
         Returns: Json
       }
       erp_platform_me: { Args: never; Returns: Json }
+      erp_platform_my_tenancies: { Args: never; Returns: Json }
       erp_platform_offer_ownership: {
         Args: { p_reason?: string; p_tenant_id: string; p_to_staff_id: string }
         Returns: Json
@@ -722,6 +756,7 @@ export type Database = {
         Args: { p_limit?: number; p_tenant_id?: string }
         Returns: Json
       }
+      erp_platform_policy_decisions: { Args: never; Returns: Json }
       erp_platform_purge_due_tenants: {
         Args: { p_grace_days?: number }
         Returns: Json
@@ -738,6 +773,11 @@ export type Database = {
         Args: { p_id: string; p_reason?: string }
         Returns: Json
       }
+      erp_platform_run_check: { Args: { p_code: string }; Returns: Json }
+      erp_platform_run_due_jobs: {
+        Args: { p_batch_size?: number }
+        Returns: Json
+      }
       erp_platform_set_staff_role: {
         Args: { p_id: string; p_role: string }
         Returns: Json
@@ -747,10 +787,12 @@ export type Database = {
         Returns: Json
       }
       erp_platform_staff: { Args: never; Returns: Json }
+      erp_platform_tenant_configuration: { Args: never; Returns: Json }
       erp_platform_tenants: { Args: never; Returns: Json }
       erp_post_count: { Args: { p_task_id: string }; Returns: number }
       erp_posting_classes: { Args: { p_kind?: string }; Returns: Json }
       erp_posting_overrides: { Args: { p_limit?: number }; Returns: Json }
+      erp_presets: { Args: never; Returns: Json }
       erp_preview_approval_chain: {
         Args: {
           p_currency?: string
@@ -775,6 +817,11 @@ export type Database = {
       }
       erp_promote_change_set: {
         Args: { p_change_set_id: string }
+        Returns: Json
+      }
+      erp_proposals: { Args: { p_status?: string }; Returns: Json }
+      erp_propose_from_interview: {
+        Args: { p_session_id: string }
         Returns: Json
       }
       erp_propose_payment_run: {
@@ -859,6 +906,7 @@ export type Database = {
         Returns: string
       }
       erp_read_protected_value: { Args: { p_code: string }; Returns: Json }
+      erp_reason_codes: { Args: { p_category?: string }; Returns: Json }
       erp_recall_evidence: { Args: { p_recall_id: string }; Returns: Json }
       erp_recall_readiness: { Args: { p_recall_id?: string }; Returns: Json }
       erp_recalls: { Args: never; Returns: Json }
@@ -950,6 +998,10 @@ export type Database = {
           | "completed"
           | "closed"
           | "cancelled"
+      }
+      erp_render_output_template: {
+        Args: { p_code: string; p_document_id?: string; p_locale?: string }
+        Returns: Json
       }
       erp_reopen_period: {
         Args: { p_fiscal_period_id: string; p_reason: string }
@@ -1046,6 +1098,15 @@ export type Database = {
         Returns: Json
       }
       erp_set_active_tenant: { Args: { p_tenant_id: string }; Returns: Json }
+      erp_set_capability: {
+        Args: {
+          p_code: string
+          p_enabled: boolean
+          p_reason?: string
+          p_valid_from?: string
+        }
+        Returns: Json
+      }
       erp_set_item_posting_class: {
         Args: {
           p_item_id: string
@@ -1096,6 +1157,10 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_set_reason_code_status: {
+        Args: { p_active: boolean; p_category: string; p_code: string }
+        Returns: Json
+      }
       erp_set_resource_override: {
         Args: {
           p_key: string
@@ -1144,6 +1209,7 @@ export type Database = {
         Args: { p_document_id: string }
         Returns: Json
       }
+      erp_start_interview: { Args: { p_code?: string }; Returns: Json }
       erp_stock_ageing: { Args: never; Returns: Json }
       erp_stock_health: { Args: never; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
@@ -1276,6 +1342,24 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_upsert_job: {
+        Args: {
+          p_at_time?: string
+          p_code: string
+          p_day_of_month?: number
+          p_days_of_week?: string
+          p_handler_code: string
+          p_interval_seconds?: number
+          p_is_enabled?: boolean
+          p_max_silence_seconds?: number
+          p_name: string
+          p_parameters?: Json
+          p_schedule_kind: string
+          p_timeout_seconds?: number
+          p_timezone?: string
+        }
+        Returns: Json
+      }
       erp_upsert_posting_class: {
         Args: {
           p_code: string
@@ -1283,6 +1367,17 @@ export type Database = {
           p_kind: string
           p_name: string
           p_valid_from?: string
+        }
+        Returns: Json
+      }
+      erp_upsert_reason_code: {
+        Args: {
+          p_category: string
+          p_code: string
+          p_name: string
+          p_requires_approval?: boolean
+          p_requires_note?: boolean
+          p_seq?: number
         }
         Returns: Json
       }
@@ -1304,6 +1399,7 @@ export type Database = {
         Returns: Json
       }
       erp_validate_import: { Args: { p_batch_id: string }; Returns: Json }
+      erp_vocabularies: { Args: never; Returns: Json }
       erp_warehouse_tasks: {
         Args: { p_kind?: string; p_limit?: number; p_site_id?: string }
         Returns: Json
