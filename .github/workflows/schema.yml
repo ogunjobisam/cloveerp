@@ -163,7 +163,8 @@ jobs:
             "erp.assert_validation_environment_available()" \
             "erp.assert_acceptance_clauses_sound()" \
             "erp.assert_output_templates_sound()" \
-            "erp.assert_product_decisions_enforced()"
+            "erp.assert_product_decisions_enforced()" \
+            "erp.assert_entitlements_enforceable()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -208,7 +209,8 @@ jobs:
             "erp_test.assert_validation_environment_suite()" \
             "erp_test.assert_document_spine_suite()" \
             "erp_test.assert_chart_alternative_suite()" \
-            "erp_test.assert_output_template_suite()"
+            "erp_test.assert_output_template_suite()" \
+            "erp_test.assert_commercial_suite()"
           do
             $PSQL -tAc "select $s;"
           done
