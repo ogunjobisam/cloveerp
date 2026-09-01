@@ -177,7 +177,8 @@ jobs:
             "erp.assert_output_integrity()" \
             "erp.assert_device_operations_sound()" \
             "erp.assert_release_integrity()" \
-            "erp.assert_support_discipline()"
+            "erp.assert_support_discipline()" \
+            "erp.assert_pack_report_versions_sound()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
