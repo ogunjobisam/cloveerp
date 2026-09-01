@@ -1928,6 +1928,14 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/operations/continuity",
+    titleKey: "nav.operations_continuity",
+    title: "Continuity and incidents",
+    blurb: "What was promised about staying up, whether a drill has proved it, and what happened when it did not.",
+    permission: "administration.read",
+    group: "administer",
+  },
+  {
     path: "/administration/configuration",
     titleKey: "nav.administration_configuration",
     title: "Configuration",
