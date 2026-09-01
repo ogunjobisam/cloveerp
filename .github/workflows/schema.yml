@@ -186,7 +186,8 @@ jobs:
             "erp_test.assert_determination_coverage_suite()" \
             "erp_test.assert_policy_register_suite()" \
             "erp_test.assert_onboarding_interview_suite()" \
-            "erp_test.assert_superadmin_suite()"
+            "erp_test.assert_superadmin_suite()" \
+            "erp_test.assert_starter_pack_acceptance()"
           do
             $PSQL -tAc "select $s;"
           done
