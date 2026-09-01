@@ -1904,6 +1904,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "govern",
   },
   {
+    path: "/reporting/reproducibility",
+    titleKey: "nav.reporting_reproducibility",
+    title: "Report versions and runs",
+    blurb:
+      "Every report version, the governed view it reads, and each run with the parameters it used — so what was shown can be shown again.",
+    permission: "reporting.read",
+    group: "govern",
+  },
+  {
     path: "/operations/jobs",
     titleKey: "nav.operations_jobs",
     title: "Scheduled jobs",
@@ -1933,6 +1942,33 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Continuity and incidents",
     blurb:
       "What was promised about staying up, whether a drill has proved it, and what happened when it did not.",
+    permission: "administration.read",
+    group: "administer",
+  },
+  {
+    path: "/operations/devices",
+    titleKey: "nav.operations_devices",
+    title: "Devices and scanning",
+    blurb:
+      "Registered scanners and terminals, what each may do, the rules a scan is judged by, and the actions waiting to be applied.",
+    permission: "administration.read",
+    group: "administer",
+  },
+  {
+    path: "/operations/output",
+    titleKey: "nav.operations_output",
+    title: "Output and printing",
+    blurb:
+      "Template versions, printers, every request with its render and delivery, and the addresses mail may not go to.",
+    permission: "administration.read",
+    group: "administer",
+  },
+  {
+    path: "/administration/commercial",
+    titleKey: "nav.administration_commercial",
+    title: "Plan and usage",
+    blurb:
+      "The plan this organisation is on, what it entitles, how much of each limit is used, and the meters behind the figures.",
     permission: "administration.read",
     group: "administer",
   },
