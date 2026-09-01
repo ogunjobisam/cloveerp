@@ -22,6 +22,14 @@ import { useT } from "../../lib/i18n";
 type Clause = {
   clause: number;
   requirement: string;
+  /**
+   * The cheapest preset that carries every capability this clause needs,
+   * derived from erp_ref.preset_capability rather than written down. Two of
+   * the seven need Full, which is what §13 means by an organisation that can
+   * answer a recall question — and saying so beats reporting a tier nobody
+   * chose as a fault.
+   */
+  needs_preset: string | null;
   ready: boolean;
   missing: string | null;
 };
@@ -50,7 +58,8 @@ export function Acceptance() {
         <Prose className="mt-0.5 text-xs text-muted-foreground">
           Seven things a new organisation should be able to do without further configuration. Where
           one does not hold, what it is short of is named — and something short of a feature is
-          usually one switch rather than a project.
+          usually one switch rather than a project. Each clause also says which preset carries what
+          it needs, so a clause that wants Full reads as a choice rather than a fault.
         </Prose>
       </header>
 
@@ -73,6 +82,11 @@ export function Acceptance() {
                   <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">{c.missing}</p>
                 ) : null}
               </div>
+              {c.needs_preset && c.needs_preset !== "minimal" ? (
+                <span className="mt-0.5 shrink-0 text-xs capitalize text-muted-foreground">
+                  {ui("Needs")} {c.needs_preset}
+                </span>
+              ) : null}
             </li>
           ))}
         </ol>
