@@ -3,6 +3,7 @@ import { ArrowRight, Settings2 } from "lucide-react";
 
 import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { usePlatformOrganisation } from "../../lib/platform-organisation";
 import { GROUP_BLURBS, iconFor } from "../../lib/module-icons";
 import {
   GROUP_LABELS,
@@ -87,7 +88,10 @@ function Section({
 
 function useTiles() {
   const { session } = useErpSession();
-  const tiles = allTiles().filter((x) => !x.permission || hasPermission(session, x.permission));
+  const platform = usePlatformOrganisation(Boolean(session?.tenant_id));
+  const tiles = allTiles().filter(
+    (x) => (!x.permission || hasPermission(session, x.permission)) && (!x.platformOnly || platform),
+  );
   const inGroup = (g: TileGroup) => tiles.filter((x) => x.group === g);
   return { tiles, inGroup };
 }

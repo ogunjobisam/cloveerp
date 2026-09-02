@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { ErpSession } from "../../lib/erp";
 import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { usePlatformOrganisation } from "../../lib/platform-organisation";
 import {
   AREA_HOME,
   GROUP_LABELS,
@@ -55,6 +56,8 @@ type NavItem = {
   label: string;
   /** Absent means always visible. */
   permission?: string;
+  /** Offered only inside the platform's own organisation. */
+  platformOnly?: boolean;
   group: "home" | TileGroup;
   area: Area;
 };
@@ -72,6 +75,7 @@ const NAV: NavItem[] = [
     labelKey: tile.titleKey,
     label: tile.title,
     ...(tile.permission ? { permission: tile.permission } : {}),
+    ...(tile.platformOnly ? { platformOnly: true } : {}),
     group: tile.group,
     area: areaOf(tile.group),
   })),
@@ -314,7 +318,10 @@ export function Shell({
     ? session.sites.filter((s) => s.entity_id === scope.entityId)
     : session.sites;
 
-  const visible = NAV.filter((n) => !n.permission || hasPermission(session, n.permission));
+  const platform = usePlatformOrganisation(Boolean(session.tenant_id));
+  const visible = NAV.filter(
+    (n) => (!n.permission || hasPermission(session, n.permission)) && (!n.platformOnly || platform),
+  );
   const hidden = NAV.length - visible.length;
   const area = areaOfPath(pathname);
   const counts: Record<Area, number> = {

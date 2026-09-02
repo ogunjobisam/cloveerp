@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 
 import { callErp } from "./erp";
+import { setRefusalResources } from "./errors";
 
 /**
  * Resource keys, per spec §3.10 and the refusal in Part 7: no hard-coded
@@ -39,6 +40,12 @@ export function ResourceProvider({
     // Terminology changes when configuration is promoted, not between clicks.
     staleTime: 5 * 60_000,
   });
+
+  // The refusal register (D34) travels in the same dictionary; hand it to the
+  // friendly-error layer, which is a plain function and cannot read context.
+  useEffect(() => {
+    if (data) setRefusalResources(data);
+  }, [data]);
 
   return (
     <ResourceContext.Provider value={{ resources: data ?? {}, locale }}>

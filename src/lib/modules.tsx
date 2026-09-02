@@ -1904,6 +1904,12 @@ export type TileDef = {
   blurb: string;
   permission?: string;
   group: TileGroup;
+  /**
+   * Offered only inside the platform's own organisation (v1.5 §17.5). The
+   * database refuses every other organisation regardless; this keeps a door
+   * that will be refused off the launchpad.
+   */
+  platformOnly?: boolean;
 };
 
 export const EXTRA_TILES: TileDef[] = [
@@ -1914,6 +1920,26 @@ export const EXTRA_TILES: TileDef[] = [
     blurb: "Quotations, orders and deliveries.",
     permission: "sales.read",
     group: "sell",
+  },
+  {
+    path: "/commercial/price-book",
+    titleKey: "nav.commercial_price_book",
+    title: "Price book",
+    blurb:
+      "What the platform sells, at what rate per currency and term, and at what cost, so margin is visible while quoting.",
+    permission: "sales.price",
+    group: "sell",
+    platformOnly: true,
+  },
+  {
+    path: "/commercial/quotes",
+    titleKey: "nav.commercial_quotes",
+    title: "Quotes",
+    blurb:
+      "Assembled from price items with margin live, discount approval routed, every version retained, the order form rendered.",
+    permission: "sales.order",
+    group: "sell",
+    platformOnly: true,
   },
   {
     path: "/procurement",

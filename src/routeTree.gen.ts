@@ -29,6 +29,8 @@ import { Route as AdministrationPacksRouteImport } from './routes/administration
 import { Route as AdministrationPermissionsRouteImport } from './routes/administration/permissions'
 import { Route as AdministrationTenantRouteImport } from './routes/administration/tenant'
 import { Route as AdministrationTerminologyRouteImport } from './routes/administration/terminology'
+import { Route as CommercialPriceBookRouteImport } from './routes/commercial/price-book'
+import { Route as CommercialQuotesRouteImport } from './routes/commercial/quotes'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
@@ -163,6 +165,16 @@ const AdministrationTerminologyRoute =
     path: '/administration/terminology',
     getParentRoute: () => rootRouteImport,
   } as any)
+const CommercialPriceBookRoute = CommercialPriceBookRouteImport.update({
+  id: '/commercial/price-book',
+  path: '/commercial/price-book',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CommercialQuotesRoute = CommercialQuotesRouteImport.update({
+  id: '/commercial/quotes',
+  path: '/commercial/quotes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
@@ -318,6 +330,8 @@ export interface FileRoutesByFullPath {
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
+  '/commercial/price-book': typeof CommercialPriceBookRoute
+  '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
@@ -366,6 +380,8 @@ export interface FileRoutesByTo {
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
+  '/commercial/price-book': typeof CommercialPriceBookRoute
+  '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
@@ -415,6 +431,8 @@ export interface FileRoutesById {
   '/administration/permissions': typeof AdministrationPermissionsRoute
   '/administration/tenant': typeof AdministrationTenantRoute
   '/administration/terminology': typeof AdministrationTerminologyRoute
+  '/commercial/price-book': typeof CommercialPriceBookRoute
+  '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
@@ -465,6 +483,8 @@ export interface FileRouteTypes {
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
+    | '/commercial/price-book'
+    | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/logistics/release-areas'
@@ -513,6 +533,8 @@ export interface FileRouteTypes {
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
+    | '/commercial/price-book'
+    | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/logistics/release-areas'
@@ -561,6 +583,8 @@ export interface FileRouteTypes {
     | '/administration/permissions'
     | '/administration/tenant'
     | '/administration/terminology'
+    | '/commercial/price-book'
+    | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
     | '/logistics/release-areas'
@@ -610,6 +634,8 @@ export interface RootRouteChildren {
   AdministrationPermissionsRoute: typeof AdministrationPermissionsRoute
   AdministrationTenantRoute: typeof AdministrationTenantRoute
   AdministrationTerminologyRoute: typeof AdministrationTerminologyRoute
+  CommercialPriceBookRoute: typeof CommercialPriceBookRoute
+  CommercialQuotesRoute: typeof CommercialQuotesRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
   LogisticsReleaseAreasRoute: typeof LogisticsReleaseAreasRoute
@@ -778,6 +804,20 @@ declare module '@tanstack/react-router' {
       path: '/administration/terminology'
       fullPath: '/administration/terminology'
       preLoaderRoute: typeof AdministrationTerminologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/commercial/price-book': {
+      id: '/commercial/price-book'
+      path: '/commercial/price-book'
+      fullPath: '/commercial/price-book'
+      preLoaderRoute: typeof CommercialPriceBookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/commercial/quotes': {
+      id: '/commercial/quotes'
+      path: '/commercial/quotes'
+      fullPath: '/commercial/quotes'
+      preLoaderRoute: typeof CommercialQuotesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents/$documentId': {
@@ -986,6 +1026,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationPermissionsRoute: AdministrationPermissionsRoute,
   AdministrationTenantRoute: AdministrationTenantRoute,
   AdministrationTerminologyRoute: AdministrationTerminologyRoute,
+  CommercialPriceBookRoute: CommercialPriceBookRoute,
+  CommercialQuotesRoute: CommercialQuotesRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
   LogisticsReleaseAreasRoute: LogisticsReleaseAreasRoute,
