@@ -32,6 +32,46 @@ function deniedObject(message: string): string | null {
   );
 }
 
+/**
+ * The refusal register, D34 (§21.1).
+ *
+ * `erp_ref.refusal` says, for each engine token, what was refused, why, and
+ * the next action — and mirrors the three into the resource dictionary as
+ * `refusal.<token>.refused`, `.why` and `.next_action`, lower-cased. The
+ * dictionary already arrives with every other string through erp_resources(),
+ * with the organisation's own overrides applied, so this file does not fetch
+ * anything: the ResourceProvider hands the loaded dictionary here once, and a
+ * refusal resolves through it before falling back to the wording below.
+ *
+ * A family token — ERPWARE_QUOTE_IS_ACCEPTED, raised with the state as a
+ * suffix — is registered once as ERPWARE_QUOTE_IS_% and mirrors with the
+ * suffix dropped, so a family key ends in an underscore and matches by prefix.
+ */
+let refusalResources: Record<string, string> = {};
+let refusalFamilies: string[] = [];
+
+export function setRefusalResources(resources: Record<string, string>): void {
+  refusalResources = resources;
+  refusalFamilies = Object.keys(resources)
+    .map((k) => /^refusal\.(erpware_[a-z0-9_]*_)\.next_action$/.exec(k)?.[1])
+    .filter((k): k is string => Boolean(k));
+}
+
+function registeredRefusal(
+  token: string,
+): { refused: string; why: string | null; nextAction: string } | null {
+  const exact = token.toLowerCase();
+  const code =
+    refusalResources[`refusal.${exact}.next_action`] !== undefined
+      ? exact
+      : refusalFamilies.find((f) => exact.startsWith(f));
+  if (!code) return null;
+  const nextAction = refusalResources[`refusal.${code}.next_action`];
+  const refused = refusalResources[`refusal.${code}.refused`];
+  if (!nextAction || !refused) return null;
+  return { refused, why: refusalResources[`refusal.${code}.why`] ?? null, nextAction };
+}
+
 const ERPWARE_MESSAGES: Record<string, { title: string; body: string }> = {
   ERPWARE_PERMISSION_DENIED: {
     title: "You do not have permission to do this.",
@@ -63,6 +103,18 @@ export function friendlyError(error: unknown): FriendlyError {
   });
 
   const token = erp?.erpCode;
+  const registered = token ? registeredRefusal(token) : null;
+  if (token && registered) {
+    // What was refused, why, and the next action — the organisation's own
+    // wording where it has overridden the product's. The engine's hint, when
+    // the raise carried one, is more specific than the register and wins.
+    return {
+      title: registered.refused,
+      body: registered.why,
+      hint: hint ?? registered.nextAction,
+      technical,
+    };
+  }
   if (token && ERPWARE_MESSAGES[token]) {
     const m = ERPWARE_MESSAGES[token];
     return out(m.title, m.body);

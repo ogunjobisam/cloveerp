@@ -190,7 +190,8 @@ jobs:
             "erp.assert_commercial_sound()" \
             "erp.assert_commercial_quotes_sound()" \
             "erp.assert_contract_provisions_entitlement()" \
-            "erp.assert_customer_view_sound()"
+            "erp.assert_customer_view_sound()" \
+            "erp.assert_refusals_name_next_action()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -259,7 +260,8 @@ jobs:
             "erp_test.assert_commercial_price_book_suite()" \
             "erp_test.assert_commercial_quote_suite()" \
             "erp_test.assert_commercial_contract_suite()" \
-            "erp_test.assert_commercial_renewal_suite()"
+            "erp_test.assert_commercial_renewal_suite()" \
+            "erp_test.assert_refusal_register_suite()"
           do
             $PSQL -tAc "select $s;"
           done
