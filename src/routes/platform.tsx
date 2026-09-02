@@ -3,7 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Building2, Gavel, HeartPulse, LayoutDashboard, ShieldCheck, Users } from "lucide-react";
+import {
+  Building2,
+  FileSignature,
+  Gavel,
+  HeartPulse,
+  LayoutDashboard,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 
 import { Wordmark } from "../components/erp/logo";
 import { Ownership } from "../components/erp/ownership";
@@ -22,6 +30,7 @@ import { Diagnostics } from "../components/platform/diagnostics";
 import { Queue } from "../components/platform/queue";
 import { Deployment } from "../components/platform/deployment";
 import { Incidents } from "../components/platform/incidents";
+import { Contracts } from "../components/platform/contracts";
 
 /**
  * The platform console.
@@ -73,7 +82,7 @@ export const Route = createFileRoute("/platform")({
  * is an action taken once in the life of a company and belongs beside the
  * company it transfers, not in a tab of its own.
  */
-type AreaKey = "overview" | "organisations" | "health" | "governance";
+type AreaKey = "overview" | "organisations" | "commercial" | "health" | "governance";
 
 const AREAS: {
   key: AreaKey;
@@ -99,6 +108,13 @@ const AREAS: {
       { key: "ownership", label: "Ownership transfers" },
       { key: "plans", label: "Plans and subscriptions" },
     ],
+  },
+  {
+    key: "commercial",
+    label: "Commercial",
+    blurb: "Contracts with the organisations on this deployment, and what each provisions.",
+    icon: <FileSignature className="size-4" />,
+    views: [{ key: "contracts", label: "Contracts" }],
   },
   {
     key: "health",
@@ -330,6 +346,7 @@ function PlatformConsole() {
           {currentView === "decisions" ? <Decisions /> : null}
           {currentView === "product" ? <ProductDecisions /> : null}
           {currentView === "plans" ? <Plans /> : null}
+          {currentView === "contracts" ? <Contracts role={role} /> : null}
         </div>
       </div>
     </Frame>
