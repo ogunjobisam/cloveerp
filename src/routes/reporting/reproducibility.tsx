@@ -15,7 +15,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
  */
 
 export const Route = createFileRoute("/reporting/reproducibility")({
-  head: () => ({ meta: [{ title: "Report versions and runs — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Report versions and runs — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Reproducibility />

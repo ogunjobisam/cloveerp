@@ -29,13 +29,13 @@ import { Logo, Wordmark } from "../components/erp/logo";
 export const Route = createFileRoute("/product")({
   head: () => ({
     meta: [
-      { title: "ERPWare — British-built ERP for finance, stock and operations" },
+      { title: "Clove ERP — British-built ERP for finance, stock and operations" },
       {
         name: "description",
         content:
-          "ERPWare unifies planning, procurement, production, logistics, sales and finance into one governed platform. VAT-ready, sterling-native, and built in the UK.",
+          "Clove ERP unifies planning, procurement, production, logistics, sales and finance into one governed platform. VAT-ready, sterling-native, and built in the UK.",
       },
-      { property: "og:title", content: "ERPWare — British-built ERP" },
+      { property: "og:title", content: "Clove ERP — British-built ERP" },
       {
         property: "og:description",
         content:
@@ -94,7 +94,7 @@ function Hero() {
             The whole firm, in one calm ledger.
           </h1>
           <p className="mt-5 max-w-[46ch] text-base leading-relaxed text-ink/70 text-pretty md:text-lg">
-            ERPWare runs planning, procurement, production, warehousing, sales and finance as one
+            Clove ERP runs planning, procurement, production, warehousing, sales and finance as one
             governed system — every document state-machined, every pound accounted for, every action
             audited.
           </p>
@@ -312,7 +312,7 @@ type Shot = { src: string; alt: string; icon: LucideIcon; caption: string; label
 const SHOTS: Shot[] = [
   {
     src: shotFinance,
-    alt: "ERPWare Finance module showing the trial balance, receivables ageing and slow-moving stock provision",
+    alt: "Clove ERP Finance module showing the trial balance, receivables ageing and slow-moving stock provision",
     icon: PoundSterling,
     label: "Finance",
     caption:
@@ -320,7 +320,7 @@ const SHOTS: Shot[] = [
   },
   {
     src: shotWarehouse,
-    alt: "ERPWare Inventory and warehouse dashboard with stock value, cover KPIs and open count tasks",
+    alt: "Clove ERP Inventory and warehouse dashboard with stock value, cover KPIs and open count tasks",
     icon: Boxes,
     label: "Warehouse",
     caption:
@@ -328,7 +328,7 @@ const SHOTS: Shot[] = [
   },
   {
     src: shotEncryption,
-    alt: "ERPWare encryption keys panel showing the per-tenant key register with rotation and destruction controls",
+    alt: "Clove ERP encryption keys panel showing the per-tenant key register with rotation and destruction controls",
     icon: Vault,
     label: "Encryption keys",
     caption:
@@ -418,7 +418,7 @@ function Footer() {
     <footer className="flex flex-col items-center gap-4 py-12 text-center">
       <Logo size={32} />
       <p className="text-[11px] font-medium uppercase tracking-widest text-ink/40">
-        Built for precision in the United Kingdom · ERPWare MMXXVI
+        Built for precision in the United Kingdom · Clove ERP MMXXVI
       </p>
       <p className="text-xs text-ink/50">
         <Link to="/" className="underline underline-offset-2">

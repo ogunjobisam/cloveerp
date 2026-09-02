@@ -48,13 +48,13 @@ import { Deployment } from "../components/platform/deployment";
 export const Route = createFileRoute("/platform")({
   head: () => ({
     meta: [
-      { title: "Platform console — ERPWare" },
+      { title: "Platform console — Clove ERP" },
       {
         name: "description",
         content:
-          "Onboard companies, manage platform staff, and review every platform action taken across ERPWare tenants.",
+          "Onboard companies, manage platform staff, and review every platform action taken across Clove ERP tenants.",
       },
-      { property: "og:title", content: "Platform console — ERPWare" },
+      { property: "og:title", content: "Platform console — Clove ERP" },
       {
         property: "og:description",
         content:

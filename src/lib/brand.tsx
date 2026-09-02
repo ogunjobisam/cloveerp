@@ -8,7 +8,7 @@ import { useT } from "./i18n";
  * There is no new table for this. Branding is wording and two colours, and
  * wording already has a tenant-scoped store: `erp.resource_override`, layered
  * over the shipped `erp_ref.resource` rows by `erp_resources()`. A tenant that
- * is not called ERPWare overrides five keys; a tenant that is overrides none
+ * is not called Clove ERP overrides five keys; a tenant that is overrides none
  * and gets the product identity from the spec.
  */
 export const BRAND_KEYS = {
@@ -20,8 +20,8 @@ export const BRAND_KEYS = {
 } as const;
 
 export const BRAND_DEFAULTS = {
-  prefix: "ERP",
-  suffix: "Ware",
+  prefix: "Clove",
+  suffix: " ERP",
   /** Ink — warm near-black, the entries. */
   ink: "#3F3A34",
   /** Amber — the derived total. */

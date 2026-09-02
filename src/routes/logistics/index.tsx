@@ -7,12 +7,12 @@ import { LOGISTICS } from "../../lib/modules";
 export const Route = createFileRoute("/logistics/")({
   head: () => ({
     meta: [
-      { title: "Logistics — ERPWare" },
+      { title: "Logistics — Clove ERP" },
       {
         name: "description",
         content: "Shipments, carrier bookings and on-time-in-full delivery performance.",
       },
-      { property: "og:title", content: "Logistics — ERPWare" },
+      { property: "og:title", content: "Logistics — Clove ERP" },
       {
         property: "og:description",
         content: "Shipments, carrier bookings and on-time-in-full delivery performance.",

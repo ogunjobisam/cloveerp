@@ -11,13 +11,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/administration/organisation")({
   head: () => ({
     meta: [
-      { title: "Organisation and approval routing — ERPWare" },
+      { title: "Organisation and approval routing — Clove ERP" },
       {
         name: "description",
         content:
           "Departments, membership, value bands and named approver assignments — the configuration that decides who approves what.",
       },
-      { property: "og:title", content: "Organisation and approval routing — ERPWare" },
+      { property: "og:title", content: "Organisation and approval routing — Clove ERP" },
       {
         property: "og:description",
         content:

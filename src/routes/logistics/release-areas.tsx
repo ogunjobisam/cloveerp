@@ -17,13 +17,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/logistics/release-areas")({
   head: () => ({
     meta: [
-      { title: "Release areas and waves — ERPWare" },
+      { title: "Release areas and waves — Clove ERP" },
       {
         name: "description",
         content:
           "Release areas hold allocated stock, waves allocate in detail against them, shortfalls raise directed replenishment, and paperwork prints only once everything is covered.",
       },
-      { property: "og:title", content: "Release areas and waves — ERPWare" },
+      { property: "og:title", content: "Release areas and waves — Clove ERP" },
       {
         property: "og:description",
         content:

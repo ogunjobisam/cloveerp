@@ -108,6 +108,13 @@ export function UserMenu({
           ) : null}
         </DropdownMenuLabel>
 
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/profile" onClick={onNavigate}>
+            {t("nav.profile", "My profile")}
+          </Link>
+        </DropdownMenuItem>
+
         {switchable ? (
           <>
             <DropdownMenuSeparator />
@@ -137,6 +144,11 @@ export function UserMenu({
         {mayAdminister ? (
           <>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/settings" onClick={onNavigate}>
+                {t("nav.settings", "Settings")}
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to="/administration/tenant" onClick={onNavigate}>
                 {t("nav.tenant_settings", "Organisation settings")}

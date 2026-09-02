@@ -16,13 +16,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/administration/tenant")({
   head: () => ({
     meta: [
-      { title: "Organisation lifecycle — ERPWare" },
+      { title: "Organisation lifecycle — Clove ERP" },
       {
         name: "description",
         content:
           "Go-live readiness, organisation data export and portability, and deletion that removes the data rather than promising to.",
       },
-      { property: "og:title", content: "Organisation lifecycle — ERPWare" },
+      { property: "og:title", content: "Organisation lifecycle — Clove ERP" },
       {
         property: "og:description",
         content: "Go-live, export and portability, and deletion that deletes.",
@@ -296,7 +296,7 @@ function ExportPanel() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = "erpware-tenant-export.json";
+                a.download = "clove-erp-tenant-export.json";
                 a.click();
                 URL.revokeObjectURL(url);
               })

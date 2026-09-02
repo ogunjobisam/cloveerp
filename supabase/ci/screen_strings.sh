@@ -24,7 +24,7 @@ trap 'rm -rf "$WORK"' EXIT
 # ui("…") only. The single-argument form is the whole convention: t(key,
 # fallback) names its key explicitly and is covered by
 # erp.assert_resource_coverage().
-grep -rhoE 'ui\("(([^"\\]|\\.)*)"\)' "$SRC" \
+grep -rhoE --exclude='*.test.ts' --exclude='*.test.tsx' 'ui\("(([^"\\]|\\.)*)"\)' "$SRC" \
   | sed -E 's/^ui\("//; s/"\)$//' | sort -u > "$WORK/literals.txt"
 
 python3 - "$WORK/literals.txt" > "$WORK/literals.csv" <<'PY'

@@ -1,10 +1,10 @@
-# ERPWare — Product & Capabilities Report (document)
+# Clove ERP — Product & Capabilities Report (document)
 
-Generate a polished, board-grade DOCX document — **"ERPWare — Product & Capabilities Report, 30 August 2026"** — written for the platform owner / product director, and deliver it to `/mnt/documents` as a chat attachment.
+Generate a polished, board-grade DOCX document — **"Clove ERP — Product & Capabilities Report, 30 August 2026"** — written for the platform owner / product director, and deliver it to `/mnt/documents` as a chat attachment.
 
 ## Content outline
 
-1. **Cover & executive summary** — what ERPWare is, who it's for, headline numbers (~45 migrations, 170+ curated RPCs, 23 UI routes, 6 configuration surfaces).
+1. **Cover & executive summary** — what Clove ERP is, who it's for, headline numbers (~45 migrations, 170+ curated RPCs, 23 UI routes, 6 configuration surfaces).
 2. **Platform control plane** — Owner/Operator/Support roles, invitation-based onboarding, ownership transfer, audited cross-tenant access, tenant lifecycle (suspend, per-tenant encryption keys, irreversible key destruction).
 3. **Module-by-module capabilities** — journey order (Plan → Source → Make → Move → Sell → Settle) plus Governance and Administration; each with features, RPC-backed flows, dashboards/KPIs, and record pickers.
 4. **Addendum B configuration surfaces** — departments & approval routing (bands, delegation, substitution, stamped rule versions), account determination (no suspense fallback, coverage assertions), classification & code templates, default suppliers & release areas (print gating with shortfall reasons).
@@ -16,7 +16,7 @@ Generate a polished, board-grade DOCX document — **"ERPWare — Product & Capa
 ## Design
 
 - Match project brand: slate (#3F3A34) headings, amber (#C2703D) accents, warm paper (#F7F5F1) shading on key panels; Arial body (DOCX-safe), black titles.
-- Use the ERPWare wordmark on the cover and the three existing product screenshots (finance, warehouse, encryption panel) in relevant sections.
+- Use the Clove ERP wordmark on the cover and the three existing product screenshots (finance, warehouse, encryption panel) in relevant sections.
 - Numbered headings, tables for module/feature matrices, bulleted capability lists, footer with page numbers.
 
 ## Technical

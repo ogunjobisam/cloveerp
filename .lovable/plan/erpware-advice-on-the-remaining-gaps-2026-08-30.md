@@ -1,4 +1,4 @@
-# ERPWare — Advice on the remaining gaps
+# Clove ERP — Advice on the remaining gaps
 
 Seven gaps remain from the audits. Below is an assessment of each — what it actually costs you, and what I recommend doing (or deliberately not doing). Approving this plan means I implement the "Recommended now" items; the rest stay documented as conscious decisions.
 

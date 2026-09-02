@@ -244,7 +244,7 @@ async function sweepDeletedTenants(sql: Sql, out: DrainReport) {
   const purged = await sql`select code from erp.purge_due_tenants()`;
   out.tenantsPurged += purged.length;
   for (const row of purged) {
-    console.log(`[erpware] purged company ${String(row["code"])}: grace period elapsed`);
+    console.log(`[clove-erp] purged company ${String(row["code"])}: grace period elapsed`);
   }
 }
 

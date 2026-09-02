@@ -60,7 +60,9 @@ export function DataPanel<T>({
 
       <div className="px-4 py-4 sm:px-5">
         {isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading…
+          </p>
         ) : error ? (
           <div role="alert">
             <p className="text-sm font-medium text-destructive">This did not load.</p>
@@ -89,6 +91,7 @@ export function Table({ columns, children }: { columns: string[]; children: Reac
             {columns.map((c, i) => (
               <th
                 key={`${c}-${i}`}
+                scope="col"
                 className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted-foreground"
               >
                 {c}

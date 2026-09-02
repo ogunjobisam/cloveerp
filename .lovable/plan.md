@@ -1,6 +1,6 @@
 # Verify the Wave C/D database work landed cleanly
 
-Another agent is applying "Wave" SQL chunks straight to the live ERPWare database. This plan checks that what landed matches the repository source, with no drift, no half-applied chunk, and no broken surface. It is a verification pass — no schema changes unless verification finds a genuine defect, and any fix would be proposed separately.
+Another agent is applying "Wave" SQL chunks straight to the live Clove ERP database. This plan checks that what landed matches the repository source, with no drift, no half-applied chunk, and no broken surface. It is a verification pass — no schema changes unless verification finds a genuine defect, and any fix would be proposed separately.
 
 ## What the first look already shows
 

@@ -188,6 +188,7 @@ function SelectField({
   return (
     <>
       <select
+        aria-label={field.label}
         required={field.required ?? false}
         value={value}
         onChange={(e) => onChange(e.target.value)}

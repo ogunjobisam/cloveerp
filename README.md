@@ -1,4 +1,4 @@
-# ERPWare
+# Clove ERP
 
 A tenant-neutral, multi-entity ERP platform whose behaviour is configured
 rather than coded.
@@ -39,7 +39,7 @@ psql -f supabase/ci/00_host_bootstrap.sql
 for f in supabase/migrations/*.sql; do psql --single-transaction -f "$f"; done
 ```
 
-`supabase/ci/00_host_bootstrap.sql` is everything ERPWare expects from its
+`supabase/ci/00_host_bootstrap.sql` is everything Clove ERP expects from its
 host — the extensions schema, three roles, and `auth.uid()`. Roughly eighty
 lines, and it is the honest answer to "how much of this is locked to Supabase".
 

@@ -13,7 +13,7 @@ import { useT } from "../../lib/i18n";
  * The five values below are resource overrides, not a new table: branding is
  * wording plus two colours, and tenant wording already has a governed,
  * tenant-scoped, locale-aware store. Clearing a field removes the override,
- * so "reset to ERPWare" is the absence of a row rather than a second concept.
+ * so "reset to Clove ERP" is the absence of a row rather than a second concept.
  */
 export function BrandingPanel({ locale = "en" }: { locale?: string }) {
   const brand = useBrand();

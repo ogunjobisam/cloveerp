@@ -199,6 +199,7 @@ export function ConfigTransfer({
         </ActionButton>
         <input
           ref={fileRef}
+          aria-label="CSV file"
           type="file"
           accept=".csv,text/csv"
           className="sr-only"

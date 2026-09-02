@@ -29,7 +29,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 export const Route = createFileRoute("/administration/onboarding")({
   head: () => ({
     meta: [
-      { title: "Onboarding interview — ERPWare" },
+      { title: "Onboarding interview — Clove ERP" },
       {
         name: "description",
         content:

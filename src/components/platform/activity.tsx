@@ -53,6 +53,7 @@ export function Activity() {
       description="Every platform action, including each entry into a customer company and the reason given."
       action={
         <select
+          aria-label="Filter by action"
           value={action}
           onChange={(e) => setAction(e.target.value)}
           className="rounded-md border border-input bg-background px-2 py-2 text-xs"

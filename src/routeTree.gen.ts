@@ -12,9 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AdministrationAccessibilityRouteImport } from './routes/administration/accessibility'
+import { Route as AdministrationAdoptionRouteImport } from './routes/administration/adoption'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
 import { Route as AdministrationCommercialRouteImport } from './routes/administration/commercial'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
+import { Route as AdministrationErasureRouteImport } from './routes/administration/erasure'
 import { Route as AdministrationOnboardingRouteImport } from './routes/administration/onboarding'
 import { Route as AdministrationOrganisationRouteImport } from './routes/administration/organisation'
 import { Route as AdministrationPacksRouteImport } from './routes/administration/packs'
@@ -62,6 +67,27 @@ const ProductRoute = ProductRouteImport.update({
   path: '/product',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdministrationAccessibilityRoute =
+  AdministrationAccessibilityRouteImport.update({
+    id: '/administration/accessibility',
+    path: '/administration/accessibility',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdministrationAdoptionRoute = AdministrationAdoptionRouteImport.update({
+  id: '/administration/adoption',
+  path: '/administration/adoption',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministrationAuditRoute = AdministrationAuditRouteImport.update({
   id: '/administration/audit',
   path: '/administration/audit',
@@ -79,6 +105,11 @@ const AdministrationConfigurationRoute =
     path: '/administration/configuration',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdministrationErasureRoute = AdministrationErasureRouteImport.update({
+  id: '/administration/erasure',
+  path: '/administration/erasure',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministrationOnboardingRoute =
   AdministrationOnboardingRouteImport.update({
     id: '/administration/onboarding',
@@ -246,9 +277,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
+  '/administration/accessibility': typeof AdministrationAccessibilityRoute
+  '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/erasure': typeof AdministrationErasureRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/packs': typeof AdministrationPacksRoute
@@ -285,9 +321,14 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
+  '/administration/accessibility': typeof AdministrationAccessibilityRoute
+  '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/erasure': typeof AdministrationErasureRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/packs': typeof AdministrationPacksRoute
@@ -325,9 +366,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
+  '/administration/accessibility': typeof AdministrationAccessibilityRoute
+  '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/erasure': typeof AdministrationErasureRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/packs': typeof AdministrationPacksRoute
@@ -366,9 +412,14 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/profile'
+    | '/settings'
+    | '/administration/accessibility'
+    | '/administration/adoption'
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
+    | '/administration/erasure'
     | '/administration/onboarding'
     | '/administration/organisation'
     | '/administration/packs'
@@ -405,9 +456,14 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/profile'
+    | '/settings'
+    | '/administration/accessibility'
+    | '/administration/adoption'
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
+    | '/administration/erasure'
     | '/administration/onboarding'
     | '/administration/organisation'
     | '/administration/packs'
@@ -444,9 +500,14 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/profile'
+    | '/settings'
+    | '/administration/accessibility'
+    | '/administration/adoption'
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
+    | '/administration/erasure'
     | '/administration/onboarding'
     | '/administration/organisation'
     | '/administration/packs'
@@ -484,9 +545,14 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
+  ProfileRoute: typeof ProfileRoute
+  SettingsRoute: typeof SettingsRoute
+  AdministrationAccessibilityRoute: typeof AdministrationAccessibilityRoute
+  AdministrationAdoptionRoute: typeof AdministrationAdoptionRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
   AdministrationCommercialRoute: typeof AdministrationCommercialRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
+  AdministrationErasureRoute: typeof AdministrationErasureRoute
   AdministrationOnboardingRoute: typeof AdministrationOnboardingRoute
   AdministrationOrganisationRoute: typeof AdministrationOrganisationRoute
   AdministrationPacksRoute: typeof AdministrationPacksRoute
@@ -543,6 +609,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/accessibility': {
+      id: '/administration/accessibility'
+      path: '/administration/accessibility'
+      fullPath: '/administration/accessibility'
+      preLoaderRoute: typeof AdministrationAccessibilityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/adoption': {
+      id: '/administration/adoption'
+      path: '/administration/adoption'
+      fullPath: '/administration/adoption'
+      preLoaderRoute: typeof AdministrationAdoptionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/administration/audit': {
       id: '/administration/audit'
       path: '/administration/audit'
@@ -562,6 +656,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/configuration'
       fullPath: '/administration/configuration'
       preLoaderRoute: typeof AdministrationConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/erasure': {
+      id: '/administration/erasure'
+      path: '/administration/erasure'
+      fullPath: '/administration/erasure'
+      preLoaderRoute: typeof AdministrationErasureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/onboarding': {
@@ -788,9 +889,14 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
+  ProfileRoute: ProfileRoute,
+  SettingsRoute: SettingsRoute,
+  AdministrationAccessibilityRoute: AdministrationAccessibilityRoute,
+  AdministrationAdoptionRoute: AdministrationAdoptionRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,
   AdministrationCommercialRoute: AdministrationCommercialRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
+  AdministrationErasureRoute: AdministrationErasureRoute,
   AdministrationOnboardingRoute: AdministrationOnboardingRoute,
   AdministrationOrganisationRoute: AdministrationOrganisationRoute,
   AdministrationPacksRoute: AdministrationPacksRoute,

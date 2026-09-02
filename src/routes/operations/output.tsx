@@ -6,7 +6,7 @@ import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 
 export const Route = createFileRoute("/operations/output")({
-  head: () => ({ meta: [{ title: "Output and printing — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Output and printing — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Output />

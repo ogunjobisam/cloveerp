@@ -4,7 +4,7 @@ One-off scripts that repair a specific database. Nothing here is part of the
 product's definition, and nothing here runs in CI.
 
 The distinction matters. `supabase/migrations/` is the sequence that builds
-ERPWare from nothing, and CI proves on every push that it still does. A script
+Clove ERP from nothing, and CI proves on every push that it still does. A script
 in this directory is the opposite: it exists because one particular database
 drifted from that sequence, and it is written against the state that database
 actually reached rather than the state the repository describes.

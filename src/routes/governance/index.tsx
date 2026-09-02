@@ -11,13 +11,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/governance/")({
   head: () => ({
     meta: [
-      { title: "Change requests and approvals — ERPWare" },
+      { title: "Change requests and approvals — Clove ERP" },
       {
         name: "description",
         content:
           "The governed path for master data: propose a change, preview it, have it approved, then apply it.",
       },
-      { property: "og:title", content: "Change requests and approvals — ERPWare" },
+      { property: "og:title", content: "Change requests and approvals — Clove ERP" },
       {
         property: "og:description",
         content: "Propose, preview, approve and apply master data changes.",

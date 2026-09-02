@@ -11,13 +11,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/master-data/item-supply")({
   head: () => ({
     meta: [
-      { title: "Item supply and default suppliers — ERPWare" },
+      { title: "Item supply and default suppliers — Clove ERP" },
       {
         name: "description",
         content:
           "Who each item is bought from, at what preference and split, per site — with approved-supplier enforcement on regulated items.",
       },
-      { property: "og:title", content: "Item supply and default suppliers — ERPWare" },
+      { property: "og:title", content: "Item supply and default suppliers — Clove ERP" },
       {
         property: "og:description",
         content:

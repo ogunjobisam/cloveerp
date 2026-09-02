@@ -24,7 +24,7 @@ import { useCurrencies } from "../../components/erp/currencies";
  */
 
 export const Route = createFileRoute("/documents/$documentId")({
-  head: () => ({ meta: [{ title: "Document — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Document — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Document />

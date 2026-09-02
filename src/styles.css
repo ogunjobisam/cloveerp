@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system: Slate & Amber for ERPWare.
+ * Design system: Slate & Amber for Clove ERP.
  *
  * Warm paper surfaces, graphite ink, one amber signal colour. Every colour is
  * a token here; components never hard-code one.
@@ -37,11 +37,11 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--surface);
   --color-border: var(--line);
-  --color-input: var(--line);
+  --color-input: var(--input-line);
   --color-ring: var(--accent);
   --color-ring-offset-background: var(--surface);
 
-  /* ERPWare semantic tokens */
+  /* Clove ERP semantic tokens */
   --color-brand: var(--brand);
   --color-ink: var(--ink);
   --color-accent-soft: var(--accent-soft);
@@ -59,18 +59,29 @@
 :root {
   --radius: 0.875rem;
 
-  /* Slate & amber palette */
+  /* Slate & amber palette.
+   *
+   * Every text token here clears WCAG 2.2 AA (4.5:1 for text, 3:1 for the
+   * boundaries of controls and the focus ring) against the surfaces it is
+   * used on, and src/lib/accessibility.test.ts computes those ratios from
+   * these values on every build. Three were changed to get there and the
+   * reasons are worth keeping: muted ink was 62% alpha over the surface,
+   * which reads at 2.3:1 and is most of the product's descriptive text;
+   * the amber accent at L 0.625 was 3.6:1 as text; and the input border
+   * shared the hairline token at 1.4:1, so a field's edge was decoration.
+   */
   --surface: oklch(0.968 0.006 85);
   --card-surface: oklch(0.993 0.003 85);
   --soft: oklch(0.925 0.011 85);
   --line: oklch(0.881 0.013 82);
+  --input-line: oklch(0.62 0.013 82);
   --ink: oklch(0.355 0.011 70);
-  --ink-muted: oklch(0.355 0.011 70 / 0.62);
+  --ink-muted: oklch(0.5 0.011 70);
   --brand: oklch(0.315 0.012 70);
-  --accent: oklch(0.625 0.118 55);
-  --accent-soft: oklch(0.625 0.118 55 / 0.12);
-  --ok: oklch(0.55 0.09 155);
-  --warn: oklch(0.7 0.13 75);
+  --accent: oklch(0.54 0.118 55);
+  --accent-soft: oklch(0.54 0.118 55 / 0.12);
+  --ok: oklch(0.52 0.09 155);
+  --warn: oklch(0.55 0.13 75);
   --destructive: oklch(0.54 0.2 25);
 
   --shadow-card: 0 1px 2px oklch(0.355 0.011 70 / 0.05), 0 8px 24px -16px oklch(0.355 0.011 70 / 0.3);
@@ -79,6 +90,34 @@
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  /* The header is sticky and 4.5rem tall. Without this, tabbing to a control
+     the browser scrolls into view lands it behind the header (WCAG 2.4.11). */
+  html {
+    scroll-padding-top: 5.5rem;
+  }
+
+  /* One focus indicator for everything that takes focus from a keyboard, and
+     only from a keyboard: a mouse click does not draw it. Two pixels of the
+     accent, offset so it sits outside the control's own border, which clears
+     3:1 against every surface (WCAG 2.4.7, 1.4.11). */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Motion is a preference. Someone who has asked for less of it gets none
+     of the hover lifts, dialog slides and drawer transitions (WCAG 2.3.3). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   body {

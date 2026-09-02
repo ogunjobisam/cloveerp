@@ -12,7 +12,7 @@ import { TOUCH } from "../erp/page";
  */
 
 export const INPUT =
-  "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/70";
+  "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground";
 
 export function Card({
   title,

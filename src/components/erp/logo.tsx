@@ -5,7 +5,7 @@ type LogoProps = {
   compact?: boolean;
   reversed?: boolean;
   className?: string;
-  /** Override the mark colours; defaults to the ERPWare tokens. */
+  /** Override the mark colours; defaults to the Clove ERP tokens. */
   ink?: string;
   total?: string;
 };
@@ -34,7 +34,7 @@ export function Logo({
       viewBox="0 0 32 32"
       fill="none"
       role="img"
-      aria-label="ERPWare"
+      aria-label="Clove ERP"
       className={className}
     >
       {useCompact ? (
@@ -58,7 +58,7 @@ export function Logo({
 
 /**
  * The mark as the tenant has it: their uploaded image if there is one, the
- * ERPWare geometry in their colours otherwise.
+ * Clove ERP geometry in their colours otherwise.
  */
 export function BrandMark({ size = 28, className }: { size?: number; className?: string }) {
   const brand = useBrand();

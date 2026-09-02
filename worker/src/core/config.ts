@@ -64,7 +64,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
         ? env["ERPWARE_SYSTEMS"].split(",").map((s) => s.trim()).filter(Boolean)
         : [],
       pollMs: Number(env["ERPWARE_POLL_MS"] ?? 5000),
-      workerName: env["ERPWARE_WORKER_NAME"] ?? `erpware-worker-${process.pid ?? "edge"}`,
+      workerName: env["ERPWARE_WORKER_NAME"] ?? `clove-erp-worker-${process.pid ?? "edge"}`,
     };
   } finally {
     (process as { env: Record<string, string | undefined> }).env = saved;

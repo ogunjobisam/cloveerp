@@ -1,4 +1,4 @@
-# ERPWare
+# Clove ERP
 
 A tenant-neutral, multi-entity ERP platform whose behaviour is configured
 rather than coded.
@@ -306,7 +306,7 @@ the log was not.
   it deploys (the preview branch on the pull request that declared it reported
   Edge Functions green, which also settled the open question of whether the
   bundler follows the import out of `supabase/functions/` into
-  `worker/src/core/` — it does), and it runs: pointed at a local ERPWare
+  `worker/src/core/` — it does), and it runs: pointed at a local Clove ERP
   database it refuses a wrong shared secret with a 403, connects with the npm
   `postgres` driver, and returns B1's own `ERPWARE_UNKNOWN_PRINCIPAL` for a
   fabricated principal. What has not happened is a real pass: no schedule

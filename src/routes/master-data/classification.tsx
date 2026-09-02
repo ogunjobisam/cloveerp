@@ -12,13 +12,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/master-data/classification")({
   head: () => ({
     meta: [
-      { title: "Product classification and coding — ERPWare" },
+      { title: "Product classification and coding — Clove ERP" },
       {
         name: "description",
         content:
           "Classification axes and values, code templates composed from them, and the assignments that record which classification produced each item code.",
       },
-      { property: "og:title", content: "Product classification and coding — ERPWare" },
+      { property: "og:title", content: "Product classification and coding — Clove ERP" },
       {
         property: "og:description",
         content:

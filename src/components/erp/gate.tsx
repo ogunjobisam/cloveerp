@@ -110,7 +110,7 @@ function SignIn() {
     <Centred>
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
         <Wordmark size={30} />
-        <h1 className="mt-4 text-lg font-semibold">Sign in to ERPWare</h1>
+        <h1 className="mt-4 text-lg font-semibold">Sign in to Clove ERP</h1>
 
         <p className="mt-1 text-sm text-muted-foreground">
           Your tenant is derived from your account. It is never chosen here.
@@ -172,7 +172,7 @@ function SignIn() {
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <Link to="/product" className="underline underline-offset-2">
-            About ERPWare
+            About Clove ERP
           </Link>
         </p>
       </form>
@@ -340,7 +340,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   );
 }
 
-const SCOPE_KEY = "erpware.scope";
+const SCOPE_KEY = "clove-erp.scope";
 
 function readScope(): Scope {
   try {
@@ -396,7 +396,9 @@ export function Gate({ children }: { children: ReactNode }) {
   if (!authReady)
     return (
       <Centred>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading…
+        </p>
       </Centred>
     );
   if (!authSession) return <SignIn />;
@@ -406,7 +408,9 @@ export function Gate({ children }: { children: ReactNode }) {
   if (isPending) {
     return (
       <Centred>
-        <p className="text-sm text-muted-foreground">Resolving your tenant…</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          Resolving your tenant…
+        </p>
       </Centred>
     );
   }

@@ -67,6 +67,50 @@ export type Chart = {
   unit?: string;
 };
 
+/**
+ * Where a screen lives.
+ *
+ * Two areas, because two different people open the product for two different
+ * reasons. Work is the operating flow — plan, source, make, move, sell,
+ * settle — and the records it runs on. Settings is everything that shapes the
+ * organisation rather than runs it: who is in it, how it is configured, the
+ * plumbing underneath, and the assurance over all of it. A person doing the
+ * day's work never sees a configuration screen in their way, and an
+ * administrator setting the organisation up is not wading through worklists.
+ */
+export type TileGroup =
+  | "plan"
+  | "source"
+  | "make"
+  | "move"
+  | "sell"
+  | "settle"
+  | "records"
+  | "organisation"
+  | "configure"
+  | "operate"
+  | "assure";
+
+export type Area = "work" | "settings";
+
+export const WORK_GROUPS: TileGroup[] = [
+  "plan",
+  "source",
+  "make",
+  "move",
+  "sell",
+  "settle",
+  "records",
+];
+export const SETTINGS_GROUPS: TileGroup[] = ["organisation", "configure", "operate", "assure"];
+
+export function areaOf(group: TileGroup): Area {
+  return SETTINGS_GROUPS.includes(group) ? "settings" : "work";
+}
+
+/** Where an area starts: its home screen. */
+export const AREA_HOME: Record<Area, string> = { work: "/", settings: "/settings" };
+
 export type ModuleDef = {
   key: string;
   path: string;
@@ -75,7 +119,7 @@ export type ModuleDef = {
   /** One sentence. Shown on the tile and under the page title. */
   blurb: string;
   permission?: string;
-  group: "plan" | "source" | "make" | "move" | "sell" | "settle" | "govern" | "administer";
+  group: TileGroup;
   kpis: Kpi[];
   chart?: Chart;
   worklists: Panel[];
@@ -1290,7 +1334,7 @@ export const QUALITY: ModuleDef = {
   title: "Quality and recall",
   blurb: "Events, dispositions, supplier qualification and recall — each with a clock.",
   permission: "quality.read",
-  group: "govern",
+  group: "make",
   actions: [
     {
       label: "Raise a quality event",
@@ -1732,7 +1776,7 @@ export const REPORTING: ModuleDef = {
   title: "Reporting",
   blurb: "Data quality, duplicates and specification coverage, read from operational tables.",
   permission: "reporting.read",
-  group: "govern",
+  group: "records",
   kpis: [
     {
       label: "Party data quality",
@@ -1859,7 +1903,7 @@ export type TileDef = {
   title: string;
   blurb: string;
   permission?: string;
-  group: "plan" | "source" | "make" | "move" | "sell" | "settle" | "govern" | "administer";
+  group: TileGroup;
 };
 
 export const EXTRA_TILES: TileDef[] = [
@@ -1885,7 +1929,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Master data",
     blurb: "The items and parties every document depends on.",
     permission: "master_data.read",
-    group: "govern",
+    group: "records",
   },
   {
     path: "/governance",
@@ -1893,7 +1937,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Change requests",
     blurb: "Proposed master data changes and the approvals on them.",
     permission: "master_data.read",
-    group: "govern",
+    group: "records",
   },
   {
     path: "/master-data/imports",
@@ -1901,7 +1945,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Imports",
     blurb: "Staged batches, preview, validation, load and rollback.",
     permission: "master_data.import",
-    group: "govern",
+    group: "records",
   },
   {
     path: "/reporting/reproducibility",
@@ -1910,7 +1954,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Every report version, the governed view it reads, and each run with the parameters it used — so what was shown can be shown again.",
     permission: "reporting.read",
-    group: "govern",
+    group: "assure",
   },
   {
     path: "/operations/jobs",
@@ -1918,7 +1962,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Scheduled jobs",
     blurb: "What is running, what failed, and what has stopped running.",
     permission: "administration.jobs",
-    group: "administer",
+    group: "operate",
   },
   {
     path: "/operations/integrations",
@@ -1926,7 +1970,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Integrations",
     blurb: "Outbound gateway health and the queue that needs a decision.",
     permission: "administration.integrate",
-    group: "administer",
+    group: "operate",
   },
   {
     path: "/operations/assurance",
@@ -1934,7 +1978,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Assurance",
     blurb: "The structural checks the build runs on every push.",
     permission: "administration.read",
-    group: "administer",
+    group: "assure",
   },
   {
     path: "/operations/continuity",
@@ -1943,7 +1987,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "What was promised about staying up, whether a drill has proved it, and what happened when it did not.",
     permission: "administration.read",
-    group: "administer",
+    group: "operate",
   },
   {
     path: "/operations/devices",
@@ -1952,7 +1996,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Registered scanners and terminals, what each may do, the rules a scan is judged by, and the actions waiting to be applied.",
     permission: "administration.read",
-    group: "administer",
+    group: "operate",
   },
   {
     path: "/operations/cutover",
@@ -1961,7 +2005,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Opening balances loaded as at a date, whether each load reconciles, the parallel-run figures, and which domains are cut over on that evidence.",
     permission: "master_data.read",
-    group: "administer",
+    group: "operate",
   },
   {
     path: "/operations/output",
@@ -1970,7 +2014,33 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Template versions, printers, every request with its render and delivery, and the addresses mail may not go to.",
     permission: "administration.read",
-    group: "administer",
+    group: "operate",
+  },
+  {
+    path: "/administration/erasure",
+    titleKey: "nav.administration_erasure",
+    title: "Personal data and erasure",
+    blurb:
+      "Which columns hold a person's data and what erasure does to each; requests to erase a principal or contact, executed by a second person, with the certificate.",
+    permission: "administration.read",
+    group: "assure",
+  },
+  {
+    path: "/administration/adoption",
+    titleKey: "nav.administration_adoption",
+    title: "Guidance and adoption",
+    blurb:
+      "Where adoption is stalling, counted and never named; training scenarios practised in a demo organisation; the product's help for every screen.",
+    permission: "administration.read",
+    group: "assure",
+  },
+  {
+    path: "/administration/accessibility",
+    titleKey: "nav.administration_accessibility",
+    title: "Accessibility",
+    blurb:
+      "The accessibility statement: each WCAG 2.2 criterion, whether the product meets it, how, and the known exceptions.",
+    group: "assure",
   },
   {
     path: "/administration/commercial",
@@ -1979,7 +2049,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "The plan this organisation is on, what it entitles, how much of each limit is used, and the meters behind the figures.",
     permission: "administration.read",
-    group: "administer",
+    group: "organisation",
   },
   {
     path: "/administration/configuration",
@@ -1987,7 +2057,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Configuration",
     blurb: "Install modules and promote the change sets that put them in force.",
     permission: "administration.configure",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/administration/packs",
@@ -1996,7 +2066,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Switch product features on and off, apply starter content packs, and see what this organisation cannot yet do.",
     permission: "administration.configure",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/administration/onboarding",
@@ -2005,7 +2075,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Questions about how this organisation works, turned into a change set per configuration surface.",
     permission: "administration.configure",
-    group: "administer",
+    group: "organisation",
   },
   {
     path: "/administration/organisation",
@@ -2013,7 +2083,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Organisation and approval routing",
     blurb: "Departments, membership, value bands and named approvers — who approves what, and why.",
     permission: "administration.configure",
-    group: "administer",
+    group: "organisation",
   },
   {
     path: "/master-data/classification",
@@ -2022,7 +2092,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Classification axes and values, code templates composed from them, completeness gaps and divergences.",
     permission: "master_data.write",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/master-data/item-supply",
@@ -2030,7 +2100,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Item supply",
     blurb: "Default suppliers, preference ranks, sourcing splits and approved-for-use status.",
     permission: "master_data.write",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/logistics/release-areas",
@@ -2039,7 +2109,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Allocated stock scopes, pull and push replenishment, ageing back to bulk, and print gating.",
     permission: "logistics.plan",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/finance/account-determination",
@@ -2048,7 +2118,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Posting classes and the matrix that decides the account and analysis — with a gap report and no suspense fallback.",
     permission: "finance.configure",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/administration/permissions",
@@ -2056,7 +2126,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Permissions",
     blurb: "Principals, roles, and the grants between them.",
     permission: "administration.roles",
-    group: "administer",
+    group: "organisation",
   },
   {
     path: "/administration/terminology",
@@ -2064,7 +2134,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Terminology",
     blurb: "The wording of every label, per tenant.",
     permission: "administration.configure",
-    group: "administer",
+    group: "configure",
   },
   {
     path: "/administration/audit",
@@ -2073,7 +2143,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Who did what, to which object, and when — filterable by action, object, actor and date.",
     permission: "administration.audit_read",
-    group: "administer",
+    group: "assure",
   },
   {
     path: "/administration/tenant",
@@ -2081,32 +2151,26 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Organisation lifecycle",
     blurb: "Go-live, export and portability, and deletion that deletes.",
     permission: "administration.configure",
-    group: "administer",
+    group: "organisation",
   },
 ];
 
-export const GROUP_LABELS: Record<TileDef["group"], string> = {
+export const GROUP_LABELS: Record<TileGroup, string> = {
   plan: "Plan",
   source: "Source",
   make: "Make",
   move: "Move",
   sell: "Sell",
   settle: "Settle",
-  govern: "Govern & assure",
-  administer: "Administration",
+  records: "Records",
+  organisation: "Organisation",
+  configure: "Configure",
+  operate: "Operate",
+  assure: "Assure",
 };
 
-/** The order the journey reads in, followed by the two supporting sections. */
-export const GROUP_ORDER: TileDef["group"][] = [
-  "plan",
-  "source",
-  "make",
-  "move",
-  "sell",
-  "settle",
-  "govern",
-  "administer",
-];
+/** The order the two areas read in: the journey and its records, then the four settings sections. */
+export const GROUP_ORDER: TileGroup[] = [...WORK_GROUPS, ...SETTINGS_GROUPS];
 
 /** Registry modules and bespoke screens, as one list of tiles. */
 export function allTiles(): TileDef[] {

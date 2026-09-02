@@ -184,6 +184,7 @@ function SelectInput({
 
   return (
     <select
+      aria-label={ui(spec.label)}
       value={value}
       onFocus={() => {
         if (rows === null && !load.isPending) load.mutate();

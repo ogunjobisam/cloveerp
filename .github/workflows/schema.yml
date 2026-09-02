@@ -45,7 +45,7 @@ jobs:
       PGPORT: '5432'
       PGUSER: postgres
       PGPASSWORD: postgres
-      PGDATABASE: erpware
+      PGDATABASE: clove_erp
       # Any notice is noise; an error must stop the run at the statement that
       # caused it rather than carrying on and failing somewhere less useful.
       PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
@@ -87,7 +87,7 @@ jobs:
         # build.
         run: |
           set -euo pipefail
-          docker run -d --name erpware-pg \
+          docker run -d --name clove-erp-pg \
             -e POSTGRES_PASSWORD=postgres \
             -p 5432:5432 \
             supabase/postgres:17.6.1.167
@@ -103,15 +103,15 @@ jobs:
             sleep 1
           done
           echo "PostgreSQL did not become ready within 60s" >&2
-          docker logs erpware-pg 2>&1 | tail -40 >&2
+          docker logs clove-erp-pg 2>&1 | tail -40 >&2
           exit 1
 
       - name: Create the database
         run: |
-          psql -v ON_ERROR_STOP=1 -d postgres -c 'create database erpware'
+          psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_erp'
 
       - name: Bootstrap the host
-        # Everything ERPWare expects its host to provide, and nothing else. That
+        # Everything Clove ERP expects its host to provide, and nothing else. That
         # this file is short is the point: it is the whole Supabase surface.
         run: $PSQL -f supabase/ci/00_host_bootstrap.sql
 
@@ -180,7 +180,11 @@ jobs:
             "erp.assert_support_discipline()" \
             "erp.assert_pack_report_versions_sound()" \
             "erp.assert_device_task_handlers_sound()" \
-            "erp.assert_migration_sound()"
+            "erp.assert_migration_sound()" \
+            "erp.assert_accessibility_register_sound()" \
+            "erp.assert_personal_data_register_sound()" \
+            "erp.assert_guidance_sound()" \
+            "erp.assert_meters_recorded()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -236,7 +240,12 @@ jobs:
             "erp_test.assert_device_boundary_suite()" \
             "erp_test.assert_incident_operations_suite()" \
             "erp_test.assert_device_drain_suite()" \
-            "erp_test.assert_migration_cutover_suite()"
+            "erp_test.assert_migration_cutover_suite()" \
+            "erp_test.assert_accessibility_suite()" \
+            "erp_test.assert_erasure_suite()" \
+            "erp_test.assert_guidance_suite()" \
+            "erp_test.assert_metering_suite()" \
+            "erp_test.assert_profile_suite()"
           do
             $PSQL -tAc "select $s;"
           done
