@@ -10,7 +10,16 @@ import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/operations/output")({
-  head: () => ({ meta: [{ title: "Output and printing — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Output and printing — Clove ERP" },
+      { name: "description", content: "Printing, labels and document output routing across sites." },
+      { property: "og:title", content: "Output and printing — Clove ERP" },
+      { property: "og:description", content: "Printing, labels and document output routing across sites." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Output />

@@ -11,7 +11,16 @@ import { RpcButton } from "../../components/erp/rpc-button";
 import { callErp } from "../../lib/erp";
 
 export const Route = createFileRoute("/administration/erasure")({
-  head: () => ({ meta: [{ title: "Personal data and erasure — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Personal data and erasure — Clove ERP" },
+      { name: "description", content: "Personal-data register and erasure requests, handled under UK GDPR." },
+      { property: "og:title", content: "Personal data and erasure — Clove ERP" },
+      { property: "og:description", content: "Personal-data register and erasure requests, handled under UK GDPR." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Erasure />

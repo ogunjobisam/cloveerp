@@ -22,7 +22,16 @@ import { useT } from "../../lib/i18n";
  */
 
 export const Route = createFileRoute("/commercial/price-book")({
-  head: () => ({ meta: [{ title: "Price book — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Price book — Clove ERP" },
+      { name: "description", content: "Effective-dated price books, entitlement kinds and customer-specific pricing." },
+      { property: "og:title", content: "Price book — Clove ERP" },
+      { property: "og:description", content: "Effective-dated price books, entitlement kinds and customer-specific pricing." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <PriceBook />

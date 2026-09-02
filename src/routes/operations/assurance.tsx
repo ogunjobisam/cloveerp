@@ -5,7 +5,16 @@ import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 
 export const Route = createFileRoute("/operations/assurance")({
-  head: () => ({ meta: [{ title: "Assurance — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Assurance — Clove ERP" },
+      { name: "description", content: "Automated assurance checks that prove the ledger, stock and postings agree." },
+      { property: "og:title", content: "Assurance — Clove ERP" },
+      { property: "og:description", content: "Automated assurance checks that prove the ledger, stock and postings agree." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Assurance />

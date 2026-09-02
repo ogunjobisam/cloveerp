@@ -8,7 +8,16 @@ import { RpcButton } from "../../components/erp/rpc-button";
 import { useErpSession } from "../../components/erp/session-context";
 
 export const Route = createFileRoute("/administration/adoption")({
-  head: () => ({ meta: [{ title: "Guidance and adoption — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Guidance and adoption — Clove ERP" },
+      { name: "description", content: "Guidance, training scenarios and adoption tracking for teams rolling out Clove ERP." },
+      { property: "og:title", content: "Guidance and adoption — Clove ERP" },
+      { property: "og:description", content: "Guidance, training scenarios and adoption tracking for teams rolling out Clove ERP." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Adoption />
