@@ -370,8 +370,15 @@ begin
       p_pack_code, v_block using errcode = '23514';
   end if;
 
+  -- Second resolution alone collided when the acceptance suite applied the same
+  -- pack twice within a second on a fast runner. 20260904210000 repairs this
+  -- forward with a short random suffix; carried back here — this file is in
+  -- supabase/ci/migrations_edited.txt — because the suites that run between
+  -- this migration and that one replay THIS definition on a fresh build.
   v_code := coalesce(p_change_set_code,
-    format('pack-%s-%s', p_pack_code, to_char(clock_timestamp(), 'YYYYMMDDHH24MISS')));
+    format('pack-%s-%s-%s', p_pack_code,
+           to_char(clock_timestamp(), 'YYYYMMDDHH24MISS'),
+           substr(replace(gen_random_uuid()::text, '-', ''), 1, 6)));
 
   v_cs := erp.create_change_set(v_code,
     format('%s (%s)', cp.name, cp.version),
