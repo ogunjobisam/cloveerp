@@ -1955,6 +1955,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/operations/cutover",
+    titleKey: "nav.operations_cutover",
+    title: "Migration and cutover",
+    blurb:
+      "Opening balances loaded as at a date, whether each load reconciles, the parallel-run figures, and which domains are cut over on that evidence.",
+    permission: "master_data.read",
+    group: "administer",
+  },
+  {
     path: "/operations/output",
     titleKey: "nav.operations_output",
     title: "Output and printing",

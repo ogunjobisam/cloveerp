@@ -26,10 +26,10 @@ Read-only audit. The spec grew from v1 (499 lines) to v1.2 (2,808 lines, 23 part
 | 17 Support & incident | Partially built | Audited, time-bounded cross-tenant support access exists (platform layer). Not built: severity model, incident workflow, status page, post-incident reviews |
 | 18 Commercial & entitlement | Not built | No subscription/entitlement objects, no metering, no restricted-for-non-payment state (suspension exists but is manual) |
 | 19 Reporting & analytics services | Partially built | Reporting substrate, KPI definitions, reports screens, AutoPanel over RPCs. Gaps: versioned report definitions as promotable configuration, scheduled distribution packs, external BI contract, NL querying |
-| 20 Data migration & import | Partially built | Import pipeline with staging/validation/preview/load and CSV engine exists. Gaps: reconciliation-after-load report (D31), batch reversal, opening-balance loaders with as-at dating, parallel-run comparison and evidence-gated cutover (D32) |
+| 20 Data migration & import | Built | Import pipeline with staging/validation/preview/load and CSV engine; opening-balance loaders for stock, sales ledger, purchase ledger and nominal as at a date through the movement and journal tables; reconciliation after load per check (D31); batch reversal as reversing journals and movements; parallel-run figures with tolerance; evidence-gated per-domain cutover by a second person, with the evidence kept (D32). `/operations/cutover` (Sep 4) |
 | 21 Accessibility | Not addressed | No WCAG audit, statement, or systematic keyboard/contrast pass |
 | 22 Guidance & adoption | Partially built | Refusals teach (friendly errors with next action); adoption/insight registers exist (Sep 2). Gaps: contextual help content, role-based first-run guidance, sandbox-with-training-scenarios, demo-seed refusal in live |
-| 23 Decisions register | Mostly honoured | D1–D23 from v1 are structural in the build. New-in-v1.2 decisions D24 (scan confirmation), D25/D26 (output subsystem), D28 (restore drill), D29 (restricted state), D31/D32 (migration/cutover) are not yet implemented because their parts aren't |
+| 23 Decisions register | Mostly honoured | D1–D23 from v1 are structural in the build. New-in-v1.2 decisions D24 (scan confirmation), D25/D26 (output subsystem), D28 (restore drill), D29 (restricted state) are not yet implemented because their parts aren't. D31/D32 (migration reconciliation and evidence-gated cutover) are implemented (Sep 4) |
 
 ## Headline summary
 
@@ -39,7 +39,7 @@ Read-only audit. The spec grew from v1 (499 lines) to v1.2 (2,808 lines, 23 part
 1. **Part 14 — Device operations**: the scan-first warehouse application. Largest single gap; a separate UI surface against existing functions.
 2. **Part 15 — Output subsystem**: one model for documents, labels, email, notifications. Templates started Sep 4; the render/deliver/archive machinery is not there.
 3. **Part 18 — Commercial & entitlement**: subscriptions, metering, entitlement enforcement in the database, the restricted (read/export-only) state.
-4. **Part 20 depth — migration reconciliation & cutover**: loads exist; proof they reconciled, reversal, and evidence-gated per-domain cutover do not.
+4. **Part 20 depth — migration reconciliation & cutover**: built Sep 4 — opening-balance loaders as at a date, reconciliation after load, reversal, parallel-run figures and evidence-gated per-domain cutover.
 
 **Smaller gaps:** Part 17 incident/status, Part 19 report governance & scheduled packs, Part 21 accessibility pass, Part 22 contextual help & sandbox, §7.18 interview UI, §9.4 personal-data erasure store.
 
