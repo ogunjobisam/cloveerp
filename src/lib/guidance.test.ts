@@ -91,6 +91,29 @@ describe("§22.2 first-run guidance: every step lands on a screen that has help"
   }
 });
 
+describe("§22.2 the first-run panel takes its words from the database", () => {
+  const panel = readFileSync(join(ROOT, "src", "components", "erp", "first-run.tsx"), "utf8");
+
+  // The nine guide names used to live in a Record<string, string> here, which
+  // put nine product-visible strings outside the resource layer every other
+  // string resolves through. They come from erp_ref.first_run_guide now.
+  test("guide names are not hardcoded in the front end", () => {
+    expect(panel).not.toContain("GUIDE_LABELS");
+    expect(panel).toContain("guide_name");
+  });
+
+  test("a step renders the action it opens, not a hyperlink on its title", () => {
+    expect(panel).toContain("action_label");
+  });
+
+  // The panel's whole point after this change: the database says whether a
+  // step is complete, and the panel must not recompute that from done_at.
+  test("completion is the database's word", () => {
+    expect(panel).toContain("step.complete");
+    expect(panel).toContain("evidence");
+  });
+});
+
 describe("the help button is in the shell, and Home offers the first steps", () => {
   test("the shell renders ContextHelp", () => {
     const shell = readFileSync(join(ROOT, "src", "components", "erp", "shell.tsx"), "utf8");
