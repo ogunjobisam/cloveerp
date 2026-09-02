@@ -9,9 +9,15 @@ export const Route = createFileRoute("/operations/devices")({
   head: () => ({
     meta: [
       { title: "Devices and scanning — Clove ERP" },
-      { name: "description", content: "Handheld scanners, device enrolment and offline queue health." },
+      {
+        name: "description",
+        content: "Handheld scanners, device enrolment and offline queue health.",
+      },
       { property: "og:title", content: "Devices and scanning — Clove ERP" },
-      { property: "og:description", content: "Handheld scanners, device enrolment and offline queue health." },
+      {
+        property: "og:description",
+        content: "Handheld scanners, device enrolment and offline queue health.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

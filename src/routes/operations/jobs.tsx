@@ -24,7 +24,10 @@ export const Route = createFileRoute("/operations/jobs")({
       { title: "Scheduled jobs — Clove ERP" },
       { name: "description", content: "Scheduled jobs, run history and failure diagnostics." },
       { property: "og:title", content: "Scheduled jobs — Clove ERP" },
-      { property: "og:description", content: "Scheduled jobs, run history and failure diagnostics." },
+      {
+        property: "og:description",
+        content: "Scheduled jobs, run history and failure diagnostics.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

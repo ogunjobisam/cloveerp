@@ -147,6 +147,7 @@ jobs:
             "erp.assert_governed_views_are_safe()" \
             "erp.assert_intelligence_boundary()" \
             "erp.assert_public_api_safe()" \
+            "erp.assert_authorising_doors_are_volatile()" \
             "erp.assert_no_dead_configuration()" \
             "erp.assert_master_data_sane()" \
             "erp.assert_inventory_sane()" \
@@ -263,7 +264,8 @@ jobs:
             "erp_test.assert_commercial_contract_suite()" \
             "erp_test.assert_commercial_renewal_suite()" \
             "erp_test.assert_refusal_register_suite()" \
-            "erp_test.assert_first_run_guidance_suite()"
+            "erp_test.assert_first_run_guidance_suite()" \
+            "erp_test.assert_authorising_doors_suite()"
           do
             $PSQL -tAc "select $s;"
           done

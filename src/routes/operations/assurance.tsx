@@ -8,9 +8,15 @@ export const Route = createFileRoute("/operations/assurance")({
   head: () => ({
     meta: [
       { title: "Assurance — Clove ERP" },
-      { name: "description", content: "Automated assurance checks that prove the ledger, stock and postings agree." },
+      {
+        name: "description",
+        content: "Automated assurance checks that prove the ledger, stock and postings agree.",
+      },
       { property: "og:title", content: "Assurance — Clove ERP" },
-      { property: "og:description", content: "Automated assurance checks that prove the ledger, stock and postings agree." },
+      {
+        property: "og:description",
+        content: "Automated assurance checks that prove the ledger, stock and postings agree.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

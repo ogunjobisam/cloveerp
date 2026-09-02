@@ -27,9 +27,17 @@ export const Route = createFileRoute("/documents/$documentId")({
   head: () => ({
     meta: [
       { title: "Document — Clove ERP" },
-      { name: "description", content: "A single Clove ERP document with its state machine, lines, postings and audit trail." },
+      {
+        name: "description",
+        content:
+          "A single Clove ERP document with its state machine, lines, postings and audit trail.",
+      },
       { property: "og:title", content: "Document — Clove ERP" },
-      { property: "og:description", content: "A single Clove ERP document with its state machine, lines, postings and audit trail." },
+      {
+        property: "og:description",
+        content:
+          "A single Clove ERP document with its state machine, lines, postings and audit trail.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

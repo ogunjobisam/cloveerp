@@ -29,7 +29,11 @@ export const Route = createFileRoute("/administration/audit")({
           "Track master-data change submissions, approvals and applied changes by tenant and user.",
       },
       { property: "og:title", content: "Audit log — Clove ERP" },
-      { property: "og:description", content: "Track master-data change submissions, approvals and applied changes by tenant and user." },
+      {
+        property: "og:description",
+        content:
+          "Track master-data change submissions, approvals and applied changes by tenant and user.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
