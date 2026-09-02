@@ -184,6 +184,7 @@ jobs:
             "erp.assert_accessibility_register_sound()" \
             "erp.assert_personal_data_register_sound()" \
             "erp.assert_guidance_sound()" \
+            "erp.assert_first_run_guidance_actionable()" \
             "erp.assert_meters_recorded()" \
             "erp.assert_reporting_services()" \
             "erp.assert_output_channels_sound()" \
@@ -261,7 +262,8 @@ jobs:
             "erp_test.assert_commercial_quote_suite()" \
             "erp_test.assert_commercial_contract_suite()" \
             "erp_test.assert_commercial_renewal_suite()" \
-            "erp_test.assert_refusal_register_suite()"
+            "erp_test.assert_refusal_register_suite()" \
+            "erp_test.assert_first_run_guidance_suite()"
           do
             $PSQL -tAc "select $s;"
           done
