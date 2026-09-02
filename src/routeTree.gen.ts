@@ -50,6 +50,7 @@ import { Route as ProcurementIndexRouteImport } from './routes/procurement/index
 import { Route as ProductionIndexRouteImport } from './routes/production/index'
 import { Route as QualityIndexRouteImport } from './routes/quality/index'
 import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
+import { Route as ReportingDistributionRouteImport } from './routes/reporting/distribution'
 import { Route as ReportingReproducibilityRouteImport } from './routes/reporting/reproducibility'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
 
@@ -267,6 +268,11 @@ const ReportingIndexRoute = ReportingIndexRouteImport.update({
   path: '/reporting/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingDistributionRoute = ReportingDistributionRouteImport.update({
+  id: '/reporting/distribution',
+  path: '/reporting/distribution',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportingReproducibilityRoute =
   ReportingReproducibilityRouteImport.update({
     id: '/reporting/reproducibility',
@@ -311,6 +317,7 @@ export interface FileRoutesByFullPath {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
   '/governance/': typeof GovernanceIndexRoute
@@ -356,6 +363,7 @@ export interface FileRoutesByTo {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance': typeof FinanceIndexRoute
   '/governance': typeof GovernanceIndexRoute
@@ -402,6 +410,7 @@ export interface FileRoutesById {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
   '/governance/': typeof GovernanceIndexRoute
@@ -449,6 +458,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance/'
     | '/governance/'
@@ -494,6 +504,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance'
     | '/governance'
@@ -539,6 +550,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance/'
     | '/governance/'
@@ -585,6 +597,7 @@ export interface RootRouteChildren {
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
   OperationsOutputRoute: typeof OperationsOutputRoute
+  ReportingDistributionRoute: typeof ReportingDistributionRoute
   ReportingReproducibilityRoute: typeof ReportingReproducibilityRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   GovernanceIndexRoute: typeof GovernanceIndexRoute
@@ -888,6 +901,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/distribution': {
+      id: '/reporting/distribution'
+      path: '/reporting/distribution'
+      fullPath: '/reporting/distribution'
+      preLoaderRoute: typeof ReportingDistributionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reporting/reproducibility': {
       id: '/reporting/reproducibility'
       path: '/reporting/reproducibility'
@@ -937,6 +957,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
   OperationsOutputRoute: OperationsOutputRoute,
+  ReportingDistributionRoute: ReportingDistributionRoute,
   ReportingReproducibilityRoute: ReportingReproducibilityRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   GovernanceIndexRoute: GovernanceIndexRoute,

@@ -1948,6 +1948,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "records",
   },
   {
+    path: "/reporting/distribution",
+    titleKey: "nav.reporting_distribution",
+    title: "Subscriptions, packs and extracts",
+    blurb:
+      "Runs the budget deferred, produced as archived extracts; subscriptions by person or role; assembled packs with manifests; the analytics contract.",
+    permission: "reporting.read",
+    group: "records",
+  },
+  {
     path: "/reporting/reproducibility",
     titleKey: "nav.reporting_reproducibility",
     title: "Report versions and runs",
