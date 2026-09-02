@@ -248,6 +248,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      erp_close_device_session: {
+        Args: { p_end_reason?: string }
+        Returns: Json
+      }
       erp_close_period: {
         Args: { p_fiscal_period_id: string }
         Returns: undefined
@@ -436,6 +440,11 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_device_actions: { Args: never; Returns: Json }
+      erp_device_queue: { Args: { p_device_code: string }; Returns: Json }
+      erp_device_task_handlers: { Args: never; Returns: Json }
+      erp_device_tasks: { Args: never; Returns: Json }
+      erp_devices: { Args: never; Returns: Json }
       erp_dimension_rules: { Args: never; Returns: Json }
       erp_dimensions: { Args: never; Returns: Json }
       erp_disposition_inspection: {
@@ -472,6 +481,10 @@ export type Database = {
       erp_document_types: { Args: { p_base_type_code?: string }; Returns: Json }
       erp_documents: {
         Args: { p_limit?: number; p_type_code?: string }
+        Returns: Json
+      }
+      erp_drain_device_actions: {
+        Args: { p_device_code?: string; p_limit?: number }
         Returns: Json
       }
       erp_dunning_worklist: { Args: never; Returns: Json }
@@ -648,6 +661,14 @@ export type Database = {
         }
         Returns: string
       }
+      erp_open_device_session: {
+        Args: {
+          p_device_code: string
+          p_supervisor_reason?: string
+          p_supervisor_user_id?: string
+        }
+        Returns: Json
+      }
       erp_open_mass_change: {
         Args: {
           p_changes: Json
@@ -720,12 +741,36 @@ export type Database = {
         Args: { p_display_name?: string }
         Returns: Json
       }
+      erp_platform_contain_incident: {
+        Args: {
+          p_affects_all_tenants: boolean
+          p_code: string
+          p_scope: string
+        }
+        Returns: undefined
+      }
+      erp_platform_continuity: { Args: never; Returns: Json }
+      erp_platform_declare_incident: {
+        Args: {
+          p_affects_all_tenants?: boolean
+          p_code: string
+          p_commander: string
+          p_communications_owner: string
+          p_is_data_integrity?: boolean
+          p_scope?: string
+          p_scribe: string
+          p_severity_code: string
+          p_title: string
+        }
+        Returns: string
+      }
       erp_platform_deployment_state: { Args: never; Returns: Json }
       erp_platform_diagnostics: { Args: never; Returns: Json }
       erp_platform_enter_tenant: {
         Args: { p_reason: string; p_tenant_id: string }
         Returns: Json
       }
+      erp_platform_incidents: { Args: never; Returns: Json }
       erp_platform_invite_admin: {
         Args: { p_display_name: string; p_email: string; p_tenant_id: string }
         Returns: Json
@@ -757,6 +802,10 @@ export type Database = {
         Returns: Json
       }
       erp_platform_policy_decisions: { Args: never; Returns: Json }
+      erp_platform_post_incident_update: {
+        Args: { p_body: string; p_code: string; p_is_no_change?: boolean }
+        Returns: string
+      }
       erp_platform_purge_due_tenants: {
         Args: { p_grace_days?: number }
         Returns: Json
@@ -764,6 +813,21 @@ export type Database = {
       erp_platform_purge_tenant: {
         Args: { p_confirm_code: string; p_reason: string; p_tenant_id: string }
         Returns: Json
+      }
+      erp_platform_record_support_action: {
+        Args: {
+          p_access_id: string
+          p_action: string
+          p_is_write?: boolean
+          p_object_id?: string
+          p_object_type?: string
+          p_reason: string
+        }
+        Returns: string
+      }
+      erp_platform_resolve_incident: {
+        Args: { p_code: string; p_review_url?: string }
+        Returns: undefined
       }
       erp_platform_respond_ownership_transfer: {
         Args: { p_accept: boolean; p_note?: string; p_transfer_id: string }
@@ -787,6 +851,7 @@ export type Database = {
         Returns: Json
       }
       erp_platform_staff: { Args: never; Returns: Json }
+      erp_platform_support_access: { Args: never; Returns: Json }
       erp_platform_tenant_configuration: { Args: never; Returns: Json }
       erp_platform_tenants: { Args: never; Returns: Json }
       erp_post_count: { Args: { p_task_id: string }; Returns: number }
@@ -940,6 +1005,18 @@ export type Database = {
           | "posted"
           | "cancelled"
       }
+      erp_record_device_action: {
+        Args: {
+          p_captured_at?: string
+          p_device_code: string
+          p_idempotency_key: string
+          p_input_method?: string
+          p_keyed_reason?: string
+          p_payload?: Json
+          p_task_code: string
+        }
+        Returns: Json
+      }
       erp_record_inspection_result: {
         Args: {
           p_characteristic: string
@@ -962,6 +1039,16 @@ export type Database = {
       erp_redistribution_suggestions: {
         Args: { p_days?: number }
         Returns: Json
+      }
+      erp_register_device: {
+        Args: {
+          p_code: string
+          p_device_class: string
+          p_name: string
+          p_serial_number?: string
+          p_site_code: string
+        }
+        Returns: string
       }
       erp_release_area_locations: { Args: never; Returns: Json }
       erp_release_areas: { Args: { p_site_id?: string }; Returns: Json }
@@ -1082,6 +1169,16 @@ export type Database = {
           p_name: string
           p_permissions: string[]
           p_role_id: string
+        }
+        Returns: Json
+      }
+      erp_scan: {
+        Args: {
+          p_barcode: string
+          p_device_code: string
+          p_item_class?: string
+          p_symbology: string
+          p_task_code: string
         }
         Returns: Json
       }
