@@ -93,7 +93,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:site_name", content: "Clove ERP" },
-      
       { name: "theme-color", content: "#A2591E" },
     ],
     links: [
