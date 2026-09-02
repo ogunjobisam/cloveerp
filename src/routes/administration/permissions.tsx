@@ -19,6 +19,10 @@ export const Route = createFileRoute("/administration/permissions")({
         name: "description",
         content: "View principals and assign or remove permission grants for a tenant.",
       },
+      { property: "og:title", content: "Permissions — Clove ERP" },
+      { property: "og:description", content: "View principals and assign or remove permission grants for a tenant." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: () => (
