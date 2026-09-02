@@ -21,6 +21,7 @@ import { Overview } from "../components/platform/overview";
 import { Diagnostics } from "../components/platform/diagnostics";
 import { Queue } from "../components/platform/queue";
 import { Deployment } from "../components/platform/deployment";
+import { Incidents } from "../components/platform/incidents";
 
 /**
  * The platform console.
@@ -108,6 +109,7 @@ const AREAS: {
       { key: "diagnostics", label: "Diagnostics" },
       { key: "queue", label: "Jobs and queue" },
       { key: "deployment", label: "Deployment" },
+      { key: "incidents", label: "Incidents and notices" },
     ],
   },
   {
@@ -322,6 +324,7 @@ function PlatformConsole() {
           {currentView === "diagnostics" ? <Diagnostics /> : null}
           {currentView === "queue" ? <Queue /> : null}
           {currentView === "deployment" ? <Deployment /> : null}
+          {currentView === "incidents" ? <Incidents /> : null}
           {currentView === "staff" ? <Staff role={role} /> : null}
           {currentView === "activity" ? <Activity /> : null}
           {currentView === "decisions" ? <Decisions /> : null}
