@@ -7,13 +7,13 @@ import { PLANNING } from "../../lib/modules";
 export const Route = createFileRoute("/planning/")({
   head: () => ({
     meta: [
-      { title: "Planning — ERPWare" },
+      { title: "Planning — Clove ERP" },
       {
         name: "description",
         content:
           "Planned orders and planning exceptions, with the release dates that keep supply on time.",
       },
-      { property: "og:title", content: "Planning — ERPWare" },
+      { property: "og:title", content: "Planning — Clove ERP" },
       {
         property: "og:description",
         content:

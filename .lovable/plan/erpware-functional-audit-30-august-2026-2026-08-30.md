@@ -1,4 +1,4 @@
-# ERPWare functional audit — 30 August 2026
+# Clove ERP functional audit — 30 August 2026
 
 I signed in as the admin account, walked all 23 routes, watched console and network on each, and compared the database's curated API against everything the interface actually calls.
 

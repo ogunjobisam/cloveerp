@@ -22,7 +22,7 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/administration/audit")({
   head: () => ({
     meta: [
-      { title: "Audit log — ERPWare" },
+      { title: "Audit log — Clove ERP" },
       {
         name: "description",
         content:

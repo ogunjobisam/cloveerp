@@ -9,7 +9,7 @@ import { SeedDemoAction } from "../components/erp/seed";
 
 export const Route = createFileRoute("/")({
   head: () => ({
-    meta: [{ title: "ERPWare" }],
+    meta: [{ title: "Clove ERP" }],
   }),
   component: () => (
     <Gate>

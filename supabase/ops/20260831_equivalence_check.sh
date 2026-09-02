@@ -24,7 +24,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-WORK="${TMPDIR:-/tmp}/erpware-equivalence.$$"
+WORK="${TMPDIR:-/tmp}/clove-erp-equivalence.$$"
 mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -102,25 +102,25 @@ dump () {                        # dump <dbname> <prefix>
 }
 
 echo "building the production baseline (repository minus ${#MISSING[@]} migrations)"
-build erpware_eq_baseline yes
+build clove_erp_eq_baseline yes
 
 echo "building the whole repository from empty"
-build erpware_eq_target no
+build clove_erp_eq_target no
 
 echo "applying the reconciliation to the baseline"
-PGDATABASE=erpware_eq_baseline $PSQL --single-transaction \
+PGDATABASE=clove_erp_eq_baseline $PSQL --single-transaction \
   -f "$HERE/20260831_live_reconciliation.sql" >/dev/null
 
 echo "applying it a second time, which must change nothing"
-PGDATABASE=erpware_eq_baseline $PSQL --single-transaction \
+PGDATABASE=clove_erp_eq_baseline $PSQL --single-transaction \
   -f "$HERE/20260831_live_reconciliation.sql" >/dev/null
 
 echo "applying it to the target, where it must be a no-op"
-PGDATABASE=erpware_eq_target $PSQL --single-transaction \
+PGDATABASE=clove_erp_eq_target $PSQL --single-transaction \
   -f "$HERE/20260831_live_reconciliation.sql" >/dev/null
 
-dump erpware_eq_baseline "$WORK/reconciled"
-dump erpware_eq_target   "$WORK/target"
+dump clove_erp_eq_baseline "$WORK/reconciled"
+dump clove_erp_eq_target   "$WORK/target"
 
 echo
 failed=0

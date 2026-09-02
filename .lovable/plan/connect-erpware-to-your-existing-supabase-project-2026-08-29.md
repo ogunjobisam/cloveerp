@@ -1,8 +1,8 @@
-# Connect ERPWare to your existing Supabase project
+# Connect Clove ERP to your existing Supabase project
 
 ## Goal
 
-Link the existing ERPWare Supabase project (`xpzffnnhnhcqyjqcueja.supabase.co`) to this Lovable app so the preview stops showing "Not connected to a project" and the dashboard loads real tenant data.
+Link the existing Clove ERP Supabase project (`xpzffnnhnhcqyjqcueja.supabase.co`) to this Lovable app so the preview stops showing "Not connected to a project" and the dashboard loads real tenant data.
 
 ## Current state
 
@@ -26,7 +26,7 @@ Link the existing ERPWare Supabase project (`xpzffnnhnhcqyjqcueja.supabase.co`) 
    - Sign in with an account that has an ERP principal (if you don't have one yet, we create a test auth user plus its `erp.app_user` principal in your tenant first).
    - Confirm the `erp_session` RPC resolves the tenant, entities, sites, and permissions.
    - Open the dashboard and operations pages (`/operations/jobs`, `/operations/assurance`, `/operations/integrations`) and confirm they render real rows from the database, with screenshots as evidence.
-   - If the RPC functions are missing from the linked project (error PGRST202), I'll report that the ERPWare migrations haven't been applied to it and we'll apply them before re-verifying.
+   - If the RPC functions are missing from the linked project (error PGRST202), I'll report that the Clove ERP migrations haven't been applied to it and we'll apply them before re-verifying.
 
 ## Technical notes
 

@@ -15,7 +15,7 @@ import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 
 export const Route = createFileRoute("/sales/")({
-  head: () => ({ meta: [{ title: "Sales — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Sales — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Sales />

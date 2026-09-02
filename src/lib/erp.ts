@@ -73,7 +73,7 @@ export class ErpError extends Error {
   }
 
   /** The `ERPWARE_*` token the engine leads its message with, if there is one. */
-  get erpwareCode(): string | null {
+  get erpCode(): string | null {
     return /^(ERPWARE_[A-Z_]+)/.exec(this.message)?.[1] ?? null;
   }
 
@@ -83,7 +83,7 @@ export class ErpError extends Error {
    * the database decided, and it decided no.
    */
   get isPermissionDenied(): boolean {
-    return this.code === "42501" || this.erpwareCode === "ERPWARE_PERMISSION_DENIED";
+    return this.code === "42501" || this.erpCode === "ERPWARE_PERMISSION_DENIED";
   }
 }
 
@@ -111,7 +111,7 @@ export async function callErp<T>(fn: string, args: Record<string, unknown> = {})
     // code one, and says so.
     if (error.code === "PGRST202") {
       throw new ErpError(
-        `${fn} does not exist on this project. The ERPWare migrations may not have been applied to it.`,
+        `${fn} does not exist on this project. The Clove ERP migrations may not have been applied to it.`,
         { code: error.code },
       );
     }

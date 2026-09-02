@@ -19,7 +19,7 @@ const KILL_TARGETS = [
 ];
 
 export const Route = createFileRoute("/operations/jobs")({
-  head: () => ({ meta: [{ title: "Scheduled jobs — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Scheduled jobs — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Jobs />

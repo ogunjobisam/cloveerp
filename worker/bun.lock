@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "erpware-worker",
+      "name": "clove-erp-worker",
       "dependencies": {
         "postgres": "^3.4.5",
       },

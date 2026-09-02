@@ -7,13 +7,13 @@ import { INVENTORY } from "../../lib/modules";
 export const Route = createFileRoute("/inventory/")({
   head: () => ({
     meta: [
-      { title: "Inventory — ERPWare" },
+      { title: "Inventory — Clove ERP" },
       {
         name: "description",
         content:
           "Stock health, valuation, ageing, expiry horizon, batches and count tasks, derived from the movement ledger.",
       },
-      { property: "og:title", content: "Inventory — ERPWare" },
+      { property: "og:title", content: "Inventory — Clove ERP" },
       {
         property: "og:description",
         content:

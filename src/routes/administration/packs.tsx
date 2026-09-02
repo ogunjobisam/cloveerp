@@ -26,13 +26,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/administration/packs")({
   head: () => ({
     meta: [
-      { title: "Features and content — ERPWare" },
+      { title: "Features and content — Clove ERP" },
       {
         name: "description",
         content:
           "Switch product features on and off, apply starter content packs, and see what this organisation is not yet able to do.",
       },
-      { property: "og:title", content: "Features and content — ERPWare" },
+      { property: "og:title", content: "Features and content — Clove ERP" },
       {
         property: "og:description",
         content: "Features, content packs, and what is still missing.",

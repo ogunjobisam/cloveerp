@@ -11,13 +11,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/finance/account-determination")({
   head: () => ({
     meta: [
-      { title: "Account determination — ERPWare" },
+      { title: "Account determination — Clove ERP" },
       {
         name: "description",
         content:
           "Posting classes and the determination matrix that decides which account and analysis a posting lands on, with a coverage report and no suspense fallback.",
       },
-      { property: "og:title", content: "Account determination — ERPWare" },
+      { property: "og:title", content: "Account determination — Clove ERP" },
       {
         property: "og:description",
         content:

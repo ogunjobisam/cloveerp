@@ -24,7 +24,7 @@ import { callErp, hasPermission } from "../../lib/erp";
  */
 
 export const Route = createFileRoute("/administration/commercial")({
-  head: () => ({ meta: [{ title: "Plan and usage — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Plan and usage — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Commercial />

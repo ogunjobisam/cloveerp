@@ -1,10 +1,10 @@
 -- =============================================================================
--- ERPWare — everything the product needs from its host, and nothing more
+-- Clove ERP — everything the product needs from its host, and nothing more
 --
 -- The migrations in supabase/migrations/ are a Postgres schema. This file is
 -- the complete list of things they expect to already exist, which on Supabase
 -- are provided by the platform. Applying this to an empty PostgreSQL cluster
--- and then applying the migrations in order gives a working ERPWare.
+-- and then applying the migrations in order gives a working Clove ERP.
 --
 -- It exists for two reasons. It lets CI stand the product up from nothing on
 -- every push, which is what makes the assert_* functions in every migration
@@ -20,11 +20,11 @@
 --   1. The `extensions` schema.
 --
 --   2. Roles. anon, authenticated and service_role, with the privilege split
---      ERPWare's row security depends on: service_role bypasses RLS, the other
+--      Clove ERP's row security depends on: service_role bypasses RLS, the other
 --      two never do. erp.session_is_trusted() reads rolbypassrls and nothing
 --      else, so this is the whole of the trust model.
 --
---   3. auth.uid(). The point at which ERPWare learns WHO is calling.
+--   3. auth.uid(). The point at which Clove ERP learns WHO is calling.
 --      erp.principal_context() calls it and nothing else does.
 --
 --   4. auth.users, in the three columns the product actually reads. This was
@@ -65,7 +65,7 @@ $$;
 
 create schema if not exists auth;
 
--- The one function that connects ERPWare to an identity provider. It returns
+-- The one function that connects Clove ERP to an identity provider. It returns
 -- the authenticated subject, or null when there is no authenticated session.
 -- erp.principal_context() resolves that subject to an erp.app_user row; nothing
 -- else in the product reads a claim, a header or a token.
@@ -90,9 +90,9 @@ comment on function auth.uid() is
   'self-service doors read the subject''s verified email back from.';
 
 -- The subject's verified identity, read back by the two self-service doors.
--- On Supabase this table is the platform's and has forty columns; ERPWare
+-- On Supabase this table is the platform's and has forty columns; Clove ERP
 -- reads three, and listing them here is the point of this file. Nothing in the
--- product writes to it: an identity is created by signing up, not by ERPWare.
+-- product writes to it: an identity is created by signing up, not by Clove ERP.
 create table if not exists auth.users (
   id                 uuid primary key,
   email              text,
@@ -123,7 +123,7 @@ alter default privileges in schema public
 -- A note on the claims GUC, which needs no setup --------------------------
 --
 -- PostgreSQL allows any session to set a custom GUC in a namespaced parameter,
--- so nothing is required here beyond noting that ERPWare never trusts it
+-- so nothing is required here beyond noting that Clove ERP never trusts it
 -- directly: request.jwt.claims is read only by auth.uid(), and the subject it
 -- yields is resolved against erp.app_user before it means anything. A client
 -- that forges a claim names a principal that does not exist.

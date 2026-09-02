@@ -77,25 +77,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ERPWare — Enterprise Resource Planning" },
+      { title: "Clove ERP — Enterprise Resource Planning" },
       {
         name: "description",
         content:
-          "ERPWare keeps entries above the rule and the derived position beneath it: finance, inventory and operations on one append-only, tenant-isolated ledger.",
+          "Clove ERP keeps entries above the rule and the derived position beneath it: finance, inventory and operations on one append-only, tenant-isolated ledger.",
       },
-      { name: "author", content: "ERPWare" },
-      { property: "og:title", content: "ERPWare — Enterprise Resource Planning" },
+      { name: "author", content: "Clove ERP" },
+      { property: "og:title", content: "Clove ERP — Enterprise Resource Planning" },
       {
         property: "og:description",
         content:
-          "ERPWare keeps entries above the rule and the derived position beneath it: finance, inventory and operations on one append-only, tenant-isolated ledger.",
+          "Clove ERP keeps entries above the rule and the derived position beneath it: finance, inventory and operations on one append-only, tenant-isolated ledger.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@ERPWare" },
-      { property: "og:site_name", content: "ERPWare" },
-      { property: "og:image", content: "https://erpware.dev/og-image.png" },
-      { name: "twitter:image", content: "https://erpware.dev/og-image.png" },
+      { property: "og:site_name", content: "Clove ERP" },
+      { property: "og:image", content: "/og-image.png" },
+      { name: "twitter:image", content: "/og-image.png" },
       { name: "theme-color", content: "#C2703D" },
     ],
     links: [

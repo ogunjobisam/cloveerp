@@ -8,7 +8,7 @@ import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { MODULES, REPORTING } from "../../lib/modules";
 
-const TITLE = "Reporting — ERPWare";
+const TITLE = "Reporting — Clove ERP";
 const DESC =
   "The reporting hub: every module report in one index, plus data quality, duplicates and specification coverage.";
 

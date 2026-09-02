@@ -8,7 +8,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { SeedDemoAction } from "../../components/erp/seed";
 
 export const Route = createFileRoute("/operations/integrations")({
-  head: () => ({ meta: [{ title: "Integrations — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Integrations — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Integrations />

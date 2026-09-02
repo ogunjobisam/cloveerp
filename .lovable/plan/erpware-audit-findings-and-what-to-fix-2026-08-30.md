@@ -1,4 +1,4 @@
-# ERPWare: audit findings and what to fix
+# Clove ERP: audit findings and what to fix
 
 I signed in as the test admin and walked every page in the app, watched the network and console, and compared the database's curated API against what the UI calls. The shell, tenant switching, permissions, configuration and the operations pages all work. The transactional half of the product does not — and the app currently hides that behind reassuring empty states.
 

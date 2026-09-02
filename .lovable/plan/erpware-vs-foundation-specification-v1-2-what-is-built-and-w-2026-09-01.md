@@ -1,4 +1,4 @@
-# ERPWare vs Foundation Specification v1.2 — what is built and what is not
+# Clove ERP vs Foundation Specification v1.2 — what is built and what is not
 
 Read-only audit. The spec grew from v1 (499 lines) to v1.2 (2,808 lines, 23 parts, 34 decisions). This maps every part against the 145 migrations, ~319 public `erp_*` functions, and the route/UI tree as they exist today.
 

@@ -1,10 +1,10 @@
-# ERPWare — Comprehensive Build Report
+# Clove ERP — Comprehensive Build Report
 
 Everything that exists today, what it does, and where the gaps remain. Read-only report; no changes proposed.
 
-## 1. What ERPWare is
+## 1. What Clove ERP is
 
-A multi-tenant ERP built to the Foundation Specification: a React 19 / TanStack Start frontend over an external Supabase project (`ERPWare`, `xpzffnnhnhcqyjqcueja.supabase.co`). All business logic lives in Postgres functions (`erp.*` RPCs); the frontend calls them through one typed gateway (`callErp`) and never touches tables directly. Custom domain: erpware.dev.
+A multi-tenant ERP built to the Foundation Specification: a React 19 / TanStack Start frontend over an external Supabase project (`Clove ERP`, `xpzffnnhnhcqyjqcueja.supabase.co`). All business logic lives in Postgres functions (`erp.*` RPCs); the frontend calls them through one typed gateway (`callErp`) and never touches tables directly. Custom domain: erpware.dev.
 
 ## 2. Database layer (the real product)
 

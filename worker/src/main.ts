@@ -29,7 +29,7 @@ async function main() {
   process.on("SIGTERM", stop);
 
   console.log(
-    `[erpware] ${cfg.workerName} serving ${cfg.bindings.length} tenant(s), ` +
+    `[clove-erp] ${cfg.workerName} serving ${cfg.bindings.length} tenant(s), ` +
       `systems: ${cfg.systems.join(", ") || "(none)"}`,
   );
 
@@ -40,20 +40,20 @@ async function main() {
         report.jobsClaimed + report.messagesClaimed + report.commandsClaimed +
           report.tenantsPurged >
         0;
-      if (did) console.log(`[erpware] ${JSON.stringify(report)}`);
+      if (did) console.log(`[clove-erp] ${JSON.stringify(report)}`);
     } catch (err) {
       // A pass that throws is this process failing, not the work failing —
       // anything claimed keeps its lease and is reclaimed by the database.
-      console.error(`[erpware] pass failed: ${(err as Error).message}`);
+      console.error(`[clove-erp] pass failed: ${(err as Error).message}`);
     }
     await new Promise((r) => setTimeout(r, cfg.pollMs));
   }
 
   await sql.end({ timeout: 10 });
-  console.log("[erpware] stopped cleanly");
+  console.log("[clove-erp] stopped cleanly");
 }
 
 main().catch((err) => {
-  console.error(`[erpware] refusing to start: ${(err as Error).message}`);
+  console.error(`[clove-erp] refusing to start: ${(err as Error).message}`);
   process.exit(1);
 });

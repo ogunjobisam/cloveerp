@@ -14,13 +14,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/administration/terminology")({
   head: () => ({
     meta: [
-      { title: "Terminology — ERPWare" },
+      { title: "Terminology — Clove ERP" },
       {
         name: "description",
         content:
           "Every user-facing label is a resource key. Override the wording for this tenant without changing the software.",
       },
-      { property: "og:title", content: "Terminology — ERPWare" },
+      { property: "og:title", content: "Terminology — Clove ERP" },
       {
         property: "og:description",
         content: "Override user-facing wording per tenant through resource keys.",

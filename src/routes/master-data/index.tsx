@@ -26,17 +26,17 @@ import { callErp, hasPermission } from "../../lib/erp";
 export const Route = createFileRoute("/master-data/")({
   head: () => ({
     meta: [
-      { title: "Master data — ERPWare" },
+      { title: "Master data — Clove ERP" },
       {
         name: "description",
         content:
-          "Create and review the items and trading parties every ERPWare document depends on.",
+          "Create and review the items and trading parties every Clove ERP document depends on.",
       },
-      { property: "og:title", content: "Master data — ERPWare" },
+      { property: "og:title", content: "Master data — Clove ERP" },
       {
         property: "og:description",
         content:
-          "Create and review the items and trading parties every ERPWare document depends on.",
+          "Create and review the items and trading parties every Clove ERP document depends on.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

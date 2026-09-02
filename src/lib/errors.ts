@@ -62,7 +62,7 @@ export function friendlyError(error: unknown): FriendlyError {
     technical,
   });
 
-  const token = erp?.erpwareCode;
+  const token = erp?.erpCode;
   if (token && ERPWARE_MESSAGES[token]) {
     const m = ERPWARE_MESSAGES[token];
     return out(m.title, m.body);

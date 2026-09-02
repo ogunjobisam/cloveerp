@@ -28,7 +28,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 export const Route = createFileRoute("/administration/configuration")({
   head: () => ({
     meta: [
-      { title: "Configuration — ERPWare" },
+      { title: "Configuration — Clove ERP" },
       {
         name: "description",
         content: "Install module configuration and promote change sets for a tenant.",

@@ -9,13 +9,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/master-data/imports")({
   head: () => ({
     meta: [
-      { title: "Imports — ERPWare" },
+      { title: "Imports — Clove ERP" },
       {
         name: "description",
         content:
           "Staged import batches with preview, validation, load and rollback — the governed way records arrive in bulk.",
       },
-      { property: "og:title", content: "Imports — ERPWare" },
+      { property: "og:title", content: "Imports — Clove ERP" },
       {
         property: "og:description",
         content: "Staged imports with preview, validation, load and rollback.",

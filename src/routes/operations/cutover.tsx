@@ -7,7 +7,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { RpcButton } from "../../components/erp/rpc-button";
 
 export const Route = createFileRoute("/operations/cutover")({
-  head: () => ({ meta: [{ title: "Migration and cutover — ERPWare" }] }),
+  head: () => ({ meta: [{ title: "Migration and cutover — Clove ERP" }] }),
   component: () => (
     <Gate>
       <Cutover />
