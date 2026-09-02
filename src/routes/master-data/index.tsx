@@ -7,6 +7,7 @@ import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 
 /**
  * Items and parties.
@@ -26,13 +27,13 @@ import { callErp, hasPermission } from "../../lib/erp";
 export const Route = createFileRoute("/master-data/")({
   head: () => ({
     meta: [
-      { title: "Master data — Clove ERP" },
+      { title: "Common data — Clove ERP" },
       {
         name: "description",
         content:
           "Create and review the items and trading parties every Clove ERP document depends on.",
       },
-      { property: "og:title", content: "Master data — Clove ERP" },
+      { property: "og:title", content: "Common data — Clove ERP" },
       {
         property: "og:description",
         content:
@@ -72,13 +73,14 @@ const ROLES = ["customer", "supplier", "carrier", "manufacturer", "broker", "con
 
 function MasterData() {
   const { session } = useErpSession();
+  const { t } = useT();
   const mayWrite = hasPermission(session, "master_data.write");
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Master data">
-        Items and parties. A document line needs an item and most documents need a party, so this is
-        where a tenant becomes able to transact.
+      <PageHeader title={t("nav.master_data", "Common data")}>
+        Products and business partners. A document line needs a product and most documents need a
+        business partner, so this is where an organisation becomes able to transact.
       </PageHeader>
 
       <Items mayWrite={mayWrite} />
@@ -97,16 +99,16 @@ function Items({ mayWrite }: { mayWrite: boolean }) {
     <section className="min-w-0 rounded-xl border border-border bg-card">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Items</h2>
+          <h2 className="text-sm font-semibold">Products</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
             What is bought, made, stocked and sold. The unit of measure is created with the first
-            item when the tenant has none.
+            product when the organisation has none.
           </Prose>
         </div>
 
         {mayWrite ? (
           <ActionDialog
-            trigger={<ActionButton>New item</ActionButton>}
+            trigger={<ActionButton>New product</ActionButton>}
             title="New product"
             description="A code and a name are the minimum. Everything else is maintainable afterwards."
             permission="master_data.write"
@@ -128,7 +130,7 @@ function Items({ mayWrite }: { mayWrite: boolean }) {
               p_is_batch_controlled: false,
             })}
             invalidates={["erp_items"]}
-            submitLabel="Create item"
+            submitLabel="Create product"
           />
         ) : null}
       </header>
@@ -140,7 +142,7 @@ function Items({ mayWrite }: { mayWrite: boolean }) {
           <ErrorNote error={error} />
         ) : (data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No items yet. Nothing can be put on a document line until there is one.
+            No products yet. Nothing can be put on a document line until there is one.
           </p>
         ) : (
           <Table columns={["Code", "Name", "Class", "Lifecycle", "Batches"]}>
@@ -174,16 +176,16 @@ function Parties({ mayWrite }: { mayWrite: boolean }) {
     <section className="min-w-0 rounded-xl border border-border bg-card">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Parties</h2>
+          <h2 className="text-sm font-semibold">Business partners</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            One table for customers, suppliers and everybody else. The role is what decides which
-            picker offers a party, and one party may hold several.
+            One record for customers, suppliers and everybody else. The role is what decides which
+            picker offers a partner, and one partner may hold several.
           </Prose>
         </div>
 
         {mayWrite ? (
           <ActionDialog
-            trigger={<ActionButton>New party</ActionButton>}
+            trigger={<ActionButton>New business partner</ActionButton>}
             title="New business partner"
             description="The role given here is the first one; more can be added afterwards."
             permission="master_data.write"

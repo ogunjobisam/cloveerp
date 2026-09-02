@@ -11,16 +11,17 @@ import {
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
+import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/procurement/")({
   head: () => ({
     meta: [
-      { title: "Procurement — Clove ERP" },
+      { title: "Purchasing — Clove ERP" },
       {
         name: "description",
         content: "Requisitions, RFQs, purchase orders, receipts and three-way match.",
       },
-      { property: "og:title", content: "Procurement — Clove ERP" },
+      { property: "og:title", content: "Purchasing — Clove ERP" },
       {
         property: "og:description",
         content: "Requisitions, RFQs, purchase orders, receipts and three-way match.",
@@ -50,11 +51,13 @@ export const Route = createFileRoute("/procurement/")({
  * short file, depending on how generous you are feeling.
  */
 function Procurement() {
+  const { t } = useT();
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Procurement">
-        Requisition to purchase order to goods receipt. Receiving posts stock inbound through the
-        same bridge a delivery uses outbound.
+      <PageHeader title={t("nav.procurement", "Purchasing")}>
+        Requisition to purchase order to receipt. Receiving posts stock inbound through the same
+        bridge a delivery uses outbound.
       </PageHeader>
 
       <ActionBar
