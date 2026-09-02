@@ -1990,6 +1990,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "operate",
   },
   {
+    path: "/device",
+    titleKey: "nav.device",
+    title: "Scanner",
+    blurb:
+      "The warehouse application: one task at a time, driven by scanning, with a queue that holds your work until the network returns.",
+    permission: "inventory.move",
+    group: "move",
+  },
+  {
     path: "/operations/devices",
     titleKey: "nav.operations_devices",
     title: "Devices and scanning",

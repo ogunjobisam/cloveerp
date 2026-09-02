@@ -245,7 +245,8 @@ jobs:
             "erp_test.assert_erasure_suite()" \
             "erp_test.assert_guidance_suite()" \
             "erp_test.assert_metering_suite()" \
-            "erp_test.assert_profile_suite()"
+            "erp_test.assert_profile_suite()" \
+            "erp_test.assert_device_client_suite()"
           do
             $PSQL -tAc "select $s;"
           done

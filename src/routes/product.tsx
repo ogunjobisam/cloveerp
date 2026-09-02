@@ -1,3 +1,4 @@
+import { CONTACT_EMAIL } from "../lib/brand";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -401,7 +402,7 @@ function Pricing() {
               Start exploring with demo data
             </Link>
             <a
-              href="mailto:hello@erpware.dev"
+              href={`mailto:${CONTACT_EMAIL}`}
               className="rounded-full px-6 py-3.5 text-center text-sm font-medium text-surface ring-1 ring-surface/40 transition-colors hover:bg-surface/10"
             >
               Book a walkthrough

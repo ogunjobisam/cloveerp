@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DeviceRouteImport } from './routes/device'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -55,6 +56,11 @@ import { Route as SalesIndexRouteImport } from './routes/sales/index'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeviceRoute = DeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformRoute = PlatformRouteImport.update({
@@ -275,6 +281,7 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/device': typeof DeviceRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -319,6 +326,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/device': typeof DeviceRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -364,6 +372,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/device': typeof DeviceRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -410,6 +419,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/device'
     | '/platform'
     | '/product'
     | '/profile'
@@ -454,6 +464,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/device'
     | '/platform'
     | '/product'
     | '/profile'
@@ -498,6 +509,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/device'
     | '/platform'
     | '/product'
     | '/profile'
@@ -543,6 +555,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DeviceRoute: typeof DeviceRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
@@ -593,6 +606,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/device': {
+      id: '/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof DeviceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform': {
@@ -887,6 +907,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DeviceRoute: DeviceRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
