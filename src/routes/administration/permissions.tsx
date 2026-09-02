@@ -540,7 +540,7 @@ function RoleForm({
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Inventory clerk"
+            placeholder="Stock clerk"
             className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           />
         </label>

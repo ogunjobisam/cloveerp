@@ -256,7 +256,9 @@ function Notifications() {
               "An event and a severity to an audience: a role, a department, a person, or whoever owns the affected object. A route may digest, escalate on a timer, and be mandatory.",
             )}
             fn="erp_notification_routes"
-            empty={ui("No route is defined, so no event reaches anybody.")}
+            empty={ui(
+              "No route is defined, so no event reaches anybody. Define one under Actions above.",
+            )}
           >
             {(rows) => (
               <Table columns={["Route", "Events", "Audience", "Channel", "Timers", "State"]}>
@@ -302,7 +304,7 @@ function Notifications() {
               "Queue depth, the oldest waiting print and the last confirmed one per printer, with the signal §15.4 names when something is wrong.",
             )}
             fn="erp_notification_health"
-            empty={ui("Nothing has been sent to you.")}
+            empty={ui("Nothing has been delivered in the last seven days.")}
           >
             {(rows) => (
               <Table

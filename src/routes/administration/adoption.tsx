@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
+import { GoTo } from "../../components/erp/action";
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose } from "../../components/erp/page";
@@ -95,7 +96,7 @@ function Adoption() {
         title="Adoption signals"
         description="Counts of what is ageing, and what to do about it. The report never names a person: adoption is a property of the organisation, not a mark against anyone."
         fn="erp_adoption_signals"
-        empty="No signals."
+        empty="No signals. Nothing in this organisation is ageing in a way that suggests adoption has stalled."
       >
         {(rows) => (
           <Table columns={["Signal", "Count", "Oldest", "What to do"]}>
@@ -137,7 +138,8 @@ function Adoption() {
         title="Scenarios"
         description="The product's, in the order they are best taken, then this organisation's own. Start is offered only where the caller holds the scenario's permission."
         fn="erp_training_scenarios"
-        empty="No scenarios."
+        empty="No scenarios. The product's own are installed with the base content pack, and an organisation can add its own on top."
+        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
       >
         {(rows) => (
           <Table columns={["Scenario", "Starting state", "Task", "Complete when", "Actions"]}>
@@ -182,7 +184,7 @@ function Adoption() {
         title="Runs"
         description="Every run in the organisation, newest first. Check evaluates the completion against what has happened since the run started; only the person practising may check their own."
         fn="erp_training_runs"
-        empty="Nobody has started a scenario."
+        empty="Nobody has started a scenario. Start is offered on each scenario above, to whoever holds its permission."
       >
         {(rows) => (
           <Table columns={["Scenario", "Started", "Last checked", "State", "Actions"]}>
@@ -269,7 +271,8 @@ function Adoption() {
         title="Help topics"
         description="The product's guidance, one topic per screen, as the help button shows it. The build fails when a screen has none. Your organisation's own notes sit beside these through the terminology overrides, under help.local."
         fn="erp_help_topics"
-        empty="No help topics."
+        empty="No help topics. Guidance is installed with the base content pack, and every screen's help comes from it."
+        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
       >
         {(rows) => (
           <Table columns={["Screen", "Summary", "Steps", "Next"]}>

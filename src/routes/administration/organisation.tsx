@@ -463,7 +463,9 @@ function Organisation() {
           "Each department is also a reporting dimension value, so a department means the same thing in a stock report and in a profit and loss.",
         )}
         fn="erp_departments"
-        empty={ui("No departments are configured yet.")}
+        empty={ui(
+          "No departments are configured yet. Create one under Actions above; approvals route by department before they route by anything else.",
+        )}
       >
         {(rows) => (
           <Table
@@ -502,7 +504,9 @@ function Organisation() {
           "The primary department in force when a request is raised is the one that routes it.",
         )}
         fn="erp_department_members"
-        empty={ui("Nobody has been assigned to a department yet.")}
+        empty={ui(
+          "Nobody has been assigned to a department yet, so nothing routes by department. Assign somebody under Actions above.",
+        )}
       >
         {(rows) => (
           <Table
@@ -626,7 +630,9 @@ function Organisation() {
         )}
         fn="erp_approval_routing_stamps"
         args={{ p_limit: 50 }}
-        empty={ui("Nothing has been routed yet.")}
+        empty={ui(
+          "Nothing has been routed yet. A decision is stamped here the first time a request meets an approval band.",
+        )}
       >
         {(rows) => (
           <Table
@@ -661,7 +667,9 @@ function Organisation() {
           "Cover is followed at resolution time, up to three hops, and never back to the person who raised the request.",
         )}
         fn="erp_approval_delegations"
-        empty={ui("Nobody is covering for anybody.")}
+        empty={ui(
+          "Nobody is covering for anybody. Record cover under Actions above before somebody is away, not after.",
+        )}
       >
         {(rows) => (
           <Table
@@ -703,7 +711,9 @@ function Organisation() {
         )}
         fn="erp_approval_audit"
         args={{ p_limit: 200 }}
-        empty={ui("No approvals have been resolved yet.")}
+        empty={ui(
+          "No approvals have been resolved yet. Every step that is resolved is recorded here and cannot be edited afterwards.",
+        )}
       >
         {(rows) => (
           <Table

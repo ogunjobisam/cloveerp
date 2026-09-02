@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
+import { GoTo } from "../components/erp/action";
 import { Gate } from "../components/erp/gate";
 import { PageHeader } from "../components/erp/page";
 import { DataPanel, Pill } from "../components/erp/panel";
@@ -214,7 +215,8 @@ function Help() {
         title="User guides"
         description="Every screen's guide, grouped by module. This is the same content the ? button shows, read end to end."
         fn="erp_help_topics"
-        empty="No guides are published yet."
+        empty="No guides are published yet. The product's own help is installed with the base content pack."
+        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
       >
         {(rows) => (
           <GuideList

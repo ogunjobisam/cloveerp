@@ -58,8 +58,8 @@ function Governance() {
                 label: "Object",
                 required: true,
                 choices: [
-                  { value: "item", label: "Item" },
-                  { value: "party", label: "Party" },
+                  { value: "item", label: "Product" },
+                  { value: "party", label: "Business partner" },
                 ],
               },
               { kind: "text", name: "p_object_id", label: "Record id", required: true },
@@ -91,8 +91,8 @@ function Governance() {
                 label: "Object",
                 required: true,
                 choices: [
-                  { value: "item", label: "Item" },
-                  { value: "party", label: "Party" },
+                  { value: "item", label: "Product" },
+                  { value: "party", label: "Business partner" },
                 ],
               },
               {
@@ -120,7 +120,7 @@ function Governance() {
         title="My approvals"
         description="Tasks assigned to you, directly or through a role you hold."
         fn="erp_my_approvals"
-        empty="Nothing is waiting on you."
+        empty="Nothing is waiting on you. Requests appear here when an approval band routes one to you."
         rowKey={(r) => String(r["task_id"])}
         columns={[
           { header: "Object", cell: "object_type" },

@@ -85,8 +85,8 @@ const SECTION_TITLE: Record<string, string> = {
   "B.2": "Approvals",
   "B.3": "Posting classes and accounts",
   "B.4": "Classification",
-  "B.5": "Item codes",
-  "B.6": "Release areas",
+  "B.5": "Product codes",
+  "B.6": "Marshalling areas",
 };
 
 /** What the database expects for each answer shape, built from what was typed. */

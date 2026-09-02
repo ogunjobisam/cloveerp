@@ -7,13 +7,13 @@ import { PRODUCTION } from "../../lib/modules";
 export const Route = createFileRoute("/production/")({
   head: () => ({
     meta: [
-      { title: "Production — Clove ERP" },
+      { title: "Manufacturing — Clove ERP" },
       {
         name: "description",
         content:
           "Works orders and their progress against plan, including completed and scrapped quantity.",
       },
-      { property: "og:title", content: "Production — Clove ERP" },
+      { property: "og:title", content: "Manufacturing — Clove ERP" },
       {
         property: "og:description",
         content:

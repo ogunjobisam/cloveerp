@@ -2,7 +2,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
+import {
+  ActionButton,
+  ActionDialog,
+  ErrorNote,
+  GoTo,
+  useErpAction,
+} from "../../components/erp/action";
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, TOUCH } from "../../components/erp/page";
@@ -354,7 +360,9 @@ function Distribution() {
           "By person or by role, on a cadence, delivered through the output subsystem. Each production checks that the recipient still holds the permission the report requires.",
         )}
         fn="erp_report_subscriptions"
-        empty={ui("Nobody is subscribed to a report.")}
+        empty={ui(
+          "Nobody is subscribed to a report. Subscribe to one under Actions above and it is produced on a cadence and delivered.",
+        )}
       >
         {(rows) => (
           <Table columns={["Report", "Subscriber", "Cadence", "Next due", "State", ""]}>
@@ -397,7 +405,7 @@ function Distribution() {
           "A pack is a defined artefact with a manifest: which reports, which versions, which parameters, and the as-at time and checksum of each figure.",
         )}
         fn="erp_report_packs"
-        empty={ui("No pack is defined.")}
+        empty={ui("No pack is defined. Define one under Actions above, then add reports to it.")}
       >
         {(rows) => (
           <ul className="flex flex-col gap-4">
@@ -648,9 +656,12 @@ function AnalyticsContract({ contract, error }: { contract: Contract | null; err
         ) : null}
 
         {contract && contract.views.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {ui("No governed view is registered yet; installing a module registers its views.")}
-          </p>
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-sm text-muted-foreground">
+              {ui("No governed view is registered yet; installing a module registers its views.")}
+            </p>
+            <GoTo to="/administration/configuration">{ui("Open Configuration")}</GoTo>
+          </div>
         ) : contract ? (
           <Table columns={["View", "Contract", "Versions"]}>
             {contract.views.map((v) => (

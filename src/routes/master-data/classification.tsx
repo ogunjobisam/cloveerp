@@ -16,7 +16,7 @@ export const Route = createFileRoute("/master-data/classification")({
       {
         name: "description",
         content:
-          "Classification axes and values, code templates composed from them, and the assignments that record which classification produced each item code.",
+          "Classification axes and values, code templates composed from them, and the assignments that record which classification produced each product code.",
       },
       { property: "og:title", content: "Product classification and coding — Clove ERP" },
       {
@@ -135,7 +135,7 @@ function Classification() {
           label="Seed a demo configuration"
           fn="erp_seed_demo_configuration"
           permission="administration.configure"
-          confirm="This adds sample axes, values, a code template, supplier defaults and a release area. Running it twice changes nothing the second time."
+          confirm="This adds sample axes, values, a code template, supplier defaults and a marshalling area. Running it twice changes nothing the second time."
           invalidates={[
             "erp_classification_axes",
             "erp_classification_values",
@@ -170,7 +170,7 @@ function Classification() {
       </div>
 
       <ActionBar
-        note="Axes are the questions asked of every item; values are the permitted answers."
+        note="Axes are the questions asked of every product; values are the permitted answers."
         actions={[
           {
             label: "Add or amend an axis",
@@ -192,8 +192,8 @@ function Classification() {
               {
                 kind: "text",
                 name: "p_item_classes",
-                label: "Only for item classes",
-                hint: "Comma separated. Leave empty to apply to every item.",
+                label: "Only for product classes",
+                hint: "Comma separated. Leave empty to apply to every product.",
               },
               { kind: "number", name: "p_seq", label: "Order" },
             ],
@@ -225,7 +225,7 @@ function Classification() {
             invalidates,
           },
           {
-            label: "Classify an item",
+            label: "Classify a product",
             permission: "master_data.write",
             fn: "erp_classify_item",
             fields: [
@@ -262,7 +262,7 @@ function Classification() {
                 required: true,
                 hint: 'For example [{"kind":"axis","axis":"FAMILY","length":3},{"kind":"literal","text":"-"},{"kind":"sequence","length":4},{"kind":"check"}]',
               },
-              { kind: "text", name: "p_item_classes", label: "Only for item classes" },
+              { kind: "text", name: "p_item_classes", label: "Only for product classes" },
               {
                 kind: "choice",
                 name: "p_casing",
@@ -277,13 +277,13 @@ function Classification() {
             invalidates,
           },
           {
-            label: "Create a classified item",
+            label: "Create a classified product",
             permission: "master_data.write",
             fn: "erp_create_classified_item",
             fields: [
               { ...pickTemplate(), required: true },
-              { kind: "text", name: "p_name", label: "Item name", required: true },
-              { kind: "text", name: "p_item_class", label: "Item class", required: true },
+              { kind: "text", name: "p_name", label: "Product name", required: true },
+              { kind: "text", name: "p_item_class", label: "Product class", required: true },
               {
                 kind: "text",
                 name: "p_classification",
@@ -309,9 +309,11 @@ function Classification() {
 
       <DataPanel<Axis>
         title={ui("Classification axes")}
-        description={ui("A mandatory axis must be answered before an item can be created.")}
+        description={ui("A mandatory axis must be answered before a product can be created.")}
         fn="erp_classification_axes"
-        empty={ui("No axes yet. Until one exists, items carry no structured meaning.")}
+        empty={ui(
+          "No axes yet. Define one under Actions above; until one exists, products carry no structured meaning.",
+        )}
       >
         {(rows) => (
           <Table
@@ -320,7 +322,7 @@ function Classification() {
               ui("Name"),
               ui("Order"),
               ui("Mandatory"),
-              ui("Item classes"),
+              ui("Product classes"),
               ui("Values"),
               ui("Status"),
             ]}
@@ -348,7 +350,9 @@ function Classification() {
         title={ui("Values")}
         description={ui("The permitted answers, and the abbreviation each contributes to a code.")}
         fn="erp_classification_values"
-        empty={ui("No values yet.")}
+        empty={ui(
+          "No values yet. A value belongs to an axis, so define an axis first and add its values under Actions above.",
+        )}
       >
         {(rows) => (
           <Table
@@ -381,7 +385,9 @@ function Classification() {
         title={ui("Code templates")}
         description={ui("Versioned. Amending a template never rewrites codes already assigned.")}
         fn="erp_code_templates"
-        empty={ui("No templates yet. Item codes would then be typed by hand.")}
+        empty={ui(
+          "No templates yet. Product codes would then be typed by hand rather than composed from the classification.",
+        )}
       >
         {(rows) => (
           <Table
@@ -412,12 +418,12 @@ function Classification() {
 
       <DataPanel<Gap>
         title={ui("Completeness gaps")}
-        description={ui("Items that are missing an answer a mandatory axis requires.")}
+        description={ui("Products that are missing an answer a mandatory axis requires.")}
         fn="erp_classification_gaps"
-        empty={ui("Every item answers every mandatory axis.")}
+        empty={ui("Every product answers every mandatory axis.")}
       >
         {(rows) => (
-          <Table columns={[ui("Item"), ui("Name"), ui("Item class"), ui("Unanswered axis")]}>
+          <Table columns={[ui("Product"), ui("Name"), ui("Product class"), ui("Unanswered axis")]}>
             {rows.map((g) => (
               <tr
                 key={`${g.item_id}-${g.axis_code}`}
@@ -440,11 +446,20 @@ function Classification() {
         description={ui("Append-only: the code, the template version that composed it, and when.")}
         fn="erp_item_code_assignments"
         args={{ p_limit: 200 }}
-        empty={ui("No codes have been composed yet.")}
+        empty={ui(
+          "No codes have been composed yet. A code is composed when a product is created against a template.",
+        )}
       >
         {(rows) => (
           <Table
-            columns={[ui("Code"), ui("Item"), ui("Template"), ui("Version"), ui("When"), ui("By")]}
+            columns={[
+              ui("Code"),
+              ui("Product"),
+              ui("Template"),
+              ui("Version"),
+              ui("When"),
+              ui("By"),
+            ]}
           >
             {rows.map((a) => (
               <tr key={a.assignment_id} className="border-b border-border/60 last:border-0">
@@ -465,13 +480,13 @@ function Classification() {
       <DataPanel<Divergence>
         title={ui("Code divergences")}
         description={ui(
-          "Items whose classification has moved on from the one their code was composed from. Reported, never silently recoded.",
+          "Products whose classification has moved on from the one their code was composed from. Reported, never silently recoded.",
         )}
         fn="erp_code_divergences"
-        empty={ui("No item has diverged from the classification behind its code.")}
+        empty={ui("No product has diverged from the classification behind its code.")}
       >
         {(rows) => (
-          <Table columns={[ui("Item"), ui("Name"), ui("Coded as"), ui("Classified as")]}>
+          <Table columns={[ui("Product"), ui("Name"), ui("Coded as"), ui("Classified as")]}>
             {rows.map((d) => (
               <tr key={d.item_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{d.item_code}</td>
@@ -502,8 +517,8 @@ function Classification() {
           },
           {
             fn: "erp_item_classification",
-            label: "How is this item classified?",
-            description: "Every axis answered for one item.",
+            label: "How is this product classified?",
+            description: "Every axis answered for one product.",
             fields: [pickItem()],
           },
         ]}

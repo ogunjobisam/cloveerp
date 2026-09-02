@@ -43,6 +43,18 @@ export type Panel = {
   fn: string;
   args?: Record<string, unknown>;
   empty: string;
+  /**
+   * Where the emptiness is fixed, when it is fixed somewhere else.
+   *
+   * A panel is empty for one of two reasons, and they want opposite treatment.
+   * Either nothing is wrong — no recalls, no match exceptions — and the right
+   * answer is the sentence alone; or something has not been set up, and the
+   * right answer is the sentence and the way to the screen that sets it up.
+   * Leaving somebody to find that screen themselves is the specific tax an ERP
+   * charges for its own breadth, and it is the one this product exists to not
+   * charge.
+   */
+  emptyAction?: { label: string; to: string };
   rowKey: (row: Row, index: number) => string;
   columns: Column<Row>[];
 };
@@ -212,7 +224,7 @@ export const INVENTORY: ModuleDef = {
   key: "inventory",
   path: "/inventory",
   titleKey: "module.inventory",
-  title: "Inventory",
+  title: "Stock",
   blurb: "Stock health, valuation, ageing, expiry and counting, all derived from the ledger.",
   permission: "inventory.read",
   group: "move",
@@ -407,7 +419,8 @@ export const INVENTORY: ModuleDef = {
     title: "Stock ageing",
     description: "Quantity by age band.",
     fn: "erp_stock_ageing",
-    empty: "No aged stock to profile.",
+    empty:
+      "No aged stock to profile. Stock is banded by age here once anything has been on hand long enough to band.",
     label: (r) => String(r["age_band"] ?? "—"),
     value: (r) => num(r["quantity"]),
   },
@@ -416,10 +429,11 @@ export const INVENTORY: ModuleDef = {
       title: "Count tasks",
       description: "Raised by the counting programme and waiting on a person.",
       fn: "erp_count_tasks",
-      empty: "No count tasks raised.",
+      empty:
+        "No count tasks raised. Raise a counting programme under Actions and its tasks appear here.",
       rowKey: (r, i) => String(r["task_id"] ?? i),
       columns: [
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Location", cell: "location" },
         { header: "Expected", cell: "expected", numeric: true },
         { header: "Counted", cell: "counted", numeric: true },
@@ -431,11 +445,12 @@ export const INVENTORY: ModuleDef = {
       title: "Warehouse tasks",
       description: "Putaway and replenishment, raised from the balances and waiting on a truck.",
       fn: "erp_warehouse_tasks",
-      empty: "No warehouse tasks outstanding.",
+      empty:
+        "No warehouse tasks outstanding. Picks, putaways and replenishments are raised by the work, not from this screen.",
       rowKey: (r, i) => String(r["task_id"] ?? i),
       columns: [
         { header: "Kind", cell: "kind" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "From", cell: "from_location" },
         { header: "To", cell: "to_location" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -448,11 +463,12 @@ export const INVENTORY: ModuleDef = {
       description: "Batches reaching their expiry inside thirty days.",
       fn: "erp_expiry_horizon",
       args: { p_days: 30 },
-      empty: "Nothing expires in the next thirty days.",
+      empty:
+        "Nothing expires in the next thirty days. Only batch-controlled stock with an expiry date appears here.",
       rowKey: (r, i) => String(r["batch_id"] ?? i),
       columns: [
         { header: "Batch", cell: "batch_number" },
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         date("Expires", "expires_on"),
         { header: "Quantity", cell: "quantity", numeric: true },
         { header: "Days left", cell: "days_remaining", numeric: true },
@@ -464,10 +480,12 @@ export const INVENTORY: ModuleDef = {
       title: "Stock health",
       description: "Cover against policy, by item and site.",
       fn: "erp_stock_health",
-      empty: "No stock positions yet — nothing has moved into this tenant.",
+      empty:
+        "Nothing is on hand yet. Receipting a purchase order is what first puts stock into an organisation.",
+      emptyAction: { label: "Open Purchasing", to: "/procurement" },
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "On hand", cell: "on_hand", numeric: true },
         { header: "Available", cell: "available", numeric: true },
@@ -479,10 +497,11 @@ export const INVENTORY: ModuleDef = {
       title: "Valuation",
       description: "Cost basis by item and site, in minor units.",
       fn: "erp_stock_valuation",
-      empty: "Nothing to value yet.",
+      empty: "Nothing to value yet. Stock is valued from the moment it is received.",
+      emptyAction: { label: "Open Purchasing", to: "/procurement" },
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Quantity", cell: "quantity", numeric: true },
         { header: "Value (minor)", cell: "value_minor", numeric: true },
@@ -493,10 +512,10 @@ export const INVENTORY: ModuleDef = {
       title: "Ageing",
       description: "How long stock has been standing still.",
       fn: "erp_stock_ageing",
-      empty: "No aged stock.",
+      empty: "No aged stock. Nothing has been on hand long enough to fall into an age band.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["age_band"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Band", cell: "age_band" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -506,11 +525,13 @@ export const INVENTORY: ModuleDef = {
       title: "Batches",
       description: "Traceable units, with their genealogy anchors.",
       fn: "erp_batches",
-      empty: "No batches yet.",
+      empty:
+        "No batches yet. A batch is created when stock of a batch-controlled product is received, so a product has to be marked batch controlled first.",
+      emptyAction: { label: "Open Common data", to: "/master-data" },
       rowKey: (r, i) => String(r["batch_id"] ?? i),
       columns: [
         { header: "Batch", cell: "batch_number" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         pill("status"),
         date("Made", "manufactured_on"),
         date("Expires", "expires_on"),
@@ -553,7 +574,7 @@ export const FINANCE: ModuleDef = {
   key: "finance",
   path: "/finance",
   titleKey: "module.finance",
-  title: "Finance",
+  title: "Financials",
   blurb: "Trial balance, periods, receivables, tax and assets, read from the posted ledger.",
   permission: "finance.read",
   group: "settle",
@@ -741,7 +762,8 @@ export const FINANCE: ModuleDef = {
     title: "Receivables ageing",
     description: "Outstanding balance by age band.",
     fn: "erp_receivables_ageing",
-    empty: "Nothing outstanding to profile.",
+    empty:
+      "Nothing outstanding to profile. Customer invoices land here as they are posted, banded by how overdue they are.",
     label: (r) => String(r["party"] ?? "—"),
     value: (r) => num(r["total_minor"]) / 100,
   },
@@ -750,7 +772,8 @@ export const FINANCE: ModuleDef = {
       title: "Dunning worklist",
       description: "Customers overdue enough to contact.",
       fn: "erp_dunning_worklist",
-      empty: "Nobody needs chasing.",
+      empty:
+        "Nobody needs chasing. Every customer is inside their terms, or has nothing outstanding at all.",
       rowKey: (r, i) => String(r["party"] ?? i),
       columns: [
         { header: "Customer", cell: "party" },
@@ -763,12 +786,13 @@ export const FINANCE: ModuleDef = {
       title: "Goods received not invoiced",
       description: "Received against a purchase order, still awaiting an invoice.",
       fn: "erp_grni",
-      empty: "Nothing received awaiting an invoice.",
+      empty:
+        "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
       rowKey: (r, i) => `${String(r["document_number"] ?? i)}-${i}`,
       columns: [
         { header: "Receipt", cell: "document_number" },
         { header: "Supplier", cell: "party" },
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Quantity", cell: "quantity_open", numeric: true },
         { header: "Value", cell: "value_minor", numeric: true },
         { header: "Age (days)", cell: "age_days", numeric: true },
@@ -781,10 +805,11 @@ export const FINANCE: ModuleDef = {
       description:
         "One published policy: nothing under ninety days, a quarter to six months, half to a year, all of it beyond.",
       fn: "erp_stock_provision",
-      empty: "Nothing is old enough to provide against.",
+      empty:
+        "Nothing is old enough to provide against. Stock appears here once it has passed the slow-moving threshold this organisation set.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Name", cell: "item_name" },
         { header: "Age band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -797,7 +822,7 @@ export const FINANCE: ModuleDef = {
       title: "Trial balance",
       description: "Every account with a movement, by ledger.",
       fn: "erp_trial_balance",
-      empty: "Nothing posted yet.",
+      empty: "Nothing posted yet. A trial balance is built from documents that have been posted.",
       rowKey: (r, i) => `${String(r["ledger"] ?? i)}-${String(r["account"] ?? i)}`,
       columns: [
         { header: "Ledger", cell: "ledger" },
@@ -813,7 +838,7 @@ export const FINANCE: ModuleDef = {
       title: "Receivables ageing",
       description: "What is outstanding, and for how long.",
       fn: "erp_receivables_ageing",
-      empty: "Nothing outstanding.",
+      empty: "Nothing outstanding. Every customer invoice posted so far has been settled.",
       rowKey: (r, i) => String(r["party"] ?? i),
       columns: [
         { header: "Customer", cell: "party" },
@@ -829,7 +854,8 @@ export const FINANCE: ModuleDef = {
       title: "Tax report",
       description: "Net and tax by code for the current period.",
       fn: "erp_tax_report",
-      empty: "No taxable transactions in this period.",
+      empty:
+        "No taxable transactions in this period. Change the period, or post a document that carries tax.",
       rowKey: (r, i) => String(r["tax_code"] ?? i),
       columns: [
         { header: "Code", cell: "tax_code" },
@@ -843,7 +869,7 @@ export const FINANCE: ModuleDef = {
       title: "Fixed assets",
       description: "The register as at today.",
       fn: "erp_fixed_asset_register",
-      empty: "No fixed assets recorded.",
+      empty: "No fixed assets recorded. An asset is capitalised from a posted purchase invoice.",
       rowKey: (r, i) => String(r["asset_code"] ?? i),
       columns: [
         { header: "Asset", cell: "asset_code" },
@@ -857,7 +883,8 @@ export const FINANCE: ModuleDef = {
       title: "Intercompany position",
       description: "What each entity owes another, before elimination.",
       fn: "erp_intercompany_position",
-      empty: "No intercompany balances.",
+      empty:
+        "No intercompany balances. This appears once two companies in the organisation trade with each other.",
       rowKey: (r, i) => `${String(r["from_entity"] ?? i)}-${String(r["to_entity"] ?? i)}-${i}`,
       columns: [
         { header: "From", cell: "from_entity" },
@@ -871,7 +898,8 @@ export const FINANCE: ModuleDef = {
       title: "Ledgers",
       description: "The books this tenant keeps.",
       fn: "erp_ledgers",
-      empty: "No ledger configured. Installing the finance module is what creates one.",
+      empty: "No ledger configured. Installing Financials is what creates one.",
+      emptyAction: { label: "Open Configuration", to: "/administration/configuration" },
       rowKey: (r, i) => String(r["code"] ?? i),
       columns: [
         { header: "Code", cell: "code" },
@@ -886,7 +914,9 @@ export const FINANCE: ModuleDef = {
       title: "Periods",
       description: "The fiscal calendar and where it is open.",
       fn: "erp_fiscal_periods",
-      empty: "No fiscal calendar yet.",
+      empty:
+        "No fiscal calendar yet. Installing Financials creates one, and nothing can be posted to a period until it exists.",
+      emptyAction: { label: "Open Configuration", to: "/administration/configuration" },
       rowKey: (r, i) => String(r["code"] ?? i),
       columns: [
         { header: "Period", cell: "code" },
@@ -1002,7 +1032,7 @@ export const PLANNING: ModuleDef = {
     title: "Exceptions by kind",
     description: "Where the plan is inconsistent.",
     fn: "erp_planning_exceptions",
-    empty: "No exceptions to profile.",
+    empty: "No exceptions to profile. The plan is currently consistent with demand and supply.",
     label: (r) => String(r["exception_kind"] ?? "—"),
     value: () => 1,
   },
@@ -1014,7 +1044,7 @@ export const PLANNING: ModuleDef = {
       empty: "No exceptions — the plan is currently consistent.",
       rowKey: (r, i) => String(r["exception_id"] ?? i),
       columns: [
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "exception_kind" },
         { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
@@ -1031,7 +1061,7 @@ export const PLANNING: ModuleDef = {
       empty: "No planned orders. Nothing is short against current demand.",
       rowKey: (r, i) => String(r["planned_order_id"] ?? i),
       columns: [
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "order_kind" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -1094,7 +1124,7 @@ export const PRODUCTION: ModuleDef = {
   key: "production",
   path: "/production",
   titleKey: "module.production",
-  title: "Production",
+  title: "Manufacturing",
   blurb: "Works orders and their progress against plan, quantity by quantity.",
   permission: "production.read",
   group: "make",
@@ -1265,7 +1295,7 @@ export const PRODUCTION: ModuleDef = {
     title: "Works orders by status",
     description: "Where the shop floor currently sits.",
     fn: "erp_works_orders",
-    empty: "No works orders to profile.",
+    empty: "No works orders to profile. Raise one under Work and it is counted here by status.",
     label: (r) => String(r["status"] ?? "—"),
     value: () => 1,
   },
@@ -1274,11 +1304,11 @@ export const PRODUCTION: ModuleDef = {
       title: "Works orders",
       description: "Everything raised, with progress against the ordered quantity.",
       fn: "erp_works_orders",
-      empty: "No works orders raised.",
+      empty: "No works orders raised. Raise one under Actions above.",
       rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
       columns: [
         { header: "Number", cell: "order_number" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "order_kind" },
         { header: "Ordered", cell: "quantity", numeric: true },
@@ -1294,11 +1324,14 @@ export const PRODUCTION: ModuleDef = {
       title: "Works order register",
       description: "The full register, including closed orders.",
       fn: "erp_works_orders",
-      empty: "No works orders raised.",
+      // No "under Actions above" here: the actions bar is on Work, and this
+      // panel is on Reports. An instruction pointing at a control the reader
+      // cannot see is worse than none.
+      empty: "No works orders raised, so the register is empty. Raising one is done under Work.",
       rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
       columns: [
         { header: "Number", cell: "order_number" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Ordered", cell: "quantity", numeric: true },
         { header: "Completed", cell: "quantity_completed", numeric: true },
@@ -1331,7 +1364,7 @@ export const QUALITY: ModuleDef = {
   key: "quality",
   path: "/quality",
   titleKey: "module.quality",
-  title: "Quality and recall",
+  title: "Quality control",
   blurb: "Events, dispositions, supplier qualification and recall — each with a clock.",
   permission: "quality.read",
   group: "make",
@@ -1530,7 +1563,8 @@ export const QUALITY: ModuleDef = {
     title: "Events by kind",
     description: "What is being raised against quality.",
     fn: "erp_quality_events",
-    empty: "No quality events to profile.",
+    empty:
+      "No quality events to profile. Deviations, complaints and non-conformances are counted here by kind.",
     label: (r) => String(r["event_kind"] ?? "—"),
     value: () => 1,
   },
@@ -1539,14 +1573,15 @@ export const QUALITY: ModuleDef = {
       title: "Quality events",
       description: "Non-conformance, complaint, deviation and their investigations.",
       fn: "erp_quality_events",
-      empty: "No quality events open.",
+      empty:
+        "No quality events open. Raise one under Actions above when something needs investigating.",
       rowKey: (r, i) => String(r["event_id"] ?? i),
       columns: [
         { header: "Reference", cell: "reference" },
         { header: "Kind", cell: "event_kind" },
         { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
         { header: "Title", cell: "title" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         date("Due", "due_at"),
         pill("status"),
       ],
@@ -1572,7 +1607,9 @@ export const QUALITY: ModuleDef = {
       title: "Supplier qualification",
       description: "Who is approved to supply what, and until when.",
       fn: "erp_supplier_qualification",
-      empty: "No supplier qualifications recorded.",
+      empty:
+        "No supplier is qualified yet. Qualification is recorded against a business partner holding the supplier role.",
+      emptyAction: { label: "Open Common data", to: "/master-data" },
       rowKey: (r, i) => `${String(r["party"] ?? i)}-${i}`,
       columns: [
         { header: "Supplier", cell: "party" },
@@ -1588,7 +1625,7 @@ export const LOGISTICS: ModuleDef = {
   key: "logistics",
   path: "/logistics",
   titleKey: "module.logistics",
-  title: "Logistics",
+  title: "Despatch",
   blurb: "Shipments, carrier bookings and delivery performance, with cost landing on stock.",
   permission: "logistics.read",
   group: "move",
@@ -1727,7 +1764,8 @@ export const LOGISTICS: ModuleDef = {
     description: "On time in full, last ninety days.",
     fn: "erp_delivery_performance",
     args: { p_days: 90 },
-    empty: "No deliveries in the window.",
+    empty:
+      "No deliveries in the window. On-time-in-full is measured from confirmed deliveries, so this fills once goods start leaving.",
     label: (r) => String(r["party"] ?? r["site"] ?? "—"),
     value: (r) => num(r["otif_pct"]),
     unit: "%",
@@ -1737,7 +1775,9 @@ export const LOGISTICS: ModuleDef = {
       title: "Shipments",
       description: "Planned and despatched loads.",
       fn: "erp_shipments",
-      empty: "No shipments planned.",
+      empty:
+        "No shipments planned. A shipment is planned against confirmed sales deliveries, so there has to be a sales order first.",
+      emptyAction: { label: "Open Sales", to: "/sales" },
       rowKey: (r, i) => String(r["shipment_id"] ?? i),
       columns: [
         { header: "Reference", cell: "reference" },
@@ -1756,7 +1796,8 @@ export const LOGISTICS: ModuleDef = {
       description: "On time, in full, over the last ninety days.",
       fn: "erp_delivery_performance",
       args: { p_days: 90 },
-      empty: "No deliveries in the window.",
+      empty:
+        "No deliveries in the window. On-time-in-full is measured from confirmed deliveries, so this fills once goods start leaving.",
       rowKey: (r, i) => `${String(r["party"] ?? r["site"] ?? i)}-${i}`,
       columns: [
         { header: "Customer", cell: "party" },
@@ -1773,7 +1814,7 @@ export const REPORTING: ModuleDef = {
   key: "reporting",
   path: "/reporting",
   titleKey: "module.reporting",
-  title: "Reporting",
+  title: "Reports and inquiries",
   blurb: "Data quality, duplicates and specification coverage, read from operational tables.",
   permission: "reporting.read",
   group: "records",
@@ -1820,7 +1861,8 @@ export const REPORTING: ModuleDef = {
     title: "Coverage by section",
     description: "Part 5 of the foundation specification, measured against the database.",
     fn: "erp_part5_summary",
-    empty: "Coverage could not be measured.",
+    empty:
+      "Coverage could not be measured. The report itself returned nothing, which is not the same as full coverage.",
     label: (r) => String(r["section"] ?? "—"),
     value: (r) => num(r["coverage_pct"]),
     unit: "%",
@@ -1831,7 +1873,8 @@ export const REPORTING: ModuleDef = {
       description: "Likely duplicate parties, for merge with a survivor and a reason.",
       fn: "erp_duplicate_candidates",
       args: { p_object_type: "party" },
-      empty: "No likely duplicates.",
+      empty:
+        "No likely duplicates. Nothing in the common data scores closely enough to another record to be worth merging.",
       rowKey: (r, i) => `${String(r["left_code"] ?? i)}-${String(r["right_code"] ?? i)}`,
       columns: [
         { header: "Record", cell: "left_code" },
@@ -1843,11 +1886,12 @@ export const REPORTING: ModuleDef = {
   ],
   reports: [
     {
-      title: "Party data quality",
+      title: "Business partner data quality",
       description: "Completeness and validity of party master records.",
       fn: "erp_data_quality",
       args: { p_object_type: "party" },
-      empty: "No party master data to assess yet.",
+      empty: "No business partner exists yet, so there is nothing to score.",
+      emptyAction: { label: "Open Common data", to: "/master-data" },
       rowKey: (r, i) => `${String(r["object_id"] ?? i)}`,
       columns: [
         { header: "Code", cell: "code" },
@@ -1862,7 +1906,8 @@ export const REPORTING: ModuleDef = {
       title: "Specification coverage",
       description: "Part 5, section by section, measured against the database.",
       fn: "erp_part5_summary",
-      empty: "Coverage could not be measured.",
+      empty:
+        "Coverage could not be measured. The report itself returned nothing, which is not the same as full coverage.",
       rowKey: (r, i) => `${String(r["section"] ?? i)}-${i}`,
       columns: [
         { header: "Section", cell: "section" },
@@ -1877,6 +1922,108 @@ export const REPORTING: ModuleDef = {
 };
 
 /** Every module that renders from the registry. */
+/**
+ * The numbers Sales and Purchasing lead with.
+ *
+ * Both screens are bespoke rather than registry modules, because their content
+ * is document lists and a document list needs the organisation's own type code
+ * — which a registry panel, whose `fn` and `args` are fixed at build time,
+ * cannot name. That is a good reason for the tables to stay where they are and
+ * a bad reason for the two busiest screens in the product to be the only ones
+ * that open on a wall of rows with no figure at the top.
+ *
+ * So the tiles come here, beside the modules that have them, and the screens
+ * import them. Same `Kpi` type, same `KpiRow`, same rule as everywhere else:
+ * every figure is derived in the browser from a read the screen already makes,
+ * so a headline can never disagree with the list under it.
+ */
+export const SALES_KPIS: Kpi[] = [
+  {
+    label: "Open order lines",
+    fn: "erp_release_sequence",
+    compute: (rows) =>
+      rows.length === 0
+        ? { value: "0", hint: "nothing waiting to be released", tone: "ok" }
+        : { value: String(rows.length), hint: "awaiting release" },
+  },
+  {
+    label: "Short",
+    fn: "erp_release_sequence",
+    // The line cannot go out complete on today's availability. Zero is the
+    // good answer, which is what zeroIsGood is for.
+    compute: (rows) =>
+      zeroIsGood(
+        count(rows, (r) => r["can_ship_in_full"] === false),
+        "cannot ship in full",
+      ),
+  },
+  {
+    label: "On credit hold",
+    fn: "erp_release_sequence",
+    compute: (rows) =>
+      zeroIsGood(
+        count(rows, (r) => !isOneOf(r["credit_status"], ["ok"])),
+        "lines held on credit",
+      ),
+  },
+  {
+    label: "Customers overdue",
+    fn: "erp_dunning_worklist",
+    compute: (rows) => {
+      if (rows.length === 0) return { value: "0", hint: "nothing overdue", tone: "ok" };
+      const oldest = Math.max(...rows.map((r) => num(r["oldest_days"])));
+      // Blocking trading is a different order of problem from being late.
+      const blocking = count(rows, (r) => r["blocks_trading"] === true);
+      return {
+        value: String(rows.length),
+        hint: blocking > 0 ? `${blocking} blocking trading` : `oldest ${oldest} days`,
+        tone: blocking > 0 ? "bad" : "warn",
+      };
+    },
+  },
+];
+
+export const PURCHASING_KPIS: Kpi[] = [
+  {
+    label: "Received not invoiced",
+    fn: "erp_grni",
+    compute: (rows) => {
+      if (rows.length === 0) return { value: "0", hint: "nothing awaiting an invoice", tone: "ok" };
+      const oldest = Math.max(...rows.map((r) => num(r["age_days"])));
+      return {
+        value: String(rows.length),
+        hint: `oldest ${oldest} days`,
+        tone: oldest > 60 ? "bad" : oldest > 30 ? "warn" : "ok",
+      };
+    },
+  },
+  {
+    label: "GRNI value",
+    fn: "erp_grni",
+    compute: (rows) =>
+      rows.length === 0
+        ? null
+        : { value: money(sum(rows, "open_value_minor")), hint: "open on the balance sheet" },
+  },
+  {
+    label: "Match exceptions",
+    fn: "erp_match_workbench",
+    compute: (rows) => zeroIsGood(rows.length, "invoices that will not match"),
+  },
+  {
+    label: "Value at risk",
+    fn: "erp_match_workbench",
+    compute: (rows) =>
+      rows.length === 0
+        ? null
+        : {
+            value: money(sum(rows, "value_at_risk_minor")),
+            hint: "held by match exceptions",
+            tone: "warn",
+          },
+  },
+];
+
 export const MODULES: ModuleDef[] = [
   INVENTORY,
   PRODUCTION,
@@ -1917,7 +2064,7 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/sales",
     titleKey: "nav.sales",
     title: "Sales",
-    blurb: "Quotations, orders and deliveries.",
+    blurb: "Sales quotes, sales orders and deliveries.",
     permission: "sales.read",
     group: "sell",
   },
@@ -1944,16 +2091,16 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/procurement",
     titleKey: "nav.procurement",
-    title: "Procurement",
-    blurb: "Requisitions, purchase orders and goods receipts.",
+    title: "Purchasing",
+    blurb: "Purchase requisitions, purchase orders and receipts.",
     permission: "procurement.read",
     group: "source",
   },
   {
     path: "/master-data",
     titleKey: "nav.master_data",
-    title: "Master data",
-    blurb: "The items and parties every document depends on.",
+    title: "Common data",
+    blurb: "The products and business partners every document depends on.",
     permission: "master_data.read",
     group: "records",
   },
@@ -2002,7 +2149,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/operations/jobs",
     titleKey: "nav.operations_jobs",
-    title: "Scheduled jobs",
+    title: "Recurring tasks",
     blurb: "What is running, what failed, and what has stopped running.",
     permission: "administration.jobs",
     group: "operate",
@@ -2125,7 +2272,10 @@ export const EXTRA_TILES: TileDef[] = [
     titleKey: "nav.administration_onboarding",
     title: "Onboarding interview",
     blurb:
-      "Questions about how this organisation works, turned into a change set per configuration surface.",
+      // "Change", not "change set": erp_ref.vocabulary marks the latter an
+      // internal model term, and assert_vocabulary_aligned() keeps internal
+      // words off the surface.
+      "Questions about how this organisation works, turned into a proposed change for each configuration surface.",
     permission: "administration.configure",
     group: "organisation",
   },
@@ -2140,7 +2290,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/master-data/classification",
     titleKey: "nav.master_data_classification",
-    title: "Classification and coding",
+    title: "Categories and codes",
     blurb:
       "Classification axes and values, code templates composed from them, completeness gaps and divergences.",
     permission: "master_data.write",
@@ -2149,7 +2299,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/master-data/item-supply",
     titleKey: "nav.master_data_item_supply",
-    title: "Item supply",
+    title: "Product-suppliers",
     blurb: "Default suppliers, preference ranks, sourcing splits and approved-for-use status.",
     permission: "master_data.write",
     group: "configure",
@@ -2157,7 +2307,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/logistics/release-areas",
     titleKey: "nav.logistics_release_areas",
-    title: "Release areas and waves",
+    title: "Marshalling areas",
     blurb:
       "Allocated stock scopes, pull and push replenishment, ageing back to bulk, and print gating.",
     permission: "logistics.plan",
@@ -2175,7 +2325,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/administration/permissions",
     titleKey: "nav.administration_permissions",
-    title: "Permissions",
+    title: "Users and authorisations",
     blurb: "Principals, roles, and the grants between them.",
     permission: "administration.roles",
     group: "organisation",
@@ -2223,6 +2373,44 @@ export const GROUP_LABELS: Record<TileGroup, string> = {
 
 /** The order the two areas read in: the journey and its records, then the four settings sections. */
 export const GROUP_ORDER: TileGroup[] = [...WORK_GROUPS, ...SETTINGS_GROUPS];
+
+/**
+ * Where a glossary term is maintained or used.
+ *
+ * The palette searches erp_ref.vocabulary so somebody who says "inventory",
+ * "item" or "vendor" still lands somewhere. A term only earns a row when it
+ * leads to a screen, so this map is the whole of what the search can offer —
+ * and a term absent from it simply does not appear, rather than offering a
+ * destination that would not help.
+ */
+export const GLOSSARY_DESTINATION: Record<string, string> = {
+  stock: "/inventory",
+  cycle_count: "/inventory",
+  stocktake: "/inventory",
+  batch: "/inventory",
+  handling_unit: "/inventory",
+  product: "/master-data",
+  business_partner: "/master-data",
+  supplier: "/master-data",
+  analysis_code: "/master-data/classification",
+  works_order: "/production",
+  despatch: "/logistics",
+  marshalling_area: "/logistics/release-areas",
+  goods_out: "/logistics",
+  goods_in: "/procurement",
+  grni: "/procurement",
+  requisition: "/procurement",
+  accounting_code: "/finance/account-determination",
+  nominal_account: "/finance",
+  accounting_period: "/finance",
+  sales_ledger: "/finance",
+  purchase_ledger: "/finance",
+  company: "/administration/organisation",
+  user: "/administration/permissions",
+  organisation: "/administration/tenant",
+  global_allocation: "/sales",
+  detailed_allocation: "/sales",
+};
 
 /** Registry modules and bespoke screens, as one list of tiles. */
 export function allTiles(): TileDef[] {

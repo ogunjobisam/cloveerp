@@ -7,13 +7,13 @@ import { QUALITY } from "../../lib/modules";
 export const Route = createFileRoute("/quality/")({
   head: () => ({
     meta: [
-      { title: "Quality and recall — Clove ERP" },
+      { title: "Quality control — Clove ERP" },
       {
         name: "description",
         content:
           "Quality events, dispositions, supplier qualification and recalls against a regulatory clock.",
       },
-      { property: "og:title", content: "Quality and recall — Clove ERP" },
+      { property: "og:title", content: "Quality control — Clove ERP" },
       {
         property: "og:description",
         content:

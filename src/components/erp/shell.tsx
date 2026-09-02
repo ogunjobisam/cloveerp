@@ -20,6 +20,7 @@ import {
 } from "../../lib/modules";
 import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
+import { CommandPalette } from "./command-palette";
 import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
@@ -382,6 +383,8 @@ export function Shell({
           {/* Help for the screen you are on, at every width: the one control
               that stays out of the drawer, because the question "what is this
               screen for" is asked most on the phone. */}
+          <CommandPalette />
+
           <ContextHelp />
 
           {/* Everything here is in the drawer below md. */}

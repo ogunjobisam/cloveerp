@@ -7,13 +7,13 @@ import { FINANCE } from "../../lib/modules";
 export const Route = createFileRoute("/finance/")({
   head: () => ({
     meta: [
-      { title: "Finance — Clove ERP" },
+      { title: "Financials — Clove ERP" },
       {
         name: "description",
         content:
           "Trial balance, fiscal periods, receivables ageing, dunning, tax and fixed assets from the posted ledger.",
       },
-      { property: "og:title", content: "Finance — Clove ERP" },
+      { property: "og:title", content: "Financials — Clove ERP" },
       {
         property: "og:description",
         content:

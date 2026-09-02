@@ -378,7 +378,7 @@ function Lines({
               {
                 kind: "select",
                 name: "p_item_id",
-                label: "Item",
+                label: "Product",
                 required: true,
                 options: {
                   fn: "erp_items",

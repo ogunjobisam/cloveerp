@@ -12,7 +12,9 @@ import {
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
+import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { SALES_KPIS } from "../../lib/modules";
 
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — Clove ERP" }] }),
@@ -39,16 +41,18 @@ function Sales() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Sales">
-        Quotation to order to delivery, on the same document spine procurement uses in the opposite
+        Quote to order to delivery, on the same document spine purchasing uses in the opposite
         direction.
       </PageHeader>
+
+      <KpiRow kpis={SALES_KPIS} />
 
       <ActionBar
         note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
         actions={[
           {
             label: "Resolve a price",
-            description: "What would this customer pay for this item today?",
+            description: "What would this customer pay for this product today?",
             permission: "sales.price",
             fn: "erp_resolve_price",
             fields: [
@@ -126,13 +130,13 @@ function Sales() {
         title="Release sequence"
         description="Open demand in the order it should be released: promise date first, then credit standing, then value."
         fn="erp_release_sequence"
-        empty="Nothing open to release."
+        empty="Nothing open to release. Confirmed sales order lines appear here in the order they should be released."
         rowKey={(r, i) => String(r["line_id"] ?? i)}
         columns={[
           { header: "#", cell: "rank", numeric: true },
           { header: "Order", cell: "document_number" },
           { header: "Customer", cell: "customer" },
-          { header: "Item", cell: "item" },
+          { header: "Product", cell: "item" },
           { header: "Quantity", cell: "quantity", numeric: true },
           { header: "Required", cell: "required_date" },
           { header: "Credit", cell: "credit_status" },
@@ -154,7 +158,7 @@ function Sales() {
         description="Commitments to a customer. Discount and credit bands decide what needs approving."
         baseType="sales_order"
         partyRole="customer"
-        empty="No sales orders yet."
+        empty="No sales orders yet. New raises one, or accept a quotation from the panel above."
       />
 
       <DocumentPanel
@@ -162,7 +166,7 @@ function Sales() {
         description="Goods leaving. Posting one is what takes the stock off the shelf."
         baseType="delivery"
         partyRole="customer"
-        empty="No deliveries yet."
+        empty="No deliveries yet. A delivery is raised against a sales order, and posting it is what takes the stock off the shelf."
       />
     </div>
   );

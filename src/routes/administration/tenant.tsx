@@ -113,7 +113,7 @@ function TenantLifecycle() {
         title="Platform assurance"
         description="What the platform itself says about this organisation's configuration and isolation."
         fn="erp_platform_assurance"
-        empty="No assurance checks reported."
+        empty="No assurance checks reported. That is itself unexpected — the platform runs these against every organisation."
         rowKey={(r, i) => `${String(r["code"] ?? i)}-${i}`}
         columns={[
           // check_code / state / result were none of them keys this RPC returns,
@@ -183,7 +183,7 @@ function EncryptionKeysPanel() {
         title="Key register"
         description="Every key this organisation has held, and what became of it."
         fn="erp_tenant_keys"
-        empty="No key has been issued yet."
+        empty="No key has been issued yet. Rotate above to issue the first one; nothing can be stored encrypted until there is a key."
         rowKey={(r, i) => `${String(r["key_id"] ?? i)}`}
         columns={[
           { header: "Purpose", cell: "purpose" },
@@ -200,7 +200,7 @@ function EncryptionKeysPanel() {
         title="Protected values"
         description="Stored encrypted under the key above; unreadable once it is destroyed."
         fn="erp_protected_values"
-        empty="Nothing is stored under the key yet."
+        empty="Nothing is stored under the key yet. A protected value is written by the feature that owns it, not from this screen."
         rowKey={(r, i) => `${String(r["code"] ?? i)}`}
         columns={[
           { header: "Name", cell: "code" },

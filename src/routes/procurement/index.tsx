@@ -10,17 +10,20 @@ import {
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
+import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { PURCHASING_KPIS } from "../../lib/modules";
+import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/procurement/")({
   head: () => ({
     meta: [
-      { title: "Procurement — Clove ERP" },
+      { title: "Purchasing — Clove ERP" },
       {
         name: "description",
         content: "Requisitions, RFQs, purchase orders, receipts and three-way match.",
       },
-      { property: "og:title", content: "Procurement — Clove ERP" },
+      { property: "og:title", content: "Purchasing — Clove ERP" },
       {
         property: "og:description",
         content: "Requisitions, RFQs, purchase orders, receipts and three-way match.",
@@ -50,12 +53,16 @@ export const Route = createFileRoute("/procurement/")({
  * short file, depending on how generous you are feeling.
  */
 function Procurement() {
+  const { t } = useT();
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Procurement">
-        Requisition to purchase order to goods receipt. Receiving posts stock inbound through the
-        same bridge a delivery uses outbound.
+      <PageHeader title={t("nav.procurement", "Purchasing")}>
+        Requisition to purchase order to receipt. Receiving posts stock inbound through the same
+        bridge a delivery uses outbound.
       </PageHeader>
+
+      <KpiRow kpis={PURCHASING_KPIS} />
 
       <ActionBar
         note="Receiving, matching and supplier qualification — the verbs between the documents."
@@ -105,7 +112,8 @@ function Procurement() {
           },
           {
             label: "Resolve a purchase price",
-            description: "What should this supplier charge for this item today, and on what basis?",
+            description:
+              "What should this supplier charge for this product today, and on what basis?",
             permission: "procurement.order",
             fn: "erp_resolve_purchase_price",
             fields: [
@@ -152,7 +160,7 @@ function Procurement() {
         description="Commitments to a supplier. Value bands decide what needs approving before it is sent."
         baseType="purchase_order"
         partyRole="supplier"
-        empty="No purchase orders yet."
+        empty="No purchase orders yet. New raises one, or convert a requisition from the panel above."
       />
 
       <DocumentPanel
@@ -160,7 +168,7 @@ function Procurement() {
         description="Goods arriving. Posting one is what puts the stock on the shelf and raises the GRNI accrual."
         baseType="receipt"
         partyRole="supplier"
-        empty="No receipts yet."
+        empty="No receipts yet. A receipt is recorded against a purchase order, and posting it is what puts stock on hand."
       />
     </div>
   );
