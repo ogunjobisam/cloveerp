@@ -13,9 +13,15 @@ export const Route = createFileRoute("/operations/output")({
   head: () => ({
     meta: [
       { title: "Output and printing — Clove ERP" },
-      { name: "description", content: "Printing, labels and document output routing across sites." },
+      {
+        name: "description",
+        content: "Printing, labels and document output routing across sites.",
+      },
       { property: "og:title", content: "Output and printing — Clove ERP" },
-      { property: "og:description", content: "Printing, labels and document output routing across sites." },
+      {
+        property: "og:description",
+        content: "Printing, labels and document output routing across sites.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

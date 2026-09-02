@@ -26,7 +26,10 @@ export const Route = createFileRoute("/commercial/quotes")({
       { title: "Quotes — Clove ERP" },
       { name: "description", content: "Quotations, versions and conversion into customer orders." },
       { property: "og:title", content: "Quotes — Clove ERP" },
-      { property: "og:description", content: "Quotations, versions and conversion into customer orders." },
+      {
+        property: "og:description",
+        content: "Quotations, versions and conversion into customer orders.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

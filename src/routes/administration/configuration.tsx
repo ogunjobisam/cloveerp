@@ -34,7 +34,10 @@ export const Route = createFileRoute("/administration/configuration")({
         content: "Install module configuration and promote change sets for a tenant.",
       },
       { property: "og:title", content: "Configuration — Clove ERP" },
-      { property: "og:description", content: "Install module configuration and promote change sets for a tenant." },
+      {
+        property: "og:description",
+        content: "Install module configuration and promote change sets for a tenant.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

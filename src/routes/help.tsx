@@ -25,7 +25,11 @@ export const Route = createFileRoute("/help")({
           "Frequently asked questions and the full user guides for every screen, grouped by module.",
       },
       { property: "og:title", content: "Help and user guides — Clove ERP" },
-      { property: "og:description", content: "Frequently asked questions and the full user guides for every screen, grouped by module." },
+      {
+        property: "og:description",
+        content:
+          "Frequently asked questions and the full user guides for every screen, grouped by module.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

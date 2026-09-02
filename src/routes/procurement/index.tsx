@@ -16,9 +16,15 @@ export const Route = createFileRoute("/procurement/")({
   head: () => ({
     meta: [
       { title: "Procurement — Clove ERP" },
-      { name: "description", content: "Requisitions, RFQs, purchase orders, receipts and three-way match." },
+      {
+        name: "description",
+        content: "Requisitions, RFQs, purchase orders, receipts and three-way match.",
+      },
       { property: "og:title", content: "Procurement — Clove ERP" },
-      { property: "og:description", content: "Requisitions, RFQs, purchase orders, receipts and three-way match." },
+      {
+        property: "og:description",
+        content: "Requisitions, RFQs, purchase orders, receipts and three-way match.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

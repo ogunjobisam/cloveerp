@@ -10,9 +10,15 @@ export const Route = createFileRoute("/operations/cutover")({
   head: () => ({
     meta: [
       { title: "Migration and cutover — Clove ERP" },
-      { name: "description", content: "Migration reconciliation, parallel running and evidence-gated go-live." },
+      {
+        name: "description",
+        content: "Migration reconciliation, parallel running and evidence-gated go-live.",
+      },
       { property: "og:title", content: "Migration and cutover — Clove ERP" },
-      { property: "og:description", content: "Migration reconciliation, parallel running and evidence-gated go-live." },
+      {
+        property: "og:description",
+        content: "Migration reconciliation, parallel running and evidence-gated go-live.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

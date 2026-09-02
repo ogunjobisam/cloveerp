@@ -11,9 +11,15 @@ export const Route = createFileRoute("/operations/integrations")({
   head: () => ({
     meta: [
       { title: "Integrations — Clove ERP" },
-      { name: "description", content: "Outbound and inbound integrations, endpoints and delivery history." },
+      {
+        name: "description",
+        content: "Outbound and inbound integrations, endpoints and delivery history.",
+      },
       { property: "og:title", content: "Integrations — Clove ERP" },
-      { property: "og:description", content: "Outbound and inbound integrations, endpoints and delivery history." },
+      {
+        property: "og:description",
+        content: "Outbound and inbound integrations, endpoints and delivery history.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
