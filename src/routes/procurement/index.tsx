@@ -10,7 +10,9 @@ import {
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
+import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { PURCHASING_KPIS } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/procurement/")({
@@ -59,6 +61,8 @@ function Procurement() {
         Requisition to purchase order to receipt. Receiving posts stock inbound through the same
         bridge a delivery uses outbound.
       </PageHeader>
+
+      <KpiRow kpis={PURCHASING_KPIS} />
 
       <ActionBar
         note="Receiving, matching and supplier qualification — the verbs between the documents."

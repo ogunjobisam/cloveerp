@@ -1877,6 +1877,108 @@ export const REPORTING: ModuleDef = {
 };
 
 /** Every module that renders from the registry. */
+/**
+ * The numbers Sales and Purchasing lead with.
+ *
+ * Both screens are bespoke rather than registry modules, because their content
+ * is document lists and a document list needs the organisation's own type code
+ * — which a registry panel, whose `fn` and `args` are fixed at build time,
+ * cannot name. That is a good reason for the tables to stay where they are and
+ * a bad reason for the two busiest screens in the product to be the only ones
+ * that open on a wall of rows with no figure at the top.
+ *
+ * So the tiles come here, beside the modules that have them, and the screens
+ * import them. Same `Kpi` type, same `KpiRow`, same rule as everywhere else:
+ * every figure is derived in the browser from a read the screen already makes,
+ * so a headline can never disagree with the list under it.
+ */
+export const SALES_KPIS: Kpi[] = [
+  {
+    label: "Open order lines",
+    fn: "erp_release_sequence",
+    compute: (rows) =>
+      rows.length === 0
+        ? { value: "0", hint: "nothing waiting to be released", tone: "ok" }
+        : { value: String(rows.length), hint: "awaiting release" },
+  },
+  {
+    label: "Short",
+    fn: "erp_release_sequence",
+    // The line cannot go out complete on today's availability. Zero is the
+    // good answer, which is what zeroIsGood is for.
+    compute: (rows) =>
+      zeroIsGood(
+        count(rows, (r) => r["can_ship_in_full"] === false),
+        "cannot ship in full",
+      ),
+  },
+  {
+    label: "On credit hold",
+    fn: "erp_release_sequence",
+    compute: (rows) =>
+      zeroIsGood(
+        count(rows, (r) => !isOneOf(r["credit_status"], ["ok"])),
+        "lines held on credit",
+      ),
+  },
+  {
+    label: "Customers overdue",
+    fn: "erp_dunning_worklist",
+    compute: (rows) => {
+      if (rows.length === 0) return { value: "0", hint: "nothing overdue", tone: "ok" };
+      const oldest = Math.max(...rows.map((r) => num(r["oldest_days"])));
+      // Blocking trading is a different order of problem from being late.
+      const blocking = count(rows, (r) => r["blocks_trading"] === true);
+      return {
+        value: String(rows.length),
+        hint: blocking > 0 ? `${blocking} blocking trading` : `oldest ${oldest} days`,
+        tone: blocking > 0 ? "bad" : "warn",
+      };
+    },
+  },
+];
+
+export const PURCHASING_KPIS: Kpi[] = [
+  {
+    label: "Received not invoiced",
+    fn: "erp_grni",
+    compute: (rows) => {
+      if (rows.length === 0) return { value: "0", hint: "nothing awaiting an invoice", tone: "ok" };
+      const oldest = Math.max(...rows.map((r) => num(r["age_days"])));
+      return {
+        value: String(rows.length),
+        hint: `oldest ${oldest} days`,
+        tone: oldest > 60 ? "bad" : oldest > 30 ? "warn" : "ok",
+      };
+    },
+  },
+  {
+    label: "GRNI value",
+    fn: "erp_grni",
+    compute: (rows) =>
+      rows.length === 0
+        ? null
+        : { value: money(sum(rows, "open_value_minor")), hint: "open on the balance sheet" },
+  },
+  {
+    label: "Match exceptions",
+    fn: "erp_match_workbench",
+    compute: (rows) => zeroIsGood(rows.length, "invoices that will not match"),
+  },
+  {
+    label: "Value at risk",
+    fn: "erp_match_workbench",
+    compute: (rows) =>
+      rows.length === 0
+        ? null
+        : {
+            value: money(sum(rows, "value_at_risk_minor")),
+            hint: "held by match exceptions",
+            tone: "warn",
+          },
+  },
+];
+
 export const MODULES: ModuleDef[] = [
   INVENTORY,
   PRODUCTION,
@@ -1917,7 +2019,7 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/sales",
     titleKey: "nav.sales",
     title: "Sales",
-    blurb: "Quotations, orders and deliveries.",
+    blurb: "Sales quotes, sales orders and deliveries.",
     permission: "sales.read",
     group: "sell",
   },
@@ -1945,7 +2047,7 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/procurement",
     titleKey: "nav.procurement",
     title: "Purchasing",
-    blurb: "Requisitions, purchase orders and goods receipts.",
+    blurb: "Purchase requisitions, purchase orders and receipts.",
     permission: "procurement.read",
     group: "source",
   },
@@ -1953,7 +2055,7 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/master-data",
     titleKey: "nav.master_data",
     title: "Common data",
-    blurb: "The items and parties every document depends on.",
+    blurb: "The products and business partners every document depends on.",
     permission: "master_data.read",
     group: "records",
   },

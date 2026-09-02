@@ -12,7 +12,9 @@ import {
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
+import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { SALES_KPIS } from "../../lib/modules";
 
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — Clove ERP" }] }),
@@ -39,9 +41,11 @@ function Sales() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Sales">
-        Quotation to order to delivery, on the same document spine procurement uses in the opposite
+        Quote to order to delivery, on the same document spine purchasing uses in the opposite
         direction.
       </PageHeader>
+
+      <KpiRow kpis={SALES_KPIS} />
 
       <ActionBar
         note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
