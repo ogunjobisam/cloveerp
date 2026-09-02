@@ -2326,6 +2326,44 @@ export const GROUP_LABELS: Record<TileGroup, string> = {
 /** The order the two areas read in: the journey and its records, then the four settings sections. */
 export const GROUP_ORDER: TileGroup[] = [...WORK_GROUPS, ...SETTINGS_GROUPS];
 
+/**
+ * Where a glossary term is maintained or used.
+ *
+ * The palette searches erp_ref.vocabulary so somebody who says "inventory",
+ * "item" or "vendor" still lands somewhere. A term only earns a row when it
+ * leads to a screen, so this map is the whole of what the search can offer —
+ * and a term absent from it simply does not appear, rather than offering a
+ * destination that would not help.
+ */
+export const GLOSSARY_DESTINATION: Record<string, string> = {
+  stock: "/inventory",
+  cycle_count: "/inventory",
+  stocktake: "/inventory",
+  batch: "/inventory",
+  handling_unit: "/inventory",
+  product: "/master-data",
+  business_partner: "/master-data",
+  supplier: "/master-data",
+  analysis_code: "/master-data/classification",
+  works_order: "/production",
+  despatch: "/logistics",
+  marshalling_area: "/logistics/release-areas",
+  goods_out: "/logistics",
+  goods_in: "/procurement",
+  grni: "/procurement",
+  requisition: "/procurement",
+  accounting_code: "/finance/account-determination",
+  nominal_account: "/finance",
+  accounting_period: "/finance",
+  sales_ledger: "/finance",
+  purchase_ledger: "/finance",
+  company: "/administration/organisation",
+  user: "/administration/permissions",
+  organisation: "/administration/tenant",
+  global_allocation: "/sales",
+  detailed_allocation: "/sales",
+};
+
 /** Registry modules and bespoke screens, as one list of tiles. */
 export function allTiles(): TileDef[] {
   const fromModules: TileDef[] = MODULES.map((m) => ({
