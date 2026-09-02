@@ -75,7 +75,7 @@ function StepActions({ step, primary }: { step: Step; primary: boolean }) {
               : "border border-input font-medium"
           }`}
         >
-          {ui(step.action_label)}
+          {step.action_label}
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
 
@@ -176,7 +176,7 @@ function StepRow({ step }: { step: Step }) {
       </button>
       {open ? (
         <div className="pb-3 pl-7.5">
-          <Prose className="mb-3 text-xs text-muted-foreground">{ui(step.why)}</Prose>
+          <Prose className="mb-3 text-xs text-muted-foreground">{step.why}</Prose>
           <StepActions step={step} primary={false} />
         </div>
       ) : null}
@@ -225,8 +225,10 @@ export function FirstRun() {
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-sm font-semibold">
             {ui("Your first steps")}{" "}
+            {/* A ratio of two numerals, not a sentence. Nothing here for the
+                terminology layer to hold, and nothing to translate. */}
             <span className="font-normal text-muted-foreground">
-              ({done} {ui("of")} {steps.length})
+              ({done}/{steps.length})
             </span>
           </h2>
           <Prose className="mt-1 text-xs text-muted-foreground">
@@ -259,7 +261,7 @@ export function FirstRun() {
           {ui("Next")} · {next.guide_name}
         </p>
         <h3 className="mt-1 font-display text-base font-semibold">{next.title}</h3>
-        <Prose className="mt-1 text-xs text-muted-foreground">{ui(next.why)}</Prose>
+        <Prose className="mt-1 text-xs text-muted-foreground">{next.why}</Prose>
         <p className="mt-2 text-xs">
           <Evidence step={next} />
         </p>
@@ -276,13 +278,12 @@ export function FirstRun() {
             aria-expanded={showAll}
             className={`${TOUCH} mt-3 flex w-full items-center justify-between gap-2 rounded-md px-1 text-sm font-medium`}
           >
+            {/* Whole phrases, with the count kept out of them. A rename layer
+                that is handed "more steps" and "already done" cannot be used
+                by a language that puts the number anywhere else. */}
             <span>
-              {showAll ? ui("Hide the rest") : `${rest.length} ${ui("more steps")}`}
-              {done > 0 ? (
-                <span className="ml-2 font-normal text-muted-foreground">
-                  {done} {ui("already done")}
-                </span>
-              ) : null}
+              {showAll ? ui("Hide the other steps") : ui("Show the other steps")}
+              <span className="ml-2 font-normal text-muted-foreground">{rest.length}</span>
             </span>
             <ChevronDown
               className={`size-4 shrink-0 text-muted-foreground transition-transform ${showAll ? "rotate-180" : ""}`}
