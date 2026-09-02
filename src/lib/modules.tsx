@@ -419,7 +419,7 @@ export const INVENTORY: ModuleDef = {
       empty: "No count tasks raised.",
       rowKey: (r, i) => String(r["task_id"] ?? i),
       columns: [
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Location", cell: "location" },
         { header: "Expected", cell: "expected", numeric: true },
         { header: "Counted", cell: "counted", numeric: true },
@@ -435,7 +435,7 @@ export const INVENTORY: ModuleDef = {
       rowKey: (r, i) => String(r["task_id"] ?? i),
       columns: [
         { header: "Kind", cell: "kind" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "From", cell: "from_location" },
         { header: "To", cell: "to_location" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -452,7 +452,7 @@ export const INVENTORY: ModuleDef = {
       rowKey: (r, i) => String(r["batch_id"] ?? i),
       columns: [
         { header: "Batch", cell: "batch_number" },
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         date("Expires", "expires_on"),
         { header: "Quantity", cell: "quantity", numeric: true },
         { header: "Days left", cell: "days_remaining", numeric: true },
@@ -467,7 +467,7 @@ export const INVENTORY: ModuleDef = {
       empty: "No stock positions yet — nothing has moved into this tenant.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "On hand", cell: "on_hand", numeric: true },
         { header: "Available", cell: "available", numeric: true },
@@ -482,7 +482,7 @@ export const INVENTORY: ModuleDef = {
       empty: "Nothing to value yet.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Quantity", cell: "quantity", numeric: true },
         { header: "Value (minor)", cell: "value_minor", numeric: true },
@@ -496,7 +496,7 @@ export const INVENTORY: ModuleDef = {
       empty: "No aged stock.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["age_band"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Band", cell: "age_band" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -510,7 +510,7 @@ export const INVENTORY: ModuleDef = {
       rowKey: (r, i) => String(r["batch_id"] ?? i),
       columns: [
         { header: "Batch", cell: "batch_number" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         pill("status"),
         date("Made", "manufactured_on"),
         date("Expires", "expires_on"),
@@ -768,7 +768,7 @@ export const FINANCE: ModuleDef = {
       columns: [
         { header: "Receipt", cell: "document_number" },
         { header: "Supplier", cell: "party" },
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Quantity", cell: "quantity_open", numeric: true },
         { header: "Value", cell: "value_minor", numeric: true },
         { header: "Age (days)", cell: "age_days", numeric: true },
@@ -784,7 +784,7 @@ export const FINANCE: ModuleDef = {
       empty: "Nothing is old enough to provide against.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
       columns: [
-        { header: "Item", cell: "item_code" },
+        { header: "Product", cell: "item_code" },
         { header: "Name", cell: "item_name" },
         { header: "Age band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -1014,7 +1014,7 @@ export const PLANNING: ModuleDef = {
       empty: "No exceptions — the plan is currently consistent.",
       rowKey: (r, i) => String(r["exception_id"] ?? i),
       columns: [
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "exception_kind" },
         { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
@@ -1031,7 +1031,7 @@ export const PLANNING: ModuleDef = {
       empty: "No planned orders. Nothing is short against current demand.",
       rowKey: (r, i) => String(r["planned_order_id"] ?? i),
       columns: [
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "order_kind" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -1278,7 +1278,7 @@ export const PRODUCTION: ModuleDef = {
       rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
       columns: [
         { header: "Number", cell: "order_number" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "order_kind" },
         { header: "Ordered", cell: "quantity", numeric: true },
@@ -1298,7 +1298,7 @@ export const PRODUCTION: ModuleDef = {
       rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
       columns: [
         { header: "Number", cell: "order_number" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Ordered", cell: "quantity", numeric: true },
         { header: "Completed", cell: "quantity_completed", numeric: true },
@@ -1546,7 +1546,7 @@ export const QUALITY: ModuleDef = {
         { header: "Kind", cell: "event_kind" },
         { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
         { header: "Title", cell: "title" },
-        { header: "Item", cell: "item" },
+        { header: "Product", cell: "item" },
         date("Due", "due_at"),
         pill("status"),
       ],
@@ -1843,11 +1843,11 @@ export const REPORTING: ModuleDef = {
   ],
   reports: [
     {
-      title: "Party data quality",
+      title: "Business partner data quality",
       description: "Completeness and validity of party master records.",
       fn: "erp_data_quality",
       args: { p_object_type: "party" },
-      empty: "No party master data to assess yet.",
+      empty: "No business partner data to assess yet.",
       rowKey: (r, i) => `${String(r["object_id"] ?? i)}`,
       columns: [
         { header: "Code", cell: "code" },

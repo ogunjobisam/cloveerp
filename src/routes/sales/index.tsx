@@ -136,7 +136,7 @@ function Sales() {
           { header: "#", cell: "rank", numeric: true },
           { header: "Order", cell: "document_number" },
           { header: "Customer", cell: "customer" },
-          { header: "Item", cell: "item" },
+          { header: "Product", cell: "item" },
           { header: "Quantity", cell: "quantity", numeric: true },
           { header: "Required", cell: "required_date" },
           { header: "Credit", cell: "credit_status" },
