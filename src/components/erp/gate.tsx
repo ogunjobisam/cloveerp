@@ -355,7 +355,13 @@ function readScope(): Scope {
   return { entityId: "", siteId: "" };
 }
 
-export function Gate({ children }: { children: ReactNode }) {
+/**
+ * `bare` keeps the session, the scope and the terminology but drops the desk
+ * shell: the rail, the header and the area switch. The device client (Part 14)
+ * is a different application against the same functions, and a warehouse
+ * screen wrapped in a desk's navigation would be neither.
+ */
+export function Gate({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
   const [authSession, setAuthSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   // Each route mounts its own Gate, so scope held in plain state would reset on
@@ -435,9 +441,13 @@ export function Gate({ children }: { children: ReactNode }) {
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>
       <ResourceProvider>
-        <Shell session={data} scope={scope} onScopeChange={changeScope} onSignOut={signOut}>
-          {children}
-        </Shell>
+        {bare ? (
+          children
+        ) : (
+          <Shell session={data} scope={scope} onScopeChange={changeScope} onSignOut={signOut}>
+            {children}
+          </Shell>
+        )}
       </ResourceProvider>
     </ErpSessionContext.Provider>
   );

@@ -1,9 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
+import type React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { callErp } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/operations/output")({
   head: () => ({ meta: [{ title: "Output and printing — Clove ERP" }] }),
@@ -113,6 +117,56 @@ const LANGUAGES = [
   { value: "pdf", label: "PDF" },
 ];
 
+/** Shaped by erp_print_routes(). */
+type PrintRoute = {
+  code: string;
+  output_kind: string;
+  template_code: string | null;
+  site: string | null;
+  workstation: string | null;
+  person: string | null;
+  printer: string;
+  priority: number;
+  status: string;
+};
+
+/** Shaped by erp.print_queue_health_report(): §15.4's signals per printer. */
+type QueueHealth = {
+  printer_code: string;
+  site_code: string;
+  queued: number;
+  failed: number;
+  oldest_queued_minutes: number | null;
+  last_confirmed_at: string | null;
+  signal: string | null;
+};
+
+/** Shaped by erp_sender_identities(). */
+type Senders = {
+  identities: {
+    domain: string;
+    category: string;
+    from_address: string;
+    reply_to: string | null;
+    spf_verified_at: string | null;
+    dkim_verified_at: string | null;
+    dmarc_verified_at: string | null;
+    verified_at: string | null;
+    status: string;
+    checklist: { record: string; type: string; name: string; value: string; why: string }[];
+  }[];
+  transactional: { from_address: string; reply_to: string | null; own_domain: boolean };
+  operational: { from_address: string; reply_to: string | null; own_domain: boolean };
+};
+
+type OutputHealth = {
+  requests_24h: number;
+  requests_7d: number;
+  deliveries_7d: Record<string, number>;
+  failure_rate_7d: number;
+  print_queue_depth: number;
+};
+
 function when(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
@@ -145,6 +199,140 @@ function Output() {
       <ActionBar
         note="Printers are configuration: on a live organisation the change goes through a change set, and a direct write here is refused. A label printer needs a language and a resolution; a document printer needs neither."
         actions={[
+          {
+            label: "Add a print route",
+            permission: "administration.configure",
+            fn: "erp_upsert_print_route",
+            fields: [
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              {
+                kind: "choice",
+                name: "p_output_kind",
+                label: "Output kind",
+                required: true,
+                choices: [
+                  { value: "label", label: "Labels" },
+                  { value: "document", label: "Documents" },
+                ],
+              },
+              pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
+              {
+                kind: "text",
+                name: "p_template_code",
+                label: "Template code",
+                hint: "Leave empty for any template of the kind.",
+              },
+              { kind: "site", name: "p_site_id", label: "Site", required: false },
+              { kind: "text", name: "p_workstation", label: "Workstation" },
+              {
+                kind: "number",
+                name: "p_priority",
+                label: "Priority",
+                hint: "Lower wins among equally specific routes.",
+              },
+            ],
+            invalidates: ["erp_print_routes", "erp_output_integrity"],
+          },
+          {
+            label: "Render a label",
+            permission: "inventory.read",
+            fn: "erp_render_label",
+            fields: [
+              pickFrom(
+                "erp_output_templates",
+                "code",
+                ["code", "kind"],
+                "p_template_code",
+                "Label template",
+              ),
+              pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
+              {
+                kind: "text",
+                name: "p_document_id",
+                label: "Document id",
+                hint: "Optional; a label for a document carries its number.",
+              },
+            ],
+            invalidates: ["erp_output_requests", "erp_print_queue_health", "erp_output_health"],
+          },
+          {
+            label: "Reprint",
+            permission: "inventory.read",
+            fn: "erp_reprint_output",
+            fields: [
+              { kind: "text", name: "p_render_id", label: "Render id", required: true },
+              pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
+            ],
+            invalidates: ["erp_output_requests", "erp_print_queue_health", "erp_output_health"],
+          },
+          {
+            label: "Register a sending domain",
+            permission: "administration.integrate",
+            fn: "erp_upsert_sender_identity",
+            fields: [
+              { kind: "text", name: "p_domain", label: "Domain", required: true },
+              {
+                kind: "choice",
+                name: "p_category",
+                label: "Category",
+                required: true,
+                choices: [
+                  { value: "transactional", label: "Transactional (invoices, orders)" },
+                  { value: "operational", label: "Operational (alerts, reminders)" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "p_from_local_part",
+                label: "From (local part)",
+                hint: "e.g. invoices",
+              },
+              { kind: "text", name: "p_reply_to", label: "Reply-to" },
+            ],
+            invalidates: ["erp_sender_identities"],
+          },
+          {
+            label: "Record DNS verification",
+            permission: "administration.integrate",
+            fn: "erp_record_sender_verification",
+            fields: [
+              { kind: "text", name: "p_domain", label: "Domain", required: true },
+              {
+                kind: "choice",
+                name: "p_spf",
+                label: "SPF verified",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "true", label: "Yes" },
+                  { value: "false", label: "No" },
+                ],
+              },
+              {
+                kind: "choice",
+                name: "p_dkim",
+                label: "DKIM verified",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "true", label: "Yes" },
+                  { value: "false", label: "No" },
+                ],
+              },
+              {
+                kind: "choice",
+                name: "p_dmarc",
+                label: "DMARC verified",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "true", label: "Yes" },
+                  { value: "false", label: "No" },
+                ],
+              },
+            ],
+            invalidates: ["erp_sender_identities"],
+          },
           {
             label: "Register a printer",
             permission: "administration.configure",
@@ -403,6 +591,202 @@ function Output() {
           </Table>
         )}
       </DataPanel>
+
+      <DataPanel<PrintRoute>
+        title="Print routes"
+        description="Which printer a document or label goes to, by site, workstation or person. The most specific route that matches wins."
+        fn="erp_print_routes"
+        empty="No print route is defined; a print request has nowhere to go until one is."
+      >
+        {(rows) => (
+          <Table columns={["Route", "Kind", "Scope", "Printer", "State"]}>
+            {rows.map((r) => (
+              <tr key={r.code} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {r.code}
+                  <div className="mt-0.5 text-muted-foreground">priority {r.priority}</div>
+                </td>
+                <td className="py-2 pr-4 text-sm">
+                  {r.output_kind}
+                  {r.template_code ? ` · ${r.template_code}` : ""}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {[r.site, r.workstation, r.person].filter(Boolean).join(" · ") || "anywhere"}
+                </td>
+                <td className="py-2 pr-4 font-mono text-xs">{r.printer}</td>
+                <td className="py-2">
+                  <Pill tone={r.status === "active" ? "ok" : "muted"}>{r.status}</Pill>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<QueueHealth>
+        title="Print queues"
+        description="Queue depth, the oldest waiting print and the last confirmed one per printer, with the signal §15.4 names when something is wrong."
+        fn="erp_print_queue_health"
+        empty="No active printer is registered."
+      >
+        {(rows) => (
+          <Table
+            columns={["Printer", "Queued", "Failed", "Oldest waiting", "Last confirmed", "Signal"]}
+          >
+            {rows.map((q) => (
+              <tr
+                key={q.printer_code}
+                className="border-b border-border/50 align-top last:border-0"
+              >
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {q.printer_code}
+                  <div className="mt-0.5 text-muted-foreground">{q.site_code}</div>
+                </td>
+                <td className="py-2 pr-4 text-xs tabular-nums">{q.queued}</td>
+                <td className="py-2 pr-4 text-xs tabular-nums">{q.failed}</td>
+                <td className="py-2 pr-4 text-xs">
+                  {q.oldest_queued_minutes !== null ? `${q.oldest_queued_minutes} min` : "—"}
+                </td>
+                <td className="py-2 pr-4 text-xs">{when(q.last_confirmed_at)}</td>
+                <td className="py-2">
+                  {q.signal ? <Pill tone="bad">{q.signal}</Pill> : <Pill tone="ok">Healthy</Pill>}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <SenderIdentities />
+
+      <OutputHealthPanel />
     </div>
+  );
+}
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+      </header>
+      <div className="px-4 py-4 sm:px-5">{children}</div>
+    </section>
+  );
+}
+
+function OutputHealthPanel() {
+  const { ui } = useT();
+  const q = useQuery({
+    queryKey: ["erp_output_health", {}],
+    queryFn: () => callErp<OutputHealth>("erp_output_health"),
+    refetchInterval: 30_000,
+  });
+  const h = q.data;
+  return (
+    <Section
+      title={ui("Output health")}
+      description={ui(
+        "Requests, deliveries by state, the failure rate and the print queue depth, alongside job health.",
+      )}
+    >
+      {!h ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
+          <dt className="text-muted-foreground">Requests, 24 h</dt>
+          <dd className="tabular-nums">{h.requests_24h}</dd>
+          <dt className="text-muted-foreground">Requests, 7 d</dt>
+          <dd className="tabular-nums">{h.requests_7d}</dd>
+          <dt className="text-muted-foreground">Failure rate, 7 d</dt>
+          <dd className="tabular-nums">{h.failure_rate_7d}%</dd>
+          <dt className="text-muted-foreground">Print queue depth</dt>
+          <dd className="tabular-nums">{h.print_queue_depth}</dd>
+          <dt className="text-muted-foreground">Deliveries, 7 d</dt>
+          <dd className="font-mono text-xs">
+            {Object.entries(h.deliveries_7d ?? {})
+              .map(([k, v]) => `${k} ${v}`)
+              .join(" · ") || "—"}
+          </dd>
+        </dl>
+      )}
+    </Section>
+  );
+}
+
+function SenderIdentities() {
+  const { ui } = useT();
+  const q = useQuery({
+    queryKey: ["erp_sender_identities", {}],
+    queryFn: () => callErp<Senders>("erp_sender_identities"),
+  });
+  const s = q.data;
+  return (
+    <Section
+      title={ui("Sending domains")}
+      description={ui(
+        "Until a domain verifies its SPF, DKIM and DMARC records the organisation sends from the platform's address with its own reply-to. Each record to publish is listed with why.",
+      )}
+    >
+      {!s ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-muted-foreground">
+            {ui("Sends as")}: {s.transactional.from_address}
+            {s.transactional.reply_to ? ` (reply-to ${s.transactional.reply_to})` : ""} ·{" "}
+            {s.operational.from_address}
+          </p>
+          {s.identities.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {ui("No sending domain is registered; messages go from the platform's address.")}
+            </p>
+          ) : null}
+          {s.identities.map((d) => (
+            <div
+              key={`${d.domain}-${d.category}`}
+              className="border-b border-border/50 pb-3 last:border-0 last:pb-0"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-sm">{d.from_address}</span>
+                <span className="text-xs text-muted-foreground">{d.category}</span>
+                {d.verified_at ? (
+                  <Pill tone="ok">{ui("Verified")}</Pill>
+                ) : (
+                  <Pill tone="warn">{ui("Not yet verified")}</Pill>
+                )}
+              </div>
+              <ul className="mt-2 flex flex-col gap-1 text-xs">
+                {d.checklist.map((c) => (
+                  <li key={c.record}>
+                    <span className="font-medium">{c.record}</span>{" "}
+                    {(c.record === "SPF" && d.spf_verified_at) ||
+                    (c.record === "DKIM" && d.dkim_verified_at) ||
+                    (c.record === "DMARC" && d.dmarc_verified_at) ? (
+                      <Pill tone="ok">{ui("Verified")}</Pill>
+                    ) : (
+                      <Pill tone="muted">{ui("Not yet verified")}</Pill>
+                    )}
+                    <div className="font-mono text-muted-foreground">
+                      {c.type} {c.name} → {c.value}
+                    </div>
+                    <div className="text-muted-foreground">{c.why}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
   );
 }

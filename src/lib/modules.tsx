@@ -1948,6 +1948,23 @@ export const EXTRA_TILES: TileDef[] = [
     group: "records",
   },
   {
+    path: "/notifications",
+    titleKey: "nav.notifications",
+    title: "Notifications",
+    blurb:
+      "What the product told you, your channel preferences and quiet hours, and the routes from events to audiences.",
+    group: "records",
+  },
+  {
+    path: "/reporting/distribution",
+    titleKey: "nav.reporting_distribution",
+    title: "Subscriptions, packs and extracts",
+    blurb:
+      "Runs the budget deferred, produced as archived extracts; subscriptions by person or role; assembled packs with manifests; the analytics contract.",
+    permission: "reporting.read",
+    group: "records",
+  },
+  {
     path: "/reporting/reproducibility",
     titleKey: "nav.reporting_reproducibility",
     title: "Report versions and runs",
@@ -1988,6 +2005,15 @@ export const EXTRA_TILES: TileDef[] = [
       "What was promised about staying up, whether a drill has proved it, and what happened when it did not.",
     permission: "administration.read",
     group: "operate",
+  },
+  {
+    path: "/device",
+    titleKey: "nav.device",
+    title: "Scanner",
+    blurb:
+      "The warehouse application: one task at a time, driven by scanning, with a queue that holds your work until the network returns.",
+    permission: "inventory.move",
+    group: "move",
   },
   {
     path: "/operations/devices",

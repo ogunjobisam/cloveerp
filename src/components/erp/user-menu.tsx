@@ -114,6 +114,11 @@ export function UserMenu({
             {t("nav.profile", "My profile")}
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/notifications" onClick={onNavigate}>
+            {t("nav.notifications", "Notifications")}
+          </Link>
+        </DropdownMenuItem>
 
         {switchable ? (
           <>

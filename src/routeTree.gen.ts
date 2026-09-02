@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DeviceRouteImport } from './routes/device'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -49,12 +51,23 @@ import { Route as ProcurementIndexRouteImport } from './routes/procurement/index
 import { Route as ProductionIndexRouteImport } from './routes/production/index'
 import { Route as QualityIndexRouteImport } from './routes/quality/index'
 import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
+import { Route as ReportingDistributionRouteImport } from './routes/reporting/distribution'
 import { Route as ReportingReproducibilityRouteImport } from './routes/reporting/reproducibility'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeviceRoute = DeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformRoute = PlatformRouteImport.update({
@@ -261,6 +274,11 @@ const ReportingIndexRoute = ReportingIndexRouteImport.update({
   path: '/reporting/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingDistributionRoute = ReportingDistributionRouteImport.update({
+  id: '/reporting/distribution',
+  path: '/reporting/distribution',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportingReproducibilityRoute =
   ReportingReproducibilityRouteImport.update({
     id: '/reporting/reproducibility',
@@ -275,6 +293,8 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/device': typeof DeviceRoute
+  '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -304,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
   '/governance/': typeof GovernanceIndexRoute
@@ -319,6 +340,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/device': typeof DeviceRoute
+  '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -348,6 +371,7 @@ export interface FileRoutesByTo {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance': typeof FinanceIndexRoute
   '/governance': typeof GovernanceIndexRoute
@@ -364,6 +388,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/device': typeof DeviceRoute
+  '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -393,6 +419,7 @@ export interface FileRoutesById {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
   '/governance/': typeof GovernanceIndexRoute
@@ -410,6 +437,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/device'
+    | '/notifications'
     | '/platform'
     | '/product'
     | '/profile'
@@ -439,6 +468,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance/'
     | '/governance/'
@@ -454,6 +484,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/device'
+    | '/notifications'
     | '/platform'
     | '/product'
     | '/profile'
@@ -483,6 +515,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance'
     | '/governance'
@@ -498,6 +531,8 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/device'
+    | '/notifications'
     | '/platform'
     | '/product'
     | '/profile'
@@ -527,6 +562,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance/'
     | '/governance/'
@@ -543,6 +579,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DeviceRoute: typeof DeviceRoute
+  NotificationsRoute: typeof NotificationsRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
@@ -572,6 +610,7 @@ export interface RootRouteChildren {
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
   OperationsOutputRoute: typeof OperationsOutputRoute
+  ReportingDistributionRoute: typeof ReportingDistributionRoute
   ReportingReproducibilityRoute: typeof ReportingReproducibilityRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   GovernanceIndexRoute: typeof GovernanceIndexRoute
@@ -593,6 +632,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/device': {
+      id: '/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof DeviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform': {
@@ -868,6 +921,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/distribution': {
+      id: '/reporting/distribution'
+      path: '/reporting/distribution'
+      fullPath: '/reporting/distribution'
+      preLoaderRoute: typeof ReportingDistributionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reporting/reproducibility': {
       id: '/reporting/reproducibility'
       path: '/reporting/reproducibility'
@@ -887,6 +947,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DeviceRoute: DeviceRoute,
+  NotificationsRoute: NotificationsRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
@@ -916,6 +978,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
   OperationsOutputRoute: OperationsOutputRoute,
+  ReportingDistributionRoute: ReportingDistributionRoute,
   ReportingReproducibilityRoute: ReportingReproducibilityRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   GovernanceIndexRoute: GovernanceIndexRoute,

@@ -1,8 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
+import { ErrorNote } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { callErp } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/operations/continuity")({
   head: () => ({ meta: [{ title: "Continuity and incidents — Clove ERP" }] }),
@@ -64,6 +68,173 @@ function when(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
+/** Shaped by erp.service_notices(): only what touches this organisation. */
+type Notices = {
+  maintenance: {
+    code: string;
+    title: string;
+    detail: string | null;
+    starts_at: string;
+    ends_at: string;
+    announced_at: string;
+    is_emergency: boolean;
+    emergency_reason: string | null;
+    state: string;
+  }[];
+  incidents: {
+    code: string;
+    title: string;
+    severity_code: string;
+    state: string;
+    declared_at: string;
+    scope: string | null;
+    is_data_integrity: boolean;
+    is_security: boolean;
+    affects_all_tenants: boolean;
+    updates: { posted_at: string; body: string; is_no_change: boolean }[];
+    obligations: {
+      obligation_code: string;
+      title: string;
+      obliged_party: string;
+      basis: string;
+      due_at: string;
+      notified_at: string | null;
+      overdue: boolean;
+    }[];
+  }[];
+};
+
+/**
+ * §17.3 and §17.4 from the organisation's side. Everything here was scoped by
+ * the database: a window for this organisation or for everyone, an incident it
+ * was named in or that reached everyone once contained, and its own
+ * obligations on a security incident. Nothing about anybody else arrives.
+ */
+function ServiceNotices() {
+  const { ui } = useT();
+  const q = useQuery({
+    queryKey: ["erp_service_notices", {}],
+    queryFn: () => callErp<Notices>("erp_service_notices"),
+  });
+
+  if (q.error) return <ErrorNote error={q.error} />;
+  const n = q.data;
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="font-display text-lg font-semibold">{ui("Service notices")}</h2>
+
+      <div className="surface-card rounded-xl border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold">{ui("Maintenance windows")}</h3>
+        {!n || n.maintenance.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {ui(
+              "Nothing is planned. Maintenance is announced here at least two days ahead; an emergency says so and says why.",
+            )}
+          </p>
+        ) : (
+          <ul className="mt-3 flex flex-col gap-3">
+            {n.maintenance.map((w) => (
+              <li key={w.code} className="border-b border-border/50 pb-3 last:border-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{w.title}</span>
+                  {w.is_emergency ? (
+                    <Pill tone="bad">{ui("Emergency")}</Pill>
+                  ) : w.state === "in_progress" ? (
+                    <Pill tone="warn">{ui("In progress")}</Pill>
+                  ) : w.state === "past" ? (
+                    <Pill tone="muted">{ui("Past")}</Pill>
+                  ) : (
+                    <Pill tone="ok">{ui("Planned")}</Pill>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {when(w.starts_at)} — {when(w.ends_at)}
+                </div>
+                {w.detail ? <p className="mt-1 text-sm">{w.detail}</p> : null}
+                {w.emergency_reason ? (
+                  <p className="mt-1 text-sm text-muted-foreground">{w.emergency_reason}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="surface-card rounded-xl border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold">{ui("Incidents affecting you")}</h3>
+        {!n || n.incidents.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {ui(
+              "No incident has been declared that reached this organisation. You are told here the moment the platform names you, never by a broadcast meant for somebody else.",
+            )}
+          </p>
+        ) : (
+          <ul className="mt-3 flex flex-col gap-4">
+            {n.incidents.map((i) => (
+              <li key={i.code} className="border-b border-border/50 pb-4 last:border-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{i.title}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{i.severity_code}</span>
+                  {i.state === "resolved" ? (
+                    <Pill tone="ok">{ui("Resolved")}</Pill>
+                  ) : i.state === "contained" ? (
+                    <Pill tone="muted">{ui("Contained")}</Pill>
+                  ) : (
+                    <Pill tone="bad">{ui("Live")}</Pill>
+                  )}
+                  {i.is_security ? <Pill tone="bad">{ui("Security incident")}</Pill> : null}
+                  {i.is_data_integrity ? <Pill tone="bad">{ui("Data integrity")}</Pill> : null}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {when(i.declared_at)}
+                  {i.scope ? ` · ${i.scope}` : ""}
+                  {i.affects_all_tenants ? ` · ${ui("Every organisation")}` : ""}
+                </div>
+                {i.updates.length > 0 ? (
+                  <ol className="mt-2 flex flex-col gap-1">
+                    {i.updates.map((u) => (
+                      <li key={u.posted_at} className="text-sm">
+                        <span className="text-xs text-muted-foreground">
+                          {when(u.posted_at)} · {u.is_no_change ? ui("No change") : ui("Update")}
+                        </span>
+                        <div>{u.body}</div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+                {i.obligations.length > 0 ? (
+                  <div className="mt-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {ui("Your obligations")}
+                    </h4>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {i.obligations.map((o) => (
+                        <li key={o.obligation_code} className="text-sm">
+                          <span className="font-medium">{o.title}</span>{" "}
+                          <span className="text-xs text-muted-foreground">
+                            {o.obliged_party} · {ui("Due")} {when(o.due_at)}
+                          </span>{" "}
+                          {o.notified_at ? (
+                            <Pill tone="ok">{ui("Told")}</Pill>
+                          ) : o.overdue ? (
+                            <Pill tone="bad">{ui("Overdue")}</Pill>
+                          ) : null}
+                          <div className="text-xs text-muted-foreground">{o.basis}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Continuity() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -74,6 +245,8 @@ function Continuity() {
         against the restored data, and a live incident reads as overdue the moment it passes its own
         severity&rsquo;s update cadence.
       </PageHeader>
+
+      <ServiceNotices />
 
       <DataPanel<Commitment>
         title="Continuity commitments"

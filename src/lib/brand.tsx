@@ -11,6 +11,12 @@ import { useT } from "./i18n";
  * is not called Clove ERP overrides five keys; a tenant that is overrides none
  * and gets the product identity from the spec.
  */
+/**
+ * Where a prospect writes to. One constant, so the address the product page
+ * offers is changed in one place when the domain moves.
+ */
+export const CONTACT_EMAIL = "hello@cloveerp.com";
+
 export const BRAND_KEYS = {
   prefix: "brand.name.prefix",
   suffix: "brand.name.suffix",
