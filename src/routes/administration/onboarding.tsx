@@ -35,6 +35,10 @@ export const Route = createFileRoute("/administration/onboarding")({
         content:
           "Answer questions about how the organisation works, and get a reviewable change set for each Addendum B configuration surface.",
       },
+      { property: "og:title", content: "Onboarding interview — Clove ERP" },
+      { property: "og:description", content: "Answer questions about how the organisation works, and get a reviewable change set for each Addendum B configuration surface." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: () => (

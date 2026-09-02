@@ -21,7 +21,16 @@ import { useT } from "../../lib/i18n";
  */
 
 export const Route = createFileRoute("/commercial/quotes")({
-  head: () => ({ meta: [{ title: "Quotes — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Quotes — Clove ERP" },
+      { name: "description", content: "Quotations, versions and conversion into customer orders." },
+      { property: "og:title", content: "Quotes — Clove ERP" },
+      { property: "og:description", content: "Quotations, versions and conversion into customer orders." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Quotes />

@@ -9,7 +9,16 @@ import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
 
 export const Route = createFileRoute("/administration/accessibility")({
-  head: () => ({ meta: [{ title: "Accessibility — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Accessibility — Clove ERP" },
+      { name: "description", content: "Accessibility statement, conformance checks and assistive-technology settings for Clove ERP." },
+      { property: "og:title", content: "Accessibility — Clove ERP" },
+      { property: "og:description", content: "Accessibility statement, conformance checks and assistive-technology settings for Clove ERP." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <AccessibilityStatement />

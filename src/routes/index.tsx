@@ -21,7 +21,26 @@ import { useT } from "../lib/i18n";
 
 export const Route = createFileRoute("/")({
   head: () => ({
-    meta: [{ title: "Clove ERP" }],
+    meta: [
+      { title: "Clove ERP — Your work, one governed ledger" },
+      {
+        name: "description",
+        content:
+          "Sign in to Clove ERP: your organisation's finance, inventory and operations on one append-only, tenant-isolated ledger, with every action audited.",
+      },
+      { property: "og:title", content: "Clove ERP — Your work, one governed ledger" },
+      {
+        property: "og:description",
+        content:
+          "Finance, inventory and operations on one append-only, tenant-isolated ledger, with every action audited.",
+      },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://cloveerp.com/" },
+      { property: "og:image", content: "https://cloveerp.com/og-image.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "https://cloveerp.com/og-image.png" },
+    ],
+    links: [{ rel: "canonical", href: "https://cloveerp.com/" }],
   }),
   component: () => (
     <Gate>

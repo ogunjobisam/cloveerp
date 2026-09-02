@@ -17,6 +17,7 @@ import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AdministrationAccessibilityRouteImport } from './routes/administration/accessibility'
 import { Route as AdministrationAdoptionRouteImport } from './routes/administration/adoption'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
@@ -96,6 +97,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdministrationAccessibilityRoute =
@@ -318,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
@@ -368,6 +375,7 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
@@ -419,6 +427,7 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
@@ -471,6 +480,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/settings'
+    | '/sitemap.xml'
     | '/administration/accessibility'
     | '/administration/adoption'
     | '/administration/audit'
@@ -521,6 +531,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/settings'
+    | '/sitemap.xml'
     | '/administration/accessibility'
     | '/administration/adoption'
     | '/administration/audit'
@@ -571,6 +582,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/settings'
+    | '/sitemap.xml'
     | '/administration/accessibility'
     | '/administration/adoption'
     | '/administration/audit'
@@ -622,6 +634,7 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AdministrationAccessibilityRoute: typeof AdministrationAccessibilityRoute
   AdministrationAdoptionRoute: typeof AdministrationAdoptionRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
@@ -720,6 +733,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/accessibility': {
@@ -1014,6 +1034,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   AdministrationAccessibilityRoute: AdministrationAccessibilityRoute,
   AdministrationAdoptionRoute: AdministrationAdoptionRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,

@@ -26,7 +26,16 @@ import { useT } from "../../lib/i18n";
  */
 
 export const Route = createFileRoute("/administration/commercial")({
-  head: () => ({ meta: [{ title: "Plan and usage — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Plan and usage — Clove ERP" },
+      { name: "description", content: "Your Clove ERP plan, entitlements and metered usage in one place." },
+      { property: "og:title", content: "Plan and usage — Clove ERP" },
+      { property: "og:description", content: "Your Clove ERP plan, entitlements and metered usage in one place." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Commercial />

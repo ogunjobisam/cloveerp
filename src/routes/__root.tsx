@@ -77,6 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "google-site-verification", content: "hV7r-oxT-gL4bf4h7QMYT76AKgqa6EBD5vdzoiUbwlg" },
       { title: "Clove ERP — Enterprise Resource Planning" },
       {
         name: "description",
@@ -93,8 +94,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:site_name", content: "Clove ERP" },
-      { property: "og:image", content: "/og-image.png" },
-      { name: "twitter:image", content: "/og-image.png" },
       { name: "theme-color", content: "#A2591E" },
     ],
     links: [

@@ -22,7 +22,16 @@ import { useT } from "../lib/i18n";
  */
 
 export const Route = createFileRoute("/notifications")({
-  head: () => ({ meta: [{ title: "Notifications — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Notifications — Clove ERP" },
+      { name: "description", content: "Approvals, exceptions and system notices awaiting your attention." },
+      { property: "og:title", content: "Notifications — Clove ERP" },
+      { property: "og:description", content: "Approvals, exceptions and system notices awaiting your attention." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Notifications />
