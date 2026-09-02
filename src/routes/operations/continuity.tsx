@@ -308,7 +308,7 @@ function Continuity() {
         title="Incidents"
         description="Declared with a commander, a communications owner and a scribe, because deciding who is writing things down at three in the morning is the wrong time to decide it. A severity 1 or 2 cannot be resolved without its blameless review."
         fn="erp_platform_incidents"
-        empty="No incident has been declared."
+        empty="No incident has been declared. This is a panel worth keeping empty."
       >
         {(rows) => (
           <Table columns={["Incident", "Severity", "State", "Communication", "Roles"]}>

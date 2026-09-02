@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
+import { GoTo } from "../../components/erp/action";
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -423,7 +424,8 @@ function Output() {
         title="Template versions"
         description="Every version of every template, newest first. A label version shows whether its test barcode decoded and to what; a document version shows its page and how many blocks it lays out."
         fn="erp_output_template_versions"
-        empty="No output template is installed. The base content pack carries the standard documents and labels; install it from Packs."
+        empty="No output template is installed. The base content pack carries the standard documents and labels."
+        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
       >
         {(rows) => (
           <Table columns={["Template", "Version", "Engine", "Decode check", "Effective", "State"]}>
@@ -584,7 +586,7 @@ function Output() {
         title="Suppressed addresses"
         description="Addresses the organisation will not email again: a hard bounce, a complaint, an unsubscribe. A permanent suppression outlives the reason; a temporary one is lifted when the reason is."
         fn="erp_email_suppressions"
-        empty="No address is suppressed."
+        empty="No address is suppressed. A bounce or a complaint adds one here, and messages then stop going to it."
       >
         {(rows) => (
           <Table columns={["Address", "Reason", "Since", "Kind", "Note"]}>
@@ -611,7 +613,7 @@ function Output() {
         title="Print routes"
         description="Which printer a document or label goes to, by site, workstation or person. The most specific route that matches wins."
         fn="erp_print_routes"
-        empty="No print route is defined; a print request has nowhere to go until one is."
+        empty="No print route is defined; a print request has nowhere to go until one is. Add a route under Actions above."
       >
         {(rows) => (
           <Table columns={["Route", "Kind", "Scope", "Printer", "State"]}>
@@ -642,7 +644,7 @@ function Output() {
         title="Print queues"
         description="Queue depth, the oldest waiting print and the last confirmed one per printer, with the signal §15.4 names when something is wrong."
         fn="erp_print_queue_health"
-        empty="No active printer is registered."
+        empty="No active printer is registered. Register one under Actions above, and a print route can then point at it."
       >
         {(rows) => (
           <Table

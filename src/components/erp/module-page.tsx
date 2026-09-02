@@ -37,6 +37,7 @@ function panelOf(p: Panel) {
       fn={p.fn}
       {...(p.args ? { args: p.args } : {})}
       empty={p.empty}
+      {...(p.emptyAction ? { emptyAction: p.emptyAction } : {})}
       rowKey={p.rowKey}
       columns={p.columns}
     />

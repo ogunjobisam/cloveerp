@@ -112,7 +112,8 @@ function Procurement() {
           },
           {
             label: "Resolve a purchase price",
-            description: "What should this supplier charge for this item today, and on what basis?",
+            description:
+              "What should this supplier charge for this product today, and on what basis?",
             permission: "procurement.order",
             fn: "erp_resolve_purchase_price",
             fields: [
@@ -159,7 +160,7 @@ function Procurement() {
         description="Commitments to a supplier. Value bands decide what needs approving before it is sent."
         baseType="purchase_order"
         partyRole="supplier"
-        empty="No purchase orders yet."
+        empty="No purchase orders yet. New raises one, or convert a requisition from the panel above."
       />
 
       <DocumentPanel
@@ -167,7 +168,7 @@ function Procurement() {
         description="Goods arriving. Posting one is what puts the stock on the shelf and raises the GRNI accrual."
         baseType="receipt"
         partyRole="supplier"
-        empty="No receipts yet."
+        empty="No receipts yet. A receipt is recorded against a purchase order, and posting it is what puts stock on hand."
       />
     </div>
   );

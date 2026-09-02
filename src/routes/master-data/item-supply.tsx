@@ -15,13 +15,13 @@ export const Route = createFileRoute("/master-data/item-supply")({
       {
         name: "description",
         content:
-          "Who each item is bought from, at what preference and split, per site — with approved-supplier enforcement on regulated items.",
+          "Who each product is bought from, at what preference and split, per site — with approved-supplier enforcement on regulated products.",
       },
       { property: "og:title", content: "Product-suppliers — Clove ERP" },
       {
         property: "og:description",
         content:
-          "Default suppliers, preference ranks, sourcing splits, lead times and approved-for-use status for every purchased item.",
+          "Default suppliers, preference ranks, sourcing splits, lead times and approved-for-use status for every purchased product.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -58,9 +58,9 @@ function ItemSupply() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Item supply")}>
+      <PageHeader title={ui("Product-suppliers")}>
         {ui(
-          "One supplier is the default for an item at a site; the rest are ranked alternatives. A regulated item cannot default to a supplier that is not on the approved list, and the sourcing split may not exceed the whole requirement.",
+          "One supplier is the default for a product at a site; the rest are ranked alternatives. A regulated product cannot default to a supplier that is not on the approved list, and the sourcing split may not exceed the whole requirement.",
         )}
       </PageHeader>
 
@@ -79,7 +79,7 @@ function ItemSupply() {
         note="Set the default once. Replenishment, planning and manual purchasing all resolve through it, so a missing default is a stopped order, not a silent guess."
         actions={[
           {
-            label: "Set or amend a supplier for an item",
+            label: "Set or amend a supplier for a product",
             permission: "master_data.write",
             fn: "erp_set_item_supplier",
             fields: [
@@ -130,7 +130,7 @@ function ItemSupply() {
                 "item_supplier_id",
                 ["item_code", "supplier"],
                 "p_item_supplier_id",
-                "Item and supplier",
+                "Product and supplier",
               ),
               { ...reason(), required: true },
             ],
@@ -140,17 +140,19 @@ function ItemSupply() {
       />
 
       <DataPanel<SupplierRow>
-        title={ui("Suppliers by item")}
+        title={ui("Suppliers by product")}
         description={ui(
           "Rank one is used unless a site-specific row overrides it. An unapproved row is never resolved.",
         )}
         fn="erp_item_suppliers"
-        empty={ui("No item has a supplier yet. Purchasing cannot resolve anything until one does.")}
+        empty={ui(
+          "No product has a supplier yet, so purchasing cannot resolve where to buy anything. Link one under Actions above.",
+        )}
       >
         {(rows) => (
           <Table
             columns={[
-              ui("Item"),
+              ui("Product"),
               ui("Name"),
               ui("Supplier"),
               ui("Site"),

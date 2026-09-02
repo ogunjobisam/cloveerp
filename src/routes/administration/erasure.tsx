@@ -163,7 +163,7 @@ function Erasure() {
         title="Erasure requests"
         description="Newest first. An open request is executed or refused by an administrator other than the one who made it; an executed one carries the certificate of what was overwritten and how many ledger copies were redacted."
         fn="erp_erasure_requests"
-        empty="No erasure has been requested."
+        empty="No erasure has been requested. Raise one under Actions above; it is executed by a second administrator, never the one who asked."
       >
         {(rows) => (
           <Table

@@ -105,7 +105,7 @@ export function DocumentPanel({
               {
                 kind: "select",
                 name: "p_party_id",
-                label: "Party",
+                label: "Business partner",
                 required: type.requires_party,
                 options: {
                   fn: "erp_parties",

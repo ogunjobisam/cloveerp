@@ -46,7 +46,7 @@ function Imports() {
         title="Import batches"
         description="Every batch keeps its rows, its errors and its outcome."
         fn="erp_import_batches"
-        empty="No imports staged."
+        empty="No imports staged. Stage a batch from a file, preview it row by row, and load it only once the errors are nil."
         rowKey={(r) => String(r["batch_id"])}
         columns={[
           { header: "Batch", cell: "code" },

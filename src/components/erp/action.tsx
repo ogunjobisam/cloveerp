@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
 import {
@@ -73,6 +74,33 @@ export function ActionButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * The next action, when it lives on another screen.
+ *
+ * Half the empty states in this product are empty because of something that has
+ * not been done somewhere else: no print route because no printer is
+ * registered, no product-supplier because there are no suppliers, no posting
+ * rule because the finance module was never installed. Telling somebody that
+ * and leaving them to find the screen is most of the work of an ERP, and it is
+ * exactly the work Sage X3 makes people do.
+ *
+ * So an empty state can carry a link rather than a button. It looks like the
+ * secondary button because it does the same job — it is the thing to press —
+ * and it is a `Link` rather than an `ActionButton` with a navigate() inside
+ * because a link can be opened in a new tab, and middle-click is how people
+ * actually work through a setup list.
+ */
+export function GoTo({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-sm font-medium hover:border-accent/50 hover:text-accent`}
+    >
+      {children}
+    </Link>
   );
 }
 

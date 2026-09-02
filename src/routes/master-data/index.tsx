@@ -31,13 +31,13 @@ export const Route = createFileRoute("/master-data/")({
       {
         name: "description",
         content:
-          "Create and review the items and trading parties every Clove ERP document depends on.",
+          "Create and review the products and business partners every Clove ERP document depends on.",
       },
       { property: "og:title", content: "Common data — Clove ERP" },
       {
         property: "og:description",
         content:
-          "Create and review the items and trading parties every Clove ERP document depends on.",
+          "Create and review the products and business partners every Clove ERP document depends on.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -216,7 +216,7 @@ function Parties({ mayWrite }: { mayWrite: boolean }) {
                 : null,
             })}
             invalidates={["erp_parties"]}
-            submitLabel="Create party"
+            submitLabel="Create business partner"
           />
         ) : null}
       </header>

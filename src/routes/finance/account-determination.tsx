@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { type Field } from "../../components/erp/action";
+import { GoTo, type Field } from "../../components/erp/action";
 import { ActionBar, pickFrom, pickItem, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/finance/account-determination")({
       {
         property: "og:description",
         content:
-          "Posting classes for items and trading partners, the determination matrix, reasoned overrides, and a gap report before go-live.",
+          "Accounting codes for products and business partners, the determination matrix, reasoned overrides, and a gap report before go-live.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -171,7 +171,7 @@ function AccountDetermination() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={ui("Account determination")}>
         {ui(
-          "A posting class is what accounting cares about; the item is what operations cares about. Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
+          "A posting class is what accounting cares about; the product is what operations cares about. Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
         )}
       </PageHeader>
 
@@ -193,8 +193,8 @@ function AccountDetermination() {
                 label: "Applies to",
                 required: true,
                 choices: [
-                  { value: "item", label: "Items" },
-                  { value: "party", label: "Trading partners" },
+                  { value: "item", label: "Products" },
+                  { value: "party", label: "Business partners" },
                 ],
               },
               { kind: "text", name: "p_code", label: "Code", required: true },
@@ -220,7 +220,7 @@ function AccountDetermination() {
             invalidates,
           },
           {
-            label: "Set an item's posting class",
+            label: "Set a product's posting class",
             permission: "finance.configure",
             fn: "erp_set_item_posting_class",
             fields: [
@@ -268,7 +268,7 @@ function AccountDetermination() {
                 choices: TRANSACTION_TYPES,
               },
               pickAccount(),
-              pickClass("item", "p_item_class_id", "Item posting class"),
+              pickClass("item", "p_item_class_id", "Product posting class"),
               pickClass("party", "p_party_class_id", "Partner posting class"),
               pickEntity(),
               { kind: "text", name: "p_reason_code", label: "Reason code" },
@@ -323,7 +323,7 @@ function AccountDetermination() {
       <DataPanel<PostingClass>
         title={ui("Posting classes")}
         description={ui(
-          "The accounting vocabulary, and how many items or partners currently carry each class.",
+          "The accounting vocabulary, and how many products or business partners currently carry each class.",
         )}
         fn="erp_posting_classes"
         empty={ui("No posting classes yet. Until one exists, nothing can be determined.")}
@@ -367,7 +367,7 @@ function AccountDetermination() {
           <Table
             columns={[
               ui("Transaction type"),
-              ui("Item class"),
+              ui("Product class"),
               ui("Partner class"),
               ui("Company"),
               ui("Reason"),
@@ -399,14 +399,17 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<ItemClass>
-        title={ui("Items and their posting class")}
-        description={ui("Items without a class are listed first — they cannot be posted.")}
+        title={ui("Products and their posting class")}
+        description={ui("Products without a class are listed first — they cannot be posted.")}
         fn="erp_item_posting_classes"
         args={{ p_limit: 200 }}
-        empty={ui("No items yet.")}
+        empty={ui("No product exists yet, so nothing can be classed for posting.")}
+        emptyAction={<GoTo to="/master-data">{ui("Open Common data")}</GoTo>}
       >
         {(rows) => (
-          <Table columns={[ui("Item"), ui("Name"), ui("Posting class"), ui("From"), ui("Reason")]}>
+          <Table
+            columns={[ui("Product"), ui("Name"), ui("Posting class"), ui("From"), ui("Reason")]}
+          >
             {rows.map((i) => (
               <tr key={i.item_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{i.item_code}</td>
@@ -427,14 +430,17 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<PartyClass>
-        title={ui("Trading partners and their posting class")}
-        description={ui("A partner class separates, for example, export from domestic settlement.")}
+        title={ui("Business partners and their posting class")}
+        description={ui(
+          "A business partner class separates, for example, export from domestic settlement.",
+        )}
         fn="erp_party_posting_classes"
         args={{ p_limit: 200 }}
-        empty={ui("No trading partners yet.")}
+        empty={ui("No business partner exists yet, so nothing can be classed for settlement.")}
+        emptyAction={<GoTo to="/master-data">{ui("Open Common data")}</GoTo>}
       >
         {(rows) => (
-          <Table columns={[ui("Party"), ui("Name"), ui("Posting class"), ui("From")]}>
+          <Table columns={[ui("Business partner"), ui("Name"), ui("Posting class"), ui("From")]}>
             {rows.map((p) => (
               <tr key={p.party_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{p.party_code}</td>
@@ -460,7 +466,9 @@ function AccountDetermination() {
         )}
         fn="erp_posting_overrides"
         args={{ p_limit: 100 }}
-        empty={ui("No overrides have been recorded.")}
+        empty={ui(
+          "No overrides have been recorded. Every posting so far has followed the matrix above.",
+        )}
       >
         {(rows) => (
           <Table

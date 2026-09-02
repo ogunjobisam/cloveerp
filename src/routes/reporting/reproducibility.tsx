@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { GoTo } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -147,6 +148,7 @@ function Reproducibility() {
         description="Every version of every report, newest first. The source is the governed view the version reads; a version that names none cannot run. The budget is what a run may spend before it is capped."
         fn="erp_report_versions"
         empty="No report has a version. A report is installed with its definition by a content pack and given a version through a change set; until then it cannot be run."
+        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
       >
         {(rows) => (
           <Table columns={["Report", "Version", "Source", "Shape", "Parameters", "Budget", "Runs"]}>
@@ -218,7 +220,8 @@ function Reproducibility() {
         title="Runs"
         description="The last five hundred runs, newest first, each with the version and parameters it used. An extract — rows leaving the product as a file — carries the reason that was given for it."
         fn="erp_report_runs"
-        empty="No report has been run."
+        empty="No report has been run. A run is started from the report itself, under Reports and inquiries."
+        emptyAction={<GoTo to="/reporting">Open Reports and inquiries</GoTo>}
       >
         {(rows) => (
           <Table columns={["Run", "Report", "Parameters", "Result", "Outcome"]}>

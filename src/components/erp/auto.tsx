@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { useT } from "../../lib/i18n";
 
+import { GoTo } from "./action";
 import { DataPanel, Pill, Table } from "./panel";
 
 /**
@@ -27,6 +28,7 @@ export function AutoPanel<T extends Record<string, unknown>>({
   fn,
   args,
   empty,
+  emptyAction,
   columns,
   rowKey,
 }: {
@@ -35,6 +37,8 @@ export function AutoPanel<T extends Record<string, unknown>>({
   fn: string;
   args?: Record<string, unknown>;
   empty: string;
+  /** Where the emptiness is fixed, when it is fixed on another screen. */
+  emptyAction?: { label: string; to: string };
   columns: Column<T>[];
   rowKey: (row: T, index: number) => string;
 }) {
@@ -47,6 +51,9 @@ export function AutoPanel<T extends Record<string, unknown>>({
       fn={fn}
       {...(args ? { args } : {})}
       empty={ui(empty)}
+      {...(emptyAction
+        ? { emptyAction: <GoTo to={emptyAction.to}>{ui(emptyAction.label)}</GoTo> }
+        : {})}
     >
       {(rows) => (
         <Table columns={columns.map((c) => ui(c.header))}>

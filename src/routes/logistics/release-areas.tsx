@@ -17,13 +17,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/logistics/release-areas")({
   head: () => ({
     meta: [
-      { title: "Release areas and waves — Clove ERP" },
+      { title: "Marshalling areas and waves — Clove ERP" },
       {
         name: "description",
         content:
-          "Release areas hold allocated stock, waves allocate in detail against them, shortfalls raise directed replenishment, and paperwork prints only once everything is covered.",
+          "Marshalling areas hold allocated stock, waves allocate in detail against them, shortfalls raise directed replenishment, and paperwork prints only once everything is covered.",
       },
-      { property: "og:title", content: "Release areas and waves — Clove ERP" },
+      { property: "og:title", content: "Marshalling areas and waves — Clove ERP" },
       {
         property: "og:description",
         content:
@@ -82,7 +82,7 @@ type WaveLine = {
   status: string;
 };
 
-const pickArea = (name = "p_release_area_id", label = "Release area") =>
+const pickArea = (name = "p_release_area_id", label = "Marshalling area") =>
   pickFrom("erp_release_areas", "release_area_id", ["site_code", "code", "name"], name, label);
 
 const pickWave = (name = "p_wave_id", label = "Wave") =>
@@ -94,9 +94,9 @@ function ReleaseAreas() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Release areas")}>
+      <PageHeader title={ui("Marshalling areas")}>
         {ui(
-          "Stock in a release area is allocated stock: out of counting scope and out of reach of other demand. A wave allocates in detail against the area, what the area cannot cover raises directed replenishment rather than a shortage, and nothing prints until every line is covered.",
+          "Stock in a marshalling area is allocated stock: out of counting scope and out of reach of other demand. A wave allocates in detail against the area, what the area cannot cover raises directed replenishment rather than a shortage, and nothing prints until every line is covered.",
         )}
       </PageHeader>
 
@@ -106,16 +106,16 @@ function ReleaseAreas() {
 
       <ConfigTransfer
         objectType="release_area"
-        title="Release areas as a file"
+        title="Marshalling areas as a file"
         description="Sites and locations are named by code; the download doubles as the upload template."
         invalidates={["erp_release_areas", "erp_release_area_locations"]}
       />
 
       <ActionBar
-        note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and item classes it serves."
+        note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and product classes it serves."
         actions={[
           {
-            label: "Add or amend a release area",
+            label: "Add or amend a marshalling area",
             permission: "logistics.plan",
             fn: "erp_upsert_release_area",
             fields: [
@@ -138,8 +138,8 @@ function ReleaseAreas() {
               {
                 kind: "text",
                 name: "p_item_classes",
-                label: "Item classes",
-                hint: "Comma separated. Leave empty to serve any item.",
+                label: "Product classes",
+                hint: "Comma separated. Leave empty to serve any product.",
               },
               { kind: "number", name: "p_min_quantity", label: "Minimum" },
               { kind: "number", name: "p_max_quantity", label: "Maximum" },
@@ -215,12 +215,14 @@ function ReleaseAreas() {
       />
 
       <DataPanel<Area>
-        title={ui("Release areas")}
+        title={ui("Marshalling areas")}
         description={ui(
           "What each area serves, how it replenishes, and what is sitting in it now.",
         )}
         fn="erp_release_areas"
-        empty={ui("No release areas yet. Allocation runs against the whole site until one exists.")}
+        empty={ui(
+          "No marshalling areas yet. Allocation runs against the whole site until one exists.",
+        )}
       >
         {(rows) => (
           <Table
@@ -231,7 +233,7 @@ function ReleaseAreas() {
               ui("Location"),
               ui("Channel"),
               ui("Order type"),
-              ui("Item classes"),
+              ui("Product classes"),
               ui("Mode"),
               ui("Min"),
               ui("Max"),
@@ -274,7 +276,9 @@ function ReleaseAreas() {
         description={ui("A wave with short lines has raised replenishment and cannot print yet.")}
         fn="erp_release_waves"
         args={{ p_limit: 100 }}
-        empty={ui("No waves have been opened.")}
+        empty={ui(
+          "No waves have been opened. Open one under Actions above and its lines are picked together.",
+        )}
       >
         {(rows) => (
           <Table
@@ -346,7 +350,7 @@ function ReleaseAreas() {
         {(rows) => (
           <Table
             columns={[
-              ui("Item"),
+              ui("Product"),
               ui("Name"),
               ui("Wanted"),
               ui("Allocated"),

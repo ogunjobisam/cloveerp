@@ -163,7 +163,7 @@ function AuditLog() {
           </span>
           <input
             className={field}
-            placeholder="party, item, document…"
+            placeholder="business partner, product, document…"
             value={draft.objectType}
             onChange={(e) => setDraft({ ...draft, objectType: e.target.value })}
           />
@@ -222,7 +222,10 @@ function AuditLog() {
             </div>
           ) : !data || data.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {t("audit.empty", "No audit entries match these filters.")}
+              {t(
+                "audit.empty",
+                "No audit entries match these filters. Widen the dates, or clear the actor and action.",
+              )}
             </p>
           ) : (
             <Table

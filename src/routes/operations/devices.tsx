@@ -269,7 +269,7 @@ function Devices() {
         title="Action queue"
         description="Every action received from a device, newest first. Received is the act of capture reaching the server; applied is the moment the module that owns the step did the work, and the outcome is what it returned. A conflict names what it collided with, in the module's own words."
         fn="erp_device_actions"
-        empty="No device has sent an action yet."
+        empty="No device has sent an action yet. A device queues its work offline and sends it when the network returns, so this fills up from the warehouse rather than from here."
       >
         {(rows) => (
           <Table columns={["Received", "Device", "Step", "Input", "State", "Applied", "Outcome"]}>
