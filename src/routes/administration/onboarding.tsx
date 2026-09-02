@@ -285,6 +285,25 @@ function Onboarding() {
             {start.isPending ? "Starting…" : "Start an interview"}
           </button>
         </div>
+      ) : questions.isPending ? (
+        <div className="rounded-lg border border-border bg-card p-5">
+          <p className="text-sm text-muted-foreground">Loading the questions…</p>
+        </div>
+      ) : questions.error ? (
+        /* Without this the screen rendered a failed read as "0 of 0 questions
+           answered", which reads as an empty question bank and is the one
+           thing it was not. The interview is nineteen rows of product content;
+           if none arrive, something refused, and the refusal is the news. */
+        <div className="rounded-lg border border-border bg-card p-5">
+          <ErrorNote error={questions.error} />
+        </div>
+      ) : asked.length === 0 ? (
+        <div className="rounded-lg border border-border bg-card p-5">
+          <p className="text-sm text-muted-foreground">
+            The interview returned no questions to ask. That is not an empty question bank — every
+            question is gated on an earlier answer or on a permission, so this means none applied.
+          </p>
+        </div>
       ) : (
         <div className="flex flex-col gap-5">
           {sections.map((s) => (
