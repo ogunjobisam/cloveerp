@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DeviceRouteImport } from './routes/device'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -62,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
 const DeviceRoute = DeviceRouteImport.update({
   id: '/device',
   path: '/device',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlatformRoute = PlatformRouteImport.update({
@@ -288,6 +294,7 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/device': typeof DeviceRoute
+  '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -334,6 +341,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/device': typeof DeviceRoute
+  '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -381,6 +389,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/device': typeof DeviceRoute
+  '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
@@ -429,6 +438,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/device'
+    | '/notifications'
     | '/platform'
     | '/product'
     | '/profile'
@@ -475,6 +485,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/device'
+    | '/notifications'
     | '/platform'
     | '/product'
     | '/profile'
@@ -521,6 +532,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/device'
+    | '/notifications'
     | '/platform'
     | '/product'
     | '/profile'
@@ -568,6 +580,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DeviceRoute: typeof DeviceRoute
+  NotificationsRoute: typeof NotificationsRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
@@ -626,6 +639,13 @@ declare module '@tanstack/react-router' {
       path: '/device'
       fullPath: '/device'
       preLoaderRoute: typeof DeviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/platform': {
@@ -928,6 +948,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DeviceRoute: DeviceRoute,
+  NotificationsRoute: NotificationsRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,

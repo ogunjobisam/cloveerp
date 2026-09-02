@@ -1948,6 +1948,14 @@ export const EXTRA_TILES: TileDef[] = [
     group: "records",
   },
   {
+    path: "/notifications",
+    titleKey: "nav.notifications",
+    title: "Notifications",
+    blurb:
+      "What the product told you, your channel preferences and quiet hours, and the routes from events to audiences.",
+    group: "records",
+  },
+  {
     path: "/reporting/distribution",
     titleKey: "nav.reporting_distribution",
     title: "Subscriptions, packs and extracts",

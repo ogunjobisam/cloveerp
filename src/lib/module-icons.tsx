@@ -1,5 +1,6 @@
 import {
   Accessibility,
+  Bell,
   Send,
   Barcode,
   ArrowRightLeft,
@@ -66,6 +67,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/operations/devices": ScanBarcode,
   "/device": Barcode,
   "/reporting/distribution": Send,
+  "/notifications": Bell,
   "/operations/cutover": ArrowRightLeft,
   "/operations/output": Printer,
   "/reporting/reproducibility": Repeat,
