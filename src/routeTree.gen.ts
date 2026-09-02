@@ -34,6 +34,7 @@ import { Route as MasterDataImportsRouteImport } from './routes/master-data/impo
 import { Route as MasterDataItemSupplyRouteImport } from './routes/master-data/item-supply'
 import { Route as OperationsAssuranceRouteImport } from './routes/operations/assurance'
 import { Route as OperationsContinuityRouteImport } from './routes/operations/continuity'
+import { Route as OperationsCutoverRouteImport } from './routes/operations/cutover'
 import { Route as OperationsDevicesRouteImport } from './routes/operations/devices'
 import { Route as OperationsIntegrationsRouteImport } from './routes/operations/integrations'
 import { Route as OperationsJobsRouteImport } from './routes/operations/jobs'
@@ -179,6 +180,11 @@ const OperationsContinuityRoute = OperationsContinuityRouteImport.update({
   path: '/operations/continuity',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperationsCutoverRoute = OperationsCutoverRouteImport.update({
+  id: '/operations/cutover',
+  path: '/operations/cutover',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperationsDevicesRoute = OperationsDevicesRouteImport.update({
   id: '/operations/devices',
   path: '/operations/devices',
@@ -257,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/continuity': typeof OperationsContinuityRoute
+  '/operations/cutover': typeof OperationsCutoverRoute
   '/operations/devices': typeof OperationsDevicesRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -295,6 +302,7 @@ export interface FileRoutesByTo {
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/continuity': typeof OperationsContinuityRoute
+  '/operations/cutover': typeof OperationsCutoverRoute
   '/operations/devices': typeof OperationsDevicesRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -334,6 +342,7 @@ export interface FileRoutesById {
   '/master-data/item-supply': typeof MasterDataItemSupplyRoute
   '/operations/assurance': typeof OperationsAssuranceRoute
   '/operations/continuity': typeof OperationsContinuityRoute
+  '/operations/cutover': typeof OperationsCutoverRoute
   '/operations/devices': typeof OperationsDevicesRoute
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
@@ -374,6 +383,7 @@ export interface FileRouteTypes {
     | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/continuity'
+    | '/operations/cutover'
     | '/operations/devices'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -412,6 +422,7 @@ export interface FileRouteTypes {
     | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/continuity'
+    | '/operations/cutover'
     | '/operations/devices'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -450,6 +461,7 @@ export interface FileRouteTypes {
     | '/master-data/item-supply'
     | '/operations/assurance'
     | '/operations/continuity'
+    | '/operations/cutover'
     | '/operations/devices'
     | '/operations/integrations'
     | '/operations/jobs'
@@ -489,6 +501,7 @@ export interface RootRouteChildren {
   MasterDataItemSupplyRoute: typeof MasterDataItemSupplyRoute
   OperationsAssuranceRoute: typeof OperationsAssuranceRoute
   OperationsContinuityRoute: typeof OperationsContinuityRoute
+  OperationsCutoverRoute: typeof OperationsCutoverRoute
   OperationsDevicesRoute: typeof OperationsDevicesRoute
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
@@ -684,6 +697,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsContinuityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/operations/cutover': {
+      id: '/operations/cutover'
+      path: '/operations/cutover'
+      fullPath: '/operations/cutover'
+      preLoaderRoute: typeof OperationsCutoverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/operations/devices': {
       id: '/operations/devices'
       path: '/operations/devices'
@@ -785,6 +805,7 @@ const rootRouteChildren: RootRouteChildren = {
   MasterDataItemSupplyRoute: MasterDataItemSupplyRoute,
   OperationsAssuranceRoute: OperationsAssuranceRoute,
   OperationsContinuityRoute: OperationsContinuityRoute,
+  OperationsCutoverRoute: OperationsCutoverRoute,
   OperationsDevicesRoute: OperationsDevicesRoute,
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
