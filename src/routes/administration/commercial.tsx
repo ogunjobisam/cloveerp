@@ -269,7 +269,7 @@ function Commercial() {
                       {day(m.period_start)} → {day(m.period_end)}
                     </td>
                     <td className="py-2 pr-4 text-sm tabular-nums">
-                      {m.quantity.toLocaleString()} {m.unit ?? ""}
+                      {m.quantity != null ? m.quantity.toLocaleString() : "—"} {m.unit ?? ""}
                     </td>
                     <td className="py-2 text-xs text-muted-foreground">
                       {new Date(m.measured_at).toLocaleString()}
