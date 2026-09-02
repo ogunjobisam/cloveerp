@@ -1973,6 +1973,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/administration/erasure",
+    titleKey: "nav.administration_erasure",
+    title: "Personal data and erasure",
+    blurb:
+      "Which columns hold a person's data and what erasure does to each; requests to erase a principal or contact, executed by a second person, with the certificate.",
+    permission: "administration.read",
+    group: "administer",
+  },
+  {
     path: "/administration/accessibility",
     titleKey: "nav.administration_accessibility",
     title: "Accessibility",

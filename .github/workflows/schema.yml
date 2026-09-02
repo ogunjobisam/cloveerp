@@ -181,7 +181,8 @@ jobs:
             "erp.assert_pack_report_versions_sound()" \
             "erp.assert_device_task_handlers_sound()" \
             "erp.assert_migration_sound()" \
-            "erp.assert_accessibility_register_sound()"
+            "erp.assert_accessibility_register_sound()" \
+            "erp.assert_personal_data_register_sound()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'
@@ -238,7 +239,8 @@ jobs:
             "erp_test.assert_incident_operations_suite()" \
             "erp_test.assert_device_drain_suite()" \
             "erp_test.assert_migration_cutover_suite()" \
-            "erp_test.assert_accessibility_suite()"
+            "erp_test.assert_accessibility_suite()" \
+            "erp_test.assert_erasure_suite()"
           do
             $PSQL -tAc "select $s;"
           done

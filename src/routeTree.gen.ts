@@ -16,6 +16,7 @@ import { Route as AdministrationAccessibilityRouteImport } from './routes/admini
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
 import { Route as AdministrationCommercialRouteImport } from './routes/administration/commercial'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
+import { Route as AdministrationErasureRouteImport } from './routes/administration/erasure'
 import { Route as AdministrationOnboardingRouteImport } from './routes/administration/onboarding'
 import { Route as AdministrationOrganisationRouteImport } from './routes/administration/organisation'
 import { Route as AdministrationPacksRouteImport } from './routes/administration/packs'
@@ -86,6 +87,11 @@ const AdministrationConfigurationRoute =
     path: '/administration/configuration',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdministrationErasureRoute = AdministrationErasureRouteImport.update({
+  id: '/administration/erasure',
+  path: '/administration/erasure',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministrationOnboardingRoute =
   AdministrationOnboardingRouteImport.update({
     id: '/administration/onboarding',
@@ -257,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/erasure': typeof AdministrationErasureRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/packs': typeof AdministrationPacksRoute
@@ -297,6 +304,7 @@ export interface FileRoutesByTo {
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/erasure': typeof AdministrationErasureRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/packs': typeof AdministrationPacksRoute
@@ -338,6 +346,7 @@ export interface FileRoutesById {
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
+  '/administration/erasure': typeof AdministrationErasureRoute
   '/administration/onboarding': typeof AdministrationOnboardingRoute
   '/administration/organisation': typeof AdministrationOrganisationRoute
   '/administration/packs': typeof AdministrationPacksRoute
@@ -380,6 +389,7 @@ export interface FileRouteTypes {
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
+    | '/administration/erasure'
     | '/administration/onboarding'
     | '/administration/organisation'
     | '/administration/packs'
@@ -420,6 +430,7 @@ export interface FileRouteTypes {
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
+    | '/administration/erasure'
     | '/administration/onboarding'
     | '/administration/organisation'
     | '/administration/packs'
@@ -460,6 +471,7 @@ export interface FileRouteTypes {
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
+    | '/administration/erasure'
     | '/administration/onboarding'
     | '/administration/organisation'
     | '/administration/packs'
@@ -501,6 +513,7 @@ export interface RootRouteChildren {
   AdministrationAuditRoute: typeof AdministrationAuditRoute
   AdministrationCommercialRoute: typeof AdministrationCommercialRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
+  AdministrationErasureRoute: typeof AdministrationErasureRoute
   AdministrationOnboardingRoute: typeof AdministrationOnboardingRoute
   AdministrationOrganisationRoute: typeof AdministrationOrganisationRoute
   AdministrationPacksRoute: typeof AdministrationPacksRoute
@@ -583,6 +596,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/configuration'
       fullPath: '/administration/configuration'
       preLoaderRoute: typeof AdministrationConfigurationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/erasure': {
+      id: '/administration/erasure'
+      path: '/administration/erasure'
+      fullPath: '/administration/erasure'
+      preLoaderRoute: typeof AdministrationErasureRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/onboarding': {
@@ -813,6 +833,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationAuditRoute: AdministrationAuditRoute,
   AdministrationCommercialRoute: AdministrationCommercialRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
+  AdministrationErasureRoute: AdministrationErasureRoute,
   AdministrationOnboardingRoute: AdministrationOnboardingRoute,
   AdministrationOrganisationRoute: AdministrationOrganisationRoute,
   AdministrationPacksRoute: AdministrationPacksRoute,
