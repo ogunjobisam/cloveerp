@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AdministrationAccessibilityRouteImport } from './routes/administration/accessibility'
 import { Route as AdministrationAdoptionRouteImport } from './routes/administration/adoption'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
@@ -63,6 +64,11 @@ const PlatformRoute = PlatformRouteImport.update({
 const ProductRoute = ProductRouteImport.update({
   id: '/product',
   path: '/product',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdministrationAccessibilityRoute =
@@ -265,6 +271,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/settings': typeof SettingsRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
@@ -307,6 +314,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/settings': typeof SettingsRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
@@ -350,6 +358,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/settings': typeof SettingsRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
@@ -394,6 +403,7 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/settings'
     | '/administration/accessibility'
     | '/administration/adoption'
     | '/administration/audit'
@@ -436,6 +446,7 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/settings'
     | '/administration/accessibility'
     | '/administration/adoption'
     | '/administration/audit'
@@ -478,6 +489,7 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/settings'
     | '/administration/accessibility'
     | '/administration/adoption'
     | '/administration/audit'
@@ -521,6 +533,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
+  SettingsRoute: typeof SettingsRoute
   AdministrationAccessibilityRoute: typeof AdministrationAccessibilityRoute
   AdministrationAdoptionRoute: typeof AdministrationAdoptionRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
@@ -581,6 +594,13 @@ declare module '@tanstack/react-router' {
       path: '/product'
       fullPath: '/product'
       preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/accessibility': {
@@ -849,6 +869,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
+  SettingsRoute: SettingsRoute,
   AdministrationAccessibilityRoute: AdministrationAccessibilityRoute,
   AdministrationAdoptionRoute: AdministrationAdoptionRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,

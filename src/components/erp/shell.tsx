@@ -1,14 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Menu } from "lucide-react";
+import { Briefcase, Menu, Settings2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import type { ErpSession } from "../../lib/erp";
-import { callErp, hasPermission } from "../../lib/erp";
+import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { GROUP_LABELS, GROUP_ORDER, allTiles } from "../../lib/modules";
+import {
+  AREA_HOME,
+  GROUP_LABELS,
+  SETTINGS_GROUPS,
+  WORK_GROUPS,
+  allTiles,
+  areaOf,
+  type Area,
+  type TileGroup,
+} from "../../lib/modules";
 import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { ContextHelp } from "./context-help";
@@ -18,6 +26,14 @@ import { UserMenu } from "./user-menu";
 
 /**
  * The application shell.
+ *
+ * Two areas, one switch. Work is the operating flow and its records; Settings
+ * is the organisation, its configuration, its plumbing and its assurance. The
+ * header carries the switch, and the rail shows only the area you are in, so
+ * a warehouse operative's rail is six entries long and an administrator
+ * setting the organisation up is not scrolling past worklists to find the
+ * permission screen. Which area a path belongs to is derived from the tile
+ * registry, never from the URL's spelling.
  *
  * Navigation is derived from the session's permissions rather than filtered
  * after rendering. A screen the caller could not use does not appear at all,
@@ -30,10 +46,6 @@ import { UserMenu } from "./user-menu";
  * principal and sign-out. Below it: none of that fits, so the rail and
  * everything that is not identity or context moves into a drawer, and the
  * header keeps a tenant name and a single chip saying where you are working.
- *
- * The previous layout had no breakpoint at all. The rail was 224px of a 375px
- * screen and the header's control group could not wrap, so the page was both
- * wider than the viewport and unreadable in what remained.
  */
 
 type NavItem = {
@@ -43,30 +55,41 @@ type NavItem = {
   label: string;
   /** Absent means always visible. */
   permission?: string;
-  group: "home" | (typeof GROUP_ORDER)[number];
+  group: "home" | TileGroup;
+  area: Area;
 };
 
 /**
- * The rail, derived from the module registry.
- *
- * It used to be a hand-written list of twenty entries in the order they were
- * built, which is why Inventory sat below Permissions and the whole thing read
- * as a pile rather than a structure. Now it is Home plus the same tiles the
- * launchpad renders, in the same three groups, so the two navigations can no
- * longer disagree about what exists.
+ * The rail, derived from the module registry: each area's home, then the same
+ * tiles the launchpads render, in the same groups, so the navigations cannot
+ * disagree about what exists or where it lives.
  */
 const NAV: NavItem[] = [
-  { to: "/", labelKey: "nav.overview", label: "Home", group: "home" },
+  { to: "/", labelKey: "nav.overview", label: "Home", group: "home", area: "work" },
+  { to: "/settings", labelKey: "nav.settings", label: "Settings", group: "home", area: "settings" },
   ...allTiles().map((tile) => ({
     to: tile.path,
     labelKey: tile.titleKey,
     label: tile.title,
     ...(tile.permission ? { permission: tile.permission } : {}),
     group: tile.group,
+    area: areaOf(tile.group),
   })),
 ];
 
-const NAV_GROUPS: NavItem["group"][] = ["home", ...GROUP_ORDER];
+const AREA_GROUPS: Record<Area, NavItem["group"][]> = {
+  work: ["home", ...WORK_GROUPS],
+  settings: ["home", ...SETTINGS_GROUPS],
+};
+
+/** Which area a path is in: the longest tile prefix decides; Settings home is its own. */
+function areaOfPath(pathname: string): Area {
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
+  const match = allTiles()
+    .filter((t) => pathname === t.path || pathname.startsWith(`${t.path}/`))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+  return match ? areaOf(match.group) : "work";
+}
 
 function ScopeSelect({
   label,
@@ -100,44 +123,95 @@ function ScopeSelect({
   );
 }
 
-type MyTenant = {
-  tenant_id: string;
-  code: string;
-  name: string;
-  principal_id: string;
-  is_active: boolean;
-};
-
 export type Scope = { entityId: string; siteId: string };
+
+/**
+ * The switch between the two areas. Offered only when the account can open
+ * something in both; an operative with no settings at all sees no switch and
+ * no mention of an area they cannot enter.
+ */
+function AreaSwitch({
+  area,
+  counts,
+  onNavigate,
+  className = "",
+}: {
+  area: Area;
+  counts: Record<Area, number>;
+  onNavigate?: () => void;
+  className?: string;
+}) {
+  const { t } = useT();
+  if (counts.settings === 0 || counts.work === 0) return null;
+
+  const items: { area: Area; labelKey: string; label: string; icon: typeof Briefcase }[] = [
+    { area: "work", labelKey: "nav.work", label: "Work", icon: Briefcase },
+    { area: "settings", labelKey: "nav.settings", label: "Settings", icon: Settings2 },
+  ];
+
+  return (
+    <nav aria-label="Areas" className={className}>
+      <ul className="inline-flex rounded-lg border border-border bg-muted/50 p-0.5">
+        {items.map((item) => {
+          const active = item.area === area;
+          const Icon = item.icon;
+          return (
+            <li key={item.area}>
+              <Link
+                to={AREA_HOME[item.area]}
+                onClick={onNavigate}
+                aria-current={active ? "location" : undefined}
+                className={[
+                  "inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-card text-foreground shadow-[var(--shadow-card)]"
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                <Icon className="size-4" />
+                {t(item.labelKey, item.label)}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
 
 function NavList({
   items,
+  area,
   pathname,
   hidden,
   onNavigate,
 }: {
   items: NavItem[];
+  area: Area;
   pathname: string;
   hidden: number;
   onNavigate?: () => void;
 }) {
-  const { t } = useT();
+  const { t, ui } = useT();
 
   return (
     <>
-      {NAV_GROUPS.map((group) => {
-        const inGroup = items.filter((i) => i.group === group);
+      {AREA_GROUPS[area].map((group) => {
+        const inGroup = items.filter((i) => i.area === area && i.group === group);
         if (inGroup.length === 0) return null;
         return (
           <div key={group} className="mb-4 last:mb-0">
             {group === "home" ? null : (
               <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {GROUP_LABELS[group]}
+                {ui(GROUP_LABELS[group])}
               </p>
             )}
             <ul className="flex flex-col gap-1">
               {inGroup.map((item) => {
-                const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+                const active =
+                  item.group === "home"
+                    ? pathname === item.to
+                    : pathname === item.to || pathname.startsWith(`${item.to}/`);
                 const Icon = iconFor(item.to);
                 return (
                   <li key={item.to}>
@@ -168,8 +242,9 @@ function NavList({
 
       {hidden > 0 ? (
         <p className="mt-4 px-3 text-xs text-muted-foreground">
-          Some sections are not shown because this account does not hold the permissions they
-          require.
+          {ui(
+            "Some sections are not shown because this account does not hold the permissions they require.",
+          )}
         </p>
       ) : null}
     </>
@@ -241,6 +316,11 @@ export function Shell({
 
   const visible = NAV.filter((n) => !n.permission || hasPermission(session, n.permission));
   const hidden = NAV.length - visible.length;
+  const area = areaOfPath(pathname);
+  const counts: Record<Area, number> = {
+    work: visible.filter((n) => n.area === "work" && n.group !== "home").length,
+    settings: visible.filter((n) => n.area === "settings" && n.group !== "home").length,
+  };
 
   return (
     // overflow-x-hidden is the backstop, not the fix: everything inside is
@@ -257,7 +337,7 @@ export function Shell({
         Skip to content
       </a>
       <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:flex-wrap md:gap-4">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:gap-4">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
@@ -268,7 +348,7 @@ export function Shell({
             <Menu className="size-5" />
           </button>
 
-          <Link to="/" className={`${TOUCH} flex shrink-0 items-center gap-2`}>
+          <Link to={AREA_HOME[area]} className={`${TOUCH} flex shrink-0 items-center gap-2`}>
             <BrandMark size={28} />
             <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] md:inline">
               <span style={{ color: brand.ink }}>{brand.prefix}</span>
@@ -288,6 +368,8 @@ export function Shell({
             </span>
           </div>
 
+          <AreaSwitch area={area} counts={counts} className="hidden md:block" />
+
           <ScopeChip session={session} scope={scope} onClick={() => setDrawerOpen(true)} />
 
           {/* Help for the screen you are on, at every width: the one control
@@ -296,7 +378,7 @@ export function Shell({
           <ContextHelp />
 
           {/* Everything here is in the drawer below md. */}
-          <div className="hidden items-end gap-3 md:flex">
+          <div className="ml-auto hidden items-end gap-3 md:flex">
             <ScopeSelect
               label="Company"
               value={scope.entityId}
@@ -318,9 +400,12 @@ export function Shell({
         <SheetContent side="left" className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto">
           <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
 
+          <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
+
           <nav aria-label="Sections">
             <NavList
               items={visible}
+              area={area}
               pathname={pathname}
               hidden={hidden}
               onNavigate={() => setDrawerOpen(false)}
@@ -360,7 +445,7 @@ export function Shell({
           className="sticky top-[4.5rem] hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto pr-1 md:block"
           aria-label="Sections"
         >
-          <NavList items={visible} pathname={pathname} hidden={hidden} />
+          <NavList items={visible} area={area} pathname={pathname} hidden={hidden} />
         </nav>
 
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">

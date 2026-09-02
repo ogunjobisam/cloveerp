@@ -138,6 +138,11 @@ export function UserMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
+              <Link to="/settings" onClick={onNavigate}>
+                {t("nav.settings", "Settings")}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
               <Link to="/administration/tenant" onClick={onNavigate}>
                 {t("nav.tenant_settings", "Organisation settings")}
               </Link>

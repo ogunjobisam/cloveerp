@@ -40,7 +40,7 @@ type HelpTopic = {
 
 /** The topic for a path: the tile whose path is the longest prefix, or home. */
 function helpPathFor(pathname: string): string {
-  if (pathname === "/") return "/";
+  if (pathname === "/" || pathname === "/settings") return pathname;
   const paths = allTiles()
     .map((t) => t.path)
     .filter((p) => pathname === p || pathname.startsWith(`${p}/`))

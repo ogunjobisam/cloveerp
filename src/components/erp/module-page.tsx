@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
 import { useT } from "../../lib/i18n";
-import { GROUP_LABELS, type ModuleDef, type Panel } from "../../lib/modules";
+import { AREA_HOME, GROUP_LABELS, areaOf, type ModuleDef, type Panel } from "../../lib/modules";
 import { ActionBar } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
@@ -60,8 +60,11 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
         <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-5">
           <div className="min-w-0 flex-1">
             <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
-              <Link to="/" className="hover:text-foreground hover:underline">
-                {ui("Home")}
+              <Link
+                to={AREA_HOME[areaOf(def.group)]}
+                className="hover:text-foreground hover:underline"
+              >
+                {areaOf(def.group) === "settings" ? t("nav.settings", "Settings") : ui("Home")}
               </Link>
               <span className="px-1.5">/</span>
               <span>{ui(GROUP_LABELS[def.group])}</span>

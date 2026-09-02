@@ -20,6 +20,7 @@ import {
   Repeat,
   ScanBarcode,
   ScrollText,
+  Settings2,
   ShieldCheck,
   ShoppingCart,
   Timer,
@@ -41,6 +42,7 @@ import type { TileDef } from "./modules";
  */
 const ICONS: Record<string, LucideIcon> = {
   "/": Home,
+  "/settings": Settings2,
   "/planning": CalendarRange,
   "/procurement": ShoppingCart,
   "/production": Factory,
@@ -80,10 +82,13 @@ export function iconFor(path: string): LucideIcon {
 export const GROUP_BLURBS: Record<TileDef["group"], string> = {
   plan: "Decide what should happen and when.",
   source: "Bring materials and services in.",
-  make: "Turn inputs into finished goods.",
+  make: "Turn inputs into finished goods, and check them.",
   move: "Hold, count and ship what exists.",
   sell: "Quote, order and deliver to customers.",
   settle: "Value it, invoice it, close the period.",
-  govern: "The records everything else depends on, and the checks over them.",
-  administer: "Configure the tenant, its people and its plumbing.",
+  records: "The master data everything depends on, how it changes, and the reports over it.",
+  organisation: "Who is in the organisation, what they may do, and the plan it is on.",
+  configure: "How the modules behave: installed configuration, packs, codes, terminology.",
+  operate: "The plumbing: jobs, integrations, printing, devices, continuity, cutover.",
+  assure: "The evidence: the audit log, the assertions, personal data, accessibility, adoption.",
 };

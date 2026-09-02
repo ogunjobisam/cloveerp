@@ -61,6 +61,10 @@ describe("§22.1 contextual help: every screen the launchpad offers has a topic"
     expect(topics.has("/")).toBe(true);
   });
 
+  test("the Settings area's home has a topic", () => {
+    expect(topics.has("/settings")).toBe(true);
+  });
+
   for (const path of tilePaths()) {
     test(`${path}`, () => {
       expect(topics.has(path)).toBe(true);
