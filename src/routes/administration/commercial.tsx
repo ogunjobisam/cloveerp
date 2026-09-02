@@ -200,7 +200,7 @@ function Commercial() {
                       </div>
                     </td>
                     <td className="py-2 pr-4 text-sm tabular-nums">
-                      {e.used.toLocaleString()} {e.unit}
+                      {e.used != null ? e.used.toLocaleString() : "—"} {e.unit}
                     </td>
                     <td className="py-2 pr-4 text-sm tabular-nums">
                       {e.limit_value != null ? e.limit_value.toLocaleString() : "Unlimited"}
