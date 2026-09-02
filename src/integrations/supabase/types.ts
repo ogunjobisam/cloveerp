@@ -20,6 +20,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      erp_accessibility_statement: { Args: never; Returns: Json }
       erp_account_determination_rules: {
         Args: { p_transaction_type?: string }
         Returns: Json
@@ -39,6 +40,15 @@ export type Database = {
         Args: { p_party_id: string; p_role_kind: string }
         Returns: Json
       }
+      erp_add_report_pack_item: {
+        Args: {
+          p_pack_code: string
+          p_parameters?: Json
+          p_report_code: string
+          p_seq?: number
+        }
+        Returns: string
+      }
       erp_add_wave_line: {
         Args: {
           p_document_id?: string
@@ -48,6 +58,7 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_adoption_signals: { Args: never; Returns: Json }
       erp_age_back_release_area: {
         Args: { p_release_area_id: string }
         Returns: Json
@@ -69,6 +80,16 @@ export type Database = {
       erp_amend_document_line: {
         Args: { p_line_id: string; p_quantity: number; p_reason: string }
         Returns: undefined
+      }
+      erp_analytics_contract: { Args: never; Returns: Json }
+      erp_analytics_read: {
+        Args: {
+          p_limit?: number
+          p_since?: string
+          p_token: string
+          p_view_code: string
+        }
+        Returns: Json
       }
       erp_answer_interview: {
         Args: { p_answer: Json; p_question_code: string; p_session_id: string }
@@ -141,6 +162,7 @@ export type Database = {
         Args: { p_object_type?: string }
         Returns: Json
       }
+      erp_assemble_report_pack: { Args: { p_pack_code: string }; Returns: Json }
       erp_assign_department: {
         Args: {
           p_app_user_id: string
@@ -220,6 +242,7 @@ export type Database = {
       erp_change_requests: { Args: { p_object_type?: string }; Returns: Json }
       erp_change_sets: { Args: never; Returns: Json }
       erp_chart_alternative: { Args: never; Returns: Json }
+      erp_check_training_run: { Args: { p_run_id: string }; Returns: Json }
       erp_claim_invitation: { Args: { p_token: string }; Returns: Json }
       erp_classification_axes: { Args: never; Returns: Json }
       erp_classification_gaps: { Args: { p_limit?: number }; Returns: Json }
@@ -273,6 +296,7 @@ export type Database = {
       }
       erp_code_divergences: { Args: { p_limit?: number }; Returns: Json }
       erp_code_templates: { Args: never; Returns: Json }
+      erp_commercial_summary: { Args: never; Returns: Json }
       erp_commit_allocation: {
         Args: {
           p_allocation_id: string
@@ -306,6 +330,7 @@ export type Database = {
         Args: { p_approver_role?: string }
         Returns: string
       }
+      erp_configure_notifications: { Args: never; Returns: string }
       erp_configure_period_close: { Args: never; Returns: string }
       erp_configure_planning: {
         Args: { p_service_level_pct?: number }
@@ -322,6 +347,7 @@ export type Database = {
       erp_configure_production: { Args: never; Returns: string }
       erp_configure_quality: { Args: never; Returns: string }
       erp_configure_receivables: { Args: never; Returns: string }
+      erp_configure_reporting: { Args: never; Returns: string }
       erp_configure_sales: {
         Args: { p_discount_threshold_pct?: number }
         Returns: Json
@@ -333,6 +359,10 @@ export type Database = {
       erp_configure_tax: {
         Args: { p_home_country?: string; p_standard_rate?: number }
         Returns: string
+      }
+      erp_confirm_delivery: {
+        Args: { p_delivery_id: string }
+        Returns: undefined
       }
       erp_content_packs: { Args: never; Returns: Json }
       erp_count_accuracy: { Args: never; Returns: Json }
@@ -401,6 +431,10 @@ export type Database = {
       }
       erp_credit_position: { Args: { p_party_id: string }; Returns: Json }
       erp_currencies: { Args: never; Returns: Json }
+      erp_cut_over_domain: {
+        Args: { p_domain_code: string; p_note?: string }
+        Returns: Json
+      }
       erp_data_quality: { Args: { p_object_type: string }; Returns: Json }
       erp_decide_approval: {
         Args: { p_approve: boolean; p_comment?: string; p_task_id: string }
@@ -441,7 +475,13 @@ export type Database = {
         Returns: Json
       }
       erp_device_actions: { Args: never; Returns: Json }
+      erp_device_classes: { Args: never; Returns: Json }
+      erp_device_operations: { Args: never; Returns: Json }
       erp_device_queue: { Args: { p_device_code: string }; Returns: Json }
+      erp_device_stock_position: {
+        Args: { p_device_code?: string; p_reference_id: string }
+        Returns: Json
+      }
       erp_device_task_handlers: { Args: never; Returns: Json }
       erp_device_tasks: { Args: never; Returns: Json }
       erp_devices: { Args: never; Returns: Json }
@@ -483,6 +523,7 @@ export type Database = {
         Args: { p_limit?: number; p_type_code?: string }
         Returns: Json
       }
+      erp_domain_cutovers: { Args: never; Returns: Json }
       erp_drain_device_actions: {
         Args: { p_device_code?: string; p_limit?: number }
         Returns: Json
@@ -492,6 +533,7 @@ export type Database = {
         Args: { p_object_type: string }
         Returns: Json
       }
+      erp_email_suppressions: { Args: never; Returns: Json }
       erp_end_approval_delegation: {
         Args: { p_delegation_id: string; p_reason?: string }
         Returns: Json
@@ -509,6 +551,8 @@ export type Database = {
         Returns: Json
       }
       erp_entities: { Args: never; Returns: Json }
+      erp_erasure_requests: { Args: never; Returns: Json }
+      erp_erasure_subjects: { Args: never; Returns: Json }
       erp_excursion_impact: {
         Args: {
           p_from: string
@@ -518,12 +562,22 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_execute_erasure: { Args: { p_request_id: string }; Returns: Json }
       erp_expiry_horizon: { Args: { p_days?: number }; Returns: Json }
       erp_export_configuration: {
         Args: { p_object_type: string }
         Returns: Json
       }
       erp_export_tenant: { Args: never; Returns: Json }
+      erp_expose_governed_view: {
+        Args: { p_view_code: string }
+        Returns: number
+      }
+      erp_fail_delivery: {
+        Args: { p_delivery_id: string; p_reason: string }
+        Returns: undefined
+      }
+      erp_first_run_guide: { Args: never; Returns: Json }
       erp_fiscal_periods: { Args: never; Returns: Json }
       erp_fixed_asset_register: { Args: { p_as_at?: string }; Returns: Json }
       erp_forecast_versions: { Args: { p_limit?: number }; Returns: Json }
@@ -540,6 +594,9 @@ export type Database = {
         Returns: Json
       }
       erp_grni: { Args: never; Returns: Json }
+      erp_gs1_application_identifiers: { Args: never; Returns: Json }
+      erp_help_topic: { Args: { p_screen_path: string }; Returns: Json }
+      erp_help_topics: { Args: never; Returns: Json }
       erp_import_batches: { Args: { p_limit?: number }; Returns: Json }
       erp_import_configuration: {
         Args: { p_dry_run?: boolean; p_object_type: string; p_rows: Json }
@@ -571,6 +628,14 @@ export type Database = {
       erp_invoice_from_delivery: {
         Args: { p_allow_self_invoice?: boolean; p_delivery_id: string }
         Returns: string
+      }
+      erp_issue_analytics_credential: {
+        Args: {
+          p_expires_at?: string
+          p_label: string
+          p_view_codes?: string[]
+        }
+        Returns: Json
       }
       erp_issue_to_works_order: {
         Args: {
@@ -615,6 +680,7 @@ export type Database = {
         Returns: string
       }
       erp_load_import: { Args: { p_batch_id: string }; Returns: number }
+      erp_locales: { Args: never; Returns: Json }
       erp_locations: { Args: { p_site_id?: string }; Returns: Json }
       erp_log_recall_action: {
         Args: {
@@ -627,6 +693,14 @@ export type Database = {
           p_recall_id: string
         }
         Returns: number
+      }
+      erp_mark_first_run_step: {
+        Args: { p_done?: boolean; p_guide_code: string; p_seq: number }
+        Returns: Json
+      }
+      erp_mark_notification_read: {
+        Args: { p_notification_id: string }
+        Returns: undefined
       }
       erp_match_workbench: { Args: never; Returns: Json }
       erp_merge_batches: {
@@ -646,8 +720,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      erp_migration_domains: { Args: never; Returns: Json }
       erp_my_approvals: { Args: never; Returns: Json }
+      erp_my_notification_settings: { Args: never; Returns: Json }
+      erp_my_notifications: { Args: { p_limit?: number }; Returns: Json }
       erp_my_tenants: { Args: never; Returns: Json }
+      erp_notice_periods: { Args: never; Returns: Json }
+      erp_notification_health: { Args: never; Returns: Json }
+      erp_notification_routes: { Args: never; Returns: Json }
       erp_onboard_tenant: {
         Args: { p_code: string; p_name: string }
         Returns: Json
@@ -687,6 +767,15 @@ export type Database = {
         Args: { p_code?: string; p_note?: string; p_release_area_id: string }
         Returns: Json
       }
+      erp_opening_balance_reconciliation: {
+        Args: { p_batch_id: string }
+        Returns: Json
+      }
+      erp_opening_batches: { Args: never; Returns: Json }
+      erp_output_health: { Args: never; Returns: Json }
+      erp_output_integrity: { Args: never; Returns: Json }
+      erp_output_requests: { Args: never; Returns: Json }
+      erp_output_template_versions: { Args: never; Returns: Json }
       erp_output_templates: { Args: never; Returns: Json }
       erp_override_posting_account: {
         Args: {
@@ -701,6 +790,7 @@ export type Database = {
       }
       erp_pack_acceptance: { Args: never; Returns: Json }
       erp_pack_plan: { Args: { p_pack_code: string }; Returns: Json }
+      erp_parallel_run_figures: { Args: never; Returns: Json }
       erp_part5_coverage: { Args: { p_section?: string }; Returns: Json }
       erp_part5_summary: { Args: never; Returns: Json }
       erp_parties: {
@@ -710,6 +800,7 @@ export type Database = {
       erp_party_posting_classes: { Args: { p_limit?: number }; Returns: Json }
       erp_payment_proposals: { Args: { p_limit?: number }; Returns: Json }
       erp_permissions_directory: { Args: never; Returns: Json }
+      erp_personal_data_register: { Args: never; Returns: Json }
       erp_plan_shipment: {
         Args: {
           p_delivery_ids: string[]
@@ -728,10 +819,28 @@ export type Database = {
         Args: { p_display_name: string; p_email: string; p_role: string }
         Returns: Json
       }
+      erp_platform_announce_maintenance: {
+        Args: {
+          p_affects_all_tenants: boolean
+          p_code: string
+          p_detail: string
+          p_emergency_reason?: string
+          p_ends_at: string
+          p_is_emergency?: boolean
+          p_starts_at: string
+          p_tenant_codes?: string[]
+          p_title: string
+        }
+        Returns: string
+      }
       erp_platform_assurance: { Args: never; Returns: Json }
       erp_platform_audit: {
         Args: { p_action?: string; p_limit?: number; p_tenant_id?: string }
         Returns: Json
+      }
+      erp_platform_cancel_maintenance: {
+        Args: { p_code: string; p_reason: string }
+        Returns: undefined
       }
       erp_platform_cancel_ownership_transfer: {
         Args: { p_reason?: string; p_transfer_id: string }
@@ -766,8 +875,17 @@ export type Database = {
       }
       erp_platform_deployment_state: { Args: never; Returns: Json }
       erp_platform_diagnostics: { Args: never; Returns: Json }
+      erp_platform_disclosures: { Args: never; Returns: Json }
       erp_platform_enter_tenant: {
         Args: { p_reason: string; p_tenant_id: string }
+        Returns: Json
+      }
+      erp_platform_flag_security_incident: {
+        Args: { p_incident_code: string }
+        Returns: number
+      }
+      erp_platform_incident_organisations: {
+        Args: { p_incident_code: string }
         Returns: Json
       }
       erp_platform_incidents: { Args: never; Returns: Json }
@@ -779,8 +897,13 @@ export type Database = {
         Args: { p_tenant_id: string }
         Returns: Json
       }
+      erp_platform_maintenance_windows: { Args: never; Returns: Json }
       erp_platform_me: { Args: never; Returns: Json }
       erp_platform_my_tenancies: { Args: never; Returns: Json }
+      erp_platform_name_affected_organisations: {
+        Args: { p_incident_code: string; p_tenant_codes: string[] }
+        Returns: number
+      }
       erp_platform_offer_ownership: {
         Args: { p_reason?: string; p_tenant_id: string; p_to_staff_id: string }
         Returns: Json
@@ -801,11 +924,13 @@ export type Database = {
         Args: { p_limit?: number; p_tenant_id?: string }
         Returns: Json
       }
+      erp_platform_plans: { Args: never; Returns: Json }
       erp_platform_policy_decisions: { Args: never; Returns: Json }
       erp_platform_post_incident_update: {
         Args: { p_body: string; p_code: string; p_is_no_change?: boolean }
         Returns: string
       }
+      erp_platform_product_decisions: { Args: never; Returns: Json }
       erp_platform_purge_due_tenants: {
         Args: { p_grace_days?: number }
         Returns: Json
@@ -813,6 +938,14 @@ export type Database = {
       erp_platform_purge_tenant: {
         Args: { p_confirm_code: string; p_reason: string; p_tenant_id: string }
         Returns: Json
+      }
+      erp_platform_record_disclosure: {
+        Args: {
+          p_incident_code: string
+          p_note?: string
+          p_obligation_code: string
+        }
+        Returns: undefined
       }
       erp_platform_record_support_action: {
         Args: {
@@ -875,7 +1008,10 @@ export type Database = {
       }
       erp_price_document_line: { Args: { p_line_id: string }; Returns: number }
       erp_principals: { Args: never; Returns: Json }
+      erp_print_queue_health: { Args: never; Returns: Json }
       erp_print_release_wave: { Args: { p_wave_id: string }; Returns: Json }
+      erp_print_routes: { Args: never; Returns: Json }
+      erp_printers: { Args: never; Returns: Json }
       erp_promise_date: {
         Args: { p_item_id: string; p_quantity: number; p_site_id: string }
         Returns: string
@@ -1027,6 +1163,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      erp_record_parallel_run_figure: {
+        Args: {
+          p_as_at: string
+          p_domain_code: string
+          p_legacy_value_minor: number
+          p_note?: string
+          p_tolerance_minor?: number
+        }
+        Returns: Json
+      }
       erp_record_proof_of_delivery: {
         Args: {
           p_arrived_at: string
@@ -1036,8 +1182,21 @@ export type Database = {
         }
         Returns: undefined
       }
+      erp_record_sender_verification: {
+        Args: {
+          p_dkim: boolean
+          p_dmarc: boolean
+          p_domain: string
+          p_spf: boolean
+        }
+        Returns: Json
+      }
       erp_redistribution_suggestions: {
         Args: { p_days?: number }
+        Returns: Json
+      }
+      erp_refuse_erasure: {
+        Args: { p_reason: string; p_request_id: string }
         Returns: Json
       }
       erp_register_device: {
@@ -1086,6 +1245,19 @@ export type Database = {
           | "closed"
           | "cancelled"
       }
+      erp_remove_report_pack_item: {
+        Args: { p_pack_code: string; p_report_code: string }
+        Returns: undefined
+      }
+      erp_render_label: {
+        Args: {
+          p_document_id?: string
+          p_locale?: string
+          p_printer_code: string
+          p_template_code: string
+        }
+        Returns: Json
+      }
       erp_render_output_template: {
         Args: { p_code: string; p_document_id?: string; p_locale?: string }
         Returns: Json
@@ -1097,6 +1269,26 @@ export type Database = {
       erp_replay_message: {
         Args: { p_message_id: number; p_reason: string }
         Returns: number
+      }
+      erp_report_extract_content: { Args: { p_run_id: string }; Returns: Json }
+      erp_report_extracts: { Args: never; Returns: Json }
+      erp_report_packs: { Args: never; Returns: Json }
+      erp_report_reproducibility: { Args: never; Returns: Json }
+      erp_report_runs: { Args: never; Returns: Json }
+      erp_report_subscriptions: { Args: never; Returns: Json }
+      erp_report_versions: { Args: never; Returns: Json }
+      erp_reprint_output: {
+        Args: {
+          p_printer_code?: string
+          p_render_id: string
+          p_site_id?: string
+          p_workstation?: string
+        }
+        Returns: Json
+      }
+      erp_request_erasure: {
+        Args: { p_reason: string; p_subject_id: string; p_subject_kind: string }
+        Returns: Json
       }
       erp_request_tenant_deletion: {
         Args: { p_confirm_code: string; p_reason: string }
@@ -1124,11 +1316,24 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_resolve_scan: {
+        Args: {
+          p_barcode: string
+          p_device_code?: string
+          p_fields?: Json
+          p_key: string
+        }
+        Returns: Json
+      }
       erp_resource_catalog: { Args: { p_locale?: string }; Returns: Json }
       erp_resources: { Args: { p_locale?: string }; Returns: Json }
       erp_retire_account_determination: {
         Args: { p_rule_id: string }
         Returns: Json
+      }
+      erp_retire_analytics_contract: {
+        Args: { p_version: number; p_view_code: string }
+        Returns: undefined
       }
       erp_retire_approval_band: { Args: { p_band_id: string }; Returns: Json }
       erp_retire_posting_class: {
@@ -1140,6 +1345,22 @@ export type Database = {
         Args: { p_mass_change_id: string }
         Returns: number
       }
+      erp_revert_cutover: {
+        Args: { p_domain_code: string; p_reason: string }
+        Returns: Json
+      }
+      erp_revise_analytics_contract: {
+        Args: {
+          p_deprecation_notice: string
+          p_retire_after: string
+          p_view_code: string
+        }
+        Returns: number
+      }
+      erp_revoke_analytics_credential: {
+        Args: { p_credential_id: string; p_reason: string }
+        Returns: undefined
+      }
       erp_revoke_role: { Args: { p_user_role_id: string }; Returns: Json }
       erp_rollback_import: { Args: { p_batch_id: string }; Returns: Json }
       erp_rollback_to_snapshot: {
@@ -1148,6 +1369,14 @@ export type Database = {
       }
       erp_rotate_tenant_key: {
         Args: { p_purpose?: string; p_reason?: string }
+        Returns: Json
+      }
+      erp_route_print: {
+        Args: {
+          p_render_id: string
+          p_site_id?: string
+          p_workstation?: string
+        }
         Returns: Json
       }
       erp_run_forecast: {
@@ -1182,6 +1411,8 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_scan_rules: { Args: never; Returns: Json }
+      erp_scenario_completions: { Args: never; Returns: Json }
       erp_seed_demo: { Args: never; Returns: Json }
       erp_seed_demo_configuration: { Args: never; Returns: Json }
       erp_seed_demo_operations: { Args: never; Returns: Json }
@@ -1189,6 +1420,8 @@ export type Database = {
         Args: { p_required_by?: string; p_shipment_id: string }
         Returns: Json
       }
+      erp_sender_identities: { Args: never; Returns: Json }
+      erp_service_notices: { Args: never; Returns: Json }
       erp_session: { Args: never; Returns: Json }
       erp_set_account_dimension_requirements: {
         Args: { p_account_id: string; p_dimension_codes: string }
@@ -1245,6 +1478,24 @@ export type Database = {
         }
         Returns: string
       }
+      erp_set_my_quiet_hours: {
+        Args: {
+          p_days_of_week: number[]
+          p_ends_at: string
+          p_override_at_or_above?: string
+          p_starts_at: string
+          p_timezone: string
+        }
+        Returns: string
+      }
+      erp_set_notification_preference: {
+        Args: { p_channel_kind: string; p_is_enabled: boolean }
+        Returns: undefined
+      }
+      erp_set_notification_route_status: {
+        Args: { p_code: string; p_status: string }
+        Returns: undefined
+      }
       erp_set_party_posting_class: {
         Args: {
           p_party_id: string
@@ -1257,6 +1508,10 @@ export type Database = {
       erp_set_reason_code_status: {
         Args: { p_active: boolean; p_category: string; p_code: string }
         Returns: Json
+      }
+      erp_set_report_subscription_status: {
+        Args: { p_status: string; p_subscription_id: string }
+        Returns: undefined
       }
       erp_set_resource_override: {
         Args: {
@@ -1292,6 +1547,17 @@ export type Database = {
         }
         Returns: string
       }
+      erp_stage_opening_balances: {
+        Args: {
+          p_as_at: string
+          p_code?: string
+          p_control_quantity?: number
+          p_control_total_minor: number
+          p_domain_code: string
+          p_rows: Json
+        }
+        Returns: Json
+      }
       erp_stamp_approval_routing: {
         Args: {
           p_currency?: string
@@ -1307,6 +1573,7 @@ export type Database = {
         Returns: Json
       }
       erp_start_interview: { Args: { p_code?: string }; Returns: Json }
+      erp_start_training_scenario: { Args: { p_code: string }; Returns: Json }
       erp_stock_ageing: { Args: never; Returns: Json }
       erp_stock_health: { Args: never; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
@@ -1325,14 +1592,33 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_subscribe_to_report: {
+        Args: {
+          p_app_user_id?: string
+          p_at_time?: string
+          p_cadence?: string
+          p_destination_kind?: string
+          p_parameters?: Json
+          p_report_code: string
+          p_role_code?: string
+          p_subscriber_kind?: string
+          p_timezone?: string
+        }
+        Returns: string
+      }
       erp_supplier_qualification: { Args: never; Returns: Json }
       erp_supply_demand: {
         Args: { p_horizon_days?: number; p_item_id: string; p_site_id: string }
         Returns: Json
       }
+      erp_support_severities: { Args: never; Returns: Json }
+      erp_symbologies: { Args: never; Returns: Json }
       erp_tax_report: { Args: { p_from: string; p_to: string }; Returns: Json }
       erp_tenant_keys: { Args: never; Returns: Json }
       erp_tenant_state: { Args: never; Returns: Json }
+      erp_timezones: { Args: never; Returns: Json }
+      erp_training_runs: { Args: never; Returns: Json }
+      erp_training_scenarios: { Args: never; Returns: Json }
       erp_transition_document: {
         Args: {
           p_document_id: string
@@ -1347,6 +1633,18 @@ export type Database = {
         Returns: Json
       }
       erp_uoms: { Args: never; Returns: Json }
+      erp_update_my_profile: {
+        Args: {
+          p_display_name?: string
+          p_document_locale?: string
+          p_family_name?: string
+          p_given_name?: string
+          p_reporting_locale?: string
+          p_timezone?: string
+          p_user_locale?: string
+        }
+        Returns: Json
+      }
       erp_upsert_account_determination: {
         Args: {
           p_account_id: string
@@ -1457,6 +1755,25 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_upsert_notification_route: {
+        Args: {
+          p_app_user_id?: string
+          p_audience_kind?: string
+          p_channel_kind?: string
+          p_code: string
+          p_department_code?: string
+          p_digest_minutes?: number
+          p_escalate_after_minutes?: number
+          p_escalate_to_role_code?: string
+          p_event_pattern: string
+          p_is_mandatory?: boolean
+          p_name: string
+          p_role_code?: string
+          p_severity?: string
+          p_template_code?: string
+        }
+        Returns: string
+      }
       erp_upsert_posting_class: {
         Args: {
           p_code: string
@@ -1466,6 +1783,33 @@ export type Database = {
           p_valid_from?: string
         }
         Returns: Json
+      }
+      erp_upsert_print_route: {
+        Args: {
+          p_app_user_id?: string
+          p_code: string
+          p_output_kind: string
+          p_printer_code: string
+          p_priority?: number
+          p_site_id?: string
+          p_template_code?: string
+          p_workstation?: string
+        }
+        Returns: string
+      }
+      erp_upsert_printer: {
+        Args: {
+          p_code: string
+          p_default_stock?: string
+          p_dots_per_inch?: number
+          p_language?: string
+          p_name: string
+          p_physical_location?: string
+          p_printer_type: string
+          p_queue_address?: string
+          p_site_id: string
+        }
+        Returns: string
       }
       erp_upsert_reason_code: {
         Args: {
@@ -1492,6 +1836,40 @@ export type Database = {
           p_order_type_code?: string
           p_replenishment_mode?: string
           p_site_id: string
+        }
+        Returns: Json
+      }
+      erp_upsert_report_pack: {
+        Args: { p_code: string; p_description?: string; p_name: string }
+        Returns: string
+      }
+      erp_upsert_scan_rule: {
+        Args: {
+          p_accepted_symbologies: string
+          p_item_class?: string
+          p_mandatory_identifiers?: string
+          p_task_code: string
+          p_when_absent?: string
+        }
+        Returns: string
+      }
+      erp_upsert_sender_identity: {
+        Args: {
+          p_category?: string
+          p_domain: string
+          p_from_local_part?: string
+          p_reply_to?: string
+        }
+        Returns: string
+      }
+      erp_upsert_training_scenario: {
+        Args: {
+          p_code: string
+          p_completion_code: string
+          p_permission_code: string
+          p_starting_state: string
+          p_task: string
+          p_title: string
         }
         Returns: Json
       }
@@ -1540,12 +1918,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1569,11 +1947,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1594,11 +1972,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1619,11 +1997,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1636,11 +2014,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
