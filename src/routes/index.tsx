@@ -78,7 +78,11 @@ function Overview() {
 
   return (
     <div className="flex min-w-0 flex-col gap-8">
-      <PageHeader title={`${ui("Welcome")}, ${session.principal?.display_name ?? ui("there")}`}>
+      <PageHeader
+        title={`${ui("Welcome")}, ${
+          session.principal?.given_name || session.principal?.display_name || ui("there")
+        }`}
+      >
         {where}
       </PageHeader>
 

@@ -25,6 +25,7 @@ import {
   ShoppingCart,
   Timer,
   Truck,
+  UserRound,
   UserX,
   Handshake,
   HeartPulse,
@@ -43,6 +44,7 @@ import type { TileDef } from "./modules";
 const ICONS: Record<string, LucideIcon> = {
   "/": Home,
   "/settings": Settings2,
+  "/profile": UserRound,
   "/planning": CalendarRange,
   "/procurement": ShoppingCart,
   "/production": Factory,

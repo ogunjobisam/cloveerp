@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AdministrationAccessibilityRouteImport } from './routes/administration/accessibility'
 import { Route as AdministrationAdoptionRouteImport } from './routes/administration/adoption'
@@ -64,6 +65,11 @@ const PlatformRoute = PlatformRouteImport.update({
 const ProductRoute = ProductRouteImport.update({
   id: '/product',
   path: '/product',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -271,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
@@ -314,6 +321,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
@@ -358,6 +366,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
+  '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
@@ -403,6 +412,7 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/profile'
     | '/settings'
     | '/administration/accessibility'
     | '/administration/adoption'
@@ -446,6 +456,7 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/profile'
     | '/settings'
     | '/administration/accessibility'
     | '/administration/adoption'
@@ -489,6 +500,7 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/product'
+    | '/profile'
     | '/settings'
     | '/administration/accessibility'
     | '/administration/adoption'
@@ -533,6 +545,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
+  ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
   AdministrationAccessibilityRoute: typeof AdministrationAccessibilityRoute
   AdministrationAdoptionRoute: typeof AdministrationAdoptionRoute
@@ -594,6 +607,13 @@ declare module '@tanstack/react-router' {
       path: '/product'
       fullPath: '/product'
       preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -869,6 +889,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
+  ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
   AdministrationAccessibilityRoute: AdministrationAccessibilityRoute,
   AdministrationAdoptionRoute: AdministrationAdoptionRoute,

@@ -108,6 +108,13 @@ export function UserMenu({
           ) : null}
         </DropdownMenuLabel>
 
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/profile" onClick={onNavigate}>
+            {t("nav.profile", "My profile")}
+          </Link>
+        </DropdownMenuItem>
+
         {switchable ? (
           <>
             <DropdownMenuSeparator />

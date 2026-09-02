@@ -36,9 +36,13 @@ export type ErpSession = {
   tenant_id: string | null;
   principal?: {
     display_name: string;
+    given_name?: string | null;
+    family_name?: string | null;
     email: string | null;
     kind: "person" | "service";
     user_locale: string | null;
+    document_locale?: string | null;
+    reporting_locale?: string | null;
     timezone: string | null;
   };
   tenant?: { code: string; name: string; status: string };
