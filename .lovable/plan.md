@@ -1,27 +1,52 @@
-# Verify the Wave C/D database work landed cleanly
+# Production readiness: full journey sweep and fix pass
 
-Another agent is applying "Wave" SQL chunks straight to the live Clove ERP database. This plan checks that what landed matches the repository source, with no drift, no half-applied chunk, and no broken surface. It is a verification pass — no schema changes unless verification finds a genuine defect, and any fix would be proposed separately.
+Goal: walk every user journey in the running app as a real signed-in user, record what breaks, and fix everything found — blocking defects and rough edges alike.
 
-## What the first look already shows
+## How the sweep runs
 
-- Live counts match the figures in the screenshot: 20 policy decisions and 1,049 resource strings.
-- The `erp` engine holds 559 routines and the `public` front door exposes 319 `erp_*` wrappers.
-- `apply_change_set_item` (the Wave D chunk 1 target) exists on live.
-- **Drift signal:** the repository holds 168 migration files, but the database's migration registry records only 160, with the newest recorded version dated 31 Aug. Everything applied since then — including the Wave chunks — is not recorded in the registry. This means the repo and the live database can no longer be compared by version number alone.
+Driven through a real browser against the running app, signed in as the owner account, with the console and network recorded on every screen. Each journey is walked as a person would walk it, not just loaded.
 
-## Verification steps
+Recorded per screen: page errors, failed requests, permission failures, empty states that should have data, dead controls, and anything that reads as unfinished.
 
-1. **Registry reconciliation.** List the repository migration filenames against the recorded versions and produce the exact set of files present in the repo but absent from the registry, and vice versa.
-2. **Object-level presence.** For each unrecorded migration, extract the objects it creates (tables, functions, policies, grants) and confirm each one exists on live with the expected signature. This is the real test, since the registry cannot be trusted.
-3. **Body comparison.** For every `erp` and `public` routine that the unrecorded migrations define, compare the live function body against the repository source and report any that differ. This catches a chunk applied from a different branch (`erpware_v13`) than the one in this repo.
-4. **Half-applied chunk check.** Confirm no routine is left in a state where it references a table, column, type or helper that does not exist — a fast way to spot a chunk that stopped midway.
-5. **Surface health.** Confirm the `public` wrappers still resolve, grants and RLS are intact on every table touched, and no table lost row-level security or gained anonymous access during the applies.
-6. **Runtime smoke.** Run the Supabase linter and load the affected screens as an authenticated user to confirm the front end still reads real data without errors.
+## Journeys to walk
 
-## What you get
+1. **Arrival and sign-in** — landing page, product page, email sign-in, Google sign-in path, sign-out, profile and settings.
+2. **Onboarding** — create a tenant, seed the demo tenant, redeem an invitation, the onboarding interview.
+3. **Platform console** — companies, staff, activity, plans, incidents, queue, diagnostics, deployment, ownership transfer, suspension and purge.
+4. **Plan** — planning board, forecasting, planner workbench.
+5. **Source** — procurement: order, receive against it, match, supplier records, landed cost.
+6. **Make** — production: raise, release, issue, receive, close a works order; book time; batch record.
+7. **Move** — inventory and logistics: counts, write-offs, batches, warehouse tasks, release areas, waves, shipment and delivery.
+8. **Sell** — sales: quote to order, reserve, price, promise, credit position, despatch, returns.
+9. **Settle** — finance: invoicing from delivery, cash application, payment runs, period close, account determination.
+10. **Quality** — inspections, dispositions, quality events, recall readiness.
+11. **Master data and governance** — items, parties, classification, change requests and approvals, imports, mass change.
+12. **Administration** — permissions, configuration, terminology, audit log, packs, commercial, adoption, accessibility, erasure, tenant lifecycle.
+13. **Operations** — jobs, integrations, devices, output, continuity, cutover, assurance.
+14. **Device client** — the bare warehouse screen, including queued-offline behaviour.
 
-A short report listing, in order of severity: objects missing on live, live bodies that diverge from the repo, any lost security posture, and the reconciliation gap between the repo's migration files and the database registry — with a recommendation on how to bring the registry back in step.
+## Fix pass
 
-## Note on the other agent
+Everything found is fixed in the same pass, ordered:
 
-If the other session is still mid-apply, the comparison is a snapshot and results can move under us. Best run once that session reports finished.
+1. Anything that stops a journey: errors, failed calls, permission failures, controls that do nothing.
+2. Correctness: wrong numbers, stale reads after an action, actions that succeed but do not refresh the screen.
+3. Presentation: raw error text, missing empty states, untranslated literals where a resource key exists, keyboard and contrast problems.
+
+Where a journey cannot be walked because the demo tenant has no data for it, the demo seed is extended so the journey has something to act on — through the same governed functions the interface uses.
+
+## Production-readiness checks alongside the sweep
+
+- Database security lint and security scan; every critical finding either fixed or explained.
+- Row-level security and grants confirmed on every table the interface reads.
+- Build, typecheck, lint and the existing unit tests all clean.
+- Page metadata (title, description, social preview) present and distinct on every public route.
+- Migration registry reconciled against the repository so live and repo agree.
+
+## Deliverable
+
+A short written report of what was walked, what was found, what was fixed, and anything deliberately left — with the app in the fixed state.
+
+## Technical notes
+
+Browser automation runs against the local dev server with the owner session restored. Fixes stay in the frontend where the defect is presentational; backend fixes go through migrations, never direct edits to generated types or migration files. The seed extension, if needed, is a single migration extending the existing demo seed.
