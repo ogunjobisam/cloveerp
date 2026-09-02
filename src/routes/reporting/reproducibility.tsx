@@ -15,7 +15,16 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
  */
 
 export const Route = createFileRoute("/reporting/reproducibility")({
-  head: () => ({ meta: [{ title: "Report versions and runs — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Report versions and runs — Clove ERP" },
+      { name: "description", content: "Report versions and runs, reproducible to the row that produced them." },
+      { property: "og:title", content: "Report versions and runs — Clove ERP" },
+      { property: "og:description", content: "Report versions and runs, reproducible to the row that produced them." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Reproducibility />

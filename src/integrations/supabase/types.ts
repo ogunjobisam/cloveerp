@@ -504,6 +504,10 @@ export type Database = {
       erp_devices: { Args: never; Returns: Json }
       erp_dimension_rules: { Args: never; Returns: Json }
       erp_dimensions: { Args: never; Returns: Json }
+      erp_dismiss_first_run_step: {
+        Args: { p_dismissed?: boolean; p_guide_code: string; p_seq: number }
+        Returns: Json
+      }
       erp_disposition_inspection: {
         Args: {
           p_disposition:

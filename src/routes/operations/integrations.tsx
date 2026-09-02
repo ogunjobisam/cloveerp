@@ -8,7 +8,16 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { SeedDemoAction } from "../../components/erp/seed";
 
 export const Route = createFileRoute("/operations/integrations")({
-  head: () => ({ meta: [{ title: "Integrations — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Integrations — Clove ERP" },
+      { name: "description", content: "Outbound and inbound integrations, endpoints and delivery history." },
+      { property: "og:title", content: "Integrations — Clove ERP" },
+      { property: "og:description", content: "Outbound and inbound integrations, endpoints and delivery history." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Integrations />

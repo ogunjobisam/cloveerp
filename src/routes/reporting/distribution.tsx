@@ -22,7 +22,16 @@ import { useT } from "../../lib/i18n";
  */
 
 export const Route = createFileRoute("/reporting/distribution")({
-  head: () => ({ meta: [{ title: "Subscriptions, packs and extracts — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Subscriptions, packs and extracts — Clove ERP" },
+      { name: "description", content: "Report subscriptions, content packs and scheduled data extracts." },
+      { property: "og:title", content: "Subscriptions, packs and extracts — Clove ERP" },
+      { property: "og:description", content: "Report subscriptions, content packs and scheduled data extracts." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Distribution />

@@ -9,7 +9,16 @@ import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/operations/continuity")({
-  head: () => ({ meta: [{ title: "Continuity and incidents — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Continuity and incidents — Clove ERP" },
+      { name: "description", content: "Continuity planning, incident records and recovery evidence." },
+      { property: "og:title", content: "Continuity and incidents — Clove ERP" },
+      { property: "og:description", content: "Continuity planning, incident records and recovery evidence." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Continuity />

@@ -6,7 +6,16 @@ import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 
 export const Route = createFileRoute("/operations/devices")({
-  head: () => ({ meta: [{ title: "Devices and scanning — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "Devices and scanning — Clove ERP" },
+      { name: "description", content: "Handheld scanners, device enrolment and offline queue health." },
+      { property: "og:title", content: "Devices and scanning — Clove ERP" },
+      { property: "og:description", content: "Handheld scanners, device enrolment and offline queue health." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Devices />

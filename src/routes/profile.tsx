@@ -23,7 +23,16 @@ import { useT } from "../lib/i18n";
  */
 
 export const Route = createFileRoute("/profile")({
-  head: () => ({ meta: [{ title: "My profile — Clove ERP" }] }),
+  head: () => ({
+    meta: [
+      { title: "My profile — Clove ERP" },
+      { name: "description", content: "Your Clove ERP account, sessions and personal preferences." },
+      { property: "og:title", content: "My profile — Clove ERP" },
+      { property: "og:description", content: "Your Clove ERP account, sessions and personal preferences." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: () => (
     <Gate>
       <Profile />
