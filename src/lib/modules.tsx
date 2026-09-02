@@ -1932,6 +1932,16 @@ export const EXTRA_TILES: TileDef[] = [
     platformOnly: true,
   },
   {
+    path: "/commercial/quotes",
+    titleKey: "nav.commercial_quotes",
+    title: "Quotes",
+    blurb:
+      "Assembled from price items with margin live, discount approval routed, every version retained, the order form rendered.",
+    permission: "sales.order",
+    group: "sell",
+    platformOnly: true,
+  },
+  {
     path: "/procurement",
     titleKey: "nav.procurement",
     title: "Procurement",
