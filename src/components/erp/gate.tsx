@@ -396,7 +396,9 @@ export function Gate({ children }: { children: ReactNode }) {
   if (!authReady)
     return (
       <Centred>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading…
+        </p>
       </Centred>
     );
   if (!authSession) return <SignIn />;
@@ -406,7 +408,9 @@ export function Gate({ children }: { children: ReactNode }) {
   if (isPending) {
     return (
       <Centred>
-        <p className="text-sm text-muted-foreground">Resolving your tenant…</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          Resolving your tenant…
+        </p>
       </Centred>
     );
   }

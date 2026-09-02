@@ -159,6 +159,7 @@ export function Staff({ role }: { role: PlatformRole }) {
                   {mayManage ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <select
+                        aria-label={`Role of ${s.display_name}`}
                         value={s.role}
                         onChange={(e) =>
                           setRole.mutate({ id: s.id, role: e.target.value as PlatformRole })

@@ -351,6 +351,7 @@ function DecisionRow({
           <Pill tone="warn">{ui("open")}</Pill>
         )}
         <input
+          aria-label="Answer"
           className={`${TOUCH} w-40 rounded-md border border-input px-2 text-sm`}
           inputMode="numeric"
           value={value}

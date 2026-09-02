@@ -95,7 +95,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:site_name", content: "Clove ERP" },
       { property: "og:image", content: "/og-image.png" },
       { name: "twitter:image", content: "/og-image.png" },
-      { name: "theme-color", content: "#C2703D" },
+      { name: "theme-color", content: "#A2591E" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

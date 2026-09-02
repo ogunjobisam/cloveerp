@@ -1973,6 +1973,14 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/administration/accessibility",
+    titleKey: "nav.administration_accessibility",
+    title: "Accessibility",
+    blurb:
+      "The accessibility statement: each WCAG 2.2 criterion, whether the product meets it, how, and the known exceptions.",
+    group: "administer",
+  },
+  {
     path: "/administration/commercial",
     titleKey: "nav.administration_commercial",
     title: "Plan and usage",

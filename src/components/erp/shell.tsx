@@ -130,7 +130,7 @@ function NavList({
         return (
           <div key={group} className="mb-4 last:mb-0">
             {group === "home" ? null : (
-              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 {GROUP_LABELS[group]}
               </p>
             )}
@@ -143,6 +143,7 @@ function NavList({
                     <Link
                       to={item.to}
                       onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
                       className={[
                         TOUCH,
                         "flex items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
@@ -245,6 +246,15 @@ export function Shell({
     // meant to fit, and this only stops one mistake becoming a page that
     // scrolls sideways.
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+      {/* The first thing a keyboard reaches. Invisible until focused, so it
+          costs sighted mouse users nothing and saves a keyboard user the
+          twenty-odd rail links on every page (WCAG 2.4.1). */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-[var(--shadow-card)]"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:flex-wrap md:gap-4">
           <button
@@ -347,7 +357,9 @@ export function Shell({
           <NavList items={visible} pathname={pathname} hidden={hidden} />
         </nav>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          {children}
+        </main>
       </div>
     </div>
   );

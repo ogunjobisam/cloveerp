@@ -1,4 +1,5 @@
 import {
+  Accessibility,
   ArrowRightLeft,
   Boxes,
   Building2,
@@ -58,6 +59,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/operations/cutover": ArrowRightLeft,
   "/operations/output": Printer,
   "/reporting/reproducibility": Repeat,
+  "/administration/accessibility": Accessibility,
   "/administration/commercial": CreditCard,
   "/administration/configuration": Cog,
   "/administration/permissions": KeyRound,

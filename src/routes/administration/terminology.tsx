@@ -82,6 +82,7 @@ function Terminology() {
             </Prose>
           </div>
           <input
+            aria-label="Filter keys"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter keys"
