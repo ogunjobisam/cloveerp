@@ -31,6 +31,7 @@ import { Queue } from "../components/platform/queue";
 import { Deployment } from "../components/platform/deployment";
 import { Incidents } from "../components/platform/incidents";
 import { Contracts } from "../components/platform/contracts";
+import { Revenue } from "../components/platform/revenue";
 
 /**
  * The platform console.
@@ -112,9 +113,13 @@ const AREAS: {
   {
     key: "commercial",
     label: "Commercial",
-    blurb: "Contracts with the organisations on this deployment, and what each provisions.",
+    blurb:
+      "Contracts with the organisations on this deployment, what each provisions, and what they add up to.",
     icon: <FileSignature className="size-4" />,
-    views: [{ key: "contracts", label: "Contracts" }],
+    views: [
+      { key: "contracts", label: "Contracts" },
+      { key: "revenue", label: "Revenue and renewals" },
+    ],
   },
   {
     key: "health",
@@ -347,6 +352,7 @@ function PlatformConsole() {
           {currentView === "product" ? <ProductDecisions /> : null}
           {currentView === "plans" ? <Plans /> : null}
           {currentView === "contracts" ? <Contracts role={role} /> : null}
+          {currentView === "revenue" ? <Revenue role={role} /> : null}
         </div>
       </div>
     </Frame>

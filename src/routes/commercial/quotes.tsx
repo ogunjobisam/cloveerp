@@ -272,144 +272,258 @@ function Quotes() {
           onOpen={(id) => setSelected(id)}
         />
       ) : (
-        <Section
-          title={ui("Quotes")}
-          description={`${ui("Threshold")}: ${q.data.threshold_pct ?? "—"}%`}
-          action={
-            mayQuote ? (
-              <ActionDialog
-                trigger={<span className={button(true)}>{ui("Open a quote")}</span>}
-                title={ui("Open a quote")}
-                permission="sales.order"
-                fn="erp_open_commercial_quote"
-                fields={[
-                  {
-                    kind: "text",
-                    name: "p_party_code",
-                    label: ui("Business partner code"),
-                    required: true,
-                  },
-                  {
-                    kind: "text",
-                    name: "p_party_name",
-                    label: ui("Business partner name"),
-                    required: true,
-                  },
-                  {
-                    kind: "choice",
-                    name: "p_price_book_code",
-                    label: ui("Price book"),
-                    required: true,
-                    choices: q.data.price_books.map((c) => ({ value: c, label: c })),
-                  },
-                  {
-                    kind: "choice",
-                    name: "p_term_kind",
-                    label: ui("Term"),
-                    required: true,
-                    choices: TERMS,
-                  },
-                  { kind: "number", name: "p_term_months", label: ui("Term months") },
-                  {
-                    kind: "text",
-                    name: "p_currency",
-                    label: "Currency",
-                    required: true,
-                    hint: "GBP, EUR…",
-                  },
-                  { kind: "number", name: "p_valid_days", label: ui("Valid for days") },
-                  {
-                    kind: "text",
-                    name: "p_customer_tenant_code",
-                    label: ui("Customer organisation code"),
-                  },
-                  { kind: "text", name: "p_notes", label: "Notes" },
+        <>
+          <Section
+            title={ui("Quotes")}
+            description={`${ui("Threshold")}: ${q.data.threshold_pct ?? "—"}%`}
+            action={
+              mayQuote ? (
+                <ActionDialog
+                  trigger={<span className={button(true)}>{ui("Open a quote")}</span>}
+                  title={ui("Open a quote")}
+                  permission="sales.order"
+                  fn="erp_open_commercial_quote"
+                  fields={[
+                    {
+                      kind: "text",
+                      name: "p_party_code",
+                      label: ui("Business partner code"),
+                      required: true,
+                    },
+                    {
+                      kind: "text",
+                      name: "p_party_name",
+                      label: ui("Business partner name"),
+                      required: true,
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_price_book_code",
+                      label: ui("Price book"),
+                      required: true,
+                      choices: q.data.price_books.map((c) => ({ value: c, label: c })),
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_term_kind",
+                      label: ui("Term"),
+                      required: true,
+                      choices: TERMS,
+                    },
+                    { kind: "number", name: "p_term_months", label: ui("Term months") },
+                    {
+                      kind: "text",
+                      name: "p_currency",
+                      label: "Currency",
+                      required: true,
+                      hint: "GBP, EUR…",
+                    },
+                    { kind: "number", name: "p_valid_days", label: ui("Valid for days") },
+                    {
+                      kind: "text",
+                      name: "p_customer_tenant_code",
+                      label: ui("Customer organisation code"),
+                    },
+                    { kind: "text", name: "p_notes", label: "Notes" },
+                  ]}
+                  mapArgs={(v) => ({
+                    p_party_code: v["p_party_code"],
+                    p_party_name: v["p_party_name"],
+                    p_price_book_code: v["p_price_book_code"],
+                    p_term_kind: v["p_term_kind"] || "annual",
+                    p_term_months: v["p_term_months"] ? Number(v["p_term_months"]) : 12,
+                    p_currency: (v["p_currency"] || "GBP").toUpperCase(),
+                    p_valid_days: v["p_valid_days"] ? Number(v["p_valid_days"]) : 30,
+                    p_customer_tenant_code: v["p_customer_tenant_code"] || null,
+                    p_notes: v["p_notes"] || null,
+                  })}
+                  invalidates={["erp_commercial_quotes"]}
+                  submitLabel={ui("Open a quote")}
+                  onDone={(result) => {
+                    if (typeof result === "string") setSelected(result);
+                  }}
+                />
+              ) : null
+            }
+          >
+            {q.data.quotes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{ui("No quote has been raised.")}</p>
+            ) : (
+              <Table
+                columns={[
+                  "Number",
+                  ui("Version"),
+                  "Business partner",
+                  ui("Price book"),
+                  ui("Term"),
+                  ui("Totals"),
+                  ui("Margin"),
+                  ui("Valid until"),
+                  "State",
                 ]}
-                mapArgs={(v) => ({
-                  p_party_code: v["p_party_code"],
-                  p_party_name: v["p_party_name"],
-                  p_price_book_code: v["p_price_book_code"],
-                  p_term_kind: v["p_term_kind"] || "annual",
-                  p_term_months: v["p_term_months"] ? Number(v["p_term_months"]) : 12,
-                  p_currency: (v["p_currency"] || "GBP").toUpperCase(),
-                  p_valid_days: v["p_valid_days"] ? Number(v["p_valid_days"]) : 30,
-                  p_customer_tenant_code: v["p_customer_tenant_code"] || null,
-                  p_notes: v["p_notes"] || null,
-                })}
-                invalidates={["erp_commercial_quotes"]}
-                submitLabel={ui("Open a quote")}
-                onDone={(result) => {
-                  if (typeof result === "string") setSelected(result);
-                }}
-              />
-            ) : null
-          }
-        >
-          {q.data.quotes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{ui("No quote has been raised.")}</p>
-          ) : (
-            <Table
-              columns={[
-                "Number",
-                ui("Version"),
-                "Business partner",
-                ui("Price book"),
-                ui("Term"),
-                ui("Totals"),
-                ui("Margin"),
-                ui("Valid until"),
-                "State",
-              ]}
-            >
-              {q.data.quotes.map((row) => (
-                <tr
-                  key={row.document_id}
-                  className="border-b border-border/50 align-top last:border-0"
-                >
-                  <td className="py-2 pr-4">
-                    <button
-                      type="button"
-                      className="font-mono text-xs underline underline-offset-2"
-                      onClick={() => setSelected(row.document_id)}
-                    >
-                      {row.document_number}
-                    </button>
-                  </td>
-                  <td className="py-2 pr-4 text-sm tabular-nums">{row.version}</td>
-                  <td className="py-2 pr-4 text-sm">
-                    {row.party_name ?? row.party_code ?? "—"}
-                    {row.customer_tenant_code ? (
-                      <div className="font-mono text-xs text-muted-foreground">
-                        {row.customer_tenant_code}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="py-2 pr-4 font-mono text-xs">{row.price_book}</td>
-                  <td className="py-2 pr-4 text-xs">
-                    {TERMS.find((t) => t.value === row.term_kind)?.label ?? row.term_kind} ·{" "}
-                    {row.term_months}
-                  </td>
-                  <td className="py-2 pr-4 text-sm tabular-nums">
-                    {money(row.total_minor, row.currency)}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <Pill tone={marginTone(row.margin_pct)}>
-                      {row.margin_pct == null ? "—" : `${row.margin_pct}%`}
-                    </Pill>
-                  </td>
-                  <td className="py-2 pr-4 text-xs text-muted-foreground">
-                    {day(row.valid_until)}
-                  </td>
-                  <td className="py-2">
-                    <Pill tone={stateTone(row.state)}>{row.state}</Pill>
-                  </td>
-                </tr>
-              ))}
-            </Table>
-          )}
-        </Section>
+              >
+                {q.data.quotes.map((row) => (
+                  <tr
+                    key={row.document_id}
+                    className="border-b border-border/50 align-top last:border-0"
+                  >
+                    <td className="py-2 pr-4">
+                      <button
+                        type="button"
+                        className="font-mono text-xs underline underline-offset-2"
+                        onClick={() => setSelected(row.document_id)}
+                      >
+                        {row.document_number}
+                      </button>
+                    </td>
+                    <td className="py-2 pr-4 text-sm tabular-nums">{row.version}</td>
+                    <td className="py-2 pr-4 text-sm">
+                      {row.party_name ?? row.party_code ?? "—"}
+                      {row.customer_tenant_code ? (
+                        <div className="font-mono text-xs text-muted-foreground">
+                          {row.customer_tenant_code}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="py-2 pr-4 font-mono text-xs">{row.price_book}</td>
+                    <td className="py-2 pr-4 text-xs">
+                      {TERMS.find((t) => t.value === row.term_kind)?.label ?? row.term_kind} ·{" "}
+                      {row.term_months}
+                    </td>
+                    <td className="py-2 pr-4 text-sm tabular-nums">
+                      {money(row.total_minor, row.currency)}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <Pill tone={marginTone(row.margin_pct)}>
+                        {row.margin_pct == null ? "—" : `${row.margin_pct}%`}
+                      </Pill>
+                    </td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground">
+                      {day(row.valid_until)}
+                    </td>
+                    <td className="py-2">
+                      <Pill tone={stateTone(row.state)}>{row.state}</Pill>
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+          </Section>
+          <Renewals mayQuote={mayQuote} onOpen={(id) => setSelected(id)} />
+        </>
       )}
     </div>
+  );
+}
+
+type RenewalRow = {
+  id: string;
+  tenant_code: string;
+  customer_legal_name: string;
+  term_start: string;
+  term_end: string;
+  uplift_pct: number;
+  previous_annual_value_minor: number;
+  proposed_annual_value_minor: number;
+  currency: string;
+  notice_deadline: string | null;
+  status: string;
+  quote_document_id: string | null;
+};
+
+/**
+ * §17.10: renewals proposed by the sweep at each contract's lead time. Raising
+ * the quote here copies the contract's lines with the uplift applied into the
+ * same builder, so the renewal quote has margin, approval and an order form
+ * like any other.
+ */
+function Renewals({ mayQuote, onOpen }: { mayQuote: boolean; onOpen: (id: string) => void }) {
+  const { ui } = useT();
+  const q = useQuery({
+    queryKey: ["erp_commercial_renewals"],
+    queryFn: () => callErp<RenewalRow[]>("erp_commercial_renewals"),
+    refetchInterval: 60_000,
+  });
+  const raise = useErpAction({
+    fn: "erp_open_renewal_quote",
+    invalidates: ["erp_commercial_renewals", "erp_commercial_quotes"],
+    onDone: (result) => {
+      if (typeof result === "string") onOpen(result);
+    },
+  });
+
+  return (
+    <Section
+      title={ui("Renewals")}
+      description={ui(
+        "Generated at the notice lead time from the contract with its uplift rule applied. Raise the quote here; it goes through the same builder, approval and order form as any other.",
+      )}
+    >
+      {raise.error ? <ErrorNote error={raise.error} /> : null}
+      {q.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : q.error ? (
+        <p className="text-xs text-muted-foreground">{friendlyError(q.error).title}</p>
+      ) : !q.data || q.data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{ui("No renewal is proposed.")}</p>
+      ) : (
+        <Table
+          columns={[
+            "Business partner",
+            ui("Term"),
+            ui("Previous value"),
+            ui("Proposed value"),
+            ui("Uplift"),
+            ui("Notice deadline"),
+            "State",
+            "",
+          ]}
+        >
+          {q.data.map((r) => (
+            <tr key={r.id} className="border-b border-border/50 align-top last:border-0">
+              <td className="py-2 pr-4 text-sm">
+                {r.customer_legal_name}
+                <div className="font-mono text-xs text-muted-foreground">{r.tenant_code}</div>
+              </td>
+              <td className="py-2 pr-4 text-xs">
+                {day(r.term_start)} → {day(r.term_end)}
+              </td>
+              <td className="py-2 pr-4 text-sm tabular-nums">
+                {money(r.previous_annual_value_minor, r.currency)}
+              </td>
+              <td className="py-2 pr-4 text-sm tabular-nums">
+                {money(r.proposed_annual_value_minor, r.currency)}
+              </td>
+              <td className="py-2 pr-4 text-sm tabular-nums">{r.uplift_pct}%</td>
+              <td className="py-2 pr-4 text-xs text-muted-foreground">{day(r.notice_deadline)}</td>
+              <td className="py-2 pr-4">
+                <Pill tone={r.status === "quoted" ? "ok" : "warn"}>{r.status}</Pill>
+              </td>
+              <td className="py-2">
+                {r.status === "quoted" && r.quote_document_id ? (
+                  <button
+                    type="button"
+                    className={button()}
+                    onClick={() => onOpen(r.quote_document_id as string)}
+                  >
+                    {ui("Open")}
+                  </button>
+                ) : mayQuote && r.status === "proposed" ? (
+                  <button
+                    type="button"
+                    className={button(true)}
+                    disabled={raise.isPending}
+                    onClick={() => raise.mutate({ p_renewal_id: r.id })}
+                  >
+                    {ui("Raise the renewal quote")}
+                  </button>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </Section>
   );
 }
 

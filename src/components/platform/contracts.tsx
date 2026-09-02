@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSignature } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
@@ -1005,6 +1005,8 @@ function ContractDetail({
         </Card>
       ) : null}
 
+      <Invoices contractId={id} mayWrite={mayWrite} status={c.status} />
+
       <Card
         title="Amendments"
         description="Every change is an addendum with its own signature; it provisions from its effective date."
@@ -1123,5 +1125,252 @@ function ContractDetail({
         ) : null}
       </Card>
     </div>
+  );
+}
+
+type InvoiceLine =
+  | { kind: "subscription"; net_minor: number; description: string }
+  | {
+      kind: "overage";
+      entitlement_code: string;
+      unit: string;
+      month: string;
+      used: number;
+      limit_value: number | null;
+      over: number;
+      unit_minor: number | null;
+      band: string | null;
+      net_minor: number;
+      unpriced: boolean;
+    };
+
+type Invoice = {
+  id: string;
+  reference: string;
+  period_start: string;
+  period_end: string;
+  due_on: string;
+  currency: string;
+  subscription_minor: number;
+  overage_minor: number;
+  total_minor: number;
+  status: string;
+  issued_at: string | null;
+  paid_at: string | null;
+  payment_reference: string | null;
+  lines: InvoiceLine[];
+};
+
+/**
+ * §17.10: the invoice schedule generated from the term and the billing
+ * frequency, each invoice reconciled against the metering when it is issued.
+ * A scheduled invoice shows the overage it would carry today from the same
+ * meters the customer sees, so nothing on the issued invoice is a surprise.
+ */
+function Invoices({
+  contractId,
+  mayWrite,
+  status,
+}: {
+  contractId: string;
+  mayWrite: boolean;
+  status: string;
+}) {
+  const queryClient = useQueryClient();
+  const q = useQuery({
+    queryKey: ["erp_platform_invoices", { p_contract_id: contractId }],
+    queryFn: () => callErp<Invoice[]>("erp_platform_invoices", { p_contract_id: contractId }),
+  });
+  const invalidate = () => {
+    for (const k of ["erp_platform_invoices", "erp_platform_revenue"]) {
+      void queryClient.invalidateQueries({ queryKey: [k] });
+    }
+  };
+  const generate = useMutation({
+    mutationFn: () =>
+      callErp<number>("erp_platform_generate_invoices", { p_contract_id: contractId }),
+    onSuccess: invalidate,
+  });
+  const issue = useMutation({
+    mutationFn: (id: string) => callErp("erp_platform_issue_invoice", { p_invoice_id: id }),
+    onSuccess: invalidate,
+  });
+  const paid = useMutation({
+    mutationFn: (args: { id: string; reference: string }) =>
+      callErp("erp_platform_record_invoice_paid", {
+        p_invoice_id: args.id,
+        p_payment_reference: args.reference,
+      }),
+    onSuccess: invalidate,
+  });
+  const [payRef, setPayRef] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState<string | null>(null);
+  const inForce = status === "active" || status === "terminating";
+
+  return (
+    <Card
+      title="Invoices"
+      description="Generated from the term and the billing frequency. Issuing reconciles the period against the metering and prices any overage from the book; a scheduled invoice shows the overage it would carry today."
+      action={
+        mayWrite && inForce ? (
+          <button
+            type="button"
+            className={SECONDARY}
+            disabled={generate.isPending}
+            onClick={() => generate.mutate()}
+          >
+            {generate.isPending ? "Generating…" : "Generate the schedule"}
+          </button>
+        ) : null
+      }
+    >
+      {generate.error ? <Fail error={generate.error} /> : null}
+      {generate.isSuccess ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {generate.data} invoice(s) added to the schedule.
+        </p>
+      ) : null}
+      {issue.error ? <Fail error={issue.error} /> : null}
+      {paid.error ? <Fail error={paid.error} /> : null}
+      {q.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : q.error ? (
+        <Fail error={q.error} />
+      ) : !q.data || q.data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing is scheduled. A contract in force with no schedule is a finding on the customer
+          view check.
+        </p>
+      ) : (
+        <Table
+          columns={["Reference", "Period", "Due", "Subscription", "Overage", "Total", "State", ""]}
+        >
+          {q.data.map((i) => (
+            <Fragment key={i.id}>
+              <tr className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-4">
+                  <button
+                    type="button"
+                    className="font-mono text-xs underline underline-offset-2"
+                    onClick={() => setOpen(open === i.id ? null : i.id)}
+                  >
+                    {i.reference}
+                  </button>
+                </td>
+                <td className="py-2 pr-4 text-xs">
+                  {day(i.period_start)} → {day(i.period_end)}
+                </td>
+                <td className="py-2 pr-4 text-xs">{day(i.due_on)}</td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {money(i.subscription_minor, i.currency)}
+                </td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {i.status === "scheduled"
+                    ? money(
+                        i.lines
+                          .filter((l) => l.kind === "overage")
+                          .reduce((a, l) => a + l.net_minor, 0),
+                        i.currency,
+                      )
+                    : money(i.overage_minor, i.currency)}
+                  {i.lines.some((l) => l.kind === "overage" && l.unpriced) ? (
+                    <Pill tone="bad">unpriced</Pill>
+                  ) : null}
+                </td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {money(i.total_minor, i.currency)}
+                </td>
+                <td className="py-2 pr-4">
+                  <Pill
+                    tone={i.status === "paid" ? "ok" : i.status === "issued" ? "warn" : "muted"}
+                  >
+                    {i.status}
+                  </Pill>
+                </td>
+                <td className="py-2">
+                  {mayWrite && i.status === "scheduled" ? (
+                    <button
+                      type="button"
+                      className={SECONDARY}
+                      disabled={issue.isPending}
+                      onClick={() => issue.mutate(i.id)}
+                    >
+                      Issue
+                    </button>
+                  ) : mayWrite && i.status === "issued" ? (
+                    <form
+                      className="flex gap-1"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const reference = payRef[i.id] ?? "";
+                        if (reference) paid.mutate({ id: i.id, reference });
+                      }}
+                    >
+                      <input
+                        className={`${INPUT} w-32`}
+                        aria-label="Payment reference"
+                        placeholder="Payment reference"
+                        value={payRef[i.id] ?? ""}
+                        onChange={(e) => setPayRef((prev) => ({ ...prev, [i.id]: e.target.value }))}
+                      />
+                      <button type="submit" className={SECONDARY} disabled={paid.isPending}>
+                        Paid
+                      </button>
+                    </form>
+                  ) : i.payment_reference ? (
+                    <span className="text-xs text-muted-foreground">{i.payment_reference}</span>
+                  ) : null}
+                </td>
+              </tr>
+              {open === i.id ? (
+                <tr className="border-b border-border/50 last:border-0">
+                  <td colSpan={8} className="pb-3">
+                    <InvoiceLines lines={i.lines} currency={i.currency} />
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          ))}
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+export function InvoiceLines({ lines, currency }: { lines: InvoiceLine[]; currency: string }) {
+  if (lines.length === 0) {
+    return <p className="text-xs text-muted-foreground">No line.</p>;
+  }
+  return (
+    <Table columns={["Line", "Used", "Limit", "Over", "Unit", "Band", "Net"]}>
+      {lines.map((l, n) => (
+        <tr key={n} className="border-b border-border/50 last:border-0">
+          {l.kind === "subscription" ? (
+            <>
+              <td className="py-1.5 pr-4 text-xs" colSpan={6}>
+                {l.description}
+              </td>
+              <td className="py-1.5 text-sm tabular-nums">{money(l.net_minor, currency)}</td>
+            </>
+          ) : (
+            <>
+              <td className="py-1.5 pr-4 text-xs">
+                {l.entitlement_code.replace(/_/g, " ")} · {day(l.month)}
+              </td>
+              <td className="py-1.5 pr-4 text-xs tabular-nums">{l.used.toLocaleString()}</td>
+              <td className="py-1.5 pr-4 text-xs tabular-nums">
+                {l.limit_value == null ? "—" : l.limit_value.toLocaleString()}
+              </td>
+              <td className="py-1.5 pr-4 text-xs tabular-nums">{l.over.toLocaleString()}</td>
+              <td className="py-1.5 pr-4 text-xs tabular-nums">
+                {l.unit_minor == null ? <Pill tone="bad">unpriced</Pill> : `${l.unit_minor}p`}
+              </td>
+              <td className="py-1.5 pr-4 font-mono text-xs">{l.band ?? "—"}</td>
+              <td className="py-1.5 text-sm tabular-nums">{money(l.net_minor, currency)}</td>
+            </>
+          )}
+        </tr>
+      ))}
+    </Table>
   );
 }
