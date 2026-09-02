@@ -40,3 +40,13 @@
 20260830132420_c74d2cbe-f212-4e2b-88a6-688eb02c241d.sql
 20260830132704_58b3eed8-7b0e-4209-9277-6c5518179df5.sql
 20260830134027_1c560857-6c5a-4344-b941-40066fdef595.sql
+
+# 2 September, written from the dashboard as 20260902121003 and applied on the
+# live project, so written once. It alters doors that 20260904550000 and earlier
+# create, so at its dashboard timestamp a build from empty fails on the first
+# ALTER; it is renamed to sort after them, content untouched. It re-created four
+# platform doors as SECURITY DEFINER and made twelve reads VOLATILE without
+# asserting. 20260904585000_register_the_dashboard_doors.sql registers every one
+# of them and runs the assertion, and sorts before the next migration that
+# asserts, so a build from empty is governed at that point.
+20260904584000_4240c356-c3ae-4eda-91c5-def7ea0b8efa.sql

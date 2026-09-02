@@ -38,9 +38,13 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     q: "Where do I start?",
     a: (
       <>
-        Open <Link to="/" className="underline">Home</Link>. Your first steps are listed there in
-        the order to take them, and the ? button on any screen explains that screen. To explore
-        without touching anything real, seed a demo organisation from Home and practise there.
+        Open{" "}
+        <Link to="/" className="underline">
+          Home
+        </Link>
+        . Your first steps are listed there in the order to take them, and the ? button on any
+        screen explains that screen. To explore without touching anything real, seed a demo
+        organisation from Home and practise there.
       </>
     ),
   },
@@ -52,8 +56,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         <Link to="/administration/permissions" className="underline">
           People and permissions
         </Link>
-        . The invitation is a single-use token shown once — send it to them straight away; it
-        cannot be recovered later.
+        . The invitation is a single-use token shown once — send it to them straight away; it cannot
+        be recovered later.
       </>
     ),
   },
@@ -76,7 +80,10 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         Yes. Training scenarios run in a demo organisation where nothing is real: seed one from{" "}
-        <Link to="/" className="underline">Home</Link>, then open{" "}
+        <Link to="/" className="underline">
+          Home
+        </Link>
+        , then open{" "}
         <Link to="/administration/adoption" className="underline">
           Guidance and adoption
         </Link>{" "}
@@ -101,8 +108,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     q: "How do I change what the product calls things?",
     a: (
       <>
-        Renaming is a glossary change, not a code change. An administrator overrides the words
-        under{" "}
+        Renaming is a glossary change, not a code change. An administrator overrides the words under{" "}
         <Link to="/administration/terminology" className="underline">
           Terminology and branding
         </Link>
