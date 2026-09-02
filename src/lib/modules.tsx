@@ -1982,6 +1982,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "administer",
   },
   {
+    path: "/administration/adoption",
+    titleKey: "nav.administration_adoption",
+    title: "Guidance and adoption",
+    blurb:
+      "Where adoption is stalling, counted and never named; training scenarios practised in a demo organisation; the product's help for every screen.",
+    permission: "administration.read",
+    group: "administer",
+  },
+  {
     path: "/administration/accessibility",
     titleKey: "nav.administration_accessibility",
     title: "Accessibility",

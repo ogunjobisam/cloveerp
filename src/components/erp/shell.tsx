@@ -11,6 +11,7 @@ import { useT } from "../../lib/i18n";
 import { GROUP_LABELS, GROUP_ORDER, allTiles } from "../../lib/modules";
 import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
+import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
 import { UserMenu } from "./user-menu";
@@ -289,8 +290,13 @@ export function Shell({
 
           <ScopeChip session={session} scope={scope} onClick={() => setDrawerOpen(true)} />
 
+          {/* Help for the screen you are on, at every width: the one control
+              that stays out of the drawer, because the question "what is this
+              screen for" is asked most on the phone. */}
+          <ContextHelp />
+
           {/* Everything here is in the drawer below md. */}
-          <div className="ml-auto hidden items-end gap-3 md:flex">
+          <div className="hidden items-end gap-3 md:flex">
             <ScopeSelect
               label="Company"
               value={scope.entityId}

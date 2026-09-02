@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as AdministrationAccessibilityRouteImport } from './routes/administration/accessibility'
+import { Route as AdministrationAdoptionRouteImport } from './routes/administration/adoption'
 import { Route as AdministrationAuditRouteImport } from './routes/administration/audit'
 import { Route as AdministrationCommercialRouteImport } from './routes/administration/commercial'
 import { Route as AdministrationConfigurationRouteImport } from './routes/administration/configuration'
@@ -70,6 +71,11 @@ const AdministrationAccessibilityRoute =
     path: '/administration/accessibility',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdministrationAdoptionRoute = AdministrationAdoptionRouteImport.update({
+  id: '/administration/adoption',
+  path: '/administration/adoption',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministrationAuditRoute = AdministrationAuditRouteImport.update({
   id: '/administration/audit',
   path: '/administration/audit',
@@ -260,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
+  '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
@@ -301,6 +308,7 @@ export interface FileRoutesByTo {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
+  '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
@@ -343,6 +351,7 @@ export interface FileRoutesById {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
+  '/administration/adoption': typeof AdministrationAdoptionRoute
   '/administration/audit': typeof AdministrationAuditRoute
   '/administration/commercial': typeof AdministrationCommercialRoute
   '/administration/configuration': typeof AdministrationConfigurationRoute
@@ -386,6 +395,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/administration/accessibility'
+    | '/administration/adoption'
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
@@ -427,6 +437,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/administration/accessibility'
+    | '/administration/adoption'
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
@@ -468,6 +479,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/administration/accessibility'
+    | '/administration/adoption'
     | '/administration/audit'
     | '/administration/commercial'
     | '/administration/configuration'
@@ -510,6 +522,7 @@ export interface RootRouteChildren {
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   AdministrationAccessibilityRoute: typeof AdministrationAccessibilityRoute
+  AdministrationAdoptionRoute: typeof AdministrationAdoptionRoute
   AdministrationAuditRoute: typeof AdministrationAuditRoute
   AdministrationCommercialRoute: typeof AdministrationCommercialRoute
   AdministrationConfigurationRoute: typeof AdministrationConfigurationRoute
@@ -575,6 +588,13 @@ declare module '@tanstack/react-router' {
       path: '/administration/accessibility'
       fullPath: '/administration/accessibility'
       preLoaderRoute: typeof AdministrationAccessibilityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administration/adoption': {
+      id: '/administration/adoption'
+      path: '/administration/adoption'
+      fullPath: '/administration/adoption'
+      preLoaderRoute: typeof AdministrationAdoptionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administration/audit': {
@@ -830,6 +850,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   AdministrationAccessibilityRoute: AdministrationAccessibilityRoute,
+  AdministrationAdoptionRoute: AdministrationAdoptionRoute,
   AdministrationAuditRoute: AdministrationAuditRoute,
   AdministrationCommercialRoute: AdministrationCommercialRoute,
   AdministrationConfigurationRoute: AdministrationConfigurationRoute,
