@@ -52,12 +52,19 @@ export function DocumentPanel({
   baseType,
   /** Which party role the picker should offer — customers for sales, suppliers for buying. */
   partyRole,
+  /**
+   * Which configured type to show when a base carries more than one. A sales
+   * invoice and a purchase invoice share the invoice_reference base, so the
+   * base alone would put the supplier's bills on the sales screen.
+   */
+  typeCode,
   empty,
 }: {
   title: string;
   description: string;
   baseType: string;
   partyRole: string;
+  typeCode?: string;
   empty: string;
 }) {
   const { session, scope } = useErpSession();
@@ -76,7 +83,7 @@ export function DocumentPanel({
   // A tenant may configure more than one type onto a base; the first active one
   // is the sensible default and the others are reachable once there is a reason
   // to choose between them.
-  const type = types?.[0];
+  const type = typeCode ? types?.find((x) => x.code === typeCode) : types?.[0];
 
   const { data, isPending, error } = useQuery({
     queryKey: ["erp_documents", { p_type_code: type?.code ?? "" }],
@@ -160,7 +167,8 @@ export function DocumentPanel({
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !type ? (
           <p className="text-sm text-muted-foreground">
-            No <code className="font-mono text-xs">{baseType}</code> type is configured for this
+            No <code className="font-mono text-xs">{typeCode ?? baseType}</code> type is configured
+            for this
             tenant. Installing the module that owns it on{" "}
             <Link to="/administration/configuration" className="underline underline-offset-2">
               Configuration

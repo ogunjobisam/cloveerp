@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Column } from "../components/erp/auto";
-import { StatusPill, shortDate } from "../components/erp/auto";
+import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
 import {
   pickBatch,
@@ -667,14 +667,27 @@ export const FINANCE: ModuleDef = {
       fn: "erp_apply_cash",
       fields: [
         pickParty("customer"),
+        // Money is entered the way it is written on the remittance advice.
+        // Asking for pence was an invitation to apply a hundredth of the
+        // receipt and wonder why the invoice stayed open.
         {
-          kind: "number",
+          kind: "money",
           name: "p_amount_minor",
           label: "Amount",
+          currency: "GBP",
           required: true,
-          hint: "In minor units — pence, cents.",
         },
-        { kind: "text", name: "p_currency", label: "Currency", required: true },
+        {
+          kind: "choice",
+          name: "p_currency",
+          label: "Currency",
+          required: true,
+          choices: [
+            { value: "GBP", label: "GBP — pound sterling" },
+            { value: "EUR", label: "EUR — euro" },
+            { value: "USD", label: "USD — US dollar" },
+          ],
+        },
         { kind: "text", name: "p_reference", label: "Reference" },
       ],
       invalidates: ["erp_receivables_ageing", "erp_dunning_worklist", "erp_trial_balance"],
@@ -690,7 +703,9 @@ export const FINANCE: ModuleDef = {
           ["document_number", "status"],
           "p_delivery_id",
           "Delivery",
-          { p_type_code: null, p_limit: 100 },
+          // Only deliveries can be invoiced; offering every document invites
+          // the failure rather than preventing it.
+          { p_type_code: "delivery", p_limit: 100 },
         ),
         {
           kind: "choice",
@@ -783,13 +798,13 @@ export const FINANCE: ModuleDef = {
       fn: "erp_grni",
       empty:
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
-      rowKey: (r, i) => `${String(r["document_number"] ?? i)}-${i}`,
+      rowKey: (r, i) => `${String(r["order_line_id"] ?? i)}-${i}`,
       columns: [
-        { header: "Receipt", cell: "document_number" },
-        { header: "Supplier", cell: "party" },
+        { header: "Order", cell: "order_number" },
+        { header: "Supplier", cell: "party_name" },
         { header: "Product", cell: "item_code" },
-        { header: "Quantity", cell: "quantity_open", numeric: true },
-        { header: "Value", cell: "value_minor", numeric: true },
+        { header: "Quantity", cell: "open_quantity", numeric: true },
+        { header: "Value", cell: moneyCell("open_value_minor"), numeric: true },
         { header: "Age (days)", cell: "age_days", numeric: true },
       ],
     },
