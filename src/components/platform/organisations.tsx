@@ -371,7 +371,8 @@ export function Companies({ role }: { role: PlatformRole }) {
                   ) : null}
                 </td>
                 <td className="py-3 pr-4 text-xs text-muted-foreground">
-                  {t.entities} entities · {t.sites} sites
+                  {t.entities} {t.entities === 1 ? "company" : "companies"} · {t.sites}{" "}
+                  {t.sites === 1 ? "site" : "sites"}
                 </td>
                 <td className="py-3 pr-0">
                   <div className="flex flex-wrap gap-2">

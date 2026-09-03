@@ -241,7 +241,7 @@ function SelectField({
           data does not exist yet, not that the screen is broken. */}
       {!isPending && !error && (data ?? []).length === 0 ? (
         <span className="text-xs text-muted-foreground">
-          Nothing to choose from yet — this list is empty for this tenant.
+          Nothing to choose from yet — this list is empty for this organisation.
         </span>
       ) : null}
       {error ? (

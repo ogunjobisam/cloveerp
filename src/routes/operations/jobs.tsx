@@ -193,7 +193,7 @@ function Jobs() {
         title="All jobs"
         description="State, next run, and the last 24 hours."
         fn="erp_job_health"
-        empty="No jobs are configured for this tenant yet."
+        empty="No jobs are configured for this organisation yet."
         emptyAction={<SeedDemoAction />}
       >
         {(rows) => (

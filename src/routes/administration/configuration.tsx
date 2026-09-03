@@ -259,17 +259,17 @@ function BootstrapNotice({ sets }: { sets: ChangeSet[] }) {
     <section className="min-w-0 rounded-xl border border-dashed border-border bg-card/50 p-4 sm:p-5">
       <h2 className="text-sm font-semibold">Before and after go-live</h2>
       <Prose className="mt-1 text-xs text-muted-foreground">
-        While a tenant is still being built, an installer approves and promotes its own change set —
-        there is nobody else to ask, and requiring a second person would make a new tenant
-        impossible to configure. Once you go live, separation of duties applies: the author of a
-        change set may not approve it, so a second administrator is required.
+        While an organisation is still being built, an installer approves and promotes its own
+        change set — there is nobody else to ask, and requiring a second person would make a new
+        organisation impossible to configure. Once you go live, separation of duties applies: the
+        author of a change set may not approve it, so a second administrator is required.
       </Prose>
       {waiting.length > 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
             {waiting.length} change {waiting.length === 1 ? "set is" : "sets are"} waiting
           </span>{" "}
-          — this tenant is live, so those need a second administrator.
+          — this organisation is live, so those need a second administrator.
         </p>
       ) : null}
     </section>
@@ -282,8 +282,10 @@ function ModulesPanel({ onDone }: { onDone: () => void }) {
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Modules ({MODULES.length})</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
-          Installing the same module twice authors a second change set rather than duplicating
-          configuration. Finance first: everything that posts needs a ledger to post to.
+          A module is installed once. Its change set is named after it, so asking again is refused
+          rather than quietly configuring the same thing twice — open Change requests to see what
+          the first install proposed. Finance first: everything that posts needs a ledger to post
+          to.
         </Prose>
       </header>
       <div className="grid grid-cols-1 gap-3 px-4 py-4 sm:px-5 md:grid-cols-2 xl:grid-cols-3">

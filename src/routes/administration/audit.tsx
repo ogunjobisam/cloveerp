@@ -109,7 +109,7 @@ function AuditLog() {
         <PageHeader title={t("audit.title", "Audit log")}>
           {t(
             "audit.blurb",
-            "Every recorded action in this tenant: who did what, to which object, and when.",
+            "Every recorded action in this organisation: who did what, to which object, and when.",
           )}
         </PageHeader>
         <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
@@ -129,7 +129,7 @@ function AuditLog() {
       <PageHeader title={t("audit.title", "Audit log")}>
         {t(
           "audit.blurb",
-          "Every recorded action in this tenant: who did what, to which object, and when.",
+          "Every recorded action in this organisation: who did what, to which object, and when.",
         )}
       </PageHeader>
 

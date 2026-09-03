@@ -18,7 +18,7 @@ export const Route = createFileRoute("/administration/terminology")({
       {
         name: "description",
         content:
-          "Every user-facing label is a resource key. Override the wording for this tenant without changing the software.",
+          "Every user-facing label is a resource key. Override the wording for this organisation without changing the software.",
       },
       { property: "og:title", content: "Terminology — Clove ERP" },
       {
@@ -112,7 +112,7 @@ function Terminology() {
                     <ActionDialog
                       trigger={<ActionButton variant="secondary">Reword</ActionButton>}
                       title={`Reword ${r.key}`}
-                      description="This wording applies to this tenant only, in this locale."
+                      description="This wording applies to this organisation only, in this locale."
                       permission="administration.configure"
                       fn="erp_set_resource_override"
                       fields={[

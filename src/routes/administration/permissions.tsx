@@ -122,7 +122,7 @@ function Permissions() {
       </PageHeader>
 
       <ActionBar
-        note="Bringing a principal into this tenant. An invitation returns a single-use token to hand over."
+        note="Bringing somebody into this organisation. An invitation returns a single-use token to hand over."
         actions={[
           {
             label: "Invite a person",
@@ -329,7 +329,7 @@ function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () =
       </header>
       <div className="px-5 py-4">
         {directory.grants.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No grants exist in this tenant yet.</p>
+          <p className="text-sm text-muted-foreground">No grants exist in this organisation yet.</p>
         ) : (
           <Table columns={["Principal", "Role", "Validity", "Reason", "State", ""]}>
             {directory.grants.map((g) => (
@@ -413,7 +413,7 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
         ) : null}
 
         {directory.roles.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No roles exist in this tenant yet.</p>
+          <p className="text-sm text-muted-foreground">No roles exist in this organisation yet.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {directory.roles.map((r) => (
