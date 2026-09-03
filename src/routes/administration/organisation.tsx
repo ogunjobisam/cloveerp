@@ -56,6 +56,31 @@ type Site = {
   status: string;
 };
 
+/** The kinds of place stock can stand in. */
+const LOCATION_TYPES = [
+  { value: "receiving", label: "Goods in (receiving)" },
+  { value: "bulk", label: "Bulk storage" },
+  { value: "pick", label: "Pick face" },
+  { value: "staging", label: "Staging" },
+  { value: "despatch", label: "Despatch" },
+  { value: "quarantine", label: "Quarantine" },
+  { value: "production", label: "Production" },
+  { value: "damages", label: "Damages" },
+  { value: "scrap", label: "Scrap" },
+  { value: "transit", label: "In transit" },
+  { value: "virtual", label: "Virtual" },
+];
+
+type LocationRow = {
+  location_id: string;
+  code: string;
+  name: string | null;
+  site: string;
+  location_type: string;
+  is_pickable: boolean;
+  is_blocked: boolean;
+};
+
 /** The object types a routing rule can be written against. */
 
 const OBJECT_TYPES = [
