@@ -167,7 +167,8 @@ export function DocumentPanel({
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !type ? (
           <p className="text-sm text-muted-foreground">
-            No <code className="font-mono text-xs">{baseType}</code> type is configured for this
+            No <code className="font-mono text-xs">{typeCode ?? baseType}</code> type is configured
+            for this
             tenant. Installing the module that owns it on{" "}
             <Link to="/administration/configuration" className="underline underline-offset-2">
               Configuration
