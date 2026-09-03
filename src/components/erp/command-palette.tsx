@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 
 import { callErp, hasPermission } from "../../lib/erp";
@@ -166,87 +167,103 @@ export function CommandPalette() {
         </kbd>
       </button>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={ui("Search screens")}
-            className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 border-b border-border px-3">
-              <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <input
-                id="command-palette-query"
-                ref={inputRef}
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setCursor(0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    setCursor((c) => Math.min(c + 1, hits.length - 1));
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    setCursor((c) => Math.max(c - 1, 0));
-                  } else if (e.key === "Enter" && hits[cursor]) {
-                    e.preventDefault();
-                    go(hits[cursor]);
-                  }
-                }}
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            /*
+             * Into the body, for the same reason the main menu is.
+             *
+             * This button lives in the shell's header, and that header carries
+             * backdrop-blur. A backdrop filter makes an element a containing
+             * block for position: fixed, so inset-0 resolved to the header's
+             * own 116px strip rather than the viewport. The palette looked
+             * right — the panel overflows the header and draws over the page —
+             * but the scrim dimmed only the strip, and clicking the page below
+             * it did not close anything. A dialog whose backdrop does not cover
+             * what it is covering is the same class of fault as a screen
+             * stating a condition it is not in.
+             */
+            <div
+              className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]"
+              onClick={() => setOpen(false)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
                 aria-label={ui("Search screens")}
-                placeholder={ui("Go to a screen, or type what you call it")}
-                className="h-12 w-full bg-transparent text-sm placeholder:text-muted-foreground"
-              />
-            </div>
+                className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-2 border-b border-border px-3">
+                  <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <input
+                    id="command-palette-query"
+                    ref={inputRef}
+                    value={q}
+                    onChange={(e) => {
+                      setQ(e.target.value);
+                      setCursor(0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setCursor((c) => Math.min(c + 1, hits.length - 1));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setCursor((c) => Math.max(c - 1, 0));
+                      } else if (e.key === "Enter" && hits[cursor]) {
+                        e.preventDefault();
+                        go(hits[cursor]);
+                      }
+                    }}
+                    aria-label={ui("Search screens")}
+                    placeholder={ui("Go to a screen, or type what you call it")}
+                    className="h-12 w-full bg-transparent text-sm placeholder:text-muted-foreground"
+                  />
+                </div>
 
-            <ul className="max-h-[50vh] overflow-y-auto py-1">
-              {hits.length === 0 ? (
-                <li className="px-4 py-6 text-sm text-muted-foreground">
-                  {ui("Nothing matches that. Try the word another system would use for it.")}
-                </li>
-              ) : (
-                hits.map((hit, i) => (
-                  <li key={`${hit.kind}-${hit.path}-${hit.title}`}>
-                    <button
-                      type="button"
-                      onClick={() => go(hit)}
-                      onMouseEnter={() => setCursor(i)}
-                      className={`flex w-full flex-col items-start gap-0.5 px-4 py-2 text-left ${
-                        i === cursor ? "bg-muted" : ""
-                      }`}
-                    >
-                      <span className="flex min-w-0 items-baseline gap-2">
-                        <span className="truncate text-sm font-medium">{hit.title}</span>
-                        {hit.kind === "term" ? (
-                          // Say the rename rather than performing it silently.
-                          // One whole phrase with the alias beside it, not
-                          // "{x} is called {y} here" assembled from fragments a
-                          // translator cannot reorder.
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {ui("Also known as")} {hit.matched}
+                <ul className="max-h-[50vh] overflow-y-auto py-1">
+                  {hits.length === 0 ? (
+                    <li className="px-4 py-6 text-sm text-muted-foreground">
+                      {ui("Nothing matches that. Try the word another system would use for it.")}
+                    </li>
+                  ) : (
+                    hits.map((hit, i) => (
+                      <li key={`${hit.kind}-${hit.path}-${hit.title}`}>
+                        <button
+                          type="button"
+                          onClick={() => go(hit)}
+                          onMouseEnter={() => setCursor(i)}
+                          className={`flex w-full flex-col items-start gap-0.5 px-4 py-2 text-left ${
+                            i === cursor ? "bg-muted" : ""
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-baseline gap-2">
+                            <span className="truncate text-sm font-medium">{hit.title}</span>
+                            {hit.kind === "term" ? (
+                              // Say the rename rather than performing it silently.
+                              // One whole phrase with the alias beside it, not
+                              // "{x} is called {y} here" assembled from fragments a
+                              // translator cannot reorder.
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {ui("Also known as")} {hit.matched}
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
-                      </span>
-                      {hit.detail ? (
-                        <span className="line-clamp-1 text-xs text-muted-foreground">
-                          {hit.detail}
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        </div>
-      ) : null}
+                          {hit.detail ? (
+                            <span className="line-clamp-1 text-xs text-muted-foreground">
+                              {hit.detail}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }
