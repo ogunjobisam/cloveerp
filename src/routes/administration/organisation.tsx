@@ -34,7 +34,30 @@ export const Route = createFileRoute("/administration/organisation")({
   ),
 });
 
+/** The kinds of site the engine recognises. */
+const SITE_TYPES = [
+  { value: "warehouse", label: "Warehouse" },
+  { value: "production", label: "Production plant" },
+  { value: "distribution", label: "Distribution centre" },
+  { value: "retail", label: "Retail" },
+  { value: "office", label: "Office" },
+  { value: "third_party", label: "Third party" },
+  { value: "virtual", label: "Virtual" },
+];
+
+type Site = {
+  site_id: string;
+  code: string;
+  name: string;
+  site_type: string;
+  entity_id: string | null;
+  entity_code: string | null;
+  country_code: string | null;
+  status: string;
+};
+
 /** The object types a routing rule can be written against. */
+
 const OBJECT_TYPES = [
   { value: "requisition", label: "Requisition" },
   { value: "purchase_order", label: "Purchase order" },
@@ -456,6 +479,62 @@ function Organisation() {
           },
         ]}
       />
+
+      {/* Sites come before departments here because a newly provisioned
+          organisation has none, and a document that needs a site cannot be
+          raised until one exists. */}
+      <ActionBar
+        note="Sites — the places this organisation works from. Stock, receipts and despatches all happen at one."
+        actions={[
+          {
+            label: "Add a site",
+            permission: "administration.configure",
+            fn: "erp_create_site",
+            fields: [
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "choice",
+                name: "p_site_type",
+                label: "Kind of site",
+                required: true,
+                choices: SITE_TYPES,
+              },
+              pickFrom("erp_entities", "entity_id", ["code", "name"], "p_entity_id", "Legal entity"),
+              { kind: "text", name: "p_country_code", label: "Country code", hint: "Two letters." },
+            ],
+            invalidates: ["erp_sites", "erp_session"],
+          },
+        ]}
+      />
+
+      <DataPanel<Site>
+        title={ui("Sites")}
+        description={ui(
+          "Every stock movement and every document that touches goods names one of these. A site belongs to a legal entity, which is what decides the ledger it posts to.",
+        )}
+        fn="erp_sites"
+        empty={ui(
+          "No sites yet. Add one under Actions above — until then, purchase orders, receipts and despatches cannot be raised.",
+        )}
+      >
+        {(rows) => (
+          <Table columns={[ui("Code"), ui("Name"), ui("Kind"), ui("Entity"), ui("Status")]}>
+            {rows.map((s) => (
+              <tr key={s.site_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{s.code}</td>
+                <td className="py-2 pr-4">{s.name}</td>
+                <td className="py-2 pr-4">{s.site_type}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{s.entity_code ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  <Pill tone={s.status === "active" ? "ok" : "muted"}>{s.status}</Pill>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
 
       <DataPanel<Department>
         title={ui("Departments")}

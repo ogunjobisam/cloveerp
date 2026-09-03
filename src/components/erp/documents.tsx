@@ -93,7 +93,18 @@ export function DocumentPanel({
           <Prose className="mt-0.5 text-xs text-muted-foreground">{description}</Prose>
         </div>
 
-        {type ? (
+        {type && type.requires_site && session.sites.length === 0 ? (
+          // The database refuses a document of this type without a site, and a
+          // freshly provisioned organisation has none. Saying so beats a
+          // dialog whose only possible outcome is a constraint failure.
+          <p className="max-w-xs text-xs text-muted-foreground">
+            This type needs a site, and this organisation has none yet. Add one under{" "}
+            <Link to="/administration/organisation" className="underline underline-offset-2">
+              Organisation structure
+            </Link>
+            .
+          </p>
+        ) : type ? (
           <ActionDialog
             trigger={<ActionButton>New</ActionButton>}
             title={`New ${type.name.toLowerCase()}`}
@@ -114,15 +125,21 @@ export function DocumentPanel({
                   label: ["code", "name"],
                 },
               },
+              // Only asked when the shell's scope has not already answered it:
+              // one site, or a site chosen up there, is not a question.
+              ...(type.requires_site && !scope.siteId && session.sites.length > 1
+                ? ([{ kind: "site", name: "p_site_id", label: "Site", required: true }] as const)
+                : []),
+
               { kind: "text", name: "p_their_ref", label: "Their reference" },
               { kind: "date", name: "p_required_date", label: "Required date" },
             ]}
             mapArgs={(v) => ({
               p_type_code: type.code,
               p_party_id: v["p_party_id"] || null,
-              // The shell's scope selector already asked which site; a form
-              // that asks again is asking twice.
-              p_site_id: scope.siteId || session.sites[0]?.id || null,
+              // The shell's scope selector usually already asked which site; a
+              // form that asks again is asking twice.
+              p_site_id: v["p_site_id"] || scope.siteId || session.sites[0]?.id || null,
               p_their_ref: v["p_their_ref"] || null,
               p_required_date: v["p_required_date"] || null,
             })}
@@ -130,6 +147,7 @@ export function DocumentPanel({
             submitLabel="Create"
           />
         ) : null}
+
       </header>
 
       <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
