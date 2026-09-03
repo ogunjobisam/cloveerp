@@ -535,6 +535,64 @@ function Organisation() {
         )}
       </DataPanel>
 
+      {/* A site with nowhere to put anything cannot take a receipt: posting an
+          inbound movement looks for an active receiving location. New sites are
+          given a standard set; this is how a further one is added. */}
+      <ActionBar
+        note="Locations — the places within a site where stock actually stands."
+        actions={[
+          {
+            label: "Add a location",
+            permission: "administration.configure",
+            fn: "erp_create_location",
+            fields: [
+              pickSite(),
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name" },
+              {
+                kind: "choice",
+                name: "p_location_type",
+                label: "Kind of location",
+                required: true,
+                choices: LOCATION_TYPES,
+              },
+            ],
+            invalidates: ["erp_locations"],
+          },
+        ]}
+      />
+
+      <DataPanel<LocationRow>
+        title={ui("Locations")}
+        description={ui(
+          "A receipt posts into a receiving location and a despatch picks from storage, so a site needs at least one of each before goods can move.",
+        )}
+        fn="erp_locations"
+        empty={ui(
+          "No locations yet. Add one under Actions above — until then, goods receipts cannot be posted at this site.",
+        )}
+      >
+        {(rows) => (
+          <Table columns={[ui("Site"), ui("Code"), ui("Name"), ui("Kind"), ui("Pickable")]}>
+            {rows.map((l) => (
+              <tr key={l.location_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{l.site}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{l.code}</td>
+                <td className="py-2 pr-4">{l.name ?? "—"}</td>
+                <td className="py-2 pr-4">{l.location_type}</td>
+                <td className="py-2 pr-4">
+                  <Pill tone={l.is_blocked ? "warn" : l.is_pickable ? "ok" : "muted"}>
+                    {l.is_blocked ? ui("blocked") : l.is_pickable ? ui("yes") : ui("no")}
+                  </Pill>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+
+
 
       <DataPanel<Department>
         title={ui("Departments")}
