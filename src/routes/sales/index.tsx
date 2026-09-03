@@ -175,7 +175,8 @@ function Sales() {
       <DocumentPanel
         title="Sales invoices"
         description="What the customer owes. Posting one raises the receivable and the revenue."
-        baseType="sales_invoice"
+        baseType="invoice_reference"
+        typeCode="sales_invoice"
         partyRole="customer"
         empty="No sales invoices yet. Invoice a delivery from the Financials module, then post it here."
       />
