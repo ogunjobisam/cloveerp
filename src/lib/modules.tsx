@@ -667,14 +667,27 @@ export const FINANCE: ModuleDef = {
       fn: "erp_apply_cash",
       fields: [
         pickParty("customer"),
+        // Money is entered the way it is written on the remittance advice.
+        // Asking for pence was an invitation to apply a hundredth of the
+        // receipt and wonder why the invoice stayed open.
         {
-          kind: "number",
+          kind: "money",
           name: "p_amount_minor",
           label: "Amount",
+          currency: "GBP",
           required: true,
-          hint: "In minor units — pence, cents.",
         },
-        { kind: "text", name: "p_currency", label: "Currency", required: true },
+        {
+          kind: "choice",
+          name: "p_currency",
+          label: "Currency",
+          required: true,
+          choices: [
+            { value: "GBP", label: "GBP — pound sterling" },
+            { value: "EUR", label: "EUR — euro" },
+            { value: "USD", label: "USD — US dollar" },
+          ],
+        },
         { kind: "text", name: "p_reference", label: "Reference" },
       ],
       invalidates: ["erp_receivables_ageing", "erp_dunning_worklist", "erp_trial_balance"],
