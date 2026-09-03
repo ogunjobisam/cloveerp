@@ -52,12 +52,19 @@ export function DocumentPanel({
   baseType,
   /** Which party role the picker should offer — customers for sales, suppliers for buying. */
   partyRole,
+  /**
+   * Which configured type to show when a base carries more than one. A sales
+   * invoice and a purchase invoice share the invoice_reference base, so the
+   * base alone would put the supplier's bills on the sales screen.
+   */
+  typeCode,
   empty,
 }: {
   title: string;
   description: string;
   baseType: string;
   partyRole: string;
+  typeCode?: string;
   empty: string;
 }) {
   const { session, scope } = useErpSession();
@@ -76,7 +83,7 @@ export function DocumentPanel({
   // A tenant may configure more than one type onto a base; the first active one
   // is the sensible default and the others are reachable once there is a reason
   // to choose between them.
-  const type = types?.[0];
+  const type = typeCode ? types?.find((x) => x.code === typeCode) : types?.[0];
 
   const { data, isPending, error } = useQuery({
     queryKey: ["erp_documents", { p_type_code: type?.code ?? "" }],
@@ -93,7 +100,18 @@ export function DocumentPanel({
           <Prose className="mt-0.5 text-xs text-muted-foreground">{description}</Prose>
         </div>
 
-        {type ? (
+        {type && type.requires_site && session.sites.length === 0 ? (
+          // The database refuses a document of this type without a site, and a
+          // freshly provisioned organisation has none. Saying so beats a
+          // dialog whose only possible outcome is a constraint failure.
+          <p className="max-w-xs text-xs text-muted-foreground">
+            This type needs a site, and this organisation has none yet. Add one under{" "}
+            <Link to="/administration/organisation" className="underline underline-offset-2">
+              Organisation structure
+            </Link>
+            .
+          </p>
+        ) : type ? (
           <ActionDialog
             trigger={<ActionButton>New</ActionButton>}
             title={`New ${type.name.toLowerCase()}`}
@@ -114,15 +132,21 @@ export function DocumentPanel({
                   label: ["code", "name"],
                 },
               },
+              // Only asked when the shell's scope has not already answered it:
+              // one site, or a site chosen up there, is not a question.
+              ...(type.requires_site && !scope.siteId && session.sites.length > 1
+                ? ([{ kind: "site", name: "p_site_id", label: "Site", required: true }] as const)
+                : []),
+
               { kind: "text", name: "p_their_ref", label: "Their reference" },
               { kind: "date", name: "p_required_date", label: "Required date" },
             ]}
             mapArgs={(v) => ({
               p_type_code: type.code,
               p_party_id: v["p_party_id"] || null,
-              // The shell's scope selector already asked which site; a form
-              // that asks again is asking twice.
-              p_site_id: scope.siteId || session.sites[0]?.id || null,
+              // The shell's scope selector usually already asked which site; a
+              // form that asks again is asking twice.
+              p_site_id: v["p_site_id"] || scope.siteId || session.sites[0]?.id || null,
               p_their_ref: v["p_their_ref"] || null,
               p_required_date: v["p_required_date"] || null,
             })}
@@ -130,6 +154,7 @@ export function DocumentPanel({
             submitLabel="Create"
           />
         ) : null}
+
       </header>
 
       <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
@@ -142,7 +167,8 @@ export function DocumentPanel({
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !type ? (
           <p className="text-sm text-muted-foreground">
-            No <code className="font-mono text-xs">{baseType}</code> type is configured for this
+            No <code className="font-mono text-xs">{typeCode ?? baseType}</code> type is configured
+            for this
             tenant. Installing the module that owns it on{" "}
             <Link to="/administration/configuration" className="underline underline-offset-2">
               Configuration

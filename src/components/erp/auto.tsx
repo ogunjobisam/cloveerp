@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { useT } from "../../lib/i18n";
+import { formatMinor } from "../../lib/money";
 
 import { GoTo } from "./action";
 import { DataPanel, Pill, Table } from "./panel";
@@ -104,4 +105,21 @@ export function shortDate(value: unknown): string {
   const d = new Date(String(value));
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+}
+
+/**
+ * An amount, read as money rather than as the integer count of pence the
+ * engine stores. A column of raw minor units is how "125000" ends up being
+ * read as a hundred and twenty-five thousand pounds.
+ */
+export function moneyCell<T extends Record<string, unknown>>(
+  key: keyof T,
+  currencyKey?: keyof T,
+): (row: T) => ReactNode {
+  return (row) => {
+    const raw = row[key];
+    if (raw === null || raw === undefined || raw === "") return "—";
+    const code = currencyKey ? String(row[currencyKey] ?? "GBP") : "GBP";
+    return formatMinor(Number(raw), code);
+  };
 }

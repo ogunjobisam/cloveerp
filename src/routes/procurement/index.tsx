@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   ActionBar,
+  pickBatch,
   pickFrom,
   pickItem,
   pickLine,
@@ -82,7 +83,7 @@ function Procurement() {
               ),
               pickLine("purchase_order"),
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },
-              pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+              pickBatch(),
             ],
             invalidates: ["erp_grni", "erp_match_workbench"],
           },

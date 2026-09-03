@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 
 import type { Column } from "../components/erp/auto";
-import { StatusPill, shortDate } from "../components/erp/auto";
+import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
 import {
+  pickBatch,
   pickFrom,
   pickItem,
   pickLocation,
@@ -284,13 +285,7 @@ export const INVENTORY: ModuleDef = {
         pickLocation(),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         reason("p_reason", "Reason", true),
-        pickFrom(
-          "erp_batches",
-          "batch_id",
-          ["batch_number", "item"],
-          "p_batch_id",
-          "Batch (if controlled)",
-        ),
+        pickBatch("p_batch_id", "Batch (if controlled)"),
       ],
       invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_stock_ageing", "erp_batches"],
     },
@@ -672,14 +667,27 @@ export const FINANCE: ModuleDef = {
       fn: "erp_apply_cash",
       fields: [
         pickParty("customer"),
+        // Money is entered the way it is written on the remittance advice.
+        // Asking for pence was an invitation to apply a hundredth of the
+        // receipt and wonder why the invoice stayed open.
         {
-          kind: "number",
+          kind: "money",
           name: "p_amount_minor",
           label: "Amount",
+          currency: "GBP",
           required: true,
-          hint: "In minor units — pence, cents.",
         },
-        { kind: "text", name: "p_currency", label: "Currency", required: true },
+        {
+          kind: "choice",
+          name: "p_currency",
+          label: "Currency",
+          required: true,
+          choices: [
+            { value: "GBP", label: "GBP — pound sterling" },
+            { value: "EUR", label: "EUR — euro" },
+            { value: "USD", label: "USD — US dollar" },
+          ],
+        },
         { kind: "text", name: "p_reference", label: "Reference" },
       ],
       invalidates: ["erp_receivables_ageing", "erp_dunning_worklist", "erp_trial_balance"],
@@ -695,7 +703,9 @@ export const FINANCE: ModuleDef = {
           ["document_number", "status"],
           "p_delivery_id",
           "Delivery",
-          { p_type_code: null, p_limit: 100 },
+          // Only deliveries can be invoiced; offering every document invites
+          // the failure rather than preventing it.
+          { p_type_code: "delivery", p_limit: 100 },
         ),
         {
           kind: "choice",
@@ -788,13 +798,13 @@ export const FINANCE: ModuleDef = {
       fn: "erp_grni",
       empty:
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
-      rowKey: (r, i) => `${String(r["document_number"] ?? i)}-${i}`,
+      rowKey: (r, i) => `${String(r["order_line_id"] ?? i)}-${i}`,
       columns: [
-        { header: "Receipt", cell: "document_number" },
-        { header: "Supplier", cell: "party" },
+        { header: "Order", cell: "order_number" },
+        { header: "Supplier", cell: "party_name" },
         { header: "Product", cell: "item_code" },
-        { header: "Quantity", cell: "quantity_open", numeric: true },
-        { header: "Value", cell: "value_minor", numeric: true },
+        { header: "Quantity", cell: "open_quantity", numeric: true },
+        { header: "Value", cell: moneyCell("open_value_minor"), numeric: true },
         { header: "Age (days)", cell: "age_days", numeric: true },
       ],
     },
@@ -1193,7 +1203,7 @@ export const PRODUCTION: ModuleDef = {
         ),
         pickItem("p_component_item_id", "Component"),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
-        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        pickBatch(),
       ],
       invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
     },
@@ -1408,7 +1418,7 @@ export const QUALITY: ModuleDef = {
           label: "Item",
           options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
         },
-        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        pickBatch(),
       ],
       invalidates: ["erp_quality_events", "erp_open_quality_events"],
     },
