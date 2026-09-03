@@ -270,7 +270,8 @@ jobs:
             "erp_test.assert_authorising_doors_suite()" \
             "erp_test.assert_caller_reachable_internal_suite()" \
             "erp_test.assert_authorise_code_suite()" \
-            "erp_test.assert_prosrc_code_suite()"
+            "erp_test.assert_prosrc_code_suite()" \
+            "erp_test.assert_email_delivery_suite()"
           do
             $PSQL -tAc "select $s;"
           done

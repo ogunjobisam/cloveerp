@@ -1,6 +1,7 @@
 import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { resolveCredential } from "./config.ts";
 import { asPrincipal, type Sql } from "./db.ts";
+import { drainEmail } from "./email.ts";
 import { handlerFor, registeredCodes } from "./handlers.ts";
 
 export type DrainReport = {
@@ -13,6 +14,9 @@ export type DrainReport = {
   commandsClaimed: number;
   commandsSucceeded: number;
   commandsFailed: number;
+  emailClaimed: number;
+  emailSent: number;
+  emailFailed: number;
   tenantsPurged: number;
 };
 
@@ -20,6 +24,7 @@ const empty = (): DrainReport => ({
   jobsClaimed: 0, jobsSucceeded: 0, jobsFailed: 0,
   messagesClaimed: 0, messagesSent: 0, messagesFailed: 0,
   commandsClaimed: 0, commandsSucceeded: 0, commandsFailed: 0,
+  emailClaimed: 0, emailSent: 0, emailFailed: 0,
   tenantsPurged: 0,
 });
 
@@ -255,6 +260,7 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
     await drainJobs(sql, binding, cfg, out);
     await drainOutbox(sql, binding, cfg, out);
     await drainCommands(sql, binding, cfg, out);
+    await drainEmail(sql, binding, cfg, out);
   }
   return out;
 }
