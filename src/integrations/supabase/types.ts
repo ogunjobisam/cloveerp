@@ -413,6 +413,15 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_create_location: {
+        Args: {
+          p_code: string
+          p_location_type?: string
+          p_name?: string
+          p_site_id: string
+        }
+        Returns: string
+      }
       erp_create_party: {
         Args: {
           p_code: string
