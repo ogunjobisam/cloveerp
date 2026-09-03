@@ -785,13 +785,13 @@ export const FINANCE: ModuleDef = {
       fn: "erp_grni",
       empty:
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
-      rowKey: (r, i) => `${String(r["document_number"] ?? i)}-${i}`,
+      rowKey: (r, i) => `${String(r["order_line_id"] ?? i)}-${i}`,
       columns: [
-        { header: "Receipt", cell: "document_number" },
-        { header: "Supplier", cell: "party" },
+        { header: "Order", cell: "order_number" },
+        { header: "Supplier", cell: "party_name" },
         { header: "Product", cell: "item_code" },
-        { header: "Quantity", cell: "quantity_open", numeric: true },
-        { header: "Value", cell: "value_minor", numeric: true },
+        { header: "Quantity", cell: "open_quantity", numeric: true },
+        { header: "Value", cell: "open_value_minor", numeric: true },
         { header: "Age (days)", cell: "age_days", numeric: true },
       ],
     },
