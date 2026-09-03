@@ -168,6 +168,17 @@ function Sales() {
         partyRole="customer"
         empty="No deliveries yet. A delivery is raised against a sales order, and posting it is what takes the stock off the shelf."
       />
+
+      {/* An invoice raised from a delivery had nowhere to be read: it exists as
+          a draft until someone posts it, and posting is what puts the debt on
+          the customer's account. */}
+      <DocumentPanel
+        title="Sales invoices"
+        description="What the customer owes. Posting one raises the receivable and the revenue."
+        baseType="sales_invoice"
+        partyRole="customer"
+        empty="No sales invoices yet. Invoice a delivery from the Financials module, then post it here."
+      />
     </div>
   );
 }
