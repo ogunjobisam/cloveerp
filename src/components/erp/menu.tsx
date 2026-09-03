@@ -222,12 +222,22 @@ export function MainMenu() {
                   </span>
                   <div className="relative flex min-w-0 flex-1 items-center">
                     <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+                    {/*
+                      id and aria-label come before onChange deliberately, as
+                      they do on the palette's field. The accessibility check
+                      in src/lib/accessibility.test.ts reads the source rather
+                      than a rendered tree, and its attribute pattern stops at
+                      the first ">" — which, in an inline arrow handler, is the
+                      one in "=>". Anything written after the handler is
+                      invisible to it, so a labelled field reads as unlabelled.
+                    */}
                     <input
+                      id="main-menu-query"
+                      aria-label={ui("Search the menu")}
                       ref={inputRef}
                       value={q}
                       onChange={(e) => setQ(e.target.value)}
                       placeholder={ui("Search the menu")}
-                      aria-label={ui("Search the menu")}
                       className="w-full rounded-md border border-input bg-background py-2 pl-8 pr-3 text-sm"
                     />
                   </div>
