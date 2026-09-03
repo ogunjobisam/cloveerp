@@ -4,6 +4,7 @@ import type { Column } from "../components/erp/auto";
 import { StatusPill, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
 import {
+  pickBatch,
   pickFrom,
   pickItem,
   pickLocation,

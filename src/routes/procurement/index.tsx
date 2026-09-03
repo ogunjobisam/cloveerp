@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   ActionBar,
+  pickBatch,
   pickFrom,
   pickItem,
   pickLine,
