@@ -125,7 +125,7 @@ function Document() {
     return (
       <div className="flex min-w-0 flex-col gap-6">
         <PageHeader title="Document">
-          No document with that identifier is visible to this tenant.
+          No document with that identifier is visible to this organisation.
         </PageHeader>
       </div>
     );

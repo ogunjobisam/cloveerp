@@ -101,11 +101,15 @@ export const pickFrom = (
   name: string,
   label: string,
   args?: Record<string, unknown>,
+  /* Mandatory by default, because most references are. Overridable because
+     some are not: a door that defaults the value itself should not be fronted
+     by a form that insists, least of all when the list holds one option. */
+  required = true,
 ): Field => ({
   kind: "select",
   name,
   label,
-  required: true,
+  required,
   options: { fn, value, label: labels, ...(args ? { args } : {}) },
 });
 

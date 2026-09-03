@@ -21,6 +21,7 @@ import {
 import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { CommandPalette } from "./command-palette";
+import { MainMenu } from "./menu";
 import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
@@ -384,6 +385,10 @@ export function Shell({
               that stays out of the drawer, because the question "what is this
               screen for" is asked most on the phone. */}
           <CommandPalette />
+
+          {/* Everything, at once. The palette takes you somewhere you can name;
+              this is for the screens you cannot name yet. */}
+          <MainMenu />
 
           <ContextHelp />
 

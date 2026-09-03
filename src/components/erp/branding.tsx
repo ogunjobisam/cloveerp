@@ -64,8 +64,9 @@ export function BrandingPanel({ locale = "en" }: { locale?: string }) {
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Branding</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
-          What this tenant is called and how its mark is drawn, in the shell and in the browser tab
-          where the browser supports it. Leave a field empty to keep the product identity.
+          What this organisation is called and how its mark is drawn, in the shell and in the
+          browser tab where the browser supports it. Leave a field empty to keep the product
+          identity.
         </Prose>
       </header>
 

@@ -50,3 +50,4 @@
 # of them and runs the assertion, and sorts before the next migration that
 # asserts, so a build from empty is governed at that point.
 20260904584000_4240c356-c3ae-4eda-91c5-def7ea0b8efa.sql
+

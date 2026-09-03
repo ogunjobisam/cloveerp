@@ -525,10 +525,26 @@ function Organisation() {
                 required: true,
                 choices: SITE_TYPES,
               },
-              pickFrom("erp_entities", "entity_id", ["code", "name"], "p_entity_id", "Legal entity"),
+              // Optional on purpose: erp.create_site() defaults it to the
+              // organisation's first, and a new organisation has exactly one —
+              // so insisting here is a question with a single possible answer
+              // standing between somebody and their first site.
+              pickFrom(
+                "erp_entities",
+                "entity_id",
+                ["code", "name"],
+                "p_entity_id",
+                "Legal entity",
+                undefined,
+                false,
+              ),
               { kind: "text", name: "p_country_code", label: "Country code", hint: "Two letters." },
             ],
-            invalidates: ["erp_sites", "erp_session"],
+            // A new site is given its standard bays in the same call, so the
+            // locations list is out of date the moment this returns. Leaving it
+            // out left the screen saying "No locations yet — goods receipts
+            // cannot be posted at this site" over four locations that existed.
+            invalidates: ["erp_sites", "erp_locations", "erp_session"],
           },
         ]}
       />
@@ -615,9 +631,6 @@ function Organisation() {
           </Table>
         )}
       </DataPanel>
-
-
-
 
       <DataPanel<Department>
         title={ui("Departments")}

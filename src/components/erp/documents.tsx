@@ -115,7 +115,7 @@ export function DocumentPanel({
           <ActionDialog
             trigger={<ActionButton>New</ActionButton>}
             title={`New ${type.name.toLowerCase()}`}
-            description="Numbering, lifecycle and approvals come from the type this tenant configured."
+            description="Numbering, lifecycle and approvals come from the type this organisation configured."
             // The permission the database checks, not one this screen guessed.
             permission={type.create_permission}
             fn="erp_create_document"
@@ -154,7 +154,6 @@ export function DocumentPanel({
             submitLabel="Create"
           />
         ) : null}
-
       </header>
 
       <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
@@ -168,8 +167,7 @@ export function DocumentPanel({
         ) : !type ? (
           <p className="text-sm text-muted-foreground">
             No <code className="font-mono text-xs">{typeCode ?? baseType}</code> type is configured
-            for this
-            tenant. Installing the module that owns it on{" "}
+            for this tenant. Installing the module that owns it on{" "}
             <Link to="/administration/configuration" className="underline underline-offset-2">
               Configuration
             </Link>{" "}

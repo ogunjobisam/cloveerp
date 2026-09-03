@@ -118,7 +118,7 @@ function Integrations() {
         title="Connected systems"
         description="Queue depth and the state of each configured counterpart."
         fn="erp_integration_health"
-        empty="No external systems are configured for this tenant yet."
+        empty="No external systems are configured for this organisation yet."
         emptyAction={<SeedDemoAction />}
       >
         {(rows) => (

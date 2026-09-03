@@ -15,3 +15,6 @@
 20260903120000_pack_installable_surfaces.sql  20260903155000_reapply_edited_definitions.sql
 20260903130000_terminology_alignment.sql      20260903155000_reapply_edited_definitions.sql
 20260903140000_content_packs.sql              20260903155000_reapply_edited_definitions.sql
+20260903013541_6675d7b0-a21d-4d0c-92e8-0e4b011457e5.sql  20260904800000_reapply_the_doors_that_arrived_ungoverned.sql
+20260903014640_26b515bd-97eb-45e6-b3d0-78cf1877e3c8.sql  20260904800000_reapply_the_doors_that_arrived_ungoverned.sql
+20260903020414_bc6200fb-b4b6-4c98-b873-fe392f74a7bb.sql  20260904800000_reapply_the_doors_that_arrived_ungoverned.sql

@@ -113,7 +113,7 @@ function SignIn() {
         <h1 className="mt-4 text-lg font-semibold">Sign in to Clove ERP</h1>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          Your tenant is derived from your account. It is never chosen here.
+          Your organisation is derived from your account. It is never chosen here.
         </p>
 
         <label className="mt-5 block text-sm font-medium">
@@ -235,14 +235,14 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
         }}
         className="rounded-xl border border-border bg-card p-6"
       >
-        <h1 className="text-lg font-semibold">Create your tenant</h1>
+        <h1 className="text-lg font-semibold">Create your organisation</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          You are signed in, but this identity resolves to no principal yet. Creating a tenant makes
-          you its first principal, with an administrator role holding every permission.
+          You are signed in, but this account does not belong to an organisation yet. Creating one
+          makes you its first administrator, holding every permission.
         </p>
 
         <label className="mt-5 block text-sm font-medium">
-          Tenant name
+          Organisation name
           <input
             required
             value={name}
@@ -253,7 +253,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
         </label>
 
         <label className="mt-3 block text-sm font-medium">
-          Tenant code
+          Short code
           <input
             required
             value={code}
@@ -274,7 +274,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
           disabled={busy !== null}
           className="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
-          {busy === "create" ? "Creating…" : "Create tenant"}
+          {busy === "create" ? "Creating…" : "Create organisation"}
         </button>
 
         <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
@@ -289,7 +289,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
           disabled={busy !== null}
           className="mt-4 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
         >
-          {busy === "demo" ? "Seeding…" : "Explore a seeded demo tenant instead"}
+          {busy === "demo" ? "Seeding…" : "Explore a seeded demo organisation instead"}
         </button>
 
         <div className="mt-6 border-t border-border pt-4">
@@ -415,7 +415,7 @@ export function Gate({ children, bare = false }: { children: ReactNode; bare?: b
     return (
       <Centred>
         <p role="status" className="text-sm text-muted-foreground">
-          Resolving your tenant…
+          Finding your organisation…
         </p>
       </Centred>
     );

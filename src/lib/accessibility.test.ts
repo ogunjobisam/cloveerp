@@ -145,36 +145,152 @@ function rel(p: string): string {
   return p.slice(ROOT.length + 1);
 }
 
-/** Every `<tag …>…</tag>` element in a file, with the attributes and inner
- *  text. Regex over JSX is approximate, and approximate is enough: a
- *  false positive is a named control somebody looks at, a false negative
- *  is caught by the manual pass the statement records. */
-function elements(source: string, tag: string): { attrs: string; inner: string }[] {
-  const out: { attrs: string; inner: string }[] = [];
-  const open = new RegExp(`<${tag}\\b([^>]*?)(/?)>`, "g");
+/**
+ * Where a JSX opening tag actually ends, scanning from just after the name.
+ *
+ * Deliberately not `[^>]*>`. A JSX attribute value is an arbitrary
+ * expression, and the most ordinary thing written in one — an inline arrow
+ * handler — contains a ">" in its own arrow. Scanning to the first ">" stops
+ * inside `onChange={(e) => …}` and every attribute after it becomes
+ * invisible.
+ *
+ * That is not merely a false positive. It made these checks pass or fail on
+ * attribute *order*: a field carrying aria-label after its handler read as
+ * unlabelled, and — the direction that matters — a control with no
+ * accessible name at all read as named the moment an early attribute
+ * happened to look right. A check that reports a property it did not
+ * measure is worse than no check.
+ *
+ * So brace depth and quotes are tracked instead. Returns the index of the
+ * closing ">" and whether the tag closed itself.
+ */
+function endOfOpenTag(src: string, from: number): { end: number; selfClosing: boolean } | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = from; i < src.length; i += 1) {
+    const c = src[i]!;
+    if (quote !== null) {
+      if (c === "\\") i += 1;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+      continue;
+    }
+    if (c === "{") depth += 1;
+    else if (c === "}") depth -= 1;
+    else if (c === ">" && depth === 0) {
+      return { end: i, selfClosing: /\/\s*$/.test(src.slice(from, i)) };
+    }
+  }
+  return null;
+}
+
+/** Every `<tag …>…</tag>` element in a file, with its attributes, its inner
+ *  text and where it starts. The attribute text is now the whole of the
+ *  opening tag; the inner text is still found by the next matching close,
+ *  which same-tag nesting can confuse — approximate, and approximate is
+ *  enough for inner content, because a false negative there is caught by the
+ *  manual pass the statement records. */
+function elements(source: string, tag: string): { attrs: string; inner: string; index: number }[] {
+  const out: { attrs: string; inner: string; index: number }[] = [];
+  const open = new RegExp(`<${tag}\\b`, "g");
   let m: RegExpExecArray | null;
   while ((m = open.exec(source)) !== null) {
-    if (m[2] === "/") {
-      out.push({ attrs: m[1] ?? "", inner: "" });
+    const tail = endOfOpenTag(source, open.lastIndex);
+    if (!tail) break;
+    const attrs = source.slice(open.lastIndex, tail.end).replace(/\/\s*$/, "");
+    const index = m.index;
+    open.lastIndex = tail.end + 1;
+    if (tail.selfClosing) {
+      out.push({ attrs, inner: "", index });
       continue;
     }
     const close = source.indexOf(`</${tag}>`, open.lastIndex);
-    out.push({ attrs: m[1] ?? "", inner: close < 0 ? "" : source.slice(open.lastIndex, close) });
+    out.push({
+      attrs,
+      inner: close < 0 ? "" : source.slice(open.lastIndex, close),
+      index,
+    });
   }
   return out;
 }
 
-/** Text a screen reader would announce from JSX content: literal words, or
- *  an expression that carries them. */
-function hasAccessibleContent(inner: string): boolean {
-  const withoutTags = inner.replace(/<[^>]+>/g, " ");
-  // Literal words between the tags.
-  if (/[A-Za-z]{2,}/.test(withoutTags.replace(/\{[^}]*\}/g, " "))) return true;
-  // A string literal inside an expression: {busy ? "Saving…" : "Save"}.
-  if (/\{[^}]*["'`][^"'`]*[A-Za-z]{2,}[^"'`]*["'`][^}]*\}/.test(withoutTags)) return true;
-  // {label}, {children}, {t("…")}, {ui("…")} — an expression that renders text.
-  return /\{\s*(children|label|title|name|t\(|ui\(|r\.|row\.|c\.|item\.)/.test(inner);
+/** The value of `name="literal"` or `name={expression}`, as written. */
+function attrValue(attrs: string, name: string): string | null {
+  const m = new RegExp(`\\b${name}=(?:"([^"]*)"|\\{([^}]*)\\})`).exec(attrs);
+  if (!m) return null;
+  return (m[1] ?? m[2] ?? "").trim();
 }
+
+/** JSX with its child elements removed, so what is left is the text this
+ *  element contributes itself. Uses the same scanner as the opening tag,
+ *  because a child with an inline handler has a ">" inside it too. */
+function stripTags(src: string): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const name = src[i] === "<" ? /^<\/?[A-Za-z][\w.]*/.exec(src.slice(i)) : null;
+    const tail = name ? endOfOpenTag(src, i + name[0].length) : null;
+    if (tail) {
+      out += " ";
+      i = tail.end + 1;
+      continue;
+    }
+    out += src[i];
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Text a screen reader would announce from JSX content.
+ *
+ * Child elements are stripped first: an icon contributes nothing to a
+ * control's name, and an icon-only button is the failure this exists to
+ * catch. What survives is either literal words or an interpolation.
+ *
+ * Any surviving interpolation counts. Which value it renders cannot be known
+ * from the source, so the honest answer is "text of some kind" — where this
+ * previously kept a hand-written list of variable prefixes (children, label,
+ * row., item. …) and reported everything else as nameless. That list decided
+ * the verdict by what somebody had remembered to add to it, which is not a
+ * property of the code being checked. {" "} and JSX comments are excluded,
+ * because neither renders anything.
+ */
+function hasAccessibleContent(inner: string): boolean {
+  const text = stripTags(inner);
+  // Literal words between the tags.
+  if (/[A-Za-z]{2,}/.test(text.replace(/\{[^{}]*\}/g, " "))) return true;
+  for (const m of text.matchAll(/\{([^{}]*)\}/g)) {
+    const expression = (m[1] ?? "").trim();
+    if (expression === "" || expression === '" "' || expression === "' '") continue;
+    if (expression.startsWith("/*")) continue;
+    return true;
+  }
+  return false;
+}
+
+describe("the name check can tell a named control from a nameless one", () => {
+  // A checker nobody checks is the thing this file exists to prevent. Both
+  // cases below were mis-read by the version this replaces: the first passed
+  // only because the scanner stopped inside the arrow and read the wrong
+  // slice of the file, and the second is what that same slip could hide.
+  test("an expression that renders a value is a name", () => {
+    expect(hasAccessibleContent("\n  {i.reference}\n")).toBe(true);
+    expect(hasAccessibleContent('<Icon aria-hidden="true" /><span>{step.title}</span>')).toBe(true);
+    expect(hasAccessibleContent('{busy ? "Saving…" : "Save"}')).toBe(true);
+    expect(hasAccessibleContent("  Close  ")).toBe(true);
+  });
+
+  test("an icon and nothing else is not", () => {
+    expect(hasAccessibleContent('<X className="size-4" aria-hidden="true" />')).toBe(false);
+    expect(hasAccessibleContent('<Icon onClick={() => go()} className="size-4" />')).toBe(false);
+    expect(hasAccessibleContent("{/* nothing to announce */}")).toBe(false);
+    expect(hasAccessibleContent('{" "}')).toBe(false);
+  });
+});
 
 describe("4.1.2 name, role, value: every control has an accessible name", () => {
   test("a <button> carries text or an aria-label", () => {
@@ -204,16 +320,29 @@ describe("1.3.1 and 3.3.2: every field has a label", () => {
     const bare: string[] = [];
     for (const p of SOURCES) {
       const src = read(p);
-      const re = /<(input|select|textarea)\b([^>]*?)\/?>/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(src)) !== null) {
-        const attrs = m[2] ?? "";
-        if (/aria-label(ledby)?=|\bid=/.test(attrs)) continue;
-        if (/type="hidden"/.test(attrs)) continue;
-        const before = src.slice(0, m.index);
-        const opened = (before.match(/<label\b/g) ?? []).length;
-        const closed = (before.match(/<\/label>/g) ?? []).length;
-        if (opened <= closed) bare.push(`${rel(p)}: <${m[1]}${attrs.trim()}>`);
+      for (const tag of ["input", "select", "textarea"] as const) {
+        for (const f of elements(src, tag)) {
+          if (/type="hidden"/.test(f.attrs)) continue;
+
+          // A name the control carries itself.
+          if (/aria-label(ledby)?=/.test(f.attrs)) continue;
+
+          // An id, but only when something in the same file actually points a
+          // label at it. An id on its own names nothing — accepting one was
+          // the check agreeing that a field was labelled because it could
+          // have been.
+          const id = attrValue(f.attrs, "id");
+          if (id !== null && id !== "") {
+            const quoted = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            if (new RegExp(`htmlFor=(?:"${quoted}"|\\{\\s*${quoted}\\s*\\})`).test(src)) continue;
+          }
+
+          // Or a <label> still open above it.
+          const before = src.slice(0, f.index);
+          const opened = (before.match(/<label\b/g) ?? []).length;
+          const closed = (before.match(/<\/label>/g) ?? []).length;
+          if (opened <= closed) bare.push(`${rel(p)}: <${tag}${f.attrs.trim()}>`);
+        }
       }
     }
     expect(bare).toEqual([]);

@@ -906,7 +906,7 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Ledgers",
-      description: "The books this tenant keeps.",
+      description: "The books this organisation keeps.",
       fn: "erp_ledgers",
       empty: "No ledger configured. Installing Financials is what creates one.",
       emptyAction: { label: "Open Configuration", to: "/administration/configuration" },
