@@ -436,6 +436,17 @@ export type Database = {
         Args: { p_display_name: string }
         Returns: Json
       }
+      erp_create_site: {
+        Args: {
+          p_code: string
+          p_country_code?: string
+          p_entity_id?: string
+          p_name: string
+          p_site_type?: string
+          p_timezone?: string
+        }
+        Returns: Json
+      }
       erp_create_uom: {
         Args: {
           p_code: string
@@ -554,6 +565,7 @@ export type Database = {
         Args: { p_object_type: string }
         Returns: Json
       }
+      erp_email_readiness: { Args: never; Returns: Json }
       erp_email_suppressions: { Args: never; Returns: Json }
       erp_end_approval_delegation: {
         Args: { p_delegation_id: string; p_reason?: string }
@@ -1729,6 +1741,7 @@ export type Database = {
         Returns: undefined
       }
       erp_silent_jobs: { Args: never; Returns: Json }
+      erp_sites: { Args: never; Returns: Json }
       erp_split_batch: {
         Args: {
           p_batch_id: string
