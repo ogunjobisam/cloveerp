@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Column } from "../components/erp/auto";
-import { StatusPill, shortDate } from "../components/erp/auto";
+import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
 import {
   pickBatch,
@@ -804,7 +804,7 @@ export const FINANCE: ModuleDef = {
         { header: "Supplier", cell: "party_name" },
         { header: "Product", cell: "item_code" },
         { header: "Quantity", cell: "open_quantity", numeric: true },
-        { header: "Value", cell: "open_value_minor", numeric: true },
+        { header: "Value", cell: moneyCell("open_value_minor"), numeric: true },
         { header: "Age (days)", cell: "age_days", numeric: true },
       ],
     },

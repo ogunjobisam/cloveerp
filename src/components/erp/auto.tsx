@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { useT } from "../../lib/i18n";
+import { formatMinor } from "../../lib/money";
 
 import { GoTo } from "./action";
 import { DataPanel, Pill, Table } from "./panel";
