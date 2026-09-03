@@ -4,6 +4,7 @@ import type { Column } from "../components/erp/auto";
 import { StatusPill, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
 import {
+  pickBatch,
   pickFrom,
   pickItem,
   pickLocation,
@@ -284,13 +285,7 @@ export const INVENTORY: ModuleDef = {
         pickLocation(),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         reason("p_reason", "Reason", true),
-        pickFrom(
-          "erp_batches",
-          "batch_id",
-          ["batch_number", "item"],
-          "p_batch_id",
-          "Batch (if controlled)",
-        ),
+        pickBatch("p_batch_id", "Batch (if controlled)"),
       ],
       invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_stock_ageing", "erp_batches"],
     },
@@ -1193,7 +1188,7 @@ export const PRODUCTION: ModuleDef = {
         ),
         pickItem("p_component_item_id", "Component"),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
-        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        pickBatch(),
       ],
       invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
     },
@@ -1408,7 +1403,7 @@ export const QUALITY: ModuleDef = {
           label: "Item",
           options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
         },
-        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        pickBatch(),
       ],
       invalidates: ["erp_quality_events", "erp_open_quality_events"],
     },
