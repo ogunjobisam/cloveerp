@@ -690,7 +690,9 @@ export const FINANCE: ModuleDef = {
           ["document_number", "status"],
           "p_delivery_id",
           "Delivery",
-          { p_type_code: null, p_limit: 100 },
+          // Only deliveries can be invoiced; offering every document invites
+          // the failure rather than preventing it.
+          { p_type_code: "delivery", p_limit: 100 },
         ),
         {
           kind: "choice",
