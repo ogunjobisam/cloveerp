@@ -18,6 +18,12 @@ export type WorkerConfig = {
   systems: string[];
   pollMs: number;
   workerName: string;
+  /**
+   * Absent means this worker sends no email, which is a state to report rather
+   * than to fail on: an organisation without a key configured must not stop the
+   * drain for every other organisation this process serves.
+   */
+  resendApiKey: string | null;
 };
 
 function required(name: string): string {
@@ -65,6 +71,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
         : [],
       pollMs: Number(env["ERPWARE_POLL_MS"] ?? 5000),
       workerName: env["ERPWARE_WORKER_NAME"] ?? `clove-erp-worker-${process.pid ?? "edge"}`,
+      resendApiKey: env["RESEND_API_KEY"]?.trim() || null,
     };
   } finally {
     (process as { env: Record<string, string | undefined> }).env = saved;
