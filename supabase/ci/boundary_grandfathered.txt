@@ -51,14 +51,3 @@
 # asserts, so a build from empty is governed at that point.
 20260904584000_4240c356-c3ae-4eda-91c5-def7ea0b8efa.sql
 
-# 3 September, written from the dashboard and applied on the live project, so
-# written once. Between them they add erp_create_site, erp_create_location and
-# a new body for erp_entities, none of which asserts. That left three real
-# findings — two unregistered writers and, worse, erp_entities replaced by a
-# body with no gate while its allow-list row still named one.
-# 20260903030000_the_doors_that_arrived_ungoverned.sql puts the gate back,
-# registers both writers and runs the assertion, and sorts before
-# 20260903100000_capability_registry.sql, which is the next migration to
-# assert — so a build from empty is governed again at that point.
-20260903014640_26b515bd-97eb-45e6-b3d0-78cf1877e3c8.sql
-20260903020414_bc6200fb-b4b6-4c98-b873-fe392f74a7bb.sql

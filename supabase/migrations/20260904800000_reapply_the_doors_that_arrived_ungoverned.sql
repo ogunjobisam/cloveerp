@@ -1,50 +1,104 @@
--- ─────────────────────────────────────────────────────────────────────────────
--- Provisioning goes back to building a finished organisation.
+-- =============================================================================
+-- Three definitions, re-applied — because editing a migration that has already
+-- run changes nothing where it has already run
 --
--- 20260903013541 removed the last line of erp.provision_tenant():
+-- The same shape as 20260903155000_reapply_edited_definitions.sql, and for the
+-- same reason, arrived at from the opposite direction.
 --
---   update erp.environment set is_live = true where id = v_env;
+-- Three dashboard migrations of 3 September left the schema wrong:
 --
--- The problem it was solving is real, and is the same one 20260904770000
--- describes: an organisation created from the superadmin console was handed to
--- a customer already governed, with exactly one administrator — who authors
--- every change set and may therefore approve none of them. Nothing could be
--- installed. That had to be fixed and it was right to fix it.
+--   20260903013541  took `update erp.environment set is_live = true` out of
+--                   erp.provision_tenant(), so the builder stopped building a
+--                   finished organisation and fifteen suites lost a property
+--                   they depend on
+--   20260903014640  replaced public.erp_entities() with a STABLE sql body
+--                   carrying no gate, while its allow-list row went on naming
+--                   erp.authorise, and added erp_create_site unregistered
+--   20260903020414  added erp_create_location, also unregistered
 --
--- But taking the liveness out of the builder is not where the fix belongs, and
--- a build from empty says so out loud:
+-- The first attempt at this put the repairs in two NEW migrations back-dated to
+-- 20260903030000 and 20260903040000, so that a build from empty would fix the
+-- schema before the next migration to assert. That works, and it is why the
+-- build was green. It also broke the preview branch on every commit from
+-- 5fbd1f6 onward, and the failure is worth writing down because nothing else
+-- in the repository says it:
 --
---   ERPWARE_CHANGE_SET_EMPTY: nothing to promote
---     erp_test.starter_pack_acceptance_suite()
+--   Supabase pushes only migrations NEWER than the remote's last applied
+--   version, and refuses the whole batch when it finds a local file that
+--   sorts before it.
 --
--- erp.install_module_config() finishes an install itself inside the bootstrap
--- window and leaves it for a second person outside one, so every suite that
--- provisions a tenant and then approves what an installer authored now finds
--- the change set already promoted. Fifteen suites depend on that behaviour, and
--- two cases of erp_test.provisioning_suite() assert the property directly: the
--- self environment exists and is live, and configuration cannot be edited
--- directly once it is. Removing it deletes a true property of the product.
+-- The preview's head was already 20260904770000. So the two back-dated files
+-- were not merely skipped — they took every valid migration in the same push
+-- down with them, and the branch sat at MIGRATIONS_FAILED with 208 of 220
+-- applied while the build went on passing. Green from empty, dead everywhere
+-- that is not empty: exactly the gap 20260903155000 was written about.
 --
--- The two callers want different things, and that is the whole of it. A fixture
--- or an operator calling erp.provision_tenant() directly wants an organisation
--- that is finished. The console is creating one for somebody else to finish. So
--- the builder goes back to building a governed organisation, and
--- 20260904770000 makes public.erp_platform_onboard_company() hand its
--- organisation over in the bootstrap window instead — which is where
--- erp.onboard_tenant() has left self-service organisations since
--- 20260829320000, and which erp.go_live() closes once there is a second
--- administrator to close it over.
+-- So the repairs go where the rule says they go. Each definition is corrected
+-- in the migration that broke it, which is what a build from empty replays,
+-- and re-applied here, which is what every environment past that point
+-- receives. The three files are named in supabase/ci/migrations_edited.txt
+-- against this one.
 --
--- Numbered 20260903040000 for the same reason as the file beside it: the suite
--- that catches this runs at 20260903180000, so a repair dated 20260904… would
--- be too late on every build from empty.
---
--- The data statement in 20260903013541 is deliberately not repeated. It
--- reopened the window for organisations already stranded by the old behaviour,
--- it has run where it was needed, and it is not idempotent in a useful way: on
--- a fresh build there is nothing to reopen, and on an existing one it would
--- reopen a window that this migration's own callers are entitled to have shut.
--- ─────────────────────────────────────────────────────────────────────────────
+-- Nothing below weakens a rule to make a check pass. erp_create_site and
+-- erp_create_location genuinely write and genuinely authorise, which is what
+-- the allow-list exists to record; both are thin wrappers, so each declares the
+-- erp.* function it delegates to rather than erp.authorise, because the
+-- register checks that a door's declared gate appears in that door's own body.
+-- =============================================================================
+
+-- ── The gate goes back on ────────────────────────────────────────────────────
+
+create or replace function public.erp_entities()
+returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+declare v_out jsonb;
+begin
+  perform erp.authorise('finance.read');
+  select coalesce(jsonb_agg(x order by x->>'code'), '[]'::jsonb) into v_out from (
+    select jsonb_build_object(
+      'entity_id', e.id, 'code', e.code, 'name', e.name,
+      'base_currency', e.base_currency, 'country_code', e.country_code) as x
+      from erp.entity e
+     where e.tenant_id = erp.current_tenant_id() and e.status = 'active'
+  ) s;
+  return v_out;
+end;
+$$;
+
+comment on function public.erp_entities() is
+  'The organisation''s active legal entities. Gated on finance.read and '
+  'recorded, because which entities exist is part of how an organisation is '
+  'structured; it briefly lost both and the register went on claiming '
+  'otherwise.';
+
+revoke all on function public.erp_entities() from public, anon;
+grant execute on function public.erp_entities() to authenticated, service_role;
+
+-- ── The two writers, registered ──────────────────────────────────────────────
+
+insert into erp_meta.public_write_allowance (function_name, gate, rationale)
+values
+  ('erp_create_site', 'erp.create_site',
+   'Creates a site and the standard bays that go with it, under '
+   'administration.configure. A new organisation cannot raise a purchase '
+   'order, a receipt or a despatch until it has one, so this is the door that '
+   'makes an empty organisation usable.')
+on conflict (function_name) do update set
+  gate = excluded.gate, rationale = excluded.rationale;
+
+insert into erp_meta.public_write_allowance (function_name, gate, rationale)
+values
+  ('erp_create_location', 'erp.create_location',
+   'Creates a location within a site, under administration.configure. A '
+   'receipt posts into a receiving location and a despatch picks from '
+   'storage, so a site that has run out of the bays it was given needs a way '
+   'to add another.')
+on conflict (function_name) do update set
+  gate = excluded.gate, rationale = excluded.rationale;
+
+-- ── Provisioning goes back to building a finished organisation ───────────────
 
 CREATE OR REPLACE FUNCTION erp.provision_tenant(p_code text, p_name text, p_admin_email text, p_admin_display_name text, p_base_currency character DEFAULT 'GBP'::bpchar, p_country_code character DEFAULT 'GB'::bpchar, p_entity_code text DEFAULT 'MAIN'::text, p_timezone text DEFAULT 'UTC'::text, p_admin_valid_for interval DEFAULT '14 days'::interval)
  RETURNS TABLE(tenant_id uuid, entity_id uuid, admin_user_id uuid, role_id uuid, environment_id uuid, admin_token text)
@@ -178,3 +232,6 @@ comment on function erp.provision_tenant(text, text, text, text, character, char
   'organisation. public.erp_platform_onboard_company() is the door that hands '
   'one to a customer, and it reopens the bootstrap window so the person '
   'receiving it can configure it.';
+
+-- The doors and the proof that they are governed, in the same transaction.
+select erp.assert_public_api_safe();

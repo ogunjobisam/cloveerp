@@ -105,3 +105,24 @@ as $$ select erp.create_location(p_site_id, p_code, p_name, p_location_type) $$;
 
 revoke all on function public.erp_create_location(uuid, text, text, text) from public, anon;
 grant execute on function public.erp_create_location(uuid, text, text, text) to authenticated;
+
+-- EDITED AFTER IT WAS APPLIED. See supabase/ci/migrations_edited.txt; the
+-- repair that carries this to environments which already ran the original is
+-- 20260904800000_reapply_the_doors_that_arrived_ungoverned.sql.
+--
+-- erp_create_location writes and was not on the allow-list. Like its sibling
+-- above it is a thin wrapper, so it declares the erp.* function it delegates
+-- to rather than erp.authorise — the register checks that a door's declared
+-- gate appears in that door's own body.
+insert into erp_meta.public_write_allowance (function_name, gate, rationale)
+values
+  ('erp_create_location', 'erp.create_location',
+   'Creates a location within a site, under administration.configure. A '
+   'receipt posts into a receiving location and a despatch picks from '
+   'storage, so a site that has run out of the bays it was given needs a way '
+   'to add another.')
+on conflict (function_name) do update set
+  gate = excluded.gate, rationale = excluded.rationale;
+
+-- §16.2: the door and the proof that it is governed, in the same transaction.
+select erp.assert_public_api_safe();
