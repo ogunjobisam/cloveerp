@@ -56,7 +56,16 @@ export function Fail({ error }: { error: unknown }) {
 
 /** A token is shown once and never again, so it is shown loudly. */
 
-export function TokenNotice({ email, token }: { email: string; token: string }) {
+export function TokenNotice({
+  email,
+  token,
+  note,
+}: {
+  email: string;
+  token: string;
+  /** What happens next, where that is not obvious from having a token. */
+  note?: string;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
@@ -64,6 +73,7 @@ export function TokenNotice({ email, token }: { email: string; token: string }) 
       <p className="mt-1 text-xs text-muted-foreground">
         This token works once and is shown once. Send it to them now — it cannot be recovered.
       </p>
+      {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
       <div className="mt-2 flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs">
           {token}

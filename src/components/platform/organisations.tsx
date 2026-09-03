@@ -64,14 +64,17 @@ export function Companies({ role }: { role: PlatformRole }) {
 
   const onboard = useMutation({
     mutationFn: () =>
-      callErp<{ admin_email: string; admin_token: string }>("erp_platform_onboard_company", {
-        p_code: form.code,
-        p_name: form.name,
-        p_admin_email: form.admin_email,
-        p_admin_display_name: form.admin_display_name || form.admin_email,
-        p_base_currency: form.currency,
-        p_country_code: form.country,
-      }),
+      callErp<{ admin_email: string; admin_token: string; is_live: boolean }>(
+        "erp_platform_onboard_company",
+        {
+          p_code: form.code,
+          p_name: form.name,
+          p_admin_email: form.admin_email,
+          p_admin_display_name: form.admin_display_name || form.admin_email,
+          p_base_currency: form.currency,
+          p_country_code: form.country,
+        },
+      ),
     onSuccess: (r) => {
       setToken({ email: r.admin_email, token: r.admin_token });
       setOpen(false);
@@ -174,7 +177,20 @@ export function Companies({ role }: { role: PlatformRole }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {token ? <TokenNotice email={token.email} token={token.token} /> : null}
+      {token ? (
+        <TokenNotice
+          email={token.email}
+          token={token.token}
+          /* An organisation is handed over in setup, not finished: its first
+             administrator is its only one, and nobody may approve their own
+             change set once it is live. Saying so here is cheaper than the
+             support ticket that asks why nothing can be installed. */
+          note={
+            "The organisation is in setup. It installs and configures freely until it has a " +
+            "second administrator and somebody takes it live."
+          }
+        />
+      ) : null}
       {busyError ? <Fail error={busyError} /> : null}
 
       {mayOperate ? (
