@@ -66,6 +66,38 @@ comment on role clove_enquiry is
   'are SECURITY DEFINER, so this role never needs to see through row security '
   'itself.';
 
+-- ── And the runner has to be able to become it ───────────────────────────────
+--
+-- NOLOGIN means SET ROLE is the only way anything runs as clove_enquiry, and
+-- SET ROLE is checked against membership. On a cluster whose postgres is a
+-- superuser that is automatic and this grant is a formality. This is not that
+-- cluster: Supabase's postgres has CREATEROLE and BYPASSRLS but not SUPERUSER,
+-- and createrole_self_grant is '' — so creating a role grants the creator ADMIN
+-- OPTION and nothing else. Without this the migration applies cleanly and then
+-- every submission fails on SET ROLE, which is the shape of failure this whole
+-- file exists to refuse.
+--
+-- It is written outside the "if not exists" above on purpose: a cluster where
+-- the role already exists is exactly the one where the membership might be the
+-- part that is missing.
+--
+-- current_user rather than a literal postgres, so the grant lands on whoever
+-- applies this. That is the same role the Edge Function connects as, because
+-- SUPABASE_DB_URL is the project's postgres connection — an assumption worth
+-- naming, since the prove block below checks the runner and the form is what
+-- actually has to switch.
+--
+-- INHERIT FALSE because postgres is not to acquire this role's privileges by
+-- being a member; it has strictly more already. The grant says one thing: it
+-- may become it.
+
+do $membership$
+begin
+  execute format(
+    'grant clove_enquiry to %I with set true, inherit false', current_user);
+end
+$membership$;
+
 -- ── The doorway ──────────────────────────────────────────────────────────────
 
 create schema if not exists erp_ingress;
@@ -305,6 +337,33 @@ begin
       'CLOVEERP_INGRESS_UNASSUMABLE: % cannot SET ROLE clove_enquiry', current_user
       using hint = 'The contact form switches to this role before every '
                    'statement; without membership it cannot serve a submission.';
+  end if;
+
+  -- And the same question asked of the catalogue, which cannot answer it for
+  -- free.
+  --
+  -- pg_has_role() short-circuits to true for a superuser. On a development
+  -- cluster whose postgres is one — which is every stock Postgres install, and
+  -- was the rig this migration was written on — the check above therefore
+  -- passes whether or not the grant exists, and says nothing. It passed there
+  -- and failed in CI, where postgres is not a superuser, and CI is the one that
+  -- matches live.
+  --
+  -- A row in pg_auth_members is a fact rather than a privilege decision, so it
+  -- reads the same for everybody. It is the check that would have caught this
+  -- before the build did.
+  if not exists (
+    select 1 from pg_catalog.pg_auth_members m
+     where m.roleid = 'clove_enquiry'::regrole
+       and m.member = current_user::regrole
+       and m.set_option
+  ) then
+    raise exception
+      'CLOVEERP_INGRESS_UNASSUMABLE: no pg_auth_members row grants clove_enquiry '
+      'to % with SET', current_user
+      using hint = 'CREATE ROLE alone does not grant SET to a non-superuser '
+                   'creator: createrole_self_grant is empty by default. The '
+                   'grant is explicit, earlier in this migration.';
   end if;
 
   -- Nobody else got in by the default grant.
