@@ -1,5 +1,6 @@
 import { useT } from "../../lib/i18n";
 import { ActionButton, ActionDialog, type Field } from "./action";
+import { Prose } from "./page";
 
 /**
  * The verbs.
@@ -30,16 +31,47 @@ export type ActionSpec = {
   submitLabel?: string;
 };
 
-export function ActionBar({ actions, note }: { actions: ActionSpec[]; note?: string }) {
+/**
+ * A bar of actions, under a heading that says what they act on.
+ *
+ * The heading used to be the literal word "Actions", on every one of these.
+ * The organisation screen carries five, so it read as five identical cards
+ * called ACTIONS — departments, approval bands, cover, sites and locations,
+ * none of them named — with the only distinguishing words demoted to a
+ * sentence of grey body text underneath. A page you cannot scan is a page you
+ * read top to bottom every time, and "Actions" was never an answer to "what is
+ * this card?": every card on every screen is actions.
+ *
+ * So the title names the subject and the note keeps its own job, which is to
+ * say the one thing about that subject which is not obvious. The card now
+ * reads the way DataPanel does, because it is the same kind of object.
+ */
+export function ActionBar({
+  actions,
+  title,
+  note,
+}: {
+  actions: ActionSpec[];
+  /**
+   * Omitted only where the card around this one already carries the heading —
+   * administration/tenant's "Encryption keys" is the one such place. Anywhere
+   * else, leaving it out is a card with no name, which is the fault this
+   * parameter exists to fix. It is not a fallback to "Actions".
+   */
+  title?: string;
+  note?: string;
+}) {
   const { ui } = useT();
   if (actions.length === 0) return null;
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {ui("Actions")}
-      </h2>
-      {note ? <p className="mt-1 text-sm text-muted-foreground">{ui(note)}</p> : null}
+      {title ? <h2 className="text-sm font-semibold">{ui(title)}</h2> : null}
+      {note ? (
+        <Prose className={`${title ? "mt-0.5" : ""} text-xs text-muted-foreground`}>
+          {ui(note)}
+        </Prose>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {actions.map((a) => (
           <ActionDialog

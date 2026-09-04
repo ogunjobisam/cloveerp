@@ -210,6 +210,7 @@ function Distribution() {
       ) : null}
 
       <ActionBar
+        title="Subscriptions, packs and the analytics contract"
         note="A subscription is your own unless you hold reporting.define; a pack is defined under it and assembled under reporting.export; the contract is administered under administration.integrate."
         actions={[
           {

@@ -169,6 +169,7 @@ function Cutover() {
       </PageHeader>
 
       <ActionBar
+        title="Migration batches and cutover"
         note="Stage a batch from a legacy extract, record the legacy figure against ours, then cut the domain over. A load is reversed from the batch itself, below."
         actions={[
           {

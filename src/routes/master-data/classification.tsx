@@ -169,6 +169,7 @@ function Classification() {
       </div>
 
       <ActionBar
+        title="Axes and values"
         note="Axes are the questions asked of every product; values are the permitted answers."
         actions={[
           {
@@ -245,6 +246,7 @@ function Classification() {
       />
 
       <ActionBar
+        title="Code templates"
         note="A template composes a code from ordered segments: an axis abbreviation, a literal, a sequence, or a check character."
         actions={[
           {

@@ -222,6 +222,7 @@ function Adoption() {
       </DataPanel>
 
       <ActionBar
+        title="Your own adoption scenario"
         note="Build a scenario of this organisation's own from the completion checks the product has. It is offered to whoever holds the permission it names."
         actions={[
           {

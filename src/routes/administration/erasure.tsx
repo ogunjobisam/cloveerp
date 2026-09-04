@@ -120,6 +120,7 @@ function Erasure() {
       </PageHeader>
 
       <ActionBar
+        title="Requesting an erasure"
         note="Request the erasure of a principal or a business partner's contact. Another administrator executes it from the list below."
         actions={[
           {

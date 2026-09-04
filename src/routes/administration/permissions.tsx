@@ -122,6 +122,7 @@ function Permissions() {
       </PageHeader>
 
       <ActionBar
+        title="Bringing somebody in"
         note="Bringing somebody into this organisation. An invitation returns a single-use token to hand over."
         actions={[
           {

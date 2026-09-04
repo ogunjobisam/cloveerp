@@ -108,6 +108,7 @@ function ReleaseAreas() {
       />
 
       <ActionBar
+        title="Marshalling areas"
         note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and product classes it serves."
         actions={[
           {
@@ -164,6 +165,7 @@ function ReleaseAreas() {
       />
 
       <ActionBar
+        title="Waves"
         note="The wave is the unit of release: open it, put lines on it, allocate, then print."
         actions={[
           {
@@ -324,6 +326,7 @@ function ReleaseAreas() {
       <WavePrintReadiness />
 
       <ActionBar
+        title="Cover for this wave"
         note="Cover for a wave you are looking at."
         actions={[
           {

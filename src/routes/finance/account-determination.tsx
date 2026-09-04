@@ -176,6 +176,7 @@ function AccountDetermination() {
       </PageHeader>
 
       <ActionBar
+        title="Posting classes"
         note="The vocabulary. Keep it short — a class exists because two things post differently, not because they are different things."
         actions={[
           {
@@ -249,6 +250,7 @@ function AccountDetermination() {
       />
 
       <ActionBar
+        title="Determination rules"
         note="The matrix. Leave a key field empty and the rule applies to anything; the narrowest matching rule wins."
         actions={[
           {

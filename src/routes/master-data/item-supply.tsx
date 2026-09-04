@@ -72,6 +72,7 @@ function ItemSupply() {
       />
 
       <ActionBar
+        title="Supplier defaults"
         note="Set the default once. Replenishment, planning and manual purchasing all resolve through it, so a missing default is a stopped order, not a silent guess."
         actions={[
           {

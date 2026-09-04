@@ -45,6 +45,7 @@ function Governance() {
       </PageHeader>
 
       <ActionBar
+        title="Proposing a change"
         note="Proposing a change, and the mass change that proposes the same edit against many records."
         actions={[
           {

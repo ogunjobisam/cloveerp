@@ -230,6 +230,7 @@ function Organisation() {
       </PageHeader>
 
       <ActionBar
+        title="Departments and membership"
         note="Departments and membership. A person's primary department at capture is the one that routes their request."
         actions={[
           {
@@ -288,6 +289,7 @@ function Organisation() {
       />
 
       <ActionBar
+        title="Approval bands and named approvers"
         note="Value bands and named assignments. Resolution runs named assignment first, then the department's bands."
         actions={[
           {
@@ -443,6 +445,7 @@ function Organisation() {
       />
 
       <ActionBar
+        title="Cover while somebody is away"
         note="Cover while somebody is away. A delegation keeps the approver of record and records who acted; a substitution replaces them outright."
         actions={[
           {
@@ -505,6 +508,7 @@ function Organisation() {
           organisation has none, and a document that needs a site cannot be
           raised until one exists. */}
       <ActionBar
+        title="Sites"
         note="Sites — the places this organisation works from. Stock, receipts and despatches all happen at one."
         actions={[
           {
@@ -576,6 +580,7 @@ function Organisation() {
           inbound movement looks for an active receiving location. New sites are
           given a standard set; this is how a further one is added. */}
       <ActionBar
+        title="Locations"
         note="Locations — the places within a site where stock actually stands."
         actions={[
           {
