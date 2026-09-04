@@ -22,3 +22,19 @@ project_id = "xpzffnnhnhcqyjqcueja"
 [functions.dispatch]
 verify_jwt = true
 import_map = "./functions/import_map.json"
+
+# The contact form's ingress.
+#
+# verify_jwt is false, and it is the only function here for which that is true.
+# The caller is a visitor to cloveerp.com with no session, which is the whole
+# point: erp.assert_public_api_safe() refuses a public.erp_* door executable by
+# anon, so the alternative to this function is not a safer door — it is no
+# contact form. What the visitor reaches is this file, which holds the
+# connection; the refusals, the length bounds and the rate limit are all on the
+# far side of it, in erp.record_enquiry().
+#
+# import_map for the same reason dispatch needs it: worker/src/core/db.ts
+# imports the bare specifier "postgres", which Deno cannot resolve on its own.
+[functions.enquiry]
+verify_jwt = false
+import_map = "./functions/import_map.json"

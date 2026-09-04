@@ -48,6 +48,7 @@ function Sales() {
       <KpiRow kpis={SALES_KPIS} />
 
       <ActionBar
+        title="Pricing, promise, credit and returns"
         note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
         actions={[
           {

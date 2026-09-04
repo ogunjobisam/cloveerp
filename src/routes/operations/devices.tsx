@@ -136,6 +136,7 @@ function Devices() {
       </PageHeader>
 
       <ActionBar
+        title="Devices and scan rules"
         note="Registering a device is the first act; a session is opened from the device itself. Scan rules are per step, with an optional product class that overrides the step's default."
         actions={[
           {

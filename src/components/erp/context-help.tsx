@@ -66,7 +66,7 @@ export function ContextHelp() {
         onClick={() => setOpen(true)}
         aria-label="Help for this screen"
         aria-expanded={open}
-        className={`${TOUCH} inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground`}
+        className={`${TOUCH} inline-flex w-11 shrink-0 items-center justify-center rounded-r-md border-l border-input text-muted-foreground hover:bg-muted hover:text-foreground`}
       >
         <CircleHelp className="size-5" />
       </button>

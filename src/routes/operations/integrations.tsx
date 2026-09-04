@@ -65,6 +65,7 @@ function Integrations() {
       </PageHeader>
 
       <ActionBar
+        title="Replaying a message"
         note="Replaying a message is the one thing a person does to the gateway by hand."
         actions={[
           {

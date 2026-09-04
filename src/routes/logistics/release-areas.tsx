@@ -8,7 +8,7 @@ import {
   reason,
 } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { WavePrintReadiness } from "../../components/erp/wave-print";
@@ -100,10 +100,6 @@ function ReleaseAreas() {
         )}
       </PageHeader>
 
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
-
       <ConfigTransfer
         objectType="release_area"
         title="Marshalling areas as a file"
@@ -112,6 +108,7 @@ function ReleaseAreas() {
       />
 
       <ActionBar
+        title="Marshalling areas"
         note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and product classes it serves."
         actions={[
           {
@@ -168,6 +165,7 @@ function ReleaseAreas() {
       />
 
       <ActionBar
+        title="Waves"
         note="The wave is the unit of release: open it, put lines on it, allocate, then print."
         actions={[
           {
@@ -328,6 +326,7 @@ function ReleaseAreas() {
       <WavePrintReadiness />
 
       <ActionBar
+        title="Cover for this wave"
         note="Cover for a wave you are looking at."
         actions={[
           {

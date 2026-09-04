@@ -4,7 +4,7 @@ import { type Field } from "../../components/erp/action";
 import { ActionBar, pickFrom, pickSite, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 
@@ -229,11 +229,8 @@ function Organisation() {
         )}
       </PageHeader>
 
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
-
       <ActionBar
+        title="Departments and membership"
         note="Departments and membership. A person's primary department at capture is the one that routes their request."
         actions={[
           {
@@ -292,6 +289,7 @@ function Organisation() {
       />
 
       <ActionBar
+        title="Approval bands and named approvers"
         note="Value bands and named assignments. Resolution runs named assignment first, then the department's bands."
         actions={[
           {
@@ -447,6 +445,7 @@ function Organisation() {
       />
 
       <ActionBar
+        title="Cover while somebody is away"
         note="Cover while somebody is away. A delegation keeps the approver of record and records who acted; a substitution replaces them outright."
         actions={[
           {
@@ -509,6 +508,7 @@ function Organisation() {
           organisation has none, and a document that needs a site cannot be
           raised until one exists. */}
       <ActionBar
+        title="Sites"
         note="Sites — the places this organisation works from. Stock, receipts and despatches all happen at one."
         actions={[
           {
@@ -560,7 +560,7 @@ function Organisation() {
         )}
       >
         {(rows) => (
-          <Table columns={[ui("Code"), ui("Name"), ui("Kind"), ui("Entity"), ui("Status")]}>
+          <Table columns={[ui("Code"), ui("Name"), ui("Kind"), ui("Company"), ui("Status")]}>
             {rows.map((s) => (
               <tr key={s.site_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{s.code}</td>
@@ -580,6 +580,7 @@ function Organisation() {
           inbound movement looks for an active receiving location. New sites are
           given a standard set; this is how a further one is added. */}
       <ActionBar
+        title="Locations"
         note="Locations — the places within a site where stock actually stands."
         actions={[
           {

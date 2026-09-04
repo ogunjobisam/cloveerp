@@ -315,10 +315,10 @@ function PriceBook() {
                       <span
                         className={`${TOUCH} inline-flex items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground`}
                       >
-                        {ui("Add a price item")}
+                        {ui("Add a priced product")}
                       </span>
                     }
-                    title={ui("Add a price item")}
+                    title={ui("Add a priced product")}
                     permission="sales.price"
                     fn="erp_upsert_price_item"
                     fields={[
@@ -385,7 +385,7 @@ function PriceBook() {
                       p_description: v["p_description"] || null,
                     })}
                     invalidates={["erp_price_book"]}
-                    submitLabel={ui("Add a price item")}
+                    submitLabel={ui("Add a priced product")}
                   />
                   <ActionDialog
                     trigger={

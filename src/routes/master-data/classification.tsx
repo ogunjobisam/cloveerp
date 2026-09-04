@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ActionBar, pickFrom, pickItem } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { ConfigTransfer } from "../../components/erp/transfer";
@@ -145,7 +145,6 @@ function Classification() {
             "erp_release_areas",
           ]}
         />
-        <RefreshButton />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -170,6 +169,7 @@ function Classification() {
       </div>
 
       <ActionBar
+        title="Axes and values"
         note="Axes are the questions asked of every product; values are the permitted answers."
         actions={[
           {
@@ -246,6 +246,7 @@ function Classification() {
       />
 
       <ActionBar
+        title="Code templates"
         note="A template composes a code from ordered segments: an axis abbreviation, a literal, a sequence, or a check character."
         actions={[
           {

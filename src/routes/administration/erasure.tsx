@@ -120,7 +120,8 @@ function Erasure() {
       </PageHeader>
 
       <ActionBar
-        note="Request the erasure of a principal or a business partner's contact. Another administrator executes it from the list below."
+        title="Requesting an erasure"
+        note="Request the erasure of a user or a business partner's contact. Another administrator executes it from the list below."
         actions={[
           {
             label: "Request an erasure",
@@ -142,7 +143,7 @@ function Erasure() {
                 label: "Kind",
                 required: true,
                 choices: [
-                  { value: "principal", label: "Principal (someone who signs in)" },
+                  { value: "principal", label: "User (someone who signs in)" },
                   { value: "contact", label: "Contact at a business partner" },
                 ],
               },

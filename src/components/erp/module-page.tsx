@@ -137,6 +137,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           {def.actions && def.actions.length > 0 ? (
             <ActionBar
               actions={def.actions}
+              title="What you can do here"
               note="The database authorises every one of these; you only see the ones you hold."
             />
           ) : null}

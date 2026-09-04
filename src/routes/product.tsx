@@ -1,4 +1,3 @@
-import { CONTACT_EMAIL } from "../lib/brand";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -423,12 +422,12 @@ function Pricing() {
             >
               Start exploring with demo data
             </Link>
-            <a
-              href={`mailto:${CONTACT_EMAIL}`}
+            <Link
+              to="/contact"
               className="rounded-full px-6 py-3.5 text-center text-sm font-medium text-surface ring-1 ring-surface/40 transition-colors hover:bg-surface/10"
             >
               Book a walkthrough
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -443,7 +442,10 @@ function Footer() {
       <p className="text-[11px] font-medium uppercase tracking-widest text-ink/40">
         Built for precision in the United Kingdom · Clove ERP MMXXVI
       </p>
-      <p className="text-xs text-ink/50">
+      <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-ink/50">
+        <Link to="/contact" className="underline underline-offset-2">
+          Contact us
+        </Link>
         <Link to="/" className="underline underline-offset-2">
           Sign in
         </Link>

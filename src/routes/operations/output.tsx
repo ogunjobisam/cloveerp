@@ -213,7 +213,8 @@ function Output() {
       </PageHeader>
 
       <ActionBar
-        note="Printers are configuration: on a live organisation the change goes through a change set, and a direct write here is refused. A label printer needs a language and a resolution; a document printer needs neither."
+        title="Printers"
+        note="Printers are configuration: on a live organisation the edit is raised as a change and promoted, and a direct write here is refused. A label printer needs a language and a resolution; a document printer needs neither."
         actions={[
           {
             label: "Add a print route",

@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ActionBar, pickFrom, pickItem, pickParty, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { useT } from "../../lib/i18n";
@@ -64,10 +64,6 @@ function ItemSupply() {
         )}
       </PageHeader>
 
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
-
       <ConfigTransfer
         objectType="item_supplier"
         title="Default suppliers as a file"
@@ -76,6 +72,7 @@ function ItemSupply() {
       />
 
       <ActionBar
+        title="Supplier defaults"
         note="Set the default once. Replenishment, planning and manual purchasing all resolve through it, so a missing default is a stopped order, not a silent guess."
         actions={[
           {

@@ -66,7 +66,8 @@ function Procurement() {
       <KpiRow kpis={PURCHASING_KPIS} />
 
       <ActionBar
-        note="Receiving, matching and supplier qualification — the verbs between the documents."
+        title="Goods-in, matching and qualification"
+        note="Goods-in, matching and supplier qualification — the verbs between the documents."
         actions={[
           {
             label: "Receive against an order",

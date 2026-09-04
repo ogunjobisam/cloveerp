@@ -278,7 +278,8 @@ jobs:
             "erp_test.assert_support_entry_suite()" \
             "erp_test.assert_support_visibility_suite()" \
             "erp_test.assert_door_runs_suite()" \
-            "erp_test.assert_notification_chain_suite()"
+            "erp_test.assert_notification_chain_suite()" \
+            "erp_test.assert_enquiry_suite()"
           do
             $PSQL -tAc "select $s;"
           done
@@ -389,11 +390,17 @@ jobs:
           bun run test
           bun run build
 
-      - name: The Edge Function builds
+      - name: The Edge Functions build
         # deno check resolves the whole import graph and typechecks it, which
         # is what the Edge Runtime will do to it. This is the check that was
         # missing: it fails on exactly the defect that shipped.
+        #
+        # Every function under supabase/functions, not a named one. The list
+        # was a single path when there was a single function, and the next one
+        # added would have been unbuilt by exactly the step written to stop
+        # that — which is the same "the register only knows what it was seeded
+        # with" fault the schema side keeps finding.
         run: |
           set -euo pipefail
           deno check --import-map supabase/functions/import_map.json \
-            supabase/functions/dispatch/index.ts
+            supabase/functions/*/index.ts

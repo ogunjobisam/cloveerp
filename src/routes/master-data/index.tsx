@@ -1,27 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useCallback, useState } from "react";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
+import { Field, RecordBrowser, RecordSection } from "../../components/erp/record-browser";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
 /**
- * Items and parties.
+ * Products and business partners.
  *
- * Every document line points at an item and most documents point at a party,
- * so a tenant with neither cannot transact at all. Until now there was no way
- * to create either from the product — the pickers on Sales and Procurement
- * were reading lists nothing could ever fill.
+ * Every document line points at a product and most documents point at a
+ * business partner, so an organisation with neither cannot transact at all.
  *
- * Both tables are deliberately plain. This is the minimum a document needs:
- * a code, a name, and for a party the role that decides which picker offers
- * it. The rest of the master-data surface — attributes, classifications,
- * duplicate merging, mass change — is governed work with its own approvals,
- * and belongs on its own screens rather than smuggled into a create form.
+ * This was two flat tables until the list-and-record shape arrived. The tables
+ * showed five columns each and nothing could be opened, so everything else the
+ * doors already return — a product's group, its stock unit, whether it is
+ * batch, serial or expiry controlled, how it is classified, who supplies it —
+ * was being fetched and thrown away. The list now stays where it is and the
+ * record opens beside it, which is how master data is actually read: not one
+ * product at a time, but the one of forty that is set up differently from the
+ * other thirty-nine.
+ *
+ * Creating either is still a dialog with the minimum a document needs. The
+ * governed half of master data — attributes, duplicate merging, mass change —
+ * has its own approvals and its own screens, and does not belong smuggled into
+ * a create form.
  */
 
 export const Route = createFileRoute("/master-data/")({
@@ -55,26 +63,58 @@ type Item = {
   code: string;
   name: string;
   item_class: string | null;
+  item_group: string | null;
   lifecycle: string;
-  is_batch_controlled: boolean;
   status: string;
+  stock_uom_code: string | null;
+  is_batch_controlled: boolean;
+  is_serial_controlled: boolean;
+  has_expiry: boolean;
 };
 
 type Party = {
   party_id: string;
   code: string;
   name: string;
+  legal_name: string | null;
   country_code: string | null;
   status: string;
   roles: string[];
 };
 
+type Classification = {
+  classification_id: string;
+  axis_code: string;
+  axis_name: string;
+  value_code: string;
+  value_name: string;
+  abbreviation: string | null;
+};
+
+type ItemSupplier = {
+  item_supplier_id: string;
+  supplier: string;
+  supplier_item_code: string | null;
+  preference_rank: number | null;
+  is_default: boolean;
+  is_approved_for_use: boolean;
+  lead_time_days: number | null;
+  min_order_quantity: number | null;
+};
+
 const ROLES = ["customer", "supplier", "carrier", "manufacturer", "broker", "consignee", "agent"];
+
+const LIMIT = 200;
 
 function MasterData() {
   const { session } = useErpSession();
   const { t } = useT();
   const mayWrite = hasPermission(session, "master_data.write");
+  // erp_item_suppliers authorises on procurement.read rather than
+  // master_data.read, so the panel is asked for only where it would be
+  // answered. Rendering it for everybody would turn a permission boundary
+  // into an error message on a screen that is otherwise working.
+  const maySeeSuppliers = hasPermission(session, "procurement.read");
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -83,183 +123,328 @@ function MasterData() {
         business partner, so this is where an organisation becomes able to transact.
       </PageHeader>
 
-      <Items mayWrite={mayWrite} />
+      <Items mayWrite={mayWrite} maySeeSuppliers={maySeeSuppliers} />
       <Parties mayWrite={mayWrite} />
     </div>
   );
 }
 
-function Items({ mayWrite }: { mayWrite: boolean }) {
+function Items({ mayWrite, maySeeSuppliers }: { mayWrite: boolean; maySeeSuppliers: boolean }) {
+  const [search, setSearch] = useState("");
+  const onSearchChange = useCallback((s: string) => setSearch(s), []);
   const { data, isPending, error } = useQuery({
-    queryKey: ["erp_items", {}],
-    queryFn: () => callErp<Item[]>("erp_items"),
+    queryKey: ["erp_items", { search }],
+    queryFn: () => callErp<Item[]>("erp_items", { p_search: search || null, p_limit: LIMIT }),
   });
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Products</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            What is bought, made, stocked and sold. The unit of measure is created with the first
-            product when the organisation has none.
-          </Prose>
-        </div>
+    <RecordBrowser<Item>
+      nounSingular="product"
+      nounPlural="products"
+      title="Products"
+      description="What is bought, made, stocked and sold. The unit of measure is created with the first product when the organisation has none."
+      headerAction={mayWrite ? <NewItem /> : null}
+      columns={[
+        {
+          key: "code",
+          header: "Code",
+          value: (i) => i.code,
+          render: (i) => <span className="font-mono">{i.code}</span>,
+          filter: true,
+        },
+        { key: "name", header: "Name", value: (i) => i.name, filter: true },
+      ]}
+      gridTemplate="grid-cols-[7rem_minmax(0,1fr)]"
+      rows={data}
+      isPending={isPending}
+      error={error}
+      limit={LIMIT}
+      onSearchChange={onSearchChange}
+      idOf={(i) => i.item_id}
+      titleOf={(i) => i.code}
+      subtitleOf={(i) => i.name}
+      recentsKey="clove.recent.products"
+      detail={(item) => <ItemRecord item={item} maySeeSuppliers={maySeeSuppliers} />}
+    />
+  );
+}
 
-        {mayWrite ? (
-          <ActionDialog
-            trigger={<ActionButton>New product</ActionButton>}
-            title="New product"
-            description="A code and a name are the minimum. Everything else is maintainable afterwards."
-            permission="master_data.write"
-            fn="erp_create_item"
-            fields={[
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
-              {
-                kind: "text",
-                name: "p_item_class",
-                label: "Class",
-                hint: "Free text — finished_good, raw_material, packaging.",
-              },
-            ]}
-            mapArgs={(v) => ({
-              p_code: v["p_code"],
-              p_name: v["p_name"],
-              p_item_class: v["p_item_class"] || null,
-              p_is_batch_controlled: false,
-            })}
-            invalidates={["erp_items"]}
-            submitLabel="Create product"
-          />
-        ) : null}
-      </header>
-
-      <div className="px-4 py-4 sm:px-5">
-        {isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : error ? (
-          <ErrorNote error={error} />
-        ) : (data ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No products yet. Nothing can be put on a document line until there is one.
-          </p>
-        ) : (
-          <Table columns={["Code", "Name", "Class", "Lifecycle", "Batches"]}>
-            {(data ?? []).map((i) => (
-              <tr key={i.item_id} className="border-b border-border/50 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{i.code}</td>
-                <td className="py-2 pr-4">{i.name}</td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">{i.item_class ?? "—"}</td>
-                <td className="py-2 pr-4">
-                  <Pill tone={i.lifecycle === "active" ? "ok" : "muted"}>{i.lifecycle}</Pill>
-                </td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">
-                  {i.is_batch_controlled ? "Batch controlled" : "—"}
-                </td>
-              </tr>
-            ))}
-          </Table>
-        )}
+function ItemRecord({ item, maySeeSuppliers }: { item: Item; maySeeSuppliers: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="font-mono text-sm font-semibold">{item.code}</h3>
+        <p className="min-w-0 flex-1 truncate text-base">{item.name}</p>
+        <Pill tone={item.lifecycle === "active" ? "ok" : "muted"}>{item.lifecycle}</Pill>
       </div>
-    </section>
+
+      <RecordSection title="Identification">
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <Field label="Class">{item.item_class ?? "—"}</Field>
+          <Field label="Group">{item.item_group ?? "—"}</Field>
+          <Field label="Stock unit">{item.stock_uom_code ?? "—"}</Field>
+          <Field label="Status">{item.status}</Field>
+        </dl>
+      </RecordSection>
+
+      <RecordSection title="Traceability">
+        {/* Three separate controls, so they are shown separately. A single
+            "tracked" pill would hide which of the three a product actually
+            carries, and they mean different things at the receipt. */}
+        <div className="flex flex-wrap gap-2">
+          <Pill tone={item.is_batch_controlled ? "ok" : "muted"}>
+            {item.is_batch_controlled ? "Batch controlled" : "No batch control"}
+          </Pill>
+          <Pill tone={item.is_serial_controlled ? "ok" : "muted"}>
+            {item.is_serial_controlled ? "Serial controlled" : "No serial control"}
+          </Pill>
+          <Pill tone={item.has_expiry ? "ok" : "muted"}>
+            {item.has_expiry ? "Expiry dated" : "No expiry date"}
+          </Pill>
+        </div>
+      </RecordSection>
+
+      <ItemClassification itemId={item.item_id} />
+      {maySeeSuppliers ? <ItemSuppliers itemId={item.item_id} /> : null}
+    </div>
+  );
+}
+
+function ItemClassification({ itemId }: { itemId: string }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["erp_item_classification", { itemId }],
+    queryFn: () => callErp<Classification[]>("erp_item_classification", { p_item_id: itemId }),
+  });
+
+  return (
+    <RecordSection title="Classification">
+      {isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading…
+        </p>
+      ) : error ? (
+        <ErrorNote error={error} />
+      ) : (data ?? []).length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Not classified. Reports that group by an axis will leave this product out.
+        </p>
+      ) : (
+        <dl className="grid gap-4 sm:grid-cols-3">
+          {(data ?? []).map((c) => (
+            <Field key={c.classification_id} label={c.axis_name}>
+              {c.value_name}
+              <span className="ml-1.5 font-mono text-xs text-muted-foreground">{c.value_code}</span>
+            </Field>
+          ))}
+        </dl>
+      )}
+    </RecordSection>
+  );
+}
+
+function ItemSuppliers({ itemId }: { itemId: string }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["erp_item_suppliers", { itemId }],
+    queryFn: () => callErp<ItemSupplier[]>("erp_item_suppliers", { p_item_id: itemId }),
+  });
+
+  return (
+    <RecordSection title="Supply">
+      {isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading…
+        </p>
+      ) : error ? (
+        <ErrorNote error={error} />
+      ) : (data ?? []).length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No supplier recorded. A purchase order for this product has nobody to go to.
+        </p>
+      ) : (
+        <Table columns={["Supplier", "Their code", "Rank", "Lead time", "Approved"]}>
+          {(data ?? []).map((s) => (
+            <tr key={s.item_supplier_id} className="border-b border-border/50 last:border-0">
+              <td className="py-2 pr-4">
+                {s.supplier}
+                {s.is_default ? <Pill tone="ok">default</Pill> : null}
+              </td>
+              <td className="py-2 pr-4 font-mono text-xs">{s.supplier_item_code ?? "—"}</td>
+              <td className="py-2 pr-4 text-xs text-muted-foreground">
+                {s.preference_rank ?? "—"}
+              </td>
+              <td className="py-2 pr-4 text-xs text-muted-foreground">
+                {s.lead_time_days === null ? "—" : `${s.lead_time_days} days`}
+              </td>
+              <td className="py-2 pr-4">
+                <Pill tone={s.is_approved_for_use ? "ok" : "warn"}>
+                  {s.is_approved_for_use ? "Approved" : "Not approved"}
+                </Pill>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </RecordSection>
+  );
+}
+
+function NewItem() {
+  return (
+    <ActionDialog
+      trigger={<ActionButton>New product</ActionButton>}
+      title="New product"
+      description="A code and a name are the minimum. Everything else is maintainable afterwards."
+      permission="master_data.write"
+      fn="erp_create_item"
+      fields={[
+        { kind: "text", name: "p_code", label: "Code", required: true },
+        { kind: "text", name: "p_name", label: "Name", required: true },
+        {
+          kind: "text",
+          name: "p_item_class",
+          label: "Class",
+          hint: "Free text — finished_good, raw_material, packaging.",
+        },
+      ]}
+      mapArgs={(v) => ({
+        p_code: v["p_code"],
+        p_name: v["p_name"],
+        p_item_class: v["p_item_class"] || null,
+        p_is_batch_controlled: false,
+      })}
+      invalidates={["erp_items"]}
+      submitLabel="Create product"
+    />
   );
 }
 
 function Parties({ mayWrite }: { mayWrite: boolean }) {
+  const [search, setSearch] = useState("");
+  const onSearchChange = useCallback((s: string) => setSearch(s), []);
   const { data, isPending, error } = useQuery({
-    queryKey: ["erp_parties", {}],
-    queryFn: () => callErp<Party[]>("erp_parties"),
+    queryKey: ["erp_parties", { search }],
+    queryFn: () =>
+      callErp<Party[]>("erp_parties", {
+        p_role_kind: null,
+        p_search: search || null,
+        p_limit: LIMIT,
+      }),
   });
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Business partners</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            One record for customers, suppliers and everybody else. The role is what decides which
-            picker offers a partner, and one partner may hold several.
-          </Prose>
-        </div>
+    <RecordBrowser<Party>
+      nounSingular="business partner"
+      nounPlural="business partners"
+      title="Business partners"
+      description="One record for customers, suppliers and everybody else. The role is what decides which picker offers a partner, and one partner may hold several."
+      headerAction={mayWrite ? <NewParty /> : null}
+      columns={[
+        {
+          key: "code",
+          header: "Code",
+          value: (p) => p.code,
+          render: (p) => <span className="font-mono">{p.code}</span>,
+          filter: true,
+        },
+        { key: "name", header: "Name", value: (p) => p.name, filter: true },
+      ]}
+      gridTemplate="grid-cols-[7rem_minmax(0,1fr)]"
+      rows={data}
+      isPending={isPending}
+      error={error}
+      limit={LIMIT}
+      onSearchChange={onSearchChange}
+      idOf={(p) => p.party_id}
+      titleOf={(p) => p.code}
+      subtitleOf={(p) => p.name}
+      recentsKey="clove.recent.partners"
+      detail={(party) => <PartyRecord party={party} />}
+    />
+  );
+}
 
-        {mayWrite ? (
-          <ActionDialog
-            trigger={<ActionButton>New business partner</ActionButton>}
-            title="New business partner"
-            description="The role given here is the first one; more can be added afterwards."
-            permission="master_data.write"
-            fn="erp_create_party"
-            fields={[
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
-              {
-                kind: "text",
-                name: "p_role_kind",
-                label: "Role",
-                required: true,
-                hint: `One of: ${ROLES.join(", ")}.`,
-              },
-              {
-                kind: "text",
-                name: "p_country_code",
-                label: "Country",
-                hint: "Two-letter code, e.g. GB.",
-              },
-            ]}
-            mapArgs={(v) => ({
-              p_code: v["p_code"],
-              p_name: v["p_name"],
-              p_role_kind: (v["p_role_kind"] || "customer").toString().trim().toLowerCase(),
-              p_country_code: v["p_country_code"]
-                ? v["p_country_code"].toString().trim().toUpperCase()
-                : null,
-            })}
-            invalidates={["erp_parties"]}
-            submitLabel="Create business partner"
-          />
-        ) : null}
-      </header>
+function PartyRecord({ party }: { party: Party }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="font-mono text-sm font-semibold">{party.code}</h3>
+        <p className="min-w-0 flex-1 truncate text-base">{party.name}</p>
+        <Pill tone={party.status === "active" ? "ok" : "muted"}>{party.status}</Pill>
+      </div>
 
-      <div className="px-4 py-4 sm:px-5">
-        {isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : error ? (
-          <ErrorNote error={error} />
-        ) : (data ?? []).length === 0 ? (
+      <RecordSection title="Identification">
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <Field label="Legal name">{party.legal_name ?? party.name}</Field>
+          <Field label="Country">{party.country_code ?? "—"}</Field>
+          <Field label="Status">{party.status}</Field>
+        </dl>
+      </RecordSection>
+
+      <RecordSection title="Roles">
+        {(party.roles ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No parties yet. A sales order needs a customer and a purchase order needs a supplier.
+            None. This partner is offered in no picker, so nothing can be raised against it.
           </p>
         ) : (
-          <Table columns={["Code", "Name", "Country", "Roles", "Status"]}>
-            {(data ?? []).map((p) => (
-              <tr key={p.party_id} className="border-b border-border/50 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{p.code}</td>
-                <td className="py-2 pr-4">{p.name}</td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">{p.country_code ?? "—"}</td>
-                <td className="py-2 pr-4">
-                  <span className="flex flex-wrap gap-1">
-                    {(p.roles ?? []).length === 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        None — this party is offered nowhere
-                      </span>
-                    ) : (
-                      (p.roles ?? []).map((r) => (
-                        <Pill key={r} tone="muted">
-                          {r}
-                        </Pill>
-                      ))
-                    )}
-                  </span>
-                </td>
-                <td className="py-2 pr-4">
-                  <Pill tone={p.status === "active" ? "ok" : "muted"}>{p.status}</Pill>
-                </td>
-              </tr>
+          <div className="flex flex-wrap gap-2">
+            {(party.roles ?? []).map((r) => (
+              <Pill key={r} tone="muted">
+                {r}
+              </Pill>
             ))}
-          </Table>
+          </div>
         )}
-      </div>
-    </section>
+      </RecordSection>
+
+      {/*
+        A partner record stops here on purpose. Addresses, contacts, payment
+        terms and credit are each governed by their own permission and their
+        own doors, and none of them is readable from what this screen has
+        already fetched. Showing empty sections for them would say the data is
+        absent when what is absent is the read.
+      */}
+      <Prose className="mt-5 text-xs text-muted-foreground">
+        Addresses, contacts and credit are governed separately and are not read here.
+      </Prose>
+    </div>
+  );
+}
+
+function NewParty() {
+  return (
+    <ActionDialog
+      trigger={<ActionButton>New business partner</ActionButton>}
+      title="New business partner"
+      description="The role given here is the first one; more can be added afterwards."
+      permission="master_data.write"
+      fn="erp_create_party"
+      fields={[
+        { kind: "text", name: "p_code", label: "Code", required: true },
+        { kind: "text", name: "p_name", label: "Name", required: true },
+        {
+          kind: "text",
+          name: "p_role_kind",
+          label: "Role",
+          required: true,
+          hint: `One of: ${ROLES.join(", ")}.`,
+        },
+        {
+          kind: "text",
+          name: "p_country_code",
+          label: "Country",
+          hint: "Two-letter code, e.g. GB.",
+        },
+      ]}
+      mapArgs={(v) => ({
+        p_code: v["p_code"],
+        p_name: v["p_name"],
+        p_role_kind: (v["p_role_kind"] || "customer").toString().trim().toLowerCase(),
+        p_country_code: v["p_country_code"]
+          ? v["p_country_code"].toString().trim().toUpperCase()
+          : null,
+      })}
+      invalidates={["erp_parties"]}
+      submitLabel="Create business partner"
+    />
   );
 }

@@ -71,6 +71,7 @@ function Jobs() {
       </PageHeader>
 
       <ActionBar
+        title="Running and stopping jobs"
         note="Running a job by hand, and the kill switches that stop one from running at all."
         actions={[
           {

@@ -156,6 +156,7 @@ function Notifications() {
       {admin ? (
         <>
           <ActionBar
+            title="Notification routes"
             note="A route binds an event pattern and a severity to an audience. A mandatory route reaches its audience in-app even when they switched the channel off."
             actions={[
               {
