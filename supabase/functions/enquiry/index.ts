@@ -94,8 +94,24 @@ function cors(req: Request): Record<string, string> {
   const origin = allowedOrigin(req);
   return {
     "access-control-allow-origin": origin ?? "https://cloveerp.com",
-    "access-control-allow-headers": "content-type",
+    // apikey and authorization, not just content-type.
+    //
+    // The page sends an `apikey` header whenever VITE_SUPABASE_PUBLISHABLE_KEY
+    // is defined at build time (src/routes/contact.tsx), and it is. A header
+    // the preflight does not allow makes the browser reject the whole request
+    // before it is ever sent — so the form showed "We could not reach the
+    // server" while the function sat there working, and nothing reached the
+    // logs to say why. The two halves were written separately and this pair
+    // never met a browser: the suite exercises erp.record_enquiry(), which is
+    // reached over a database connection with no CORS in sight.
+    //
+    // authorization is allowed for the same reason before it bites: Supabase
+    // clients and the gateway attach one by habit, and verify_jwt = false
+    // means this function ignores it rather than needing it.
+    "access-control-allow-headers": "content-type, apikey, authorization",
     "access-control-allow-methods": "POST, OPTIONS",
+    // A preflight per submission is a round trip nobody needs.
+    "access-control-max-age": "86400",
     vary: "origin",
   };
 }
