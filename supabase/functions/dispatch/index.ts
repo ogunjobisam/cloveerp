@@ -7,8 +7,8 @@
  *
  * Deploy:
  *   supabase functions deploy dispatch
- *   supabase secrets set ERPWARE_DATABASE_URL=... ERPWARE_TENANTS=... \
- *                        ERPWARE_PRINCIPALS=... ERPWARE_SYSTEMS=...
+ *   supabase secrets set CLOVEERP_DATABASE_URL=... CLOVEERP_TENANTS=... \
+ *                        CLOVEERP_PRINCIPALS=... CLOVEERP_SYSTEMS=...
  *
  * No flags: supabase/config.toml carries verify_jwt and the import map now, so
  * the deploy and the preview branches agree by construction rather than by
@@ -35,7 +35,7 @@ Deno.serve(async (req: Request) => {
   // A scheduler invoking this is the only legitimate caller. Requiring a shared
   // secret keeps a public function URL from becoming a way for anyone to drive
   // the outbox — the work itself is all gated, but the request rate is not.
-  const expected = Deno.env.get("ERPWARE_DISPATCH_SECRET");
+  const expected = Deno.env.get("CLOVEERP_DISPATCH_SECRET");
   if (expected && req.headers.get("x-dispatch-secret") !== expected) {
     return new Response("forbidden", { status: 403 });
   }

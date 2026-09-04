@@ -308,7 +308,7 @@ the log was not.
   bundler follows the import out of `supabase/functions/` into
   `worker/src/core/` — it does), and it runs: pointed at a local Clove ERP
   database it refuses a wrong shared secret with a 403, connects with the npm
-  `postgres` driver, and returns B1's own `ERPWARE_UNKNOWN_PRINCIPAL` for a
+  `postgres` driver, and returns B1's own `CLOVEERP_UNKNOWN_PRINCIPAL` for a
   fabricated principal. What has not happened is a real pass: no schedule
   points at it and no secrets are set, so nothing has yet drained an outbox
   through it in anger.

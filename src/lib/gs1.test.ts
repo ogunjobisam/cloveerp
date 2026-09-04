@@ -46,11 +46,11 @@ describe("§14.4 the shared parser, mirrored from erp.parse_gs1()", () => {
   });
 
   test("an unrecognised identifier is rejected with the value shown", () => {
-    expect(() => parseGs1("9912345", REGISTER)).toThrow(/ERPWARE_UNRECOGNISED_BARCODE: 9912345/);
+    expect(() => parseGs1("9912345", REGISTER)).toThrow(/CLOVEERP_UNRECOGNISED_BARCODE: 9912345/);
   });
 
   test("a truncated fixed-length field is rejected", () => {
-    expect(() => parseGs1("01050123", REGISTER)).toThrow(/ERPWARE_TRUNCATED_BARCODE/);
+    expect(() => parseGs1("01050123", REGISTER)).toThrow(/CLOVEERP_TRUNCATED_BARCODE/);
   });
 
   test("a numeric field carrying letters is rejected", () => {
@@ -58,7 +58,7 @@ describe("§14.4 the shared parser, mirrored from erp.parse_gs1()", () => {
   });
 
   test("nothing scanned is an error, not an empty result", () => {
-    expect(() => parseGs1("  ", REGISTER)).toThrow(/ERPWARE_EMPTY_SCAN/);
+    expect(() => parseGs1("  ", REGISTER)).toThrow(/CLOVEERP_EMPTY_SCAN/);
   });
 });
 
@@ -179,6 +179,6 @@ describe("§14.4 scan rules, mirrored from erp.evaluate_scan()", () => {
         rules,
         register: REGISTER,
       }),
-    ).toThrow(/ERPWARE_UNKNOWN_SYMBOLOGY/);
+    ).toThrow(/CLOVEERP_UNKNOWN_SYMBOLOGY/);
   });
 });

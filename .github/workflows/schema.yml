@@ -196,7 +196,8 @@ jobs:
             "erp.assert_commercial_quotes_sound()" \
             "erp.assert_contract_provisions_entitlement()" \
             "erp.assert_customer_view_sound()" \
-            "erp.assert_refusals_name_next_action()"
+            "erp.assert_refusals_name_next_action()" \
+            "erp.assert_no_legacy_refusal_prefix()"
           do
             printf '── %-45s' "$a"
             $PSQL -tAc "select $a;" | sed 's/^$/ok/'

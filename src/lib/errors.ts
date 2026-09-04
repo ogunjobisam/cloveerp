@@ -43,21 +43,46 @@ function deniedObject(message: string): string | null {
  * anything: the ResourceProvider hands the loaded dictionary here once, and a
  * refusal resolves through it before falling back to the wording below.
  *
- * A family token — ERPWARE_QUOTE_IS_ACCEPTED, raised with the state as a
- * suffix — is registered once as ERPWARE_QUOTE_IS_% and mirrors with the
+ * A family token — CLOVEERP_QUOTE_IS_ACCEPTED, raised with the state as a
+ * suffix — is registered once as CLOVEERP_QUOTE_IS_% and mirrors with the
  * suffix dropped, so a family key ends in an underscore and matches by prefix.
  */
 let refusalResources: Record<string, string> = {};
 let refusalFamilies: string[] = [];
 
+/**
+ * Both prefixes, for one release.
+ *
+ * 20260904980000 moved every refusal from ERPWARE_ to CLOVEERP_. The database
+ * and this site are deployed separately and by hand, so between the two there
+ * is a window where one is ahead of the other — and in that window a lookup
+ * pinned to a single spelling finds nothing, the register is never consulted,
+ * and the person who tripped the refusal reads raw database text instead of
+ * what was refused and what to do next.
+ *
+ * Accepting both costs one extra dictionary lookup and takes the deploy order
+ * off the list of things somebody has to get right. Delete the retired half —
+ * this pair of constants, alternate(), the second branch in registeredRefusal()
+ * and the tests that pin them — once both sides have been carried.
+ */
+const PREFIX = "CLOVEERP_";
+const RETIRED_PREFIX = "ERPWARE_";
+
+/** The same token spelled under the other prefix, or null if it has neither. */
+function alternate(token: string): string | null {
+  if (token.startsWith(PREFIX)) return RETIRED_PREFIX + token.slice(PREFIX.length);
+  if (token.startsWith(RETIRED_PREFIX)) return PREFIX + token.slice(RETIRED_PREFIX.length);
+  return null;
+}
+
 export function setRefusalResources(resources: Record<string, string>): void {
   refusalResources = resources;
   refusalFamilies = Object.keys(resources)
-    .map((k) => /^refusal\.(erpware_[a-z0-9_]*_)\.next_action$/.exec(k)?.[1])
+    .map((k) => /^refusal\.((?:cloveerp|erpware)_[a-z0-9_]*_)\.next_action$/.exec(k)?.[1])
     .filter((k): k is string => Boolean(k));
 }
 
-function registeredRefusal(
+function resolveRefusal(
   token: string,
 ): { refused: string; why: string | null; nextAction: string } | null {
   const exact = token.toLowerCase();
@@ -72,20 +97,35 @@ function registeredRefusal(
   return { refused, why: refusalResources[`refusal.${code}.why`] ?? null, nextAction };
 }
 
-const ERPWARE_MESSAGES: Record<string, { title: string; body: string }> = {
-  ERPWARE_PERMISSION_DENIED: {
+function registeredRefusal(
+  token: string,
+): { refused: string; why: string | null; nextAction: string } | null {
+  const found = resolveRefusal(token);
+  if (found) return found;
+  const other = alternate(token);
+  return other ? resolveRefusal(other) : null;
+}
+
+const REFUSAL_MESSAGES: Record<string, { title: string; body: string }> = {
+  CLOVEERP_PERMISSION_DENIED: {
     title: "You do not have permission to do this.",
     body: "An administrator can grant the missing permission on the Permissions screen.",
   },
-  ERPWARE_TENANT_FROZEN: {
+  CLOVEERP_TENANT_FROZEN: {
     title: "This tenant is frozen.",
     body: "Changes are blocked while the tenant is being exported or deleted.",
   },
-  ERPWARE_PERIOD_CLOSED: {
+  CLOVEERP_PERIOD_CLOSED: {
     title: "That accounting period is closed.",
     body: "Reopen the period, or post the entry into an open one.",
   },
 };
+
+/** This map is ours, so it is keyed once and the retired spelling is folded in. */
+function builtInMessage(token: string): { title: string; body: string } | undefined {
+  const other = alternate(token);
+  return REFUSAL_MESSAGES[token] ?? (other ? REFUSAL_MESSAGES[other] : undefined);
+}
 
 /** Turn any thrown value into something worth reading. */
 export function friendlyError(error: unknown): FriendlyError {
@@ -115,9 +155,9 @@ export function friendlyError(error: unknown): FriendlyError {
       technical,
     };
   }
-  if (token && ERPWARE_MESSAGES[token]) {
-    const m = ERPWARE_MESSAGES[token];
-    return out(m.title, m.body);
+  const builtIn = token ? builtInMessage(token) : undefined;
+  if (builtIn) {
+    return out(builtIn.title, builtIn.body);
   }
   if (token) {
     // An engine rule we have no wording for: show its own words, minus the token.

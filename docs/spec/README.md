@@ -1,19 +1,28 @@
 # The specification this codebase implements
 
-`ERPWare_Foundation_Specification_v1.2.pdf` is the version of record — a tenant-neutral
-ERP platform, 1 September 2026, 38 pages, Parts 1 to 19.
+`Clove_ERP_Foundation_Specification_v1.2.pdf` is the version of record — a
+tenant-neutral ERP platform, 1 September 2026, 38 pages, Parts 1 to 19.
 
-The `.txt` beside it is a page-marked text extraction of the same file
-(`<<<PAGE n>>>` separators). It exists so that the next revision can be **diffed**
-rather than re-read: a 38-page PDF is not reviewable by eye for what changed, and
-"which clauses moved" is the first question any spec update has to answer.
+**The document's own text still says ERPWare, and deliberately so.** The product
+was renamed to Clove ERP after this revision was written, and there is no source
+document behind the PDF to re-render. The file name is ours and has been changed;
+the pages are a dated artefact and have not been. The `.txt` beside it is a
+mechanical extraction, so it says ERPWare too — editing it would make it disagree
+with the file it claims to extract, and every future diff would open with seven
+changes nobody made. The next revision of the specification carries the new name;
+this one records what was written on 1 September 2026.
+
+The `.txt` is a page-marked text extraction of the same file (`<<<PAGE n>>>`
+separators). It exists so that the next revision can be **diffed** rather than
+re-read: a 38-page PDF is not reviewable by eye for what changed, and "which
+clauses moved" is the first question any spec update has to answer.
 
 Regenerate the extraction with:
 
 ```bash
 python3 - <<'PY'
 import pdfplumber
-src = "docs/spec/ERPWare_Foundation_Specification_v1.2.pdf"
+src = "docs/spec/Clove_ERP_Foundation_Specification_v1.2.pdf"
 with pdfplumber.open(src) as pdf:
     open(src[:-4] + ".txt", "w").write(
         "".join(f"\n<<<PAGE {i}>>>\n{p.extract_text() or ''}"

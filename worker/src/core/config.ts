@@ -52,25 +52,25 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     // any of the parsing or the refusals below.
     (process as { env: Record<string, string | undefined> }).env = env;
 
-    const tenants = list("ERPWARE_TENANTS");
-    const principals = list("ERPWARE_PRINCIPALS");
+    const tenants = list("CLOVEERP_TENANTS");
+    const principals = list("CLOVEERP_PRINCIPALS");
 
     if (tenants.length !== principals.length) {
       throw new Error(
-        `ERPWARE_TENANTS has ${tenants.length} entries and ERPWARE_PRINCIPALS ` +
+        `CLOVEERP_TENANTS has ${tenants.length} entries and CLOVEERP_PRINCIPALS ` +
           `has ${principals.length}. They are positional, so a mismatch would ` +
           `run one tenant's jobs as another tenant's principal.`,
       );
     }
 
     return {
-      databaseUrl: required("ERPWARE_DATABASE_URL"),
+      databaseUrl: required("CLOVEERP_DATABASE_URL"),
       bindings: tenants.map((tenantId, i) => ({ tenantId, principalId: principals[i]! })),
-      systems: env["ERPWARE_SYSTEMS"]
-        ? env["ERPWARE_SYSTEMS"].split(",").map((s) => s.trim()).filter(Boolean)
+      systems: env["CLOVEERP_SYSTEMS"]
+        ? env["CLOVEERP_SYSTEMS"].split(",").map((s) => s.trim()).filter(Boolean)
         : [],
-      pollMs: Number(env["ERPWARE_POLL_MS"] ?? 5000),
-      workerName: env["ERPWARE_WORKER_NAME"] ?? `clove-erp-worker-${process.pid ?? "edge"}`,
+      pollMs: Number(env["CLOVEERP_POLL_MS"] ?? 5000),
+      workerName: env["CLOVEERP_WORKER_NAME"] ?? `clove-erp-worker-${process.pid ?? "edge"}`,
       resendApiKey: env["RESEND_API_KEY"]?.trim() || null,
     };
   } finally {

@@ -54,11 +54,22 @@ Two entrypoints over one core.
 
 Configuration, all from the environment and none of it from the database:
 
-    ERPWARE_DATABASE_URL   a connection string for a role that bypasses RLS
-    ERPWARE_TENANTS        comma-separated tenant ids to serve
-    ERPWARE_PRINCIPALS     matching service principal ids, same order
-    ERPWARE_SYSTEMS        comma-separated external system codes to drain
-    ERPWARE_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
-    ERPWARE_SECRET_<REF>   the resolved value for a credential_ref
+    CLOVEERP_DATABASE_URL   a connection string for a role that bypasses RLS
+    CLOVEERP_TENANTS        comma-separated tenant ids to serve
+    CLOVEERP_PRINCIPALS     matching service principal ids, same order
+    CLOVEERP_SYSTEMS        comma-separated external system codes to drain
+    CLOVEERP_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
+    CLOVEERP_WORKER_NAME    the name a claim is recorded under (default clove-erp-worker-<pid>)
+    RESEND_API_KEY          the send credential for the email handler
+    <REF>                   the value a credential_ref names — see below
+
+These were `ERPWARE_*` until 20260904980000 renamed the product's prefix. There
+is no compatibility shim: `required()` throws by name, so a half-done rename
+stops the worker rather than degrading it quietly.
+
+A `credential_ref` is a URI and only `env://` is implemented. The name after
+the scheme is read from the environment **exactly as written** — `env://SMTP_PW`
+reads `SMTP_PW`, with no prefix of any kind. This file said `ERPWARE_SECRET_<REF>`
+for months, which no code has ever read.
 
 A credential is read here and used here. It is never written back.

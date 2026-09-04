@@ -10,7 +10,7 @@ export function connect(databaseUrl: string): Sql {
     // nothing and makes lease expiry harder to reason about.
     max: 4,
     idle_timeout: 30,
-    // Errors from these functions are the product speaking (ERPWARE_*), so they
+    // Errors from these functions are the product speaking (CLOVEERP_*), so they
     // must arrive intact rather than as a generic driver failure.
     onnotice: () => {},
   });
@@ -20,7 +20,7 @@ export function connect(databaseUrl: string): Sql {
  * One unit of work, as one transaction, acting as a service principal.
  *
  * The handshake is two calls and the order is enforced, not conventional:
- * set_job_principal() raises ERPWARE_NO_TENANT_CONTEXT if no tenant has been
+ * set_job_principal() raises CLOVEERP_NO_TENANT_CONTEXT if no tenant has been
  * declared yet. That is deliberate — it then checks the principal actually
  * belongs to the tenant that was declared, which it could not do the other way
  * round. A worker cannot name a principal and have the tenant inferred from
