@@ -28,7 +28,7 @@
  * somebody's message because our mail provider was down would be the worse of
  * the two failures by a wide margin.
  *
- * Deploy the migration first. 20260904990000 creates the clove_enquiry role and
+ * Deploy the migration first. 20260904995000 creates the clove_enquiry role and
  * the erp_ingress schema this file calls; a deploy that lands ahead of it makes
  * every submission a 500, because the role it switches to does not exist yet.
  *
@@ -65,7 +65,7 @@ const DEFAULT_ORIGINS = ["https://cloveerp.com", "https://www.cloveerp.com"];
  * sitting behind its most exposed door. Nothing had gone wrong; it was simply
  * more authority than the work needs.
  *
- * 20260904990000 gives the work its own role and its own schema. clove_enquiry
+ * 20260904995000 gives the work its own role and its own schema. clove_enquiry
  * holds USAGE on erp_ingress and on nothing else, and EXECUTE on the four
  * wrappers there and nothing else — proven in that migration rather than
  * asserted here, by counting what the role can reach and refusing any number but
