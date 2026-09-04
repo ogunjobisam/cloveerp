@@ -236,7 +236,7 @@ begin
    where not exists (select 1 from erp_ref.resource r
                       where r.key = erp_ref.ui_key(u.text) and r.locale = 'en');
   if n > 0 then
-    raise exception E'ERPWARE_UNRENAMEABLE_SCREEN_STRINGS: % of % have no en resource row, so no tenant can rename them:\n  %',
+    raise exception E'CLOVEERP_UNRENAMEABLE_SCREEN_STRINGS: % of % have no en resource row, so no tenant can rename them:\n  %',
       n, total, v_missing;
   end if;
   raise notice 'screen strings: % of % have a row they can be renamed by', total, total;

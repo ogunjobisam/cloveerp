@@ -78,7 +78,7 @@ function expiryToIso(yymmdd: string): string {
  */
 export function parseGs1(barcode: string, register: ApplicationIdentifier[]): ScanFields {
   let input = barcode;
-  if (input.trim() === "") throw new ScanError("ERPWARE_EMPTY_SCAN", "nothing was scanned");
+  if (input.trim() === "") throw new ScanError("CLOVEERP_EMPTY_SCAN", "nothing was scanned");
   while (input.startsWith(GS)) input = input.slice(1);
 
   const byAi = new Map(register.map((a) => [a.ai, a]));
@@ -98,7 +98,7 @@ export function parseGs1(barcode: string, register: ApplicationIdentifier[]): Sc
     }
     if (!rec) {
       throw new ScanError(
-        "ERPWARE_UNRECOGNISED_BARCODE",
+        "CLOVEERP_UNRECOGNISED_BARCODE",
         `${barcode} is not a barcode this product reads (stopped at position ${pos + 1} of ${len})`,
       );
     }
@@ -109,7 +109,7 @@ export function parseGs1(barcode: string, register: ApplicationIdentifier[]): Sc
       value = input.slice(pos, pos + rec.data_length);
       if (value.length < rec.data_length) {
         throw new ScanError(
-          "ERPWARE_TRUNCATED_BARCODE",
+          "CLOVEERP_TRUNCATED_BARCODE",
           `identifier ${rec.ai} needs ${rec.data_length} characters and ${barcode} has fewer`,
         );
       }
@@ -127,7 +127,7 @@ export function parseGs1(barcode: string, register: ApplicationIdentifier[]): Sc
 
     if (rec.is_numeric && !/^[0-9]+$/.test(value)) {
       throw new ScanError(
-        "ERPWARE_BARCODE_FIELD_NOT_NUMERIC",
+        "CLOVEERP_BARCODE_FIELD_NOT_NUMERIC",
         `identifier ${rec.ai} carried ${value}`,
       );
     }
@@ -177,7 +177,7 @@ export function evaluateScan(input: {
   const sym = input.symbologies.find((s) => s.code === input.symbology);
   if (!sym) {
     throw new ScanError(
-      "ERPWARE_UNKNOWN_SYMBOLOGY",
+      "CLOVEERP_UNKNOWN_SYMBOLOGY",
       `${input.symbology} is not a symbology this product reads`,
     );
   }

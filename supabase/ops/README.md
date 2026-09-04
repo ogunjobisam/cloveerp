@@ -13,6 +13,14 @@ A file here has done its job once it has been applied. It is kept because the
 repair should be reviewable and reproducible, not because it will be needed
 again.
 
+**The refusal codes in these files are the retired ones.** 20260904980000 moved
+every refusal from `ERPWARE_` to `CLOVEERP_`; these scripts are dated records of
+what was actually run on a given day and have not been rewritten, because a
+record that has been edited to look current is no longer a record. Do not copy a
+raise out of one. Replaying a script from here would put the old prefix back into
+the routines it touches, and `erp.assert_no_legacy_refusal_prefix()` would fail
+the next build — which is the guard working, not a false alarm.
+
 ---
 
 ## 20260831_live_reconciliation.sql

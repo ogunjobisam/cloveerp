@@ -20,7 +20,11 @@
 # like a known one:
 #
 #   - Three assertions are per-tenant by construction and raise
-#     ERPWARE_NO_TENANT_CONTEXT outside a tenant session.
+#     CLOVEERP_NO_TENANT_CONTEXT outside a tenant session. Matched on the
+#     condition rather than the prefix, because this line has already been
+#     wrong once: the prefix moved from ERPWARE_ to CLOVEERP_ in
+#     20260904980000 and a check that stopped matching would have been
+#     reported as a failure rather than a skip.
 #   - erp_test.gateway_suite() fails three of forty-nine cases wherever
 #     extensions.jsonb_matches_schema is the `select true` stub, which a local
 #     Postgres without pg_jsonschema is. Two cases assert that an invalid
@@ -45,7 +49,7 @@ run_one() {
   if out="$($PSQL_CMD -tAc "select $call;" 2>&1)"; then
     pass=$((pass + 1))
     printf '  ok   %-56s %s\n' "$call" "${out:0:70}"
-  elif [[ "$out" == *ERPWARE_NO_TENANT_CONTEXT* ]]; then
+  elif [[ "$out" == *NO_TENANT_CONTEXT* ]]; then
     skip=$((skip + 1))
     printf '  skip %-56s per-tenant, not runnable schema-level\n' "$call"
   elif [[ "$call" == *gateway_suite* && "$out" == *"GATEWAY_SUITE_FAILED: 3/49"* ]]; then

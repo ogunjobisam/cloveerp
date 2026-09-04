@@ -367,7 +367,7 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
       </div>
 
       {outcome ? <p className="mt-2 text-xs text-muted-foreground">{outcome}</p> : null}
-      {/* configure_sales refuses with ERPWARE_NO_LEDGER and a hint naming
+      {/* configure_sales refuses with CLOVEERP_NO_LEDGER and a hint naming
           erp.configure_finance(). That hint is the whole answer, and the old
           markup dropped it. */}
       {error ? (

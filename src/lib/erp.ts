@@ -54,7 +54,7 @@ export type ErpSession = {
 /**
  * An error from the database, with everything the database said.
  *
- * The engine raises `ERPWARE_*` errors carrying a `hint` that is often the
+ * The engine raises `CLOVEERP_*` errors carrying a `hint` that is often the
  * next command to run — `erp.create_item` names `erp_create_uom`,
  * `guard_live_configuration` names `erp.promote_change_set`. Throwing only
  * `error.message` discarded all of it, which turned a refusal that explains
@@ -76,9 +76,21 @@ export class ErpError extends Error {
     this.hint = parts.hint;
   }
 
-  /** The `ERPWARE_*` token the engine leads its message with, if there is one. */
+  /**
+   * The refusal token the engine leads its message with, verbatim.
+   *
+   * Verbatim rather than normalised, because friendlyError() strips this exact
+   * substring out of the message before showing what is left. Two prefixes are
+   * accepted for one release: 20260904980000 moved every refusal from ERPWARE_
+   * to CLOVEERP_, and the database and this site are deployed separately and by
+   * hand, so for a while whichever went first is ahead of the other.
+   *
+   * The character class includes digits. It did not, and four tokens carry one
+   * — CLOVEERP_C1_SUITE_FAILED matched as far as the C, resolved to nothing,
+   * and left "1_SUITE_FAILED: …" on the screen with the prefix stripped off.
+   */
   get erpCode(): string | null {
-    return /^(ERPWARE_[A-Z_]+)/.exec(this.message)?.[1] ?? null;
+    return /^((?:CLOVEERP|ERPWARE)_[A-Z0-9_]+)/.exec(this.message)?.[1] ?? null;
   }
 
   /**
@@ -87,7 +99,12 @@ export class ErpError extends Error {
    * the database decided, and it decided no.
    */
   get isPermissionDenied(): boolean {
-    return this.code === "42501" || this.erpCode === "ERPWARE_PERMISSION_DENIED";
+    const token = this.erpCode;
+    return (
+      this.code === "42501" ||
+      token === "CLOVEERP_PERMISSION_DENIED" ||
+      token === "ERPWARE_PERMISSION_DENIED"
+    );
   }
 }
 

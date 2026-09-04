@@ -27,10 +27,10 @@
  *
  * Deploy:
  *   supabase functions deploy enquiry
- *   supabase secrets set ERPWARE_DATABASE_URL=... \
+ *   supabase secrets set CLOVEERP_DATABASE_URL=... \
  *                        RESEND_API_KEY=... \
- *                        ERPWARE_ENQUIRY_FROM='Clove ERP <hello@cloveerp.com>' \
- *                        ERPWARE_ENQUIRY_IP_SALT=...
+ *                        CLOVEERP_ENQUIRY_FROM='Clove ERP <hello@cloveerp.com>' \
+ *                        CLOVEERP_ENQUIRY_IP_SALT=...
  *
  * verify_jwt is false for this one function, in supabase/config.toml, because
  * the whole point is a caller with no session. Nothing else about the product
@@ -78,7 +78,7 @@ function text(v: unknown, max: number): string | null {
 }
 
 function allowedOrigin(req: Request): string | null {
-  const configured = Deno.env.get("ERPWARE_ENQUIRY_ORIGINS");
+  const configured = Deno.env.get("CLOVEERP_ENQUIRY_ORIGINS");
   const allowed = configured
     ? configured
         .split(",")
@@ -152,19 +152,25 @@ function compose(e: {
 }
 
 /**
- * ERPWARE_* refusals are written to be read by the person who tripped them, so
+ * CLOVEERP_* refusals are written to be read by the person who tripped them, so
  * they are passed through rather than replaced with something vaguer. Anything
  * else is ours and the visitor is told nothing about our internals.
  */
 function refusal(message: string): { field: string | null; message: string } | null {
-  const m = /^(ERPWARE_[A-Z_]+): (.*)$/s.exec(message);
+  // Both prefixes for one release, and digits in the class. 20260904980000
+  // moved the prefix from ERPWARE_ to CLOVEERP_, and this function and the
+  // database it calls are deployed separately and by hand — so whichever goes
+  // first is briefly ahead of the other, and a single spelling would hand the
+  // visitor "something went wrong" for a refusal that names its own field.
+  const m = /^((?:CLOVEERP|ERPWARE)_[A-Z0-9_]+): (.*)$/s.exec(message);
   if (!m) return null;
+  const token = m[1].replace(/^ERPWARE_/, "CLOVEERP_");
   const field =
-    m[1] === "ERPWARE_ENQUIRY_NAME_REQUIRED"
+    token === "CLOVEERP_ENQUIRY_NAME_REQUIRED"
       ? "full_name"
-      : m[1] === "ERPWARE_ENQUIRY_EMAIL_INVALID"
+      : token === "CLOVEERP_ENQUIRY_EMAIL_INVALID"
         ? "email"
-        : m[1] === "ERPWARE_ENQUIRY_MESSAGE_TOO_SHORT"
+        : token === "CLOVEERP_ENQUIRY_MESSAGE_TOO_SHORT"
           ? "message"
           : null;
   return { field, message: m[2].split("\n")[0] };
@@ -176,10 +182,10 @@ Deno.serve(async (req: Request) => {
 
   let sql;
   try {
-    const databaseUrl = required("ERPWARE_DATABASE_URL");
+    const databaseUrl = required("CLOVEERP_DATABASE_URL");
     const apiKey = required("RESEND_API_KEY");
-    const from = required("ERPWARE_ENQUIRY_FROM");
-    const salt = required("ERPWARE_ENQUIRY_IP_SALT");
+    const from = required("CLOVEERP_ENQUIRY_FROM");
+    const salt = required("CLOVEERP_ENQUIRY_IP_SALT");
 
     let body: Body;
     try {
