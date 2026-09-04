@@ -261,58 +261,68 @@ begin
 
   -- And nothing else, anywhere. This is the whole claim of the change, so it is
   -- counted rather than assumed, and counted the way the server decides it: a
-  -- function is reachable only if the caller holds USAGE on its schema AND
-  -- EXECUTE on the function. Checking EXECUTE alone would answer yes for the
-  -- 731 functions in erp whose ACL is null — EXECUTE to PUBLIC — none of which
-  -- this role can name, because it holds USAGE on erp nowhere. Checking USAGE
-  -- alone would miss public, where every role holds USAGE by default and the
-  -- product's own door functions live.
+  -- caller reaches a function only if it holds USAGE on the schema AND EXECUTE
+  -- on the function. Checking EXECUTE alone would answer yes for the 731
+  -- functions in erp whose ACL is null — EXECUTE to PUBLIC — none of which this
+  -- role can name, because it holds USAGE on erp nowhere. Checking USAGE alone
+  -- would miss public, where every role holds USAGE and the product's own door
+  -- functions live.
+  --
+  -- Measured against anon rather than against a number, and that correction was
+  -- forced by a preview branch. The first version of this counted reachable
+  -- functions and demanded four, excluding 'extensions' because the local rig
+  -- grants USAGE on it to PUBLIC. It passed there and refused on a real
+  -- Supabase project with sixteen: pg_net installs a `net` schema with USAGE to
+  -- PUBLIC and twelve functions whose ACL is null, net.http_post among them. So
+  -- the number was never four; it is four plus whatever the platform has
+  -- granted to everybody, and that varies by project. postgres holds U on net
+  -- without grant option, so this migration could not revoke it even if it
+  -- should.
+  --
+  -- anon is the honest yardstick. Every role belongs to PUBLIC, so anything the
+  -- platform grants to everybody is already anon's, and the claim that survives
+  -- is the one worth making: outside erp_ingress, this role reaches nothing the
+  -- anonymous role does not already reach. It is stronger than a count — it
+  -- cannot be satisfied by a schema being added to an exclusion list — and it
+  -- holds on every project regardless of which extensions are installed.
   select count(*) into v_n
     from pg_catalog.pg_proc p
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-   where n.nspname not in ('pg_catalog', 'information_schema', 'extensions')
+   where n.nspname not in ('pg_catalog', 'information_schema', 'erp_ingress')
      and has_schema_privilege('clove_enquiry', n.oid, 'USAGE')
-     and has_function_privilege('clove_enquiry', p.oid, 'EXECUTE');
-  if v_n <> 4 then
+     and has_function_privilege('clove_enquiry', p.oid, 'EXECUTE')
+     and not (has_schema_privilege('anon', n.oid, 'USAGE')
+          and has_function_privilege('anon', p.oid, 'EXECUTE'));
+  if v_n <> 0 then
     raise exception
-      'CLOVEERP_INGRESS_TOO_BROAD: clove_enquiry can reach % function(s), not 4', v_n
-      using hint = 'The point of erp_ingress is that the ingress cannot name anything else.';
+      'CLOVEERP_INGRESS_TOO_BROAD: clove_enquiry reaches % function(s) outside '
+      'erp_ingress that anon cannot', v_n
+      using hint = 'The ingress is meant to be the anonymous role plus four '
+                   'functions. Anything else is a grant that should not exist.';
   end if;
 
-  -- extensions is excluded above because the host, not this codebase, grants
-  -- USAGE on it to PUBLIC: pgcrypto, btree_gist and pg_jsonschema come with the
-  -- platform and every role in the cluster can already call them. What matters
-  -- is that none of what the role can reach runs as somebody else, so the same
-  -- question is asked again of SECURITY DEFINER functions with nothing excluded.
-  select count(*) into v_n
-    from pg_catalog.pg_proc p
-    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-   where p.prosecdef
-     and n.nspname not in ('pg_catalog', 'information_schema')
-     and has_schema_privilege('clove_enquiry', n.oid, 'USAGE')
-     and has_function_privilege('clove_enquiry', p.oid, 'EXECUTE');
-  if v_n <> 4 then
-    raise exception
-      'CLOVEERP_INGRESS_TOO_BROAD: clove_enquiry can reach % SECURITY DEFINER '
-      'function(s), not 4', v_n;
-  end if;
-
-  -- No table, view or sequence at all: the four wrappers are the only way in,
-  -- so a direct read of erp_meta.enquiry is not merely refused by row security,
-  -- it is not expressible.
+  -- And no relation it could not already read as anon either: the four wrappers
+  -- are the only way in, so a direct read of erp_meta.enquiry is not merely
+  -- refused by row security, it is not expressible.
   select count(*) into v_n
     from pg_catalog.pg_class c
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
    where c.relkind in ('r', 'p', 'v', 'm', 'f', 'S')
-     and n.nspname not in ('pg_catalog', 'information_schema', 'extensions')
+     and n.nspname not in ('pg_catalog', 'information_schema')
      and has_schema_privilege('clove_enquiry', n.oid, 'USAGE')
      and (has_table_privilege('clove_enquiry', c.oid, 'SELECT')
        or has_table_privilege('clove_enquiry', c.oid, 'INSERT')
        or has_table_privilege('clove_enquiry', c.oid, 'UPDATE')
-       or has_table_privilege('clove_enquiry', c.oid, 'DELETE'));
+       or has_table_privilege('clove_enquiry', c.oid, 'DELETE'))
+     and not (has_schema_privilege('anon', n.oid, 'USAGE')
+          and (has_table_privilege('anon', c.oid, 'SELECT')
+            or has_table_privilege('anon', c.oid, 'INSERT')
+            or has_table_privilege('anon', c.oid, 'UPDATE')
+            or has_table_privilege('anon', c.oid, 'DELETE')));
   if v_n <> 0 then
     raise exception
-      'CLOVEERP_INGRESS_TOO_BROAD: clove_enquiry can reach % relation(s), not 0', v_n;
+      'CLOVEERP_INGRESS_TOO_BROAD: clove_enquiry reaches % relation(s) that anon '
+      'cannot', v_n;
   end if;
 
   -- It must not be able to see through row security on its own account.
