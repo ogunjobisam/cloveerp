@@ -560,7 +560,7 @@ function Organisation() {
         )}
       >
         {(rows) => (
-          <Table columns={[ui("Code"), ui("Name"), ui("Kind"), ui("Entity"), ui("Status")]}>
+          <Table columns={[ui("Code"), ui("Name"), ui("Kind"), ui("Company"), ui("Status")]}>
             {rows.map((s) => (
               <tr key={s.site_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{s.code}</td>

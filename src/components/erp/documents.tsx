@@ -180,7 +180,7 @@ export function DocumentPanel({
         ) : (data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">{empty}</p>
         ) : (
-          <Table columns={["Number", "Date", "Party", "Value", "State"]}>
+          <Table columns={["Number", "Date", "Business partner", "Value", "State"]}>
             {(data ?? []).map((d) => (
               <tr key={d.document_id} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4">

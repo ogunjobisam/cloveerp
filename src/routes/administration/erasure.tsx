@@ -143,7 +143,7 @@ function Erasure() {
                 label: "Kind",
                 required: true,
                 choices: [
-                  { value: "principal", label: "Principal (someone who signs in)" },
+                  { value: "principal", label: "User (someone who signs in)" },
                   { value: "contact", label: "Contact at a business partner" },
                 ],
               },

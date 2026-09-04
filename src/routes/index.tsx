@@ -74,7 +74,7 @@ function DemoSeed() {
           </div>
         </div>
         <div className="shrink-0">
-          <SeedDemoAction label="Seed a demo tenant" />
+          <SeedDemoAction label="Seed a demo organisation" />
         </div>
       </div>
     </section>

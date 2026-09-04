@@ -136,7 +136,7 @@ function Permissions() {
             invalidates: ["erp_permissions_directory"],
           },
           {
-            label: "Create a service principal",
+            label: "Create a service user",
             permission: "administration.users",
             fn: "erp_create_service_principal",
             fields: [{ kind: "text", name: "p_display_name", label: "Name", required: true }],

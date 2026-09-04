@@ -368,7 +368,14 @@ export function ActionDialog({
                     : f.choices
                   ).map((c) => (
                     <option key={c.value} value={c.value}>
-                      {c.label}
+                      {/* Through ui() like the field's own label. InquiryBoard
+                          has always done this for its choices; this one did
+                          not, so a form could offer a renameable "Kind of
+                          site" above a fixed "Warehouse". A site kind built
+                          from the session carries a code and a name and has no
+                          row, which ui() handles by returning what it was
+                          given. */}
+                      {ui(c.label)}
                     </option>
                   ))}
                 </select>

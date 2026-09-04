@@ -48,7 +48,7 @@ const TRANSACTION_TYPES = [
   { value: "cash_application", label: "Cash application" },
 ];
 
-const pickAccount = (name = "p_account_id", label = "Account", required = true): Field => ({
+const pickAccount = (name = "p_account_id", label = "Nominal account", required = true): Field => ({
   kind: "select",
   name,
   label,
@@ -69,7 +69,7 @@ const pickClass = (kind: "item" | "party", name: string, label: string): Field =
   },
 });
 
-const pickAnyParty = (name = "p_party_id", label = "Party", required = true): Field => ({
+const pickAnyParty = (name = "p_party_id", label = "Business partner", required = true): Field => ({
   kind: "select",
   name,
   label,
@@ -180,7 +180,7 @@ function AccountDetermination() {
         note="The vocabulary. Keep it short — a class exists because two things post differently, not because they are different things."
         actions={[
           {
-            label: "Add or amend a posting class",
+            label: "Add or amend an accounting code",
             permission: "finance.configure",
             fn: "erp_upsert_posting_class",
             fields: [
@@ -202,7 +202,7 @@ function AccountDetermination() {
             invalidates,
           },
           {
-            label: "Retire a posting class",
+            label: "Retire an accounting code",
             permission: "finance.configure",
             fn: "erp_retire_posting_class",
             fields: [
@@ -211,19 +211,19 @@ function AccountDetermination() {
                 "posting_class_id",
                 ["kind", "code", "name"],
                 "p_posting_class_id",
-                "Posting class",
+                "Accounting code",
               ),
             ],
             invalidates,
           },
           {
-            label: "Set a product's posting class",
+            label: "Set a product's accounting code",
             permission: "finance.configure",
             fn: "erp_set_item_posting_class",
             fields: [
               pickItem(),
               {
-                ...pickClass("item", "p_posting_class_id", "Posting class"),
+                ...pickClass("item", "p_posting_class_id", "Accounting code"),
                 required: true,
               },
               reason(),
@@ -232,13 +232,13 @@ function AccountDetermination() {
             invalidates,
           },
           {
-            label: "Set a partner's posting class",
+            label: "Set a partner's accounting code",
             permission: "finance.configure",
             fn: "erp_set_party_posting_class",
             fields: [
               pickAnyParty(),
               {
-                ...pickClass("party", "p_posting_class_id", "Posting class"),
+                ...pickClass("party", "p_posting_class_id", "Accounting code"),
                 required: true,
               },
               reason(),
@@ -354,7 +354,7 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<Rule>
-        title={ui("Determination matrix")}
+        title={ui("Account determination")}
         description={ui(
           "Transaction type, posting classes and place on the left; the account and its analysis on the right.",
         )}
@@ -369,7 +369,7 @@ function AccountDetermination() {
               ui("Partner class"),
               ui("Company"),
               ui("Reason"),
-              ui("Account"),
+              ui("Nominal account"),
               ui("Dimensions"),
               ui("Specificity"),
               ui("Status"),
@@ -397,7 +397,7 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<ItemClass>
-        title={ui("Products and their posting class")}
+        title={ui("Products and their accounting code")}
         description={ui("Products without a class are listed first — they cannot be posted.")}
         fn="erp_item_posting_classes"
         args={{ p_limit: 200 }}
@@ -406,7 +406,7 @@ function AccountDetermination() {
       >
         {(rows) => (
           <Table
-            columns={[ui("Product"), ui("Name"), ui("Posting class"), ui("From"), ui("Reason")]}
+            columns={[ui("Product"), ui("Name"), ui("Accounting code"), ui("From"), ui("Reason")]}
           >
             {rows.map((i) => (
               <tr key={i.item_id} className="border-b border-border/60 last:border-0">
@@ -428,7 +428,7 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<PartyClass>
-        title={ui("Business partners and their posting class")}
+        title={ui("Business partners and their accounting code")}
         description={ui(
           "A business partner class separates, for example, export from domestic settlement.",
         )}
@@ -438,7 +438,7 @@ function AccountDetermination() {
         emptyAction={<GoTo to="/master-data">{ui("Open Common data")}</GoTo>}
       >
         {(rows) => (
-          <Table columns={[ui("Business partner"), ui("Name"), ui("Posting class"), ui("From")]}>
+          <Table columns={[ui("Business partner"), ui("Name"), ui("Accounting code"), ui("From")]}>
             {rows.map((p) => (
               <tr key={p.party_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{p.party_code}</td>
@@ -470,7 +470,14 @@ function AccountDetermination() {
       >
         {(rows) => (
           <Table
-            columns={[ui("When"), ui("Object"), ui("Line"), ui("Account"), ui("Reason"), ui("By")]}
+            columns={[
+              ui("When"),
+              ui("Object"),
+              ui("Line"),
+              ui("Nominal account"),
+              ui("Reason"),
+              ui("By"),
+            ]}
           >
             {rows.map((o) => (
               <tr key={o.override_id} className="border-b border-border/60 last:border-0">
@@ -494,7 +501,7 @@ function AccountDetermination() {
             fn: "erp_determine_account",
             label: "Where would this post?",
             description:
-              "The account and analysis a posting would take, and the rule that chose it.",
+              "The nominal account and analysis a posting would take, and the rule that chose it.",
             fields: [
               {
                 kind: "choice",
@@ -504,7 +511,7 @@ function AccountDetermination() {
                 choices: TRANSACTION_TYPES,
               },
               { ...pickItem(), required: false },
-              pickAnyParty("p_party_id", "Party", false),
+              pickAnyParty("p_party_id", "Business partner", false),
               pickEntity(),
               { kind: "text", name: "p_reason_code", label: "Reason code" },
             ],
@@ -513,7 +520,7 @@ function AccountDetermination() {
             fn: "erp_determination_coverage",
             label: "What is not covered yet?",
             description:
-              "Every posting class, transaction type and company combination with no rule behind it.",
+              "Every accounting code, transaction type and company combination with no rule behind it.",
             fields: [],
           },
           {

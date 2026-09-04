@@ -12,7 +12,7 @@
 # A migration seeds what exists on the day it is written. Only this notices the
 # two hundred and second.
 #
-# Three sources, because the app says its words three ways:
+# Four sources, because the app says its words four ways:
 #
 #   1. ui("…") literals, anywhere under src.
 #   2. The module declaration in src/lib/modules.tsx, where a module states its
@@ -31,12 +31,19 @@
 #      on the day this was extended, and seeding them found three that said
 #      "Receiving" and "principal" where the product prescribes Goods-in and
 #      User.
+#   4. The words inside the forms: a field's label and hint, an action's button
+#      text, a dialog's title and description, the options in a select. Same
+#      blind spot again and the largest instance of it — 357 with no row, which
+#      is the honest size of what the terminology screen could not see.
 #
-# Not covered, and worth knowing before assuming this is exhaustive: the field
-# labels and hints inside an action's declaration, and ActionDialog's own title
-# and description. They go through ui() the same way. They were left out
-# because they are a form's words rather than a screen's, and because the set
-# is five times the size of this one — not because they are renameable.
+# Sources 3 and 4 are scoped to the components that actually render what they
+# are handed through ui(). That scoping is the whole difficulty: `label:` also
+# appears in a marketing page's data, in a route's head() meta, and in
+# RpcButton, ConfigTransfer and the branding panel, none of which call ui() —
+# so demanding rows for those would be the register claiming a renameability
+# the code does not provide, which is the same class of lie this script exists
+# to catch. Add a component here only after checking it passes the string
+# through ui().
 #
 # Usage: supabase/ci/screen_strings.sh [src-dir]
 # Reads PSQL from the environment, defaulting to a plain psql.
@@ -116,7 +123,95 @@ for value in sorted(found):
     print(value)
 PY
 
-cat "$WORK/literals.txt" "$WORK/declared.txt" "$WORK/props.txt" | sort -u > "$WORK/strings.txt"
+python3 - "$SRC" > "$WORK/form.txt" <<'PY'
+import re, pathlib, sys
+
+# Components that render the strings handed to them through ui(). Anything not
+# on this list renders its props raw, so its words are not renameable and must
+# not be demanded here: RpcButton, ConfigTransfer and the branding panel are
+# each a real example.
+COMPONENTS = ("ActionBar", "ActionDialog", "AutoPanel", "InquiryBoard")
+PROPS = ("title", "note", "description", "empty", "submitLabel")
+KEYS = ("label", "hint", "title", "description", "submitLabel", "header", "empty")
+
+def spans(src, name):
+    """The text of each <Name …> opening tag, quote- and brace-aware."""
+    for m in re.finditer(r"<" + name + r"(?=[\s/>])", src):
+        i, depth, instr = m.end(), 0, None
+        while i < len(src):
+            c = src[i]
+            if instr:
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == instr:
+                    instr = None
+            elif c in "\"'`":
+                instr = c
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+            elif c == ">" and depth == 0:
+                yield src[m.end():i]
+                break
+            i += 1
+
+def objects_with_fn(src):
+    """Object literals carrying `fn: "…"` — an action declared outside any JSX."""
+    for m in re.finditer(r'\bfn:\s*"', src):
+        start = src.rfind("{", 0, m.start())
+        if start < 0:
+            continue
+        i, depth, instr = start, 0, None
+        while i < len(src):
+            c = src[i]
+            if instr:
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == instr:
+                    instr = None
+            elif c in "\"'`":
+                instr = c
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    yield src[start:i + 1]
+                    break
+            i += 1
+
+def harvest(text, out):
+    for p in PROPS:
+        for m in re.finditer(r'(?<![\w-])' + p + r'="((?:[^"\\]|\\.)*)"', text):
+            out.add(m.group(1))
+    for k in KEYS:
+        for m in re.finditer(r"\b" + k + r'\s*:\s*"((?:[^"\\]|\\.)*)"', text):
+            out.add(m.group(1))
+
+found = set()
+for path in pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "src").rglob("*.tsx"):
+    if path.name.endswith(".test.tsx"):
+        continue
+    src = path.read_text()
+    for component in COMPONENTS:
+        if f"<{component}" in src:
+            for tag in spans(src, component):
+                harvest(tag, found)
+    for obj in objects_with_fn(src):
+        harvest(obj, found)
+    # The shared field builders state their label as a default parameter.
+    for m in re.finditer(r'(?<![\w-])label\s*=\s*"((?:[^"\\]|\\.)*)"', src):
+        found.add(m.group(1))
+
+for value in sorted(found):
+    print(value)
+PY
+
+cat "$WORK/literals.txt" "$WORK/declared.txt" "$WORK/props.txt" "$WORK/form.txt" \
+  | sort -u > "$WORK/strings.txt"
 
 python3 - "$WORK/strings.txt" > "$WORK/strings.csv" <<'PY'
 import csv, sys

@@ -93,7 +93,7 @@ export function ActionBar({
 }
 
 /** Shared field builders, so twenty declarations do not each invent one. */
-export const pickItem = (name = "p_item_id", label = "Item"): Field => ({
+export const pickItem = (name = "p_item_id", label = "Product"): Field => ({
   kind: "select",
   name,
   label,
@@ -104,7 +104,7 @@ export const pickItem = (name = "p_item_id", label = "Item"): Field => ({
 export const pickParty = (
   roleKind: string,
   name = "p_party_id",
-  label = "Party",
+  label = "Business partner",
   required = true,
 ): Field => ({
   kind: "select",

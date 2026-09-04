@@ -182,7 +182,7 @@ export const INVENTORY: ModuleDef = {
   inquiries: [
     {
       label: "Available to promise",
-      description: "What can still be committed for one item at one site, on a date.",
+      description: "What can still be committed for one product at one site, on a date.",
       permission: "inventory.read",
       fn: "erp_available_to_promise",
       fields: [pickItem(), pickSite(), { kind: "date", name: "p_on", label: "On" }],
@@ -316,7 +316,7 @@ export const INVENTORY: ModuleDef = {
     },
     {
       label: "Merge two batches",
-      description: "Combine one batch into another of the same item and condition.",
+      description: "Combine one batch into another of the same product and condition.",
       permission: "inventory.adjust",
       fn: "erp_merge_batches",
       fields: [
@@ -372,7 +372,7 @@ export const INVENTORY: ModuleDef = {
     },
     {
       label: "Apply calculated policy",
-      description: "Adopt the stocking policy the engine calculates for one item and site.",
+      description: "Adopt the stocking policy the engine calculates for one product and site.",
       permission: "inventory.adjust",
       fn: "erp_apply_calculated_policy",
       fields: [pickItem(), pickSite()],
@@ -384,7 +384,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock lines",
       fn: "erp_stock_health",
-      compute: (rows) => ({ value: String(rows.length), hint: "item and site positions" }),
+      compute: (rows) => ({ value: String(rows.length), hint: "product and site positions" }),
     },
     {
       label: "Below cover",
@@ -473,7 +473,7 @@ export const INVENTORY: ModuleDef = {
   reports: [
     {
       title: "Stock health",
-      description: "Cover against policy, by item and site.",
+      description: "Cover against policy, by product and site.",
       fn: "erp_stock_health",
       empty:
         "Nothing is on hand yet. Receipting a purchase order is what first puts stock into an organisation.",
@@ -490,7 +490,7 @@ export const INVENTORY: ModuleDef = {
     },
     {
       title: "Valuation",
-      description: "Cost basis by item and site, in minor units.",
+      description: "Cost basis by product and site, in minor units.",
       fn: "erp_stock_valuation",
       empty: "Nothing to value yet. Stock is valued from the moment it is received.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
@@ -830,13 +830,13 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Trial balance",
-      description: "Every account with a movement, by ledger.",
+      description: "Every nominal account with a movement, by ledger.",
       fn: "erp_trial_balance",
       empty: "Nothing posted yet. A trial balance is built from documents that have been posted.",
       rowKey: (r, i) => `${String(r["ledger"] ?? i)}-${String(r["account"] ?? i)}`,
       columns: [
         { header: "Ledger", cell: "ledger" },
-        { header: "Account", cell: "account" },
+        { header: "Nominal account", cell: "account" },
         { header: "Name", cell: "name" },
         { header: "Type", cell: "account_type" },
         { header: "Debit", cell: "debit_minor", numeric: true },
@@ -891,7 +891,7 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Intercompany position",
-      description: "What each entity owes another, before elimination.",
+      description: "What each company owes another, before elimination.",
       fn: "erp_intercompany_position",
       empty:
         "No intercompany balances. This appears once two companies in the organisation trade with each other.",
@@ -944,7 +944,7 @@ export const PLANNING: ModuleDef = {
   inquiries: [
     {
       label: "Supply and demand",
-      description: "The projected balance for one item and site across the horizon.",
+      description: "The projected balance for one product and site across the horizon.",
       permission: "planning.read",
       fn: "erp_supply_demand",
       fields: [
@@ -955,7 +955,7 @@ export const PLANNING: ModuleDef = {
     },
     {
       label: "Calculated stocking policy",
-      description: "What the engine would set for one item and site, before adopting it.",
+      description: "What the engine would set for one product and site, before adopting it.",
       permission: "planning.read",
       fn: "erp_calculate_policy",
       fields: [pickItem(), pickSite()],
@@ -1415,7 +1415,7 @@ export const QUALITY: ModuleDef = {
         {
           kind: "select",
           name: "p_item_id",
-          label: "Item",
+          label: "Product",
           options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
         },
         pickBatch(),
@@ -1830,7 +1830,7 @@ export const REPORTING: ModuleDef = {
   group: "records",
   kpis: [
     {
-      label: "Party data quality",
+      label: "Business partner data quality",
       fn: "erp_data_quality",
       args: { p_object_type: "party" },
       compute: (rows) => {
@@ -1838,7 +1838,7 @@ export const REPORTING: ModuleDef = {
         const pct = Math.round(avg(rows, "score"));
         return {
           value: `${pct}%`,
-          hint: "average party record score",
+          hint: "average business partner record score",
           tone: pct >= 95 ? "ok" : pct >= 80 ? "warn" : "bad",
         };
       },
@@ -1897,7 +1897,7 @@ export const REPORTING: ModuleDef = {
   reports: [
     {
       title: "Business partner data quality",
-      description: "Completeness and validity of party master records.",
+      description: "Completeness and validity of business partner master records.",
       fn: "erp_data_quality",
       args: { p_object_type: "party" },
       empty: "No business partner exists yet, so there is nothing to score.",
@@ -2230,7 +2230,7 @@ export const EXTRA_TILES: TileDef[] = [
     titleKey: "nav.administration_erasure",
     title: "Personal data and erasure",
     blurb:
-      "Which columns hold a person's data and what erasure does to each; requests to erase a principal or contact, executed by a second person, with the certificate.",
+      "Which columns hold a person's data and what erasure does to each; requests to erase a user or contact, executed by a second person, with the certificate.",
     permission: "administration.read",
     group: "assure",
   },
@@ -2328,7 +2328,7 @@ export const EXTRA_TILES: TileDef[] = [
     titleKey: "nav.finance_account_determination",
     title: "Account determination",
     blurb:
-      "Posting classes and the matrix that decides the account and analysis — with a gap report and no suspense fallback.",
+      "Accounting codes and the matrix that decides the nominal account and analysis — with a gap report and no suspense fallback.",
     permission: "finance.configure",
     group: "configure",
   },
@@ -2344,7 +2344,7 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/administration/terminology",
     titleKey: "nav.terminology",
     title: "Terminology",
-    blurb: "The wording of every label, per tenant.",
+    blurb: "The wording of every label, per organisation.",
     permission: "administration.configure",
     group: "configure",
   },
