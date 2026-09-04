@@ -27,10 +27,13 @@
  *
  * Deploy:
  *   supabase functions deploy enquiry
- *   supabase secrets set CLOVEERP_DATABASE_URL=... \
- *                        RESEND_API_KEY=... \
+ *   supabase secrets set RESEND_API_KEY=... \
  *                        CLOVEERP_ENQUIRY_FROM='Clove ERP <hello@cloveerp.com>' \
  *                        CLOVEERP_ENQUIRY_IP_SALT=...
+ *
+ * The connection is not in that list on purpose: SUPABASE_DB_URL is a reserved
+ * default present in every project, and CLOVEERP_DATABASE_URL only has to be set
+ * to override it.
  *
  * verify_jwt is false for this one function, in supabase/config.toml, because
  * the whole point is a caller with no session. Nothing else about the product
@@ -59,6 +62,36 @@ function required(name: string): string {
     throw new Error(`${name} is not set, so an enquiry could be stored and nobody told`);
   }
   return v.trim();
+}
+
+/**
+ * The connection, without anybody copying a database password into a secret.
+ *
+ * erp.record_enquiry() and the three routines around it are SECURITY INVOKER with
+ * ACL postgres=X/postgres — only the postgres role may execute them. So this
+ * function needs the project's own postgres connection string, and asking a person
+ * to paste one into a secret is asking them to move a password by hand. That step
+ * failed three times running before anybody noticed the secret had simply never
+ * saved.
+ *
+ * SUPABASE_DB_URL is that exact connection, injected into every Edge Function by
+ * the platform as a reserved default. It cannot point at the wrong project and it
+ * cannot go stale. CLOVEERP_DATABASE_URL still wins when set, so an explicit
+ * override — a different host, a pooler, a narrower role once these routines are
+ * granted to one — remains possible.
+ *
+ * Refusing to start half-configured is unchanged: this throws naming both names
+ * when there is genuinely nothing to connect with.
+ */
+function databaseUrl(): string {
+  const explicit = Deno.env.get("CLOVEERP_DATABASE_URL")?.trim();
+  if (explicit) return explicit;
+  const provided = Deno.env.get("SUPABASE_DB_URL")?.trim();
+  if (provided) return provided;
+  throw new Error(
+    "neither CLOVEERP_DATABASE_URL nor SUPABASE_DB_URL is set, so an enquiry " +
+      "could be stored and nobody told",
+  );
 }
 
 type Body = {
@@ -198,7 +231,7 @@ Deno.serve(async (req: Request) => {
 
   let sql;
   try {
-    const databaseUrl = required("CLOVEERP_DATABASE_URL");
+    const connection = databaseUrl();
     const apiKey = required("RESEND_API_KEY");
     const from = required("CLOVEERP_ENQUIRY_FROM");
     const salt = required("CLOVEERP_ENQUIRY_IP_SALT");
@@ -231,7 +264,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const ipHash = await hashAddress(req, salt);
-    sql = connect(databaseUrl);
+    sql = connect(connection);
 
     let id: string;
     try {
