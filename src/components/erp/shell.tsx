@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Briefcase, Menu, Settings2 } from "lucide-react";
+import { Briefcase, Building2, ChevronDown, Menu, Settings2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import type { ErpSession } from "../../lib/erp";
@@ -258,34 +259,79 @@ function NavList({
 }
 
 /**
- * Where you are working, in the space a phone has for it.
+ * Where you are working: one control, at every width.
  *
- * Two selects and their labels are about 300px; this is the same information
- * in about 90, and tapping it opens the drawer where the selects actually
- * live. "All" is stated rather than left blank, because an empty chip reads as
- * a loading state.
+ * This was two labelled selects on desktop and, below md, a chip that opened
+ * the navigation drawer because that is where the selects had been moved to.
+ * Two problems with that. The selects and their uppercase labels were about
+ * 300px of permanent chrome for something most people set once a day, and they
+ * sat in a header that also carried a wordmark, a tenant name, a tenant slug,
+ * an area switch and three loose icon buttons. And changing where you are
+ * working meant opening the *navigation*, which is a different question.
+ *
+ * So it is a button that reads the current scope and a popover that holds the
+ * selects — the same information in about a third of the width, in one place
+ * rather than two, and the drawer goes back to being only navigation.
+ *
+ * "All" is stated rather than left blank: an empty chip reads as a loading
+ * state, and the difference between "every site" and "not loaded yet" is
+ * exactly the sort of thing this product refuses to leave ambiguous.
  */
-function ScopeChip({
+function ScopeControl({
   session,
   scope,
-  onClick,
+  onScopeChange,
+  sites,
 }: {
   session: ErpSession;
   scope: Scope;
-  onClick: () => void;
+  onScopeChange: (s: Scope) => void;
+  sites: { id: string; code: string; name: string }[];
 }) {
   const entity = session.entities.find((e) => e.id === scope.entityId);
   const site = session.sites.find((s) => s.id === scope.siteId);
   const label = [entity?.code ?? "All", site?.code ?? "All"].join(" · ");
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${TOUCH} inline-flex max-w-[9rem] shrink-0 items-center gap-1 rounded-full border border-input px-3 text-xs font-medium md:hidden`}
-    >
-      <span className="truncate">{label}</span>
-    </button>
+    <Popover>
+      <PopoverTrigger
+        className={`${TOUCH} inline-flex max-w-[7.5rem] shrink-0 items-center gap-1.5 rounded-md border border-input px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground md:max-w-[11rem] md:px-3`}
+      >
+        <Building2 className="size-4 shrink-0 max-md:hidden" aria-hidden="true" />
+        <span className="truncate font-medium">{label}</span>
+        <ChevronDown className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72">
+        <p className="text-sm font-medium">Where you are working</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Records, totals and the documents you can raise all follow this.
+        </p>
+        <div className="mt-3 flex flex-col gap-3">
+          <ScopeSelect
+            label="Company"
+            value={scope.entityId}
+            onChange={(entityId) => onScopeChange({ entityId, siteId: "" })}
+            options={session.entities}
+          />
+          <ScopeSelect
+            label="Site"
+            value={scope.siteId}
+            onChange={(siteId) => onScopeChange({ ...scope, siteId })}
+            options={sites}
+          />
+        </div>
+        {/* The organisation's code lived in the header, under its name. It is a
+            slug: useful when raising a support request and never otherwise, so
+            it belongs where the organisation is already the subject rather
+            than in permanent chrome. */}
+        <p className="mt-3 border-t border-border pt-3 font-mono text-[11px] text-muted-foreground">
+          {session.tenant?.code ?? "—"}
+          {session.tenant?.status && session.tenant.status !== "active"
+            ? ` · ${session.tenant.status}`
+            : ""}
+        </p>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -357,55 +403,45 @@ export function Shell({
             <Menu className="size-5" />
           </button>
 
+          {/* The wordmark waits for lg. At md the mark alone says whose product
+              this is, and the width is better spent on whose data it is. */}
           <Link to={AREA_HOME[area]} className={`${TOUCH} flex shrink-0 items-center gap-2`}>
             <BrandMark size={28} />
-            <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] md:inline">
+            <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] lg:inline">
               <span style={{ color: brand.ink }}>{brand.prefix}</span>
               <span style={{ color: brand.total }}>{brand.suffix}</span>
             </span>
           </Link>
 
-          <div className="flex min-w-0 flex-1 flex-col leading-tight md:flex-none">
-            <span className="truncate text-sm font-medium">
-              {session.tenant?.name ?? "No tenant"}
-            </span>
-            <span className="hidden text-xs text-muted-foreground md:inline">
-              {session.tenant?.code ?? "—"}
-              {session.tenant?.status && session.tenant.status !== "active"
-                ? ` · ${session.tenant.status}`
-                : ""}
-            </span>
-          </div>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium md:flex-none">
+            {session.tenant?.name ?? "No tenant"}
+          </span>
 
           <AreaSwitch area={area} counts={counts} className="hidden md:block" />
 
-          <ScopeChip session={session} scope={scope} onClick={() => setDrawerOpen(true)} />
+          {/*
+            Search, the whole-product menu and screen help, as one object.
+            They were three loose buttons with the same weight as everything
+            else in the row, which is most of why this header read as busy:
+            nothing said which controls belonged together. They answer three
+            versions of one question — take me to a screen I can name, show me
+            what exists, tell me what this screen is for — so they are grouped
+            and unlabelled. The words were only carried at lg anyway.
+          */}
+          <div className="ml-auto flex shrink-0 items-center rounded-md border border-input">
+            <CommandPalette />
+            <MainMenu />
+            <ContextHelp />
+          </div>
 
-          {/* Help for the screen you are on, at every width: the one control
-              that stays out of the drawer, because the question "what is this
-              screen for" is asked most on the phone. */}
-          <CommandPalette />
+          <ScopeControl
+            session={session}
+            scope={scope}
+            onScopeChange={onScopeChange}
+            sites={sites}
+          />
 
-          {/* Everything, at once. The palette takes you somewhere you can name;
-              this is for the screens you cannot name yet. */}
-          <MainMenu />
-
-          <ContextHelp />
-
-          {/* Everything here is in the drawer below md. */}
-          <div className="ml-auto hidden items-end gap-3 md:flex">
-            <ScopeSelect
-              label="Company"
-              value={scope.entityId}
-              onChange={(entityId) => onScopeChange({ entityId, siteId: "" })}
-              options={session.entities}
-            />
-            <ScopeSelect
-              label="Site"
-              value={scope.siteId}
-              onChange={(siteId) => onScopeChange({ ...scope, siteId })}
-              options={sites}
-            />
+          <div className="hidden shrink-0 md:block">
             <UserMenu session={session} onSignOut={onSignOut} />
           </div>
         </div>
@@ -427,20 +463,10 @@ export function Shell({
             />
           </nav>
 
-          <div className="flex flex-col gap-3 border-t border-border pt-4">
-            <ScopeSelect
-              label="Company"
-              value={scope.entityId}
-              onChange={(entityId) => onScopeChange({ entityId, siteId: "" })}
-              options={session.entities}
-            />
-            <ScopeSelect
-              label="Site"
-              value={scope.siteId}
-              onChange={(siteId) => onScopeChange({ ...scope, siteId })}
-              options={sites}
-            />
-          </div>
+          {/* The scope selects used to be down here too, which meant changing
+              where you were working started by opening the navigation. They are
+              in the header's own control now, at every width, so this drawer is
+              navigation and nothing else. */}
 
           <div className="mt-auto border-t border-border pt-4">
             <UserMenu

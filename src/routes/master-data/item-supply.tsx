@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ActionBar, pickFrom, pickItem, pickParty, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { useT } from "../../lib/i18n";
@@ -63,10 +63,6 @@ function ItemSupply() {
           "One supplier is the default for a product at a site; the rest are ranked alternatives. A regulated product cannot default to a supplier that is not on the approved list, and the sourcing split may not exceed the whole requirement.",
         )}
       </PageHeader>
-
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
 
       <ConfigTransfer
         objectType="item_supplier"

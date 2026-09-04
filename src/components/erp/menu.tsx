@@ -175,10 +175,17 @@ export function MainMenu() {
         onClick={() => setOpen(true)}
         aria-label={ui("Menu")}
         aria-expanded={open}
-        className={`${TOUCH} inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground`}
+        // Icon only, and divided from the search beside it: the header groups
+        // this with the palette and the screen help, and three labelled buttons
+        // in a row was most of why that header read as busy. The name is on the
+        // panel this opens, and on the button for anything reading it aloud.
+        // Not below md, where the drawer already is this: it lists every
+        // section of the area you are in and opens from the hamburger two
+        // controls to the left. Keeping both cost 44px of a 375px header to
+        // ask the same question twice.
+        className={`${TOUCH} hidden w-11 shrink-0 items-center justify-center border-l border-input text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:inline-flex`}
       >
         <LayoutGrid className="size-4" />
-        <span className="hidden lg:inline">{ui("Menu")}</span>
       </button>
 
       {open && typeof document !== "undefined"

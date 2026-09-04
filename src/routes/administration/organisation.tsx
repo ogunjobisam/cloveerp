@@ -4,7 +4,7 @@ import { type Field } from "../../components/erp/action";
 import { ActionBar, pickFrom, pickSite, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 
@@ -228,10 +228,6 @@ function Organisation() {
           "A department is one object: it routes an approval and it carries the posting. Bands decide who approves by value; a named assignment overrides that for a person, a role or a whole department.",
         )}
       </PageHeader>
-
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
 
       <ActionBar
         note="Departments and membership. A person's primary department at capture is the one that routes their request."

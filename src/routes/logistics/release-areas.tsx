@@ -8,7 +8,7 @@ import {
   reason,
 } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { WavePrintReadiness } from "../../components/erp/wave-print";
@@ -99,10 +99,6 @@ function ReleaseAreas() {
           "Stock in a marshalling area is allocated stock: out of counting scope and out of reach of other demand. A wave allocates in detail against the area, what the area cannot cover raises directed replenishment rather than a shortage, and nothing prints until every line is covered.",
         )}
       </PageHeader>
-
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
 
       <ConfigTransfer
         objectType="release_area"

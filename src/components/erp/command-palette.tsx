@@ -158,10 +158,14 @@ export function CommandPalette() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={ui("Search screens")}
-        className={`${TOUCH} inline-flex shrink-0 items-center gap-2 rounded-md border border-input px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground md:px-3`}
+        // Borderless: this sits inside the header's one bordered control group
+        // beside the menu and the help, and a border of its own made three
+        // buttons where there is one object. The shortcut stays visible at lg —
+        // it is the cheapest thing on the row and the only place anyone learns
+        // the palette has a shortcut at all.
+        className={`${TOUCH} inline-flex shrink-0 items-center gap-1.5 rounded-l-md px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground`}
       >
         <Search className="size-4" aria-hidden="true" />
-        <span className="hidden lg:inline">{ui("Search")}</span>
         <kbd className="hidden rounded border border-border px-1 font-mono text-[10px] lg:inline">
           ⌘K
         </kbd>

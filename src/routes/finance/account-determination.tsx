@@ -4,7 +4,7 @@ import { GoTo, type Field } from "../../components/erp/action";
 import { ActionBar, pickFrom, pickItem, reason } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
-import { PageHeader, RefreshButton } from "../../components/erp/page";
+import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 
@@ -174,10 +174,6 @@ function AccountDetermination() {
           "A posting class is what accounting cares about; the product is what operations cares about. Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
         )}
       </PageHeader>
-
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
 
       <ActionBar
         note="The vocabulary. Keep it short — a class exists because two things post differently, not because they are different things."
