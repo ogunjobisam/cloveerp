@@ -281,7 +281,8 @@ jobs:
             "erp_test.assert_door_runs_suite()" \
             "erp_test.assert_notification_chain_suite()" \
             "erp_test.assert_enquiry_suite()" \
-            "erp_test.assert_ingress_suite()"
+            "erp_test.assert_ingress_suite()" \
+            "erp_test.assert_demo_history_suite()"
           do
             $PSQL -tAc "select $s;"
           done

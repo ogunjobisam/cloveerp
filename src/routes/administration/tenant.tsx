@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { ErrorNote, PermissionNote, useErpAction } from "../../components/erp/action";
 import { ActionBar, type ActionSpec } from "../../components/erp/actions-bar";
@@ -83,7 +83,7 @@ function TenantLifecycle() {
 
       <EncryptionKeysPanel />
 
-      <DemoOperationsPanel />
+      <DemoHistoryPanel />
 
       <ExportPanel />
 
@@ -213,46 +213,139 @@ function EncryptionKeysPanel() {
 }
 
 /**
- * Demonstration history.
+ * A year of trading, one week per call.
  *
  * Master data alone leaves every dashboard at zero, because a dashboard reads
- * movements, not records. This builds a short operating history — purchase,
- * receipt, putaway, production, a customer order, counts, a planning run — and
- * says plainly which of those steps it could not complete in this organisation
- * rather than failing the lot.
+ * movements, not records; and three documents dated today leave an ageing
+ * report, a margin report and a stock ledger with nothing to draw. This builds
+ * a year — purchase orders and receipts, sales orders, despatches, invoices and
+ * cash, quotations and requisitions — through the same functions a person's
+ * document goes through, so everything it writes reconciles exactly as a
+ * customer's would.
+ *
+ * The database builds one week per call and says where the next call should
+ * start; the button loops until it says it is done. That is what keeps each
+ * call inside the statement timeout a signed-in user has, and what lets a call
+ * that failed be repeated: a week that already exists is skipped, not
+ * duplicated.
  */
-function DemoOperationsPanel() {
+type DemoHistoryStep = {
+  done?: boolean;
+  from?: string;
+  to?: string;
+  built_through?: string;
+  next_from?: string | null;
+  built?: number;
+  notes?: unknown;
+};
+
+function DemoHistoryPanel() {
+  const queryClient = useQueryClient();
+  const building = useErpAction({ fn: "erp_seed_demo_history", invalidates: [] });
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<{
+    from: string;
+    to: string;
+    through: string;
+    documents: number;
+  } | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
-  const seeding = useErpAction({ fn: "erp_seed_demo_operations", invalidates: [] });
+  const stop = useRef(false);
+
+  async function run() {
+    stop.current = false;
+    setRunning(true);
+    setNotes([]);
+    setProgress(null);
+    let from: string | null = null;
+    let documents = 0;
+    try {
+      for (;;) {
+        const step = (await building.mutateAsync(from ? { p_from: from } : {})) as DemoHistoryStep;
+        documents += Number(step.built ?? 0);
+        if (step.from && step.to && step.built_through) {
+          setProgress({ from: step.from, to: step.to, through: step.built_through, documents });
+        }
+        const fresh = Array.isArray(step.notes) ? step.notes.map(String) : [];
+        if (fresh.length > 0) {
+          setNotes((prior) => [...prior, ...fresh].slice(-6));
+        }
+        if (step.done || !step.next_from || stop.current) break;
+        from = step.next_from;
+      }
+    } finally {
+      setRunning(false);
+      // Every list, dashboard and report on the site reads what was just
+      // written; naming them one by one is how a screen stays stale.
+      void queryClient.invalidateQueries();
+    }
+  }
+
+  const percent =
+    progress && progress.to > progress.from
+      ? Math.min(
+          100,
+          Math.round(
+            ((Date.parse(progress.through) - Date.parse(progress.from)) /
+              (Date.parse(progress.to) - Date.parse(progress.from))) *
+              100,
+          ),
+        )
+      : null;
 
   return (
     <section className="rounded-xl border border-border bg-card">
       <header className="border-b border-border px-4 py-4 sm:px-5">
-        <h2 className="text-sm font-semibold">Demonstration operating history</h2>
+        <h2 className="text-sm font-semibold">Demonstration trading history</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
-          Generates receipts, production, counts and orders so the dashboards, KPIs and audit trail
-          have something real to show. Each step is guarded and reported separately.
+          Builds a year of purchasing, receipts, sales, despatches, invoices and cash, with the
+          quotations and requisitions around them, so the dashboards, ageing, margin and the stock
+          ledger have a year to show. One week is built per call and the button keeps calling until
+          the year is done; a week that already exists is skipped. Refused in a live organisation.
         </Prose>
       </header>
       <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
-        <button
-          type="button"
-          className="min-h-11 w-fit rounded-md border border-input px-4 text-sm font-medium"
-          disabled={seeding.isPending}
-          onClick={() =>
-            seeding.mutateAsync({}).then((result) => {
-              const payload = result as { notes?: unknown };
-              setNotes(Array.isArray(payload?.notes) ? payload.notes.map(String) : []);
-            })
-          }
-        >
-          {seeding.isPending ? "Building…" : "Build demo operating history"}
-        </button>
-        {seeding.error ? <ErrorNote error={seeding.error} /> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="min-h-11 w-fit rounded-md border border-input px-4 text-sm font-medium"
+            disabled={running}
+            onClick={() => void run()}
+          >
+            {running ? "Building…" : "Build a year of trading history"}
+          </button>
+          {running ? (
+            <button
+              type="button"
+              className="min-h-11 w-fit rounded-md px-3 text-sm text-muted-foreground"
+              onClick={() => {
+                stop.current = true;
+              }}
+            >
+              Stop after this week
+            </button>
+          ) : null}
+        </div>
+        {progress ? (
+          <div className="flex flex-col gap-1 text-sm">
+            <div className="h-2 w-full overflow-hidden rounded bg-muted" aria-hidden="true">
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{ width: `${percent ?? 0}%` }}
+              />
+            </div>
+            <p className="text-muted-foreground" aria-live="polite">
+              Built through {shortDate(progress.through)} — {progress.documents} documents
+              {percent !== null ? ` (${percent}%)` : ""}
+              {running ? "" : "."}
+            </p>
+          </div>
+        ) : null}
+        {building.error ? <ErrorNote error={building.error} /> : null}
         {notes.length > 0 ? (
           <ul className="list-disc pl-5 text-sm text-muted-foreground">
-            {notes.map((n) => (
-              <li key={n}>{n}</li>
+            {notes.map((n, i) => (
+              <li key={`${i}-${n}`}>{n}</li>
             ))}
           </ul>
         ) : null}
