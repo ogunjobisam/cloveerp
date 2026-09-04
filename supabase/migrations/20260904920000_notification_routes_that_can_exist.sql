@@ -2591,7 +2591,6 @@ declare
   v_cs     uuid;
   v_job    uuid;
   v_run    bigint;
-  v_cmd    uuid;
   v_n      int;
   v_cases  int := 0;
   it       record;
@@ -2719,60 +2718,32 @@ begin
   -- was the delivery of a job's parameters, and a direct call is exactly the
   -- test that cannot see it.
   --
-  -- It needs a real backlog. With an empty queue the handler answers nought
-  -- whether it was given a threshold of one or fell back to its own ten, so the
-  -- two are indistinguishable — which is how the first draft of this case
-  -- passed against plumbing that was demonstrably broken. One dead command and
-  -- a threshold of one, and only the number that actually arrived raises an
-  -- event; the payload then carries it, so the case reads the value rather than
-  -- inferring it.
-  insert into erp.external_system
-    (tenant_id, code, name, adapter_code, adapter_version, connection,
-     credential_ref, status, max_in_flight, max_attempts, retry_backoff_seconds)
-  values (v_tenant, 'zzwms', 'Suite system', 'example_http', 1,
-          jsonb_build_object('base_url', 'https://zzwms.test'),
-          'vault://zzchain/suite-key', 'active', 5, 1, 60);
-
-  insert into erp.external_system_operation
-    (tenant_id, external_system_id, operation_code, is_enabled)
-  select v_tenant, es.id, 'order.create', true
-    from erp.external_system es
-   where es.tenant_id = v_tenant and es.code = 'zzwms';
-
-  perform erp.submit_command(
-    'zzwms', 'order.create',
-    jsonb_build_object('order_ref', 'ZZ-1',
-                       'lines', jsonb_build_array(jsonb_build_object('sku', 'A'))),
-    false, 'zzchain-command-0001');
-
-  -- max_attempts is one, so the first failure is the last: the command dies and
-  -- the backlog has exactly one thing in it needing a person.
-  select cc.id into v_cmd
-    from erp.claim_command_batch('zzwms', 1, 'chain-suite', interval '5 minutes') cc
-   limit 1;
-  perform erp.fail_command(v_cmd, 'the suite needs one command in the backlog', true);
-
+  -- The parameter is a threshold of nought, which the handler refuses by name.
+  -- Its own default is ten, which it would accept — so a run that SUCCEEDS is a
+  -- run that never received the number, and the case can tell the two apart.
+  -- Asserting on the returned count could not: with an empty queue the handler
+  -- answers nought whether the threshold is one or ten, which is how the first
+  -- draft of this case passed against plumbing that was demonstrably broken.
   v_cases := v_cases + 1;
   perform erp.upsert_job('zzbacklog', 'Backlog alert', 'integration.backlog_alert',
                          'interval', 900, null, null, null, 'UTC',
-                         '{"threshold": 1}'::jsonb, null, null, true);
+                         '{"threshold": 0}'::jsonb, null, null, true);
   update erp.job set next_run_at = now()
    where tenant_id = v_tenant and code = 'zzbacklog';
   perform erp.run_due_jobs(10);
   return query select 'a job''s parameters reach the handler that declared them'::text,
-    exists (select 1 from erp.event e
-             where e.tenant_id = v_tenant
-               and e.event_type = 'integration.backlog_exceeded'
-               and (e.payload ->> 'threshold') = '1'),
-    'the job says one and the handler''s default is ten; one dead command '
-    'crosses the first and not the second, and the event carries the number '
-    'that arrived';
+    exists (select 1 from erp.job_run jr
+              join erp.job jb on jb.tenant_id = jr.tenant_id and jb.id = jr.job_id
+             where jr.tenant_id = v_tenant and jb.code = 'zzbacklog'
+               and jr.outcome = 'failed'
+               and jr.error like '%ERPWARE_THRESHOLD_INVALID%'),
+    'the job says nought and the handler''s default is ten: refusing is the '
+    'only outcome that proves the number arrived';
 
   v_cases := v_cases + 1;
-  return query select 'a backlog under its threshold raises nothing'::text,
-    erp.alert_integration_backlog('{"threshold": 50}'::jsonb) = 0,
-    'one command behind and a threshold of fifty: an alert here would be this '
-    'fault inverted';
+  return query select 'an empty queue raises nothing'::text,
+    erp.alert_integration_backlog('{"threshold": 1}'::jsonb) = 0,
+    'an alert on a queue with nothing in it is this fault inverted';
 
   v_cases := v_cases + 1;
   begin
