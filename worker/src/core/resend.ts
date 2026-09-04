@@ -24,6 +24,20 @@ export type EmailRow = {
   body: string | null;
   from_address: string | null;
   reply_to: string | null;
+  /**
+   * An HTML alternative, when the caller has one.
+   *
+   * Optional, and absent for everything the queue in email.ts sends: those
+   * bodies come out of erp.notification_template and are text. The enquiry
+   * function sets it, so the person reading a lead gets something laid out
+   * rather than a wall of lines.
+   *
+   * body stays required when this is set, and stays the whole message rather
+   * than a stub pointing at the HTML. A text part that says "view this in a
+   * modern client" is a message that failed to arrive for anyone reading mail
+   * as text, and a missing text part is a spam signal besides.
+   */
+  html?: string | null;
 };
 
 /**
@@ -40,6 +54,10 @@ export class PermanentSendFailure extends Error {}
 
 /**
  * Post one message and return the provider's id for it.
+ *
+ * text always, html as well when the row carries one: Resend accepts both and
+ * sends a multipart message, which is what lets a client that renders HTML and
+ * one that does not each show the whole thing.
  *
  * 4xx other than 429 is the provider saying "never" — a malformed address, an
  * unverified domain, a rejected key. Retrying those is noise that fills the
@@ -65,6 +83,7 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
       to: [row.to_address],
       subject: row.subject ?? "(no subject)",
       text: row.body ?? "",
+      ...(row.html ? { html: row.html } : {}),
       ...(row.reply_to ? { reply_to: row.reply_to } : {}),
     }),
   });
