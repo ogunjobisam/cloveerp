@@ -1,0 +1,133 @@
+name: restore drill
+
+# D28: a backup that has never been restored is a hope.
+#
+# erp_meta.continuity_commitment promises a restore drill every ninety days
+# into an isolated environment, verified by running the invariant assertions
+# against the restored data. Until this workflow every commitment read
+# "never drilled", because nothing had ever restored anything.
+#
+# This drill: dump the live product schemas over the same connection the
+# deploy uses, restore them into a fresh PostgreSQL of the live major version
+# on the runner — an environment with no accumulated state and no route back
+# to production — and run the whole console and the whole-database
+# reconciliation against what came back. A restore that produces a database
+# that cannot reconcile is a backup that cannot recover a business, however
+# many bytes it held.
+#
+# What this drill does not yet do is write its own result to
+# erp_meta.restore_drill: there is no writer for that table outside its test
+# suite. Recording the drill is Phase 6's work, and until then the record of
+# a drill is this workflow's run history. Saying so here beats a green row
+# nothing wrote.
+#
+# Runs on the first day of every third month and on demand.
+
+on:
+  schedule:
+    - cron: '0 6 1 */3 *'
+  workflow_dispatch:
+
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The secret exists
+        run: |
+          if [[ -z "${DB_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set; there is nothing to restore from."
+            exit 1
+          fi
+
+      - name: Install the client tools of the live major version
+        # pg_dump must be at least the server's version. The apt client is
+        # 16; the live project is 17.6.
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+
+      - name: Take the backup
+        # The product's own schemas and the migration history. auth and storage
+        # belong to the host and are restored by the host; the drill is about
+        # whether the business can be recovered from what the product owns.
+        run: |
+          set -euo pipefail
+          pg_dump "$DB_URL" --format=custom --no-owner --no-privileges \
+            --schema=erp --schema=erp_ref --schema=erp_meta --schema=erp_ai \
+            --schema=erp_test --schema=erp_ingress --schema=public \
+            --schema=supabase_migrations \
+            --file=live.dump
+          ls -l live.dump
+          echo "backup: $(stat -c %s live.dump) bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start an isolated PostgreSQL
+        run: |
+          set -euo pipefail
+          docker run -d --name clove-erp-restore \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            supabase/postgres:17.6.1.167
+          for i in $(seq 1 60); do
+            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          echo "PostgreSQL did not become ready" >&2; exit 1
+
+      - name: Restore into it
+        # The host contract first (roles, auth.uid(), the extensions schema),
+        # then the extensions the product creates in its own migrations, then
+        # the dump. supabase_migrations is created by the dump itself.
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_restore'
+          $PSQL -d clove_restore -f supabase/ci/00_host_bootstrap.sql
+          $PSQL -d clove_restore -c 'create extension if not exists pgcrypto with schema extensions;
+                                     create extension if not exists pg_jsonschema with schema extensions;
+                                     create extension if not exists btree_gist with schema extensions;'
+          $PSQL -d clove_restore -c 'create role clove_enquiry nologin nobypassrls noinherit' || true
+          # The dump carries CREATE SCHEMA public, which the image already has.
+          # Everything else in it is restored.
+          pg_restore -l live.dump | grep -v 'SCHEMA - public' > live.list
+          pg_restore --dbname=clove_restore --no-owner --no-privileges --exit-on-error --single-transaction -L live.list live.dump
+          # A restored database has no statistics; the planner needs them before
+          # anything reads the catalogue at volume.
+          psql -v ON_ERROR_STOP=1 -d clove_restore -qc 'analyze'
+          psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select 'restored: ' || count(*) || ' organisation(s), ' || (select count(*) from erp.document) || ' document(s)' from erp.tenant" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the invariant assertions against the restored data
+        run: |
+          set -euo pipefail
+          bad=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
+            select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
+              from jsonb_array_elements(erp.platform_assurance()) c
+             where not (c ->> 'ok')::boolean;")
+          if [[ -n "$bad" ]]; then
+            echo "::error::the restored database does not pass the console:"
+            echo "$bad"
+            exit 1
+          fi
+          out=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.assert_whole_database_reconciles();")
+          echo "$out"
+          {
+            echo "## Restore drill"
+            echo "- platform_assurance: green on the restored database"
+            echo "- $out"
+            echo "- recorded in erp_meta.restore_drill: not yet (Phase 6)"
+          } >> "$GITHUB_STEP_SUMMARY"

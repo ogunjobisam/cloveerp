@@ -1,0 +1,145 @@
+name: deploy
+
+# The route to the live database that is not a person at a console.
+#
+# Until this workflow, every change reached production through the Supabase
+# MCP connector, one statement block at a time, because the repository holds
+# no database password and the environment the work is done from cannot reach
+# the project host. That worked, and it produced supabase/ops/README.md: a
+# 154 KB reconciliation script generated because the migrations could not be
+# replayed. A drift repaired by generation is a drift that will recur.
+#
+# From here, main is deployed by replay. The connection string lives in one
+# repository secret, CLOVEERP_LIVE_DATABASE_URL, set by the project owner and
+# read by nobody else; it must be the session-pooler URL (the direct host is
+# IPv6-only and a runner cannot reach it) and percent-encoded, because the CLI
+# says so. The Supabase CLI records what it applies in
+# supabase_migrations.schema_migrations, which is what the deployment screen
+# in the platform console compares against the repository.
+#
+# Two jobs:
+#
+#   dry-run  — on every pull request: what WOULD apply, and the remote history.
+#   apply    — on push to main: apply, then prove the result with the same
+#              checks the build runs. A deploy that applied and did not check
+#              is the silent-job problem moved to production.
+#
+# One-off: the live project's history table holds the names the connector
+# recorded, not the repository's filenames. Run this workflow by hand with
+# mark_applied = true once, on the commit whose migrations are all already on
+# live, and every repository version is recorded as applied. Replay starts
+# from the next one.
+#
+# --include-all, always. Without it the CLI applies only migrations newer than
+# the newest applied, and this repository has already had a fix silently
+# undone by a file that sorted earlier than one already applied.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mark_applied:
+        description: 'One-off: record every repository migration as already applied on live, then stop. Use once, on a commit whose migrations are all on live.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-live
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: What would apply
+        env:
+          DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DB_URL}" ]]; then
+            echo "::warning::CLOVEERP_LIVE_DATABASE_URL is not set; the dry run cannot see live and has checked nothing."
+            exit 0
+          fi
+          echo "## Migrations that would apply" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          supabase db push --dry-run --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: The secret exists
+        # A deploy that deployed nothing must not be green.
+        run: |
+          if [[ -z "${DB_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set. Add the session-pooler connection string as a repository secret; nothing was applied."
+            exit 1
+          fi
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Record every repository migration as applied (one-off)
+        if: github.event_name == 'workflow_dispatch' && inputs.mark_applied
+        run: |
+          set -euo pipefail
+          versions=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | tr '\n' ' ')
+          echo "marking $(echo $versions | wc -w) versions applied"
+          # shellcheck disable=SC2086
+          supabase migration repair --status applied $versions --db-url "$DB_URL"
+          supabase migration list --db-url "$DB_URL" | tail -20
+          echo "Recorded. Re-run this workflow without mark_applied to deploy." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply pending migrations by replay
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        run: |
+          set -euo pipefail
+          echo "## Applied" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          supabase db push --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove the live database
+        # The same checks the build runs, minus the suites: suites create and
+        # destroy organisations and do not belong on live. erp.platform_assurance()
+        # runs every registered assertion; the whole-database reconciliation
+        # visits every organisation. Either failing fails the deploy, loudly.
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        run: |
+          set -euo pipefail
+          bad=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
+              from jsonb_array_elements(erp.platform_assurance()) c
+             where not (c ->> 'ok')::boolean;")
+          if [[ -n "$bad" ]]; then
+            echo "::error::platform_assurance() is not green on live:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "platform_assurance: every registered check green"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
+          {
+            echo "## Live"
+            echo '```'
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'organisations: ' || count(*) from erp.tenant;"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'migrations recorded: ' || count(*) from supabase_migrations.schema_migrations;"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

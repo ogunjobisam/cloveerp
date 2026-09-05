@@ -132,168 +132,55 @@ jobs:
             $PSQL --single-transaction -f "$f"
           done
 
-      - name: Structural assertions
-        # These read the catalogue: they answer "could this schema be wrong?"
-        # rather than "is this data wrong?", so they need no fixtures.
+      - name: Seed a demonstration organisation for the build to reconcile
+        # Every suite cleans up after itself, so at the end of the build the
+        # database holds no organisation at all — and a reconciliation over
+        # nothing is a green light with nothing behind it. This seeds one the
+        # way the product does, through erp.ensure_demo_configuration() and
+        # erp.seed_demo_history(), so the whole-database step below has a
+        # ledger, a stock ledger, a subledger and a genealogy to disagree with.
+        run: $PSQL -f supabase/ci/seed_demo.sql
+
+      - name: Every check in the catalogue
+        # No list. erp.ci_check_catalogue() reads pg_proc and returns every
+        # erp.assert_* and erp_test.assert_* the build can call, in order:
+        # structural assertions, adversarial suites, the one procedure, and
+        # erp.assert_whole_database_reconciles() last — stock, subledger,
+        # inventory, genealogy and manifest for every organisation, every
+        # posting rule in force, every bound entity. The runner hands the
+        # names it ran back to erp.assert_ci_ran(), which refuses if the
+        # catalogue holds one it did not run.
+        #
+        # This replaces two hand-typed lists that between them left twelve
+        # assertions unrun, including all four reconciliations. A check that
+        # exists and is not run is a check that is not there.
+        run: supabase/ci/run_checks.sh
+
+      - name: A check that is not run fails the build
+        # The negative proof, in a transaction that is rolled back: create an
+        # assertion, hand the runner's list back without it, and the build
+        # must refuse. If this step ever passes without refusing, the guard
+        # above is decoration.
         run: |
           set -euo pipefail
-          for a in \
-            "erp.assert_isolation()" \
-            "erp.assert_audit_coverage()" \
-            "erp.assert_attribution_coverage()" \
-            "erp.assert_session_context_hygiene()" \
-            "erp.assert_gateway_integrity()" \
-            "erp.assert_scheduler_integrity()" \
-            "erp.assert_governed_views_are_safe()" \
-            "erp.assert_intelligence_boundary()" \
-            "erp.assert_public_api_safe()" \
-            "erp.assert_authorising_doors_are_volatile()" \
-            "erp.assert_no_caller_reachable_internals()" \
-            "erp.assert_authorise_codes_exist()" \
-            "erp.assert_no_single_administrator_live_tenant()" \
-            "erp.assert_no_dead_configuration()" \
-            "erp.assert_master_data_sane()" \
-            "erp.assert_inventory_sane()" \
-            "erp.assert_procurement_controls_sane()" \
-            "erp.assert_planning_sane()" \
-            "erp.assert_production_sane()" \
-            "erp.assert_sales_controls_sane()" \
-            "erp.assert_quality_logistics_sane()" \
-            "erp.assert_finance_depth_sane()" \
-            "erp.assert_part5_coverage()" \
-            "erp.assert_resource_coverage('en')" \
-            "erp.assert_transaction_control_routines()" \
-            "erp.assert_document_create_permissions()" \
-            "erp.assert_configuration_promotable()" \
-            "erp.assert_determination_coverage()" \
-            "erp.assert_diagnostics_registered()" \
-            "erp.assert_capabilities_sound()" \
-            "erp.assert_starter_vocabularies_sound()" \
-            "erp.assert_vocabulary_aligned()" \
-            "erp.assert_packs_installable()" \
-            "erp.assert_job_handlers_resolvable()" \
-            "erp.assert_validation_environment_available()" \
-            "erp.assert_acceptance_clauses_sound()" \
-            "erp.assert_output_templates_sound()" \
-            "erp.assert_product_decisions_enforced()" \
-            "erp.assert_entitlements_enforceable()" \
-            "erp.assert_reports_reproducible()" \
-            "erp.assert_output_integrity()" \
-            "erp.assert_device_operations_sound()" \
-            "erp.assert_release_integrity()" \
-            "erp.assert_support_discipline()" \
-            "erp.assert_pack_report_versions_sound()" \
-            "erp.assert_device_task_handlers_sound()" \
-            "erp.assert_migration_sound()" \
-            "erp.assert_accessibility_register_sound()" \
-            "erp.assert_personal_data_register_sound()" \
-            "erp.assert_guidance_sound()" \
-            "erp.assert_first_run_guidance_actionable()" \
-            "erp.assert_meters_recorded()" \
-            "erp.assert_reporting_services()" \
-            "erp.assert_output_channels_sound()" \
-            "erp.assert_commercial_sound()" \
-            "erp.assert_commercial_quotes_sound()" \
-            "erp.assert_contract_provisions_entitlement()" \
-            "erp.assert_customer_view_sound()" \
-            "erp.assert_refusals_name_next_action()" \
-            "erp.assert_no_legacy_refusal_prefix()"
-          do
-            printf '── %-45s' "$a"
-            $PSQL -tAc "select $a;" | sed 's/^$/ok/'
-          done
-
-      - name: Adversarial suites
-        # Each creates its own tenants, attacks them, and cleans up after
-        # itself. Each also asserts its own case count, so a test that
-        # disappears fails the build instead of passing quietly — which was
-        # true of the isolation suite alone until 0044; the stock and gateway
-        # suites reported n/n without ever saying what n should be.
-        run: |
-          set -euo pipefail
-          for s in \
-            "erp_test.assert_isolation_suite()" \
-            "erp_test.assert_stock_invariants()" \
-            "erp_test.assert_gateway_suite()" \
-            "erp_test.assert_provisioning_suite()" \
-            "erp_test.assert_procurement_suite()" \
-            "erp_test.assert_sales_suite()" \
-            "erp_test.assert_finance_suite()" \
-            "erp_test.assert_master_data_suite()" \
-            "erp_test.assert_inventory_suite()" \
-            "erp_test.assert_procurement_controls_suite()" \
-            "erp_test.assert_planning_suite()" \
-            "erp_test.assert_production_suite()" \
-            "erp_test.assert_sales_depth_suite()" \
-            "erp_test.assert_quality_logistics_suite()" \
-            "erp_test.assert_finance_depth_suite()" \
-            "erp_test.assert_bootstrap_window_suite()" \
-            "erp_test.assert_master_data_doors_suite()" \
-            "erp_test.assert_document_authorisation_suite()" \
-            "erp_test.assert_reference_reads_suite()" \
-            "erp_test.assert_transition_menu_suite()" \
-            "erp_test.assert_tenant_deletion_suite()" \
-            "erp_test.assert_addendum_b_promotion_suite()" \
-            "erp_test.assert_determination_coverage_suite()" \
-            "erp_test.assert_policy_register_suite()" \
-            "erp_test.assert_onboarding_interview_suite()" \
-            "erp_test.assert_superadmin_suite()" \
-            "erp_test.assert_starter_pack_acceptance()" \
-            "erp_test.assert_false_success_suite()" \
-            "erp_test.assert_validation_environment_suite()" \
-            "erp_test.assert_document_spine_suite()" \
-            "erp_test.assert_chart_alternative_suite()" \
-            "erp_test.assert_output_template_suite()" \
-            "erp_test.assert_commercial_suite()" \
-            "erp_test.assert_reporting_suite()" \
-            "erp_test.assert_output_suite()" \
-            "erp_test.assert_device_suite()" \
-            "erp_test.assert_release_suite()" \
-            "erp_test.assert_support_suite()" \
-            "erp_test.assert_promotion_completeness_suite()" \
-            "erp_test.assert_device_boundary_suite()" \
-            "erp_test.assert_incident_operations_suite()" \
-            "erp_test.assert_device_drain_suite()" \
-            "erp_test.assert_migration_cutover_suite()" \
-            "erp_test.assert_accessibility_suite()" \
-            "erp_test.assert_erasure_suite()" \
-            "erp_test.assert_guidance_suite()" \
-            "erp_test.assert_metering_suite()" \
-            "erp_test.assert_profile_suite()" \
-            "erp_test.assert_device_client_suite()" \
-            "erp_test.assert_service_notice_suite()" \
-            "erp_test.assert_reporting_services_suite()" \
-            "erp_test.assert_output_channels_suite()" \
-            "erp_test.assert_commercial_price_book_suite()" \
-            "erp_test.assert_commercial_quote_suite()" \
-            "erp_test.assert_commercial_contract_suite()" \
-            "erp_test.assert_commercial_renewal_suite()" \
-            "erp_test.assert_refusal_register_suite()" \
-            "erp_test.assert_first_run_guidance_suite()" \
-            "erp_test.assert_authorising_doors_suite()" \
-            "erp_test.assert_caller_reachable_internal_suite()" \
-            "erp_test.assert_authorise_code_suite()" \
-            "erp_test.assert_prosrc_code_suite()" \
-            "erp_test.assert_email_delivery_suite()" \
-            "erp_test.assert_provisioning_window_suite()" \
-            "erp_test.assert_support_entry_suite()" \
-            "erp_test.assert_support_visibility_suite()" \
-            "erp_test.assert_door_runs_suite()" \
-            "erp_test.assert_notification_chain_suite()" \
-            "erp_test.assert_enquiry_suite()" \
-            "erp_test.assert_ingress_suite()" \
-            "erp_test.assert_demo_history_suite()" \
-            "erp_test.assert_demo_chart_suite()"
-          do
-            $PSQL -tAc "select $s;"
-          done
-
-      - name: Context does not survive a commit
-        # The one property that cannot be tested inside a transaction, and
-        # therefore cannot live in the suites above: a tenant context set by one
-        # transaction must be gone in the next, or a pooled connection carries
-        # it to whoever is served next.
-        run: $PSQL -c 'call erp_test.assert_context_not_leaked();'
+          $PSQL <<'SQL'
+          begin;
+          create function erp.assert_zz_unrun() returns text language sql as $f$ select 'never run' $f$;
+          do $$
+          declare v_names text[];
+          begin
+            select array_agg(qualified_name) into v_names
+              from erp.ci_check_catalogue() where qualified_name <> 'erp.assert_zz_unrun';
+            perform erp.assert_ci_ran(v_names);
+            raise exception 'CLOVEERP_CI_UNGUARDED: a check that was not run passed the build';
+          exception when others then
+            if sqlerrm not like 'CLOVEERP_CHECK_NOT_RUN:%' or sqlerrm not like '%erp.assert_zz_unrun%' then
+              raise;
+            end if;
+            raise notice 'refused as it should: %', left(sqlerrm, 80);
+          end $$;
+          rollback;
+          SQL
 
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change

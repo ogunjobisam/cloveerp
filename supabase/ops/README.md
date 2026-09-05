@@ -23,6 +23,43 @@ the next build — which is the guard working, not a false alarm.
 
 ---
 
+## How live is reached from 6 September 2026
+
+Nothing in this directory is the route to production any more. Two workflows
+are:
+
+- `.github/workflows/deploy.yml` — on every push to `main`, applies the
+  repository's pending migrations to the live project by replay
+  (`supabase db push --include-all`), then runs `erp.platform_assurance()` and
+  `erp.assert_whole_database_reconciles()` over the same connection and fails
+  if either is not green. On every pull request it prints what would apply.
+- `.github/workflows/restore_drill.yml` — quarterly and on demand, dumps the
+  product schemas from live, restores them into a fresh PostgreSQL of the
+  live major version on the runner, and runs the same two checks against the
+  restored data. D28.
+
+Both read one repository secret, `CLOVEERP_LIVE_DATABASE_URL`: the project's
+session-pooler connection string (the direct host is IPv6-only and a runner
+cannot reach it), percent-encoded. It is set by the project owner and read by
+nobody else; no connection string is stored anywhere in this repository or in
+the environment the work is done from, and none should be.
+
+**Before the first replay**, the live history table has to learn which
+repository migrations it already carries: every change up to and including
+`20260905040000` reached live through the Supabase MCP connector, which
+recorded its own names rather than the repository's filenames. Run `deploy`
+by hand once with `mark_applied = true`, on a commit whose migrations are all
+already on live (the merge of PR #59, `edbd793`, or any later commit whose
+new migrations have been applied by hand). Every repository version is then
+recorded as applied and replay starts from the next one. Running it twice is
+harmless; running it on a commit with an unapplied migration would record that
+migration as applied without applying it, which is the one way to misuse it.
+
+The connector remains available for reading and for an emergency; it is no
+longer how a change lands.
+
+---
+
 ## 20260831_live_reconciliation.sql
 
 Brings the production project (`xpzffnnhnhcqyjqcueja`) to the schema `main`
