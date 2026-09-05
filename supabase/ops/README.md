@@ -58,6 +58,19 @@ migration as applied without applying it, which is the one way to misuse it.
 The connector remains available for reading and for an emergency; it is no
 longer how a change lands.
 
+### Settings that live only in the dashboard
+
+Two authentication settings cannot be expressed in `supabase/config.toml` and
+are therefore recorded here, with the date, when they are changed:
+
+| Setting | State | Changed | By |
+|---|---|---|---|
+| Leaked-password protection (HaveIBeenPwned check on new passwords) | to be switched on — Phase 2 asks for it | — | — |
+| Publishable (anon) key rotation after `.env` left version control | to be rotated — Phase 2 asks for it | — | — |
+
+Update the row when the change is made. A row that says "to be" for long is
+itself a finding.
+
 ---
 
 ## 20260831_live_reconciliation.sql

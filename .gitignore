@@ -33,3 +33,10 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files. .env held only publishable values while it was tracked,
+# but it is where a service-role key eventually lands; the names live in
+# .env.example, the values live in the host.
+.env
+.env.*
+!.env.example

@@ -38,3 +38,16 @@ import_map = "./functions/import_map.json"
 [functions.enquiry]
 verify_jwt = false
 import_map = "./functions/import_map.json"
+
+# Passwords.
+#
+# The two settings the CLI carries. Leaked-password protection (checking a new
+# password against the HaveIBeenPwned corpus) is a project setting the CLI does
+# not express; it is switched on in the dashboard under Authentication →
+# Providers → Email, and the date it was switched on is recorded in
+# supabase/ops/README.md. A setting that lives only in a dashboard is a
+# setting nobody can review in a diff, which is why the ones that can live here
+# do.
+[auth]
+minimum_password_length = 12
+password_requirements = "lower_upper_letters_digits"
