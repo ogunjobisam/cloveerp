@@ -44,7 +44,7 @@ export function BrandingPanel({ locale = "en" }: { locale?: string }) {
     for (const [field, key] of Object.entries(BRAND_KEYS) as [keyof typeof BRAND_KEYS, string][]) {
       const value = draft[field].trim();
       if (value === (initial[field] ?? "")) continue;
-      await set.mutateAsync({ p_resource_key: key, p_locale: locale, p_text: value });
+      await set.mutateAsync({ p_key: key, p_value: value, p_locale: locale });
     }
     await queryClient.invalidateQueries({ queryKey: ["erp_resources"] });
     await queryClient.invalidateQueries({ queryKey: ["erp_resource_catalog"] });

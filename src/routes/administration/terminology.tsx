@@ -124,11 +124,11 @@ function Terminology() {
                         },
                       ]}
                       mapArgs={(values) => ({
-                        p_resource_key: r.key,
+                        p_key: r.key,
+                        p_value: values["p_text"],
                         p_locale: r.locale,
-                        p_text: values["p_text"],
                       })}
-                      invalidates={["erp_resource_catalog", "erp_resources"]}
+                      invalidates={["erp_resource_catalog", "erp_resources", "erp_untranslated"]}
                       submitLabel="Apply wording"
                     />
                   </td>
@@ -138,6 +138,135 @@ function Terminology() {
           )}
         </div>
       </section>
+
+      <TenantTerm locale={locale} />
+
+      {locale !== "en" ? <ServedFromEnglish locale={locale} filter={filter} /> : null}
     </div>
+  );
+}
+
+/**
+ * A word the organisation defines. The product never shipped it, so it lives
+ * under custom. and shows as untranslated in every other locale until somebody
+ * translates it there.
+ */
+function TenantTerm({ locale }: { locale: string }) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div>
+          <h2 className="text-sm font-semibold">Your own terms</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            A word the product does not have, keyed under custom. and available to every screen
+            through the same resource layer.
+          </Prose>
+        </div>
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">Add a term</ActionButton>}
+          title="Add a term"
+          description={`A key under custom., such as custom.pallet_word, and its wording in ${locale}.`}
+          permission="administration.configure"
+          fn="erp_set_resource_override"
+          fields={[
+            {
+              kind: "text",
+              name: "p_key",
+              label: "Key (custom.…)",
+              required: true,
+              hint: "Lower-case words, digits and underscores, separated by dots.",
+            },
+            { kind: "text", name: "p_value", label: "Wording", required: true },
+          ]}
+          mapArgs={(values) => ({
+            p_key: String(values["p_key"] ?? "").trim(),
+            p_value: values["p_value"],
+            p_locale: locale,
+          })}
+          invalidates={["erp_resource_catalog", "erp_resources", "erp_untranslated"]}
+          submitLabel="Add term"
+        />
+      </header>
+    </section>
+  );
+}
+
+type Untranslated = {
+  key: string;
+  en_value: string;
+  served_from: string;
+  is_tenant_term: boolean;
+};
+
+/** Keys this locale is still serving from English, tenant terms included. */
+function ServedFromEnglish({ locale, filter }: { locale: string; filter: string }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["erp_untranslated", { p_locale: locale }],
+    queryFn: () => callErp<Untranslated[]>("erp_untranslated", { p_locale: locale }),
+  });
+
+  const rows = (data ?? []).filter((r) =>
+    filter ? `${r.key} ${r.en_value}`.toLowerCase().includes(filter.toLowerCase()) : true,
+  );
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
+        <h2 className="text-sm font-semibold">Served from English</h2>
+        <Prose className="mt-0.5 text-xs text-muted-foreground">
+          {data
+            ? `${data.length} key(s) have no ${locale} wording yet and fall back to English. Translating one here applies to this organisation only.`
+            : `Keys with no ${locale} wording fall back to English.`}
+        </Prose>
+      </header>
+      <div className="px-4 py-4 sm:px-5">
+        {isPending ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : error ? (
+          <div role="alert">
+            <p className="text-sm font-medium text-destructive">This did not load.</p>
+            <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Every key has wording in {locale}.</p>
+        ) : (
+          <Table columns={["Key", "English", "", ""]}>
+            {rows.slice(0, 300).map((r) => (
+              <tr key={r.key} className="border-b border-border/50">
+                <td className="py-2 pr-4 font-mono text-xs">{r.key}</td>
+                <td className="py-2 pr-4">{r.en_value}</td>
+                <td className="py-2 pr-4">
+                  {r.is_tenant_term ? <Pill tone="warn">Your term</Pill> : null}
+                </td>
+                <td className="py-2 pr-4">
+                  <ActionDialog
+                    trigger={<ActionButton variant="secondary">Translate</ActionButton>}
+                    title={`Translate ${r.key}`}
+                    description={`Wording in ${locale} for this organisation. English: “${r.en_value}”.`}
+                    permission="administration.configure"
+                    fn="erp_set_resource_override"
+                    fields={[
+                      {
+                        kind: "text",
+                        name: "p_value",
+                        label: `Wording (${locale})`,
+                        required: true,
+                      },
+                    ]}
+                    mapArgs={(values) => ({
+                      p_key: r.key,
+                      p_value: values["p_value"],
+                      p_locale: locale,
+                    })}
+                    invalidates={["erp_resource_catalog", "erp_resources", "erp_untranslated"]}
+                    submitLabel="Apply translation"
+                  />
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </div>
+    </section>
   );
 }
