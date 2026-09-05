@@ -196,8 +196,8 @@ jobs:
         run: supabase/ci/screen_strings.sh
 
       - name: The generators are idempotent
-        # Row security, append-only guards, attribution and audit coverage are
-        # all GENERATED from the table registry, and every migration ends by
+        # Row security, append-only guards, attribution, audit coverage and
+        # execute grants are all GENERATED from the registers, and every migration ends by
         # running them again. If a second run produced a different schema, then
         # what a table's protection is would depend on how many migrations had
         # happened to run since it was created.
@@ -208,7 +208,10 @@ jobs:
           set -euo pipefail
           shape() {
             $PSQL -tAc "select (select count(*) from pg_policy)
-                            || '/' || (select count(*) from pg_trigger where not tgisinternal)"
+                            || '/' || (select count(*) from pg_trigger where not tgisinternal)
+                            || '/' || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                                        where n.nspname in ('erp','erp_ref','erp_meta','erp_ai','erp_test','erp_ingress')
+                                          and has_function_privilege('authenticated', p.oid, 'execute'))"
           }
           before=$(shape)
           $PSQL -q >/dev/null <<'SQL'
@@ -217,9 +220,10 @@ jobs:
           select erp.apply_append_only_guards();
           select erp.apply_attribution_triggers();
           select erp.apply_audit_coverage();
+          select erp.apply_execute_grants();
           SQL
           after=$(shape)
-          echo "policies/triggers before: $before   after: $after"
+          echo "policies/triggers/grants before: $before   after: $after"
           test "$before" = "$after"
 
   # ---------------------------------------------------------------------------
