@@ -61,6 +61,8 @@ type Route = {
   log: { at: string; key: string | null }[];
 };
 const routes: Record<string, Route> = {};
+const statusPublished: { key: string | null; body: unknown }[] = [];
+const feeds: Record<string, { indicator: string; description: string }> = {};
 const route = (path: string): Route =>
   (routes[path] ??= { requests: 0, keys: [], duplicateKeys: 0, log: [] });
 
@@ -114,6 +116,40 @@ const server = Bun.serve({
       const r = record(url.pathname, key);
       if (r.requests === 1) return json({ error: "not now" }, 503);
       return json({ ok: true, idempotency_key: key });
+    }
+
+    // A status page: what an incident update looks like when it leaves the
+    // building. Records the body under its key like any other route.
+    if (req.method === "POST" && url.pathname === "/status/publish") {
+      const key = req.headers.get("idempotency-key");
+      const body = await req.json().catch(() => null);
+      const r = record(url.pathname, key);
+      statusPublished.push({ key, body });
+      return json({ ok: true, idempotency_key: key, received: r.requests });
+    }
+    if (req.method === "GET" && url.pathname === "/status/published") return json(statusPublished);
+
+    // A provider's status feed, in Statuspage v2 shape, set by the rehearsal:
+    //   POST /status/feed {"code":"supabase","indicator":"major","description":"..."}
+    //   GET  /status/feed/<code>/status.json
+    if (req.method === "POST" && url.pathname === "/status/feed") {
+      const body = (await req.json().catch(() => null)) as {
+        code?: string;
+        indicator?: string;
+        description?: string;
+      } | null;
+      if (!body?.code) return json({ error: "code is required" }, 400);
+      feeds[body.code] = {
+        indicator: body.indicator ?? "none",
+        description: body.description ?? "All Systems Operational",
+      };
+      return json({ ok: true, feed: feeds[body.code] });
+    }
+    const feed = url.pathname.match(/^\/status\/feed\/([a-z0-9_]+)\/status\.json$/);
+    if (req.method === "GET" && feed) {
+      const f = feeds[feed[1]] ?? { indicator: "none", description: "All Systems Operational" };
+      record(url.pathname, null);
+      return json({ page: { id: feed[1], name: feed[1] }, status: f });
     }
 
     if (req.method === "POST" && url.pathname === "/emails") {

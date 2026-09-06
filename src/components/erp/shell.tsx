@@ -23,6 +23,7 @@ import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { CommandPalette } from "./command-palette";
 import { MainMenu } from "./menu";
+import { ServiceBanner } from "./service-banner";
 import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
 import { TOUCH } from "./page";
@@ -446,6 +447,7 @@ export function Shell({
           </div>
         </div>
       </header>
+      {session.tenant_id ? <ServiceBanner /> : null}
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent side="left" className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto">

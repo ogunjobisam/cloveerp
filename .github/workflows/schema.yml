@@ -209,6 +209,19 @@ jobs:
         # sent twice under one key. D19, checked by the log.
         run: supabase/ci/recovery_rehearsal.sh
 
+      - name: An incident is communicated
+        # Specification v1.6 §16.5. An operator declares an incident with
+        # components and names the organisation it reached; the platform sweep
+        # delivers the declaration and the five-field update to that
+        # organisation (in-app and email, the body as posted) and publishes
+        # both to a status page through the gateway; the worker carries them
+        # to the stub; an update falls due and the timer prompts the named
+        # person; a provider's feed goes dark and the job-driven handler
+        # declares the incident below the platform, then resolves it on
+        # recovery; the review is assembled, the incident resolved, and the
+        # organisation's history still shows it. D35 and D36, by the log.
+        run: supabase/ci/incident_rehearsal.sh
+
       - name: Every door the application names exists
         # The application calls the database by bare string, and nothing
         # compared those strings with the schema: the generated types file is
