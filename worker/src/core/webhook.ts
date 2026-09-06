@@ -135,7 +135,8 @@ export async function drainWebhooks(
       await asPrincipal(
         sql,
         b,
-        (tx) => tx`select erp.fail_webhook(${row.id}::uuid, ${String((err as Error).message)}, false)`,
+        (tx) =>
+          tx`select erp.fail_webhook(${row.id}::uuid, ${String((err as Error).message)}, false)`,
       );
       out.webhooksFailed += 1;
       continue;

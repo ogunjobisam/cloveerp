@@ -42,10 +42,16 @@ async function main() {
     try {
       const report = await drainOnce(sql, cfg);
       const did =
-        report.jobsClaimed + report.messagesClaimed + report.commandsClaimed +
-          report.emailClaimed + report.webhooksClaimed + report.tenantsPurged +
-          report.reclaimed.commands + report.reclaimed.runs +
-          report.reclaimed.messages + report.reclaimed.email +
+        report.jobsClaimed +
+          report.messagesClaimed +
+          report.commandsClaimed +
+          report.emailClaimed +
+          report.webhooksClaimed +
+          report.tenantsPurged +
+          report.reclaimed.commands +
+          report.reclaimed.runs +
+          report.reclaimed.messages +
+          report.reclaimed.email +
           report.reclaimed.webhook >
         0;
       if (did || once) console.log(`[clove-erp] ${JSON.stringify(report)}`);
