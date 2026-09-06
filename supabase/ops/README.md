@@ -58,6 +58,118 @@ migration as applied without applying it, which is the one way to misuse it.
 The connector remains available for reading and for an emergency; it is no
 longer how a change lands.
 
+## Releases and rollback
+
+A release is a row. `deploy.yml` writes one to `erp_meta.release` after the
+migrations apply and before the database is proved: the commit, the moment the
+deploy started, the migration ledger as it stood, and — once
+`erp.platform_assurance()` and `erp.assert_whole_database_reconciles()` pass —
+`proved_at`. `erp.release_report()` reads the register beside the ledger, the
+platform console's deployment screen shows the last five, and a ledger that has
+moved past the last recorded release is a finding of
+`erp.assert_release_integrity()`: a migration that reached live without a
+deploy is what the release route exists to prevent (D27).
+
+Three things can be rolled back, and they roll back differently.
+
+- **The schema does not roll back; it rolls forward.** No down migration is
+  written (D27); a migration that must be undone is undone by the next
+  migration, which says why. `supabase/ci/migrations_immutable.sh` refuses an
+  edited file, so history stays what was applied.
+- **The application rolls back by publishing the previous build** in Lovable.
+  That is safe only when the previous build's doors still exist on the current
+  schema, which the `compat` job in `schema.yml` proves on every pull request:
+  it builds the schema as `main` has it and as the pull request leaves it,
+  extracts every door name the application calls on each side, and fails the
+  request if `main`'s application calls a door the request removes. A door
+  that must go is kept as a shim for one release first.
+- **Data rolls back by point-in-time recovery** to `deployed_at_start` of the
+  release being undone — the `pitr` commitment — and a restore is only a hope
+  until it has been drilled. `restore_drill.yml` drills it quarterly: dump,
+  restore into an isolated PostgreSQL of the live major version, run the
+  console and the reconciliation, then keep one organisation and run them
+  again. Since 6 September 2026 the drill records itself through
+  `erp.record_restore_drill()`, so `erp.continuity_report()` reads `proved`
+  from a row a drill wrote rather than `never drilled` from a table nothing
+  could write to. A drill done by hand is recorded through
+  `erp_platform_record_restore_drill` by the operator who did it.
+
+A rehearsal of the application rollback on live — publish the previous build,
+walk the routes, republish — is the owner's to perform; the `compat` job says
+beforehand whether it can succeed, and this file is where its date is recorded
+when it has been done.
+
+## Incidents and the status page
+
+Specification v1.6 §16.5. An incident update is one row
+(`erp_meta.incident_update`) and every channel carries it unchanged:
+
+- **The application.** The shell shows a banner to every organisation the
+  incident reached, from the same `erp_service_notices()` the continuity
+  screen reads, once a minute. An incident declared as reaching everyone is
+  shown from the moment it is declared, not only once containment repeats it.
+- **Email and the in-app notice.** The platform sweep
+  (`erp.run_due_jobs_all_tenants()`, every minute where `pg_cron` runs)
+  delivers each declaration and update to each organisation reached through
+  `erp.communicate_incidents()`: one in-app row and one queued email per
+  recipient — the organisation's administrators by default, anyone who
+  subscribed on the continuity screen, minus anyone who stepped out.
+  `erp_meta.incident_delivery` is the record; the console shows it.
+- **The status page.** In the platform's own organisation, the same sweep
+  publishes each declaration and update as a `status.publish` command to every
+  active external system on adapter `status_page@1`, and the dispatch worker
+  delivers it with an idempotency key. `infra/status/` is the page: a
+  Cloudflare Worker with one KV namespace that stores what it is sent. The
+  decision `status_page_published_through_the_gateway` supersedes
+  `status_page_not_built`; the page is still outside this database.
+- **The timer.** `erp_meta.incident.next_update_due_at` is set at declaration
+  and on every update, from the severity's cadence or an earlier promise. The
+  sweep's `erp.prompt_incident_updates()` records a prompt to the
+  communications owner when it passes, escalates to the commander after the
+  severity's response window and to the owner role after two, writes the
+  audit row each time, and tells the named person in the platform organisation
+  when their email is a person there. `erp.support_discipline_report()` fails a
+  live incident past its promise and an update ten minutes past due with no
+  prompt — the second is how a sweep that stopped shows up.
+- **Providers below the platform.** `erp_ref.platform_dependency` lists
+  Supabase, Resend, Cloudflare, Lovable and GitHub with their Statuspage v2
+  feeds. The worker handler `platform.poll_dependency_status` reads them; a
+  major or critical indicator declares a severity-3 incident with the origin,
+  the components the provider carries and the scope the row states; recovery
+  posts the closing update and resolves it.
+- **History and the review.** `erp_incident_history()` shows an organisation
+  every incident that reached it, for as long as the register holds it (D36).
+  `erp.assemble_incident_review()` builds the blameless review from the
+  updates, the prompts, the organisations reached and the actions;
+  `erp_meta.incident_action` tracks the actions, and the open actions of
+  incidents sharing a component are shown when a new one is declared.
+
+### Owner actions, once, on live
+
+1. Designate the platform's own organisation (`erp_platform_designate_organisation`
+   from the console, or `erp.designate_platform_organisation(code, reason)`),
+   if not already done for the commercial process.
+2. Deploy `infra/status/` (`wrangler kv namespace create STATUS`,
+   `wrangler secret put STATUS_PUBLISH_TOKEN`, `wrangler deploy`) and point
+   `status.<domain>` at it. The token is never stored in the product.
+3. In the platform organisation, register an external system on adapter
+   `status_page@1` with `connection = {"base_url": "https://<host>/publish"}`
+   and `credential_ref = env://CLOVEERP_STATUS_TOKEN`; enable the operation
+   `status.publish`; give the dispatch worker `CLOVEERP_STATUS_TOKEN` and add
+   the system's code to `CLOVEERP_SYSTEMS`.
+4. In the platform organisation, create the job `poll_dependency_status` on
+   handler `platform.poll_dependency_status` (interval, five minutes is
+   plenty). It needs the worker: the database engine leaves it alone and
+   reports it as left for the worker.
+5. Declare a severity-4 test incident scoped to the demonstration organisation,
+   post one five-field update, and read the console's Communication panel, the
+   organisation's banner, the email, and the status page. Record the date here.
+
+The build rehearses the whole path on every push
+(`supabase/ci/incident_rehearsal.sh`): declaration, update, delivery, the
+worker's publication to a stub status page, the timer's prompt, a provider
+feed going dark and recovering, the review, the resolution and the history.
+
 ### Settings that live only in the dashboard
 
 Two authentication settings cannot be expressed in `supabase/config.toml` and

@@ -111,10 +111,26 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
         run: |
           set -euo pipefail
+          # The moment before anything changed: the point-in-time-recovery
+          # target a rollback of this deploy would restore to. Recorded on the
+          # release row below.
+          echo "DEPLOY_STARTED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
           echo "## Applied" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           supabase db push --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the release
+        # One row per deploy, written before the database is proved so that
+        # the proof's own release clause — the ledger has moved past the last
+        # recorded release — reads this deploy, not the one before it.
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        run: |
+          set -euo pipefail
+          release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'lovable', 'run ${GITHUB_RUN_ID}');")
+          echo "RELEASE_ID=$release" >> "$GITHUB_ENV"
+          echo "release $release recorded for ${GITHUB_SHA}"
 
       - name: Prove the live database
         # The same checks the build runs, minus the suites: suites create and
@@ -135,11 +151,15 @@ jobs:
           fi
           echo "platform_assurance: every registered check green"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
+          # The release is proved: the database it produced passed. A release
+          # row without proved_at is a deploy that applied and did not check.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.prove_release('${RELEASE_ID}');"
           {
             echo "## Live"
             echo '```'
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'organisations: ' || count(*) from erp.tenant;"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'migrations recorded: ' || count(*) from supabase_migrations.schema_migrations;"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'release ' || left(git_sha, 12) || ' recorded ' || recorded_at || ', ledger at ' || coalesce(migrations_high, '(none)') || ', proved ' || proved from erp.release_report() limit 1;"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

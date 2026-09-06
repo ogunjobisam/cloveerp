@@ -1,0 +1,27 @@
+# The Clove ERP status page. Specification v1.6 §16.5 (v1.2 §17.4): "a status
+# page states current and historical availability, maintained by the platform,
+# not by inference".
+#
+# Outside the product's database on purpose: a page served from the product's
+# own Postgres goes dark exactly when somebody needs it. It stores what it is
+# sent and serves it; the product publishes to it through the integration
+# gateway (adapter status_page, operation status.publish), one POST per
+# incident update with an idempotency key.
+#
+#   wrangler kv namespace create STATUS          # paste the id below
+#   wrangler secret put STATUS_PUBLISH_TOKEN     # the bearer the product sends
+#   wrangler deploy
+#
+# Then register the page in the platform's own organisation as an external
+# system on adapter status_page@1 with base_url = https://<host>/publish and
+# credential_ref = env://CLOVEERP_STATUS_TOKEN, and enable status.publish.
+name = "clove-status"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "STATUS"
+id = "replace-with-the-namespace-id"
+
+[vars]
+PAGE_TITLE = "Clove ERP status"

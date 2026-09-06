@@ -30,7 +30,8 @@ async function main() {
 
   console.log(
     `[clove-erp] ${cfg.workerName} serving ${cfg.bindings.length} tenant(s), ` +
-      `systems: ${cfg.systems.join(", ") || "(none)"}`,
+      `systems: ${cfg.systems.join(", ") || "(none)"}, ` +
+      `lease ${cfg.leaseSeconds}s, request timeout ${cfg.httpTimeoutMs}ms`,
   );
 
   // CLOVEERP_ONCE=1: one pass, then exit. What the build runs to prove a queue
@@ -42,7 +43,9 @@ async function main() {
       const report = await drainOnce(sql, cfg);
       const did =
         report.jobsClaimed + report.messagesClaimed + report.commandsClaimed +
-          report.emailClaimed + report.tenantsPurged >
+          report.emailClaimed + report.tenantsPurged +
+          report.reclaimed.commands + report.reclaimed.runs +
+          report.reclaimed.messages + report.reclaimed.email >
         0;
       if (did || once) console.log(`[clove-erp] ${JSON.stringify(report)}`);
     } catch (err) {

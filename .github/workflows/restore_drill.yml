@@ -15,11 +15,20 @@ name: restore drill
 # that cannot reconcile is a backup that cannot recover a business, however
 # many bytes it held.
 #
-# What this drill does not yet do is write its own result to
-# erp_meta.restore_drill: there is no writer for that table outside its test
-# suite. Recording the drill is Phase 6's work, and until then the record of
-# a drill is this workflow's run history. Saying so here beats a green row
-# nothing wrote.
+# The drill records itself. Once the restored copy has passed, the result —
+# what was restored where, which assertions ran, how many passed — is written
+# to erp_meta.restore_drill on live through erp.record_restore_drill(), over
+# the same connection; erp.continuity_report() then reads `proved` for the
+# restore_drill commitment instead of `never drilled`. A failure is recorded
+# too, with what failed as its note.
+#
+# Then the second half: the per-organisation restore §16.5 also commits to.
+# In the same restored copy, erp.isolate_tenant() purges every organisation
+# but one — the copy has to name itself and declare itself a restore target
+# first, and a database called `postgres` (which is what live is called) is
+# refused — and the console and the reconciliation run again over the lone
+# organisation. That is recorded as per_tenant_restore, scoped to the
+# organisation. The drill fails unless both commitments read proved on live.
 #
 # Runs on the first day of every third month and on demand.
 
@@ -27,6 +36,11 @@ on:
   schedule:
     - cron: '0 6 1 */3 *'
   workflow_dispatch:
+    inputs:
+      tenant_code:
+        description: 'The organisation to restore alone in the second half. Empty: the oldest active one.'
+        type: string
+        default: ''
 
 concurrency:
   group: restore-drill
@@ -67,9 +81,17 @@ jobs:
         # The product's own schemas and the migration history. auth and storage
         # belong to the host and are restored by the host; the drill is about
         # whether the business can be recovered from what the product owns.
+        #
+        # Privileges travel with the dump. Without them the restored copy has
+        # the host's default grants — every door executable by anon, every
+        # routine with no ACL — and the console refuses it for exactly that,
+        # which would be the drill finding a fault in itself. The roles the
+        # ACLs name exist on the copy: the bootstrap creates three, and
+        # clove_enquiry is created below before the restore.
         run: |
           set -euo pipefail
-          pg_dump "$DB_URL" --format=custom --no-owner --no-privileges \
+          echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          pg_dump "$DB_URL" --format=custom --no-owner \
             --schema=erp --schema=erp_ref --schema=erp_meta --schema=erp_ai \
             --schema=erp_test --schema=erp_ingress --schema=public \
             --schema=supabase_migrations \
@@ -105,29 +127,130 @@ jobs:
           # The dump carries CREATE SCHEMA public, which the image already has.
           # Everything else in it is restored.
           pg_restore -l live.dump | grep -v 'SCHEMA - public' > live.list
-          pg_restore --dbname=clove_restore --no-owner --no-privileges --exit-on-error --single-transaction -L live.list live.dump
+          pg_restore --dbname=clove_restore --no-owner --exit-on-error --single-transaction -L live.list live.dump
+          # The host's default privileges hand anon EXECUTE to every function
+          # as it is created, and a dump's ACL commands are written relative
+          # to PostgreSQL's own defaults, not the host's — so a restored copy
+          # carries an anon grant on every door that the product had revoked.
+          # The product's grants are regenerated from its own registers, which
+          # is what the console then checks.
+          psql -v ON_ERROR_STOP=1 -d clove_restore -qc "
+            revoke all on all functions in schema public, erp, erp_ref, erp_meta, erp_ai, erp_test, erp_ingress from anon;
+            select erp.apply_execute_grants();"
           # A restored database has no statistics; the planner needs them before
           # anything reads the catalogue at volume.
           psql -v ON_ERROR_STOP=1 -d clove_restore -qc 'analyze'
           psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select 'restored: ' || count(*) || ' organisation(s), ' || (select count(*) from erp.document) || ' document(s)' from erp.tenant" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run the invariant assertions against the restored data
+        # What ran, how many passed and how many failed are captured for the
+        # record below, whichever way it goes.
         run: |
           set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
+            select string_agg(quote_literal(c ->> 'code'), ',' order by c ->> 'code')
+                   || '|' || count(*) filter (where (c ->> 'ok')::boolean)
+                   || '|' || count(*) filter (where not (c ->> 'ok')::boolean)
+              from jsonb_array_elements(erp.platform_assurance()) c;" > assurance.txt
+          IFS='|' read -r RAN PASSED FAILED < assurance.txt
+          {
+            echo "DRILL_RAN=$RAN"
+            echo "DRILL_PASSED=$PASSED"
+            echo "DRILL_FAILED=$FAILED"
+          } >> "$GITHUB_ENV"
           bad=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
             select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
               from jsonb_array_elements(erp.platform_assurance()) c
              where not (c ->> 'ok')::boolean;")
           if [[ -n "$bad" ]]; then
+            echo "DRILL_NOTE<<EOF" >> "$GITHUB_ENV"
+            echo "$bad" >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
             echo "::error::the restored database does not pass the console:"
             echo "$bad"
             exit 1
           fi
-          out=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.assert_whole_database_reconciles();")
+          if ! out=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.assert_whole_database_reconciles();" 2>&1); then
+            echo "DRILL_NOTE<<EOF" >> "$GITHUB_ENV"
+            echo "$out" >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
+            echo "::error::the restored database does not reconcile:"
+            echo "$out"
+            exit 1
+          fi
           echo "$out"
           {
             echo "## Restore drill"
-            echo "- platform_assurance: green on the restored database"
+            echo "- platform_assurance: $PASSED check(s) green on the restored database"
             echo "- $out"
-            echo "- recorded in erp_meta.restore_drill: not yet (Phase 6)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the drill on live
+        # Whichever way it went. A passed drill names every assertion it ran; a
+        # failed one carries what failed as its note. Recorded over the owner
+        # connection, which is what erp.record_restore_drill() trusts.
+        if: always() && env.DRILL_RAN != ''
+        run: |
+          set -euo pipefail
+          if [[ "${{ job.status }}" == "success" || -z "${DRILL_NOTE:-}" ]]; then
+            outcome=passed; note="run ${GITHUB_RUN_ID}"
+          else
+            outcome=failed; note="run ${GITHUB_RUN_ID}: ${DRILL_NOTE}"
+          fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select erp.record_restore_drill(
+              'restore_drill', '${STARTED_AT}'::timestamptz, now(),
+              'pg_dump of live on $(date -u +%F)',
+              'github runner, supabase/postgres:17.6.1.167, database clove_restore',
+              array[${DRILL_RAN},'erp.assert_whole_database_reconciles']::text[],
+              ${DRILL_PASSED} + 1, ${DRILL_FAILED}, '${outcome}', null, \$note\$${note}\$note\$, 'restore_drill.yml');"
+          echo "- recorded in erp_meta.restore_drill as ${outcome}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: One organisation, restored alone
+        # §16.5's per-organisation restore, in the same copy: the copy names
+        # itself, declares itself a restore target for one transaction, and
+        # keeps one organisation. Then the same two checks over what is left,
+        # and a second record.
+        run: |
+          set -euo pipefail
+          CODE="${{ inputs.tenant_code }}"
+          if [[ -z "$CODE" ]]; then
+            CODE=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select code from erp.tenant where status = 'active' order by created_at limit 1")
+          fi
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
+            begin;
+            select set_config('erp.restore_target', current_database(), true);
+            select erp.isolate_tenant('$CODE', current_database());
+            commit;" | tail -1
+          note="run ${GITHUB_RUN_ID}"; outcome=passed
+          bad=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
+            select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
+              from jsonb_array_elements(erp.platform_assurance()) c
+             where not (c ->> 'ok')::boolean;")
+          if [[ -n "$bad" ]]; then outcome=failed; note="run ${GITHUB_RUN_ID}: ${bad}"; fi
+          if ! out=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.assert_whole_database_reconciles();" 2>&1); then
+            outcome=failed; note="run ${GITHUB_RUN_ID}: ${out}"
+          fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select erp.record_restore_drill(
+              'per_tenant_restore', '${started}'::timestamptz, now(),
+              'the full restore above', 'the same copy, every other organisation purged',
+              array[${DRILL_RAN},'erp.assert_whole_database_reconciles']::text[],
+              case when '${outcome}' = 'passed' then ${DRILL_PASSED} + 1 else ${DRILL_PASSED} end,
+              case when '${outcome}' = 'passed' then 0 else 1 end,
+              '${outcome}', '$CODE', \$note\$${note}\$note\$, 'restore_drill.yml');"
+          echo "- one organisation ($CODE) restored alone: ${outcome}; $out" >> "$GITHUB_STEP_SUMMARY"
+          [[ "$outcome" == "passed" ]]
+
+      - name: Both commitments read proved on live
+        run: |
+          set -euo pipefail
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select '- ' || commitment_code || ': ' || state from erp.continuity_report()" | tee -a "$GITHUB_STEP_SUMMARY"
+          not_proved=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select string_agg(commitment_code, ', ') from erp.continuity_report()
+             where commitment_code in ('restore_drill', 'per_tenant_restore') and state <> 'proved';")
+          if [[ -n "$not_proved" ]]; then
+            echo "::error::not proved after this drill: $not_proved"
+            exit 1
+          fi

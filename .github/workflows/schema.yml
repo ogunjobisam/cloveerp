@@ -198,6 +198,38 @@ jobs:
           (cd worker && bun install --frozen-lockfile)
           supabase/ci/drain_rehearsal.sh
 
+      - name: Recovery is rehearsed
+        # The drain above proves the happy path. This proves three failures:
+        # a worker killed before its request left (reclaimed to the queue with
+        # a backoff, delivered once), a counterpart that stops answering after
+        # the request left (the command becomes ambiguous, its ordering key
+        # stays blocked, a person reconciles it through the door with
+        # evidence, the successor is then delivered), and a counterpart that
+        # answers 503 once (backoff, delivered on the next pass). Nothing is
+        # sent twice under one key. D19, checked by the log.
+        run: supabase/ci/recovery_rehearsal.sh
+
+      - name: An incident is communicated
+        # Specification v1.6 §16.5. An operator declares an incident with
+        # components and names the organisation it reached; the platform sweep
+        # delivers the declaration and the five-field update to that
+        # organisation (in-app and email, the body as posted) and publishes
+        # both to a status page through the gateway; the worker carries them
+        # to the stub; an update falls due and the timer prompts the named
+        # person; a provider's feed goes dark and the job-driven handler
+        # declares the incident below the platform, then resolves it on
+        # recovery; the review is assembled, the incident resolved, and the
+        # organisation's history still shows it. D35 and D36, by the log.
+        run: supabase/ci/incident_rehearsal.sh
+
+      - name: Every door the application names exists
+        # The application calls the database by bare string, and nothing
+        # compared those strings with the schema: the generated types file is
+        # imported by nothing the app uses, and six invalidation keys named
+        # doors that do not exist. This extracts every erp_* literal from src
+        # and hands the list to erp.assert_app_doors_exist().
+        run: supabase/ci/app_doors.sh
+
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
         # with no code impact. That is only true of strings erp_ref.resource
@@ -315,3 +347,116 @@ jobs:
           set -euo pipefail
           deno check --import-map supabase/functions/import_map.json \
             supabase/functions/*/index.ts
+
+  # ---------------------------------------------------------------------------
+  # Both directions of a release
+  #
+  # The schema and the application are deployed separately: the schema by
+  # deploy.yml on merge, the application by a publish somebody does by hand.
+  # So for a while after either, the other is behind — and a rollback of the
+  # application is a publish of the previous build against the current schema.
+  # This job builds the schema as main has it and as this pull request leaves
+  # it, extracts every door name from the application on each side, and says
+  # what each combination would do:
+  #
+  #   main's application against this PR's schema — a door main still calls
+  #   that this PR removes breaks the running app the moment the schema
+  #   deploys, and breaks a rollback for good. That fails the build.
+  #   this PR's application against main's schema — the doors this PR adds
+  #   are reported, so whoever publishes knows the schema must deploy first.
+  #
+  # Pull requests only: on main there is no other side to compare with.
+  # ---------------------------------------------------------------------------
+  compat:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Start PostgreSQL
+        run: |
+          set -euo pipefail
+          docker run -d --name clove-erp-compat \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            supabase/postgres:17.6.1.167
+          for i in $(seq 1 60); do
+            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          echo "PostgreSQL did not become ready within 60s" >&2; exit 1
+
+      - name: The other side of the release
+        # The merge base with the target branch: what main's schema and
+        # application look like without this pull request.
+        run: |
+          set -euo pipefail
+          base=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          echo "base=$base" >> "$GITHUB_ENV"
+          git worktree add "$RUNNER_TEMP/base" "$base"
+          echo "comparing against $base"
+
+      - name: Build both schemas
+        run: |
+          set -euo pipefail
+          build() {
+            local db="$1" root="$2"
+            psql -v ON_ERROR_STOP=1 -d postgres -c "create database $db"
+            $PSQL -d "$db" -f "$root/supabase/ci/00_host_bootstrap.sql"
+            for f in "$root"/supabase/migrations/*.sql; do
+              $PSQL -d "$db" --single-transaction -f "$f" >/dev/null
+            done
+          }
+          build clove_head "$GITHUB_WORKSPACE"
+          build clove_base "$RUNNER_TEMP/base"
+
+      - name: What each side names, and what each side has
+        run: |
+          set -euo pipefail
+          doors() { psql -v ON_ERROR_STOP=1 -d "$1" -tAc "select door from erp.door_manifest()" 2>/dev/null \
+                    || psql -v ON_ERROR_STOP=1 -d "$1" -tAc "select proname from pg_proc where pronamespace = 'public'::regnamespace and proname like 'erp\_%' order by 1"; }
+          names() { grep -rhoE '"erp_[a-z0-9_]+"' "$1" --include='*.ts' --include='*.tsx' \
+                      --exclude='*.test.ts' --exclude='*.test.tsx' --exclude-dir=integrations | tr -d '"' | sort -u; }
+          doors clove_head | sort -u > doors_head.txt
+          doors clove_base | sort -u > doors_base.txt
+          names "$GITHUB_WORKSPACE/src" > names_head.txt
+          names "$RUNNER_TEMP/base/src" > names_base.txt
+
+          removed=$(comm -23 doors_base.txt doors_head.txt)
+          added=$(comm -13 doors_base.txt doors_head.txt)
+          breaks_rollback=$(comm -12 names_base.txt <(echo "$removed"))
+          needs_schema_first=$(comm -12 names_head.txt <(echo "$added"))
+
+          {
+            echo "## Release compatibility"
+            echo "- schema on main: $(wc -l < doors_base.txt) doors; on this PR: $(wc -l < doors_head.txt)"
+            echo "- doors this PR adds: $(echo "$added" | grep -c . || true)"
+            echo "- doors this PR removes: $(echo "$removed" | grep -c . || true)"
+            if [[ -n "$needs_schema_first" ]]; then
+              echo "- **the application on this PR needs doors main's schema lacks — deploy the schema before publishing the app:**"
+              echo "$needs_schema_first" | sed 's/^/  - /'
+            else
+              echo "- the application on this PR calls nothing main's schema lacks"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -n "$breaks_rollback" ]]; then
+            echo "::error::the application on main calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim for one release, or say so in the pull request:"
+            echo "$breaks_rollback"
+            exit 1
+          fi
+          echo "main's application keeps every door it calls"

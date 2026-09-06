@@ -42,6 +42,41 @@ const received: Received = {
 
 const port = Number(process.argv[2] ?? process.env["STUB_PORT"] ?? 8788);
 
+/**
+ * Per-route evidence, for the recovery rehearsal: every POST is logged under
+ * its path with its key, so a script can read back exactly how many requests
+ * each system received and in what order.
+ *
+ *   POST /orders/hang   — the first request ever on this route is never
+ *                         answered (the endpoint stopped mid-command); later
+ *                         requests are answered 200. What a worker's timeout
+ *                         and the ambiguous state are for.
+ *   POST /orders/flaky  — the first request is answered 503; later requests
+ *                         200. What a backoff is for.
+ */
+type Route = {
+  requests: number;
+  keys: string[];
+  duplicateKeys: number;
+  log: { at: string; key: string | null }[];
+};
+const routes: Record<string, Route> = {};
+const statusPublished: { key: string | null; body: unknown }[] = [];
+const feeds: Record<string, { indicator: string; description: string }> = {};
+const route = (path: string): Route =>
+  (routes[path] ??= { requests: 0, keys: [], duplicateKeys: 0, log: [] });
+
+function record(path: string, key: string | null): Route {
+  const r = route(path);
+  r.requests += 1;
+  r.log.push({ at: new Date().toISOString(), key });
+  if (key) {
+    if (r.keys.includes(key)) r.duplicateKeys += 1;
+    else r.keys.push(key);
+  }
+  return r;
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -50,7 +85,7 @@ const server = Bun.serve({
   async fetch(req: Request) {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/health") return json({ ok: true });
-    if (req.method === "GET" && url.pathname === "/received") return json(received);
+    if (req.method === "GET" && url.pathname === "/received") return json({ ...received, routes });
 
     if (req.method === "POST" && url.pathname === "/orders") {
       const key = req.headers.get("idempotency-key");
@@ -60,7 +95,61 @@ const server = Bun.serve({
         if (received.orderKeys.includes(key)) received.duplicateKeys += 1;
         else received.orderKeys.push(key);
       }
+      record(url.pathname, key);
       return json({ ok: true, idempotency_key: key });
+    }
+
+    if (req.method === "POST" && url.pathname === "/orders/hang") {
+      const key = req.headers.get("idempotency-key");
+      await req.json().catch(() => null);
+      const r = record(url.pathname, key);
+      if (r.requests === 1) {
+        // Never answered. The connection stays open until the client gives up.
+        await new Promise<void>(() => {});
+      }
+      return json({ ok: true, idempotency_key: key });
+    }
+
+    if (req.method === "POST" && url.pathname === "/orders/flaky") {
+      const key = req.headers.get("idempotency-key");
+      await req.json().catch(() => null);
+      const r = record(url.pathname, key);
+      if (r.requests === 1) return json({ error: "not now" }, 503);
+      return json({ ok: true, idempotency_key: key });
+    }
+
+    // A status page: what an incident update looks like when it leaves the
+    // building. Records the body under its key like any other route.
+    if (req.method === "POST" && url.pathname === "/status/publish") {
+      const key = req.headers.get("idempotency-key");
+      const body = await req.json().catch(() => null);
+      const r = record(url.pathname, key);
+      statusPublished.push({ key, body });
+      return json({ ok: true, idempotency_key: key, received: r.requests });
+    }
+    if (req.method === "GET" && url.pathname === "/status/published") return json(statusPublished);
+
+    // A provider's status feed, in Statuspage v2 shape, set by the rehearsal:
+    //   POST /status/feed {"code":"supabase","indicator":"major","description":"..."}
+    //   GET  /status/feed/<code>/status.json
+    if (req.method === "POST" && url.pathname === "/status/feed") {
+      const body = (await req.json().catch(() => null)) as {
+        code?: string;
+        indicator?: string;
+        description?: string;
+      } | null;
+      if (!body?.code) return json({ error: "code is required" }, 400);
+      feeds[body.code] = {
+        indicator: body.indicator ?? "none",
+        description: body.description ?? "All Systems Operational",
+      };
+      return json({ ok: true, feed: feeds[body.code] });
+    }
+    const feed = url.pathname.match(/^\/status\/feed\/([a-z0-9_]+)\/status\.json$/);
+    if (req.method === "GET" && feed) {
+      const f = feeds[feed[1]] ?? { indicator: "none", description: "All Systems Operational" };
+      record(url.pathname, null);
+      return json({ page: { id: feed[1], name: feed[1] }, status: f });
     }
 
     if (req.method === "POST" && url.pathname === "/emails") {

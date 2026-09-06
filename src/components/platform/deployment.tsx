@@ -94,6 +94,43 @@ export function Deployment() {
         )}
       </Card>
 
+      <Card
+        title="Releases"
+        description="Every deploy of main to live, as deploy.yml recorded it: the commit, when it started (the point-in-time-recovery target for a rollback), the migration ledger as it stood, and whether the database was proved afterwards. A ledger that has moved since the last release is a finding of release integrity."
+      >
+        {d && (d.releases ?? []).length > 0 ? (
+          <Table columns={["Recorded", "Commit", "Ledger at deploy", "Proved", "Moved since"]}>
+            {(d.releases ?? []).map((r) => (
+              <tr key={r.id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {new Date(r.recorded_at).toLocaleString()}
+                </td>
+                <td className="py-2 pr-4 font-mono text-xs">{r.git_sha.slice(0, 12)}</td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {r.migrations_recorded}{" "}
+                  <span className="text-muted-foreground">to {r.migrations_high ?? "—"}</span>
+                </td>
+                <td className="py-2 pr-4">
+                  {r.proved ? <Pill tone="ok">Proved</Pill> : <Pill tone="warn">Not proved</Pill>}
+                </td>
+                <td className="py-2 pr-0">
+                  {r.moved_since ? (
+                    <Pill tone="bad">Ledger ahead</Pill>
+                  ) : (
+                    <Pill tone="muted">No</Pill>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        ) : d ? (
+          <p className="text-sm text-muted-foreground">
+            No release has been recorded on this database. deploy.yml records one on every push to
+            main once the migrations apply.
+          </p>
+        ) : null}
+      </Card>
+
       <Card title="What this database holds">
         {d ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
