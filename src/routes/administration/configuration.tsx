@@ -4,6 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ActionButton, ErrorNote, PermissionNote } from "../../components/erp/action";
+import { ActionBar, pickFrom, reason } from "../../components/erp/actions-bar";
+import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
@@ -240,6 +242,130 @@ function Configuration() {
       ) : (
         <ChangeSetsPanel sets={data ?? []} onDone={invalidate} />
       )}
+
+      <ActionBar
+        title="Changes and snapshots"
+        note="A change is submitted for approval by hand when its author is done; a promoted snapshot can be rolled back to, with a reason, when a promotion turns out wrong."
+        actions={[
+          {
+            label: "Submit a change for approval",
+            permission: "administration.configure",
+            fn: "erp_submit_change_set",
+            fields: [
+              pickFrom(
+                "erp_change_sets",
+                "change_set_id",
+                ["code", "status"],
+                "p_change_set_id",
+                "Change set",
+              ),
+            ],
+            invalidates: ["erp_change_sets"],
+          },
+          {
+            label: "Roll back to a snapshot",
+            description:
+              "Restores the configuration a promotion took a snapshot of. The reason is kept with the rollback.",
+            permission: "administration.configure",
+            fn: "erp_rollback_to_snapshot",
+            fields: [
+              {
+                kind: "text",
+                name: "p_snapshot_id",
+                label: "Snapshot id",
+                required: true,
+                hint: "From the change's promotion record.",
+              },
+              reason("p_reason", "Reason", true),
+            ],
+            invalidates: ["erp_change_sets"],
+          },
+        ]}
+      />
+
+      <ActionBar
+        title="Reason codes"
+        note="Why something happened, from a list the organisation maintains: a return, a write-off, a price override. A code can insist on a note or an approval."
+        actions={[
+          {
+            label: "Add or amend a reason code",
+            permission: "administration.configure",
+            fn: "erp_upsert_reason_code",
+            fields: [
+              {
+                kind: "text",
+                name: "p_category",
+                label: "Category",
+                required: true,
+                hint: "For example RETURN, WRITE_OFF, PRICE_OVERRIDE.",
+              },
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "choice",
+                name: "p_requires_note",
+                label: "Requires a note",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ],
+              },
+              {
+                kind: "choice",
+                name: "p_requires_approval",
+                label: "Requires approval",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ],
+              },
+              { kind: "number", name: "p_seq", label: "Order" },
+            ],
+            invalidates: ["erp_reason_codes"],
+          },
+          {
+            label: "Switch a reason code on or off",
+            permission: "administration.configure",
+            fn: "erp_set_reason_code_status",
+            fields: [
+              { kind: "text", name: "p_category", label: "Category", required: true },
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              {
+                kind: "choice",
+                name: "p_active",
+                label: "Active",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "true", label: "Yes" },
+                  { value: "false", label: "No" },
+                ],
+              },
+            ],
+            invalidates: ["erp_reason_codes"],
+          },
+        ]}
+      />
+
+      <AutoPanel
+        title="Reason codes"
+        description="Every reason code by category, and what it insists on."
+        fn="erp_reason_codes"
+        empty="No reason codes yet. The base pack ships a starter set when it is applied; add one above."
+        rowKey={(r, i) => `${String(r["category"] ?? i)}-${String(r["code"] ?? i)}`}
+        columns={[
+          { header: "Category", cell: "category" },
+          { header: "Code", cell: "code" },
+          { header: "Name", cell: "name" },
+          { header: "Needs a note", cell: "requires_note" },
+          { header: "Needs approval", cell: "requires_approval" },
+          { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
+        ]}
+      />
     </div>
   );
 }

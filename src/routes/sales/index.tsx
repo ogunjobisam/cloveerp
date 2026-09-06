@@ -3,9 +3,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AutoPanel } from "../../components/erp/auto";
 import {
   ActionBar,
+  pickBatch,
   pickFrom,
   pickItem,
   pickLine,
+  pickLocation,
   pickParty,
   pickSite,
   reason,
@@ -124,6 +126,80 @@ function Sales() {
               },
             ],
           },
+        ]}
+      />
+
+      <ActionBar
+        title="Orders that are fulfilled elsewhere"
+        note="A drop-ship is bought from a supplier who delivers to the customer; an intercompany order is mirrored into the company that supplies it. Stock identity pins a line to a batch, location or handling unit."
+        actions={[
+          {
+            label: "Raise a drop-ship order",
+            description:
+              "A purchase order to the supplier, addressed to the customer, priced from the catalogue and linked line by line to this sales order.",
+            permission: "procurement.order",
+            fn: "erp_raise_drop_ship_order",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_sales_order_id",
+                "Sales order",
+                { p_type_code: "sales_order", p_limit: 100 },
+              ),
+              pickParty("supplier", "p_supplier_party_id", "Supplier"),
+            ],
+            invalidates: ["erp_documents"],
+          },
+          {
+            label: "Raise an intercompany order",
+            description:
+              "Mirrors this sales order as a purchase order in the buying company, at its site, in its currency.",
+            permission: "procurement.order",
+            fn: "erp_raise_intercompany_order",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_sales_order_id",
+                "Sales order",
+                { p_type_code: "sales_order", p_limit: 100 },
+              ),
+              pickSite("p_site_id", "Receiving site"),
+            ],
+            invalidates: ["erp_documents"],
+          },
+          {
+            label: "Pin a line's stock identity",
+            description:
+              "The batch, location or handling unit a sales line must be fulfilled from.",
+            permission: "sales.order",
+            fn: "erp_set_line_stock_identity",
+            fields: [
+              pickLine("sales_order", "p_line_id", "Sales order line"),
+              pickBatch("p_batch_id", "Batch", false),
+              pickLocation("p_location_id", "Location", false),
+              { kind: "text", name: "p_container_id", label: "Handling unit id" },
+            ],
+            invalidates: ["erp_document"],
+          },
+        ]}
+      />
+
+      <AutoPanel
+        title="Return reasons"
+        description="Why customers have returned goods over the last ninety days, by reason code."
+        fn="erp_return_reasons"
+        args={{ p_days: 90 }}
+        empty="No returns in the window. Customer returns raised with a reason code are counted here."
+        rowKey={(r, i) => String(r["reason_code"] ?? i)}
+        columns={[
+          { header: "Reason", cell: "reason_code" },
+          { header: "Returns", cell: "returns", numeric: true },
+          { header: "Value", cell: "value_minor", numeric: true },
+          { header: "Share %", cell: "share_pct", numeric: true },
         ]}
       />
 

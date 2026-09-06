@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
+import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { RpcButton } from "../../components/erp/rpc-button";
@@ -299,6 +300,27 @@ function Cutover() {
               },
             ],
             invalidates: ["erp_domain_cutovers", "erp_migration_domains"],
+          },
+        ]}
+      />
+
+      <InquiryBoard
+        inquiries={[
+          {
+            label: "Opening balance reconciliation",
+            description:
+              "For one loaded batch: each check the load has to satisfy, the expected and actual figures, and whether it passes.",
+            permission: "administration.read",
+            fn: "erp_opening_balance_reconciliation",
+            fields: [
+              pickFrom(
+                "erp_import_batches",
+                "batch_id",
+                ["code", "object_type", "status"],
+                "p_batch_id",
+                "Batch",
+              ),
+            ],
           },
         ]}
       />

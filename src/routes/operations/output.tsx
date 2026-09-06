@@ -217,6 +217,43 @@ function Output() {
         note="Printers are configuration: on a live organisation the edit is raised as a change and promoted, and a direct write here is refused. A label printer needs a language and a resolution; a document printer needs neither."
         actions={[
           {
+            label: "Render an output template",
+            description:
+              "Renders one template for one document in a locale, into the output store.",
+            permission: "administration.read",
+            fn: "erp_render_output_template",
+            fields: [
+              pickFrom("erp_output_templates", "code", ["code", "kind"], "p_code", "Template"),
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "document_type"],
+                "p_document_id",
+                "Document",
+                { p_limit: 200 },
+              ),
+              {
+                kind: "text",
+                name: "p_locale",
+                label: "Locale",
+                hint: "Left empty, the document's own.",
+              },
+            ],
+            invalidates: ["erp_output_requests", "erp_output_integrity"],
+          },
+          {
+            label: "Route a render to a printer",
+            description: "Sends a render through the print routes for a site and workstation.",
+            permission: "administration.read",
+            fn: "erp_route_print",
+            fields: [
+              { kind: "text", name: "p_render_id", label: "Render id", required: true },
+              { kind: "site", name: "p_site_id", label: "Site", required: false },
+              { kind: "text", name: "p_workstation", label: "Workstation" },
+            ],
+            invalidates: ["erp_output_requests", "erp_print_queue_health"],
+          },
+          {
             label: "Add a print route",
             permission: "administration.configure",
             fn: "erp_upsert_print_route",

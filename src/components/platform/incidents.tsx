@@ -240,6 +240,15 @@ export function Incidents() {
       callErp<Communication[]>("erp_platform_incident_communication", { p_code: target || null }),
     enabled: Boolean(target),
   });
+  const reached = useQuery({
+    queryKey: ["erp_platform_incident_organisations", target],
+    queryFn: () =>
+      callErp<{ tenant_code: string; named_at: string; named_by: string | null }[] | null>(
+        "erp_platform_incident_organisations",
+        { p_incident_code: target },
+      ),
+    enabled: Boolean(target),
+  });
   const similar = useQuery({
     queryKey: ["erp_platform_similar_incident_actions", target],
     queryFn: () =>
@@ -571,6 +580,15 @@ export function Incidents() {
                 Organisation codes, comma separated
                 <input className={INPUT} value={orgs} onChange={(e) => setOrgs(e.target.value)} />
               </label>
+              {/* Who has been named so far, from the record rather than from
+                  memory of what was typed. */}
+              <p className="text-xs text-muted-foreground">
+                {reached.isPending
+                  ? "Reading the organisations reached…"
+                  : (reached.data ?? []).length === 0
+                    ? "Nobody named yet: everyone, or nobody, depending on the scope declared."
+                    : `Named: ${(reached.data ?? []).map((o) => o.tenant_code).join(", ")}`}
+              </p>
             </Act>
             <Act
               label="Contain"

@@ -22,7 +22,7 @@ import { ROLE_BLURB, usePlatformMe, type PlatformRole } from "../lib/platform";
 import { Card, Fail } from "../components/platform/kit";
 import { Companies } from "../components/platform/organisations";
 import { Staff } from "../components/platform/staff";
-import { Activity } from "../components/platform/activity";
+import { Activity, SupportActionLog } from "../components/platform/activity";
 import { Decisions, ProductDecisions } from "../components/platform/decisions";
 import { Plans } from "../components/platform/plans";
 import { Overview } from "../components/platform/overview";
@@ -347,7 +347,12 @@ function PlatformConsole() {
           {currentView === "deployment" ? <Deployment /> : null}
           {currentView === "incidents" ? <Incidents /> : null}
           {currentView === "staff" ? <Staff role={role} /> : null}
-          {currentView === "activity" ? <Activity /> : null}
+          {currentView === "activity" ? (
+            <>
+              <Activity />
+              <SupportActionLog />
+            </>
+          ) : null}
           {currentView === "decisions" ? <Decisions /> : null}
           {currentView === "product" ? <ProductDecisions /> : null}
           {currentView === "plans" ? <Plans /> : null}

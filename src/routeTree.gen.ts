@@ -36,6 +36,7 @@ import { Route as CommercialQuotesRouteImport } from './routes/commercial/quotes
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
+import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensions'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
@@ -203,6 +204,11 @@ const FinanceAccountDeterminationRoute =
     path: '/finance/account-determination',
     getParentRoute: () => rootRouteImport,
   } as any)
+const FinanceDimensionsRoute = FinanceDimensionsRouteImport.update({
+  id: '/finance/dimensions',
+  path: '/finance/dimensions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
   id: '/governance/',
   path: '/governance/',
@@ -348,6 +354,7 @@ export interface FileRoutesByFullPath {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/dimensions': typeof FinanceDimensionsRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/classification': typeof MasterDataClassificationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
@@ -400,6 +407,7 @@ export interface FileRoutesByTo {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/dimensions': typeof FinanceDimensionsRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/classification': typeof MasterDataClassificationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
@@ -453,6 +461,7 @@ export interface FileRoutesById {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/dimensions': typeof FinanceDimensionsRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/classification': typeof MasterDataClassificationRoute
   '/master-data/imports': typeof MasterDataImportsRoute
@@ -507,6 +516,7 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/dimensions'
     | '/logistics/release-areas'
     | '/master-data/classification'
     | '/master-data/imports'
@@ -559,6 +569,7 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/dimensions'
     | '/logistics/release-areas'
     | '/master-data/classification'
     | '/master-data/imports'
@@ -611,6 +622,7 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/dimensions'
     | '/logistics/release-areas'
     | '/master-data/classification'
     | '/master-data/imports'
@@ -664,6 +676,7 @@ export interface RootRouteChildren {
   CommercialQuotesRoute: typeof CommercialQuotesRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
+  FinanceDimensionsRoute: typeof FinanceDimensionsRoute
   LogisticsReleaseAreasRoute: typeof LogisticsReleaseAreasRoute
   MasterDataClassificationRoute: typeof MasterDataClassificationRoute
   MasterDataImportsRoute: typeof MasterDataImportsRoute
@@ -881,6 +894,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceAccountDeterminationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/dimensions': {
+      id: '/finance/dimensions'
+      path: '/finance/dimensions'
+      fullPath: '/finance/dimensions'
+      preLoaderRoute: typeof FinanceDimensionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/governance/': {
       id: '/governance/'
       path: '/governance'
@@ -1072,6 +1092,7 @@ const rootRouteChildren: RootRouteChildren = {
   CommercialQuotesRoute: CommercialQuotesRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
+  FinanceDimensionsRoute: FinanceDimensionsRoute,
   LogisticsReleaseAreasRoute: LogisticsReleaseAreasRoute,
   MasterDataClassificationRoute: MasterDataClassificationRoute,
   MasterDataImportsRoute: MasterDataImportsRoute,

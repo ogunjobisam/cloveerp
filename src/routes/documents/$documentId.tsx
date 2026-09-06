@@ -107,6 +107,15 @@ function Document() {
     queryKey: ["erp_document", { p_document_id: documentId }],
     queryFn: () => callErp<Payload>("erp_document", { p_document_id: documentId }),
   });
+  // The transitions are asked for on their own as well: the payload carries
+  // them, but a guard can change under the reader's feet — a line added, an
+  // approval decided — and this read is the one the buttons follow.
+  const live = useQuery({
+    queryKey: ["erp_available_transitions", { p_document_id: documentId }],
+    queryFn: () =>
+      callErp<Transition[]>("erp_available_transitions", { p_document_id: documentId }),
+    refetchInterval: 30_000,
+  });
 
   const { currencies } = useCurrencies();
 
@@ -151,7 +160,7 @@ function Document() {
 
         <Transitions
           documentId={documentId}
-          transitions={data.available_transitions}
+          transitions={live.data ?? data.available_transitions}
           committed={doc.is_committed}
         />
       </section>
@@ -167,7 +176,9 @@ function Document() {
 
       <ApprovalChain documentId={documentId} />
 
-      {data.lineage.length > 0 ? <LineagePanel lineage={data.lineage} /> : null}
+      {data.lineage.length > 0 ? (
+        <LineagePanel lineage={data.lineage} documentId={documentId} />
+      ) : null}
     </div>
   );
 }
@@ -353,6 +364,10 @@ function Lines({
     fn: "erp_price_document_line",
     invalidates: ["erp_document"],
   });
+  const amend = useErpAction({
+    fn: "erp_amend_document_line",
+    invalidates: ["erp_document", "erp_documents"],
+  });
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
@@ -441,13 +456,46 @@ function Lines({
                     >
                       Reprice
                     </button>
-                  ) : null}
+                  ) : (
+                    /* A committed line changes only by amendment: a new
+                       quantity, a reason, and the old figure kept beside it. */
+                    <ActionDialog
+                      trigger={
+                        <button
+                          type="button"
+                          className={`${TOUCH} inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2`}
+                        >
+                          Amend
+                        </button>
+                      }
+                      title="Amend a committed line"
+                      description="The quantity changes; the old figure and the reason are kept with the line."
+                      fn="erp_amend_document_line"
+                      fields={[
+                        {
+                          kind: "number",
+                          name: "p_quantity",
+                          label: "New quantity",
+                          required: true,
+                        },
+                        { kind: "text", name: "p_reason", label: "Reason", required: true },
+                      ]}
+                      mapArgs={(v) => ({
+                        p_line_id: l.line_id,
+                        p_quantity: Number(v["p_quantity"] ?? 0),
+                        p_reason: v["p_reason"],
+                      })}
+                      invalidates={["erp_document", "erp_documents"]}
+                      submitLabel="Amend"
+                    />
+                  )}
                 </td>
               </tr>
             ))}
           </Table>
         )}
         <ErrorNote error={price.error} />
+        <ErrorNote error={amend.error} />
       </div>
     </section>
   );
@@ -459,10 +507,66 @@ function Lines({
  * Already in the payload — `erp.document_lineage()` walks the relation graph
  * recursively — and rendered nowhere until now.
  */
-function LineagePanel({ lineage }: { lineage: Lineage[] }) {
+function LineagePanel({ lineage, documentId }: { lineage: Lineage[]; documentId: string }) {
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h2 className="text-sm font-semibold">Related documents</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-sm font-semibold">Related documents</h2>
+        {/* A relation that was not raised by a conversion — a credit for an
+            invoice raised elsewhere, a correction, a consolidation — is
+            declared here, with its kind. */}
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">Link a document</ActionButton>}
+          title="Link this document to another"
+          description="Records how the two relate. The relation is what lineage and matching read."
+          fn="erp_link_documents"
+          fields={[
+            {
+              kind: "select",
+              name: "p_to_document_id",
+              label: "Related document",
+              required: true,
+              options: {
+                fn: "erp_documents",
+                args: { p_limit: 200 },
+                value: "document_id",
+                label: ["document_number", "document_type"],
+              },
+            },
+            {
+              kind: "choice",
+              name: "p_kind",
+              label: "Relation",
+              required: true,
+              choices: [
+                { value: "fulfils", label: "Fulfils" },
+                { value: "invoices", label: "Invoices" },
+                { value: "credits", label: "Credits" },
+                { value: "converts", label: "Converts" },
+                { value: "returns", label: "Returns" },
+                { value: "consumes", label: "Consumes" },
+                { value: "corrects", label: "Corrects" },
+                { value: "consolidates", label: "Consolidates" },
+                { value: "mirrors", label: "Mirrors" },
+              ],
+            },
+            {
+              kind: "number",
+              name: "p_quantity",
+              label: "Quantity",
+              hint: "Where the relation carries one.",
+            },
+          ]}
+          mapArgs={(v) => ({
+            p_from_document_id: documentId,
+            p_to_document_id: v["p_to_document_id"],
+            p_kind: v["p_kind"],
+            p_quantity: v["p_quantity"] ? Number(v["p_quantity"]) : null,
+          })}
+          invalidates={["erp_document"]}
+          submitLabel="Link"
+        />
+      </div>
       <ul className="mt-3 flex flex-col gap-1 text-sm">
         {lineage.map((r) => (
           <li key={`${r.direction}-${r.document_id}`} className="min-w-0">

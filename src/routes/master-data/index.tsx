@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
+import { ActionBar, reason } from "../../components/erp/actions-bar";
+import { AutoPanel } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
@@ -125,6 +127,139 @@ function MasterData() {
 
       <Items mayWrite={mayWrite} maySeeSuppliers={maySeeSuppliers} />
       <Parties mayWrite={mayWrite} />
+
+      <ActionBar
+        title="Partners, roles and duplicates"
+        note="A business partner is one record with the roles it plays. Two records for one partner are merged into a survivor, with the reason kept."
+        actions={[
+          {
+            label: "Create a business partner with roles",
+            description: "The record and every role it plays, in one step.",
+            permission: "master_data.write",
+            fn: "erp_create_party_with_roles",
+            fields: [
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "text",
+                name: "p_role_kinds",
+                label: "Roles",
+                required: true,
+                hint: "Comma separated: customer, supplier, carrier, manufacturer, broker, consignee, agent.",
+              },
+              { kind: "text", name: "p_country_code", label: "Country", hint: "Two-letter code." },
+              { kind: "text", name: "p_legal_name", label: "Legal name" },
+            ],
+            mapArgs: (v) => ({
+              p_code: v["p_code"],
+              p_name: v["p_name"],
+              p_role_kinds: (v["p_role_kinds"] ?? "")
+                .split(",")
+                .map((x) => x.trim())
+                .filter(Boolean),
+              p_country_code: v["p_country_code"] || null,
+              p_legal_name: v["p_legal_name"] || null,
+            }),
+            invalidates: ["erp_parties"],
+          },
+          {
+            label: "Add a role to a business partner",
+            permission: "master_data.write",
+            fn: "erp_add_party_role",
+            fields: [
+              {
+                kind: "select",
+                name: "p_party_id",
+                label: "Business partner",
+                required: true,
+                options: { fn: "erp_parties", value: "party_id", label: ["code", "name"] },
+              },
+              {
+                kind: "choice",
+                name: "p_role_kind",
+                label: "Role",
+                required: true,
+                choices: ROLES.map((r) => ({ value: r, label: r })),
+              },
+            ],
+            invalidates: ["erp_parties"],
+          },
+          {
+            label: "Merge duplicate records",
+            description:
+              "Every reference to the duplicate is moved to the survivor; the duplicate is withdrawn, not deleted.",
+            permission: "master_data.write",
+            fn: "erp_merge_master_record",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_object_type",
+                label: "Kind of record",
+                required: true,
+                choices: [
+                  { value: "party", label: "Business partner" },
+                  { value: "item", label: "Product" },
+                ],
+              },
+              { kind: "text", name: "p_survivor_id", label: "Survivor id", required: true },
+              { kind: "text", name: "p_duplicate_id", label: "Duplicate id", required: true },
+              reason("p_reason", "Reason", true),
+            ],
+            invalidates: ["erp_parties", "erp_items"],
+          },
+          {
+            label: "Create a unit of measure",
+            permission: "master_data.write",
+            fn: "erp_create_uom",
+            fields: [
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "choice",
+                name: "p_uom_class",
+                label: "Class",
+                required: true,
+                choices: [
+                  { value: "quantity", label: "Quantity" },
+                  { value: "weight", label: "Weight" },
+                  { value: "volume", label: "Volume" },
+                  { value: "length", label: "Length" },
+                  { value: "area", label: "Area" },
+                  { value: "time", label: "Time" },
+                ],
+              },
+              { kind: "number", name: "p_decimals", label: "Decimal places", required: true },
+              {
+                kind: "choice",
+                name: "p_is_base",
+                label: "Base unit of its class",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ],
+              },
+            ],
+            invalidates: ["erp_uoms"],
+          },
+        ]}
+      />
+
+      <AutoPanel
+        title="Units of measure"
+        description="Every unit a product can be counted, weighed or measured in."
+        fn="erp_uoms"
+        empty="No unit of measure yet. The first product creates one; a further one is created above."
+        rowKey={(r, i) => String(r["uom_id"] ?? i)}
+        columns={[
+          { header: "Code", cell: "code" },
+          { header: "Name", cell: "name" },
+          { header: "Class", cell: "uom_class" },
+          { header: "Decimals", cell: "decimals", numeric: true },
+          { header: "Base", cell: "is_base" },
+        ]}
+      />
     </div>
   );
 }

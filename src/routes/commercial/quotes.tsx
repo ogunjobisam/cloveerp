@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 
 import { ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
+import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { useErpSession } from "../../components/erp/session-context";
@@ -422,6 +423,31 @@ function Quotes() {
             )}
           </Section>
           <Renewals mayQuote={mayQuote} onOpen={(id) => setSelected(id)} />
+          <InquiryBoard
+            inquiries={[
+              {
+                label: "Quote margin",
+                description:
+                  "The margin of one quote, line by line, against the cost model in force.",
+                permission: "sales.read",
+                fn: "erp_quote_margin",
+                fields: [
+                  {
+                    kind: "select",
+                    name: "p_document_id",
+                    label: "Quote",
+                    required: true,
+                    options: {
+                      fn: "erp_documents",
+                      args: { p_type_code: "commercial_quote", p_limit: 100 },
+                      value: "document_id",
+                      label: ["document_number", "state"],
+                    },
+                  },
+                ],
+              },
+            ]}
+          />
         </>
       )}
     </div>

@@ -49,6 +49,27 @@ function Governance() {
         note="Proposing a change, and the mass change that proposes the same edit against many records."
         actions={[
           {
+            label: "Apply a mass change",
+            description:
+              "Applies an approved mass change to every record it names. Each record's old value is kept, so the whole change can be reversed as one.",
+            permission: "master_data.write",
+            fn: "erp_apply_mass_change",
+            fields: [
+              { kind: "text", name: "p_mass_change_id", label: "Mass change id", required: true },
+            ],
+            invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
+          },
+          {
+            label: "Reverse a mass change",
+            description: "Puts every record the mass change touched back as it was.",
+            permission: "master_data.write",
+            fn: "erp_reverse_mass_change",
+            fields: [
+              { kind: "text", name: "p_mass_change_id", label: "Mass change id", required: true },
+            ],
+            invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
+          },
+          {
             label: "Open a change request",
             permission: "master_data.write",
             fn: "erp_open_change_request",

@@ -10,48 +10,53 @@ exist _before_ the first module, because a module built before them will be
 code — and every module after it will be built to match. The specification says
 so explicitly, and orders the work B1 through B10 for that reason.
 
-This document describes what exists.
+This document describes what exists. Every figure in it sits inside a marker
+that `docs/build_counts.sh` rewrites from the built database and that CI
+refuses if it disagrees; the words are a person's, the numbers are not.
 
 ---
 
 ## 1. What is built
 
-|                        |                                                                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Foundation, B1–B10** | Complete. 49 migrations, ~25,100 lines of SQL.                                                                  |
-| **First module**       | Procurement: requisition → purchase order → goods receipt.                                                      |
-| **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler.                                      |
-| **Interface**          | An app shell over a curated read/write API.                                                                     |
-| **Build**              | Every migration applied to an empty database on every push, then eleven assertions and four adversarial suites. |
+|                        |                                                                                                                                                                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Specification**      | <!-- count:spec_version -->v1.6<!-- /count -->, Parts 1–23. Part 5's <!-- count:part5_total -->97<!-- /count --> capabilities: <!-- count:part5_built -->96<!-- /count --> built, <!-- count:part5_partial -->0<!-- /count --> partial, <!-- count:part5_absent -->1<!-- /count --> absent by a recorded decision. |
+| **Foundation, B1–B10** | Complete, and every later Part built on it.                                                                                                                                                                                                                                  |
+| **Modules**            | <!-- count:modules -->12<!-- /count --> installable modules, each a change set of rules, lifecycles and approval chains promoted through B6 exactly as a customer's own change would be.                                                                                     |
+| **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
+| **Interface**          | An application over a curated API of <!-- count:doors -->543<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
+| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->180<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 
-Concretely: 159 tables, 248 functions, 66 enumerated types, 166 row-security
-policies and 417 triggers — of which the policies and most of the triggers are
-_generated_, not written.
+Concretely: <!-- count:erp_tables -->238<!-- /count --> tenant tables,
+<!-- count:ref_tables -->69<!-- /count --> product-content tables,
+<!-- count:meta_tables -->63<!-- /count --> platform tables,
+<!-- count:enums -->83<!-- /count --> enumerated types,
+<!-- count:policies -->345<!-- /count --> row-security policies and
+<!-- count:triggers -->770<!-- /count --> triggers — of which the policies and
+most of the triggers are _generated_, not written — in
+<!-- count:migrations -->269<!-- /count --> migrations and
+<!-- count:sql_lines -->177495<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
-Sections cited in migration headers, which is where the mapping is authoritative:
+**What of Part 5 is built is a query, not a claim.** `erp_ref.part5_capability`
+enumerates every capability Part 5 names, in the specification's own words,
+bound to the functions and tables that deliver each one; `erp.assert_part5_coverage()`
+fails the build if any artefact named there does not exist, if an absent row has
+no decision closing it, or if a closing decision is not accepted. The one absent
+capability, customs documentation, is absent by `customs_documentation_not_built`,
+which says why a declaration that is nearly right is worse than none. Run
+`select * from erp.part5_summary();` for the breakdown by section.
 
-| Part                 | Sections implemented                 |
-| -------------------- | ------------------------------------ |
-| 2 — Tenancy          | 2.1 – 2.5                            |
-| 3 — Platform engines | 3.1 – 3.12                           |
-| 4 — Canonical model  | 4.1 – 4.10                           |
-| 5 — Modules          | 5.1 – 5.11, all eleven areas         |
-| 6 — Extensibility    | 6.1, 6.3                             |
-| 7 — Prohibitions     | enforced throughout                  |
-| 8 — Invariants       | enforced throughout                  |
-
-**What of Part 5 is built is a query, not a claim.** `erp.part5_coverage()`
-enumerates all ninety capabilities Part 5 names, in the specification's own
-words, bound to the functions and tables that deliver each one — and
-`erp.assert_part5_coverage()` fails the build if any artefact named there does
-not exist. At the last build: **73 built, 16 partial, 1 absent.**
-
-Every partial and the one absent capability carries a written gap saying
-exactly what is missing. Marking them built would have been easy and would have
-made every other row untrustworthy. Run `select * from erp.part5_summary();`
-for the breakdown by section.
+**Every product decision is bound to a check.** `erp_ref.product_decision`
+holds D1–D<!-- count:product_decisions -->41<!-- /count --> and
+`erp_ref.product_decision_check` binds each to the
+<!-- count:product_decision_bindings -->78<!-- /count --> assertions and suites
+that enforce it; `erp.assert_product_decisions_enforced()` refuses a decision
+with no binding and a binding that names nothing. The
+<!-- count:policy_decisions -->35<!-- /count --> policy decisions the build took
+along the way are recorded with their evidence, and
+<!-- count:policy_decisions_open -->0<!-- /count --> are open.
 
 ---
 
@@ -64,16 +69,14 @@ Not a convention, not a review checklist, not a comment. `erp.assert_isolation()
 raises. `erp.assert_public_api_safe()` raises. When they raise, the migration
 that called them rolls back and the push goes red.
 
-That single decision is why the defects listed in §7 were found at all. None of
-them was found by reading code.
-
 ### Generated, never hand-written
 
-Row-level security policies, append-only guards, attribution triggers and audit
-coverage are all _derived_ from one registry, `erp_meta.table_policy`, by
-`erp.apply_row_security()` and its siblings. Every migration ends by re-running
-them, and CI proves a second run changes nothing (166 policies and 417 triggers
-before and after).
+Row-level security policies, append-only guards, attribution triggers, audit
+coverage, live-configuration guards and execute grants are all _derived_ from
+the registers — `erp_meta.table_policy`, `erp_meta.promotable_surface`, the
+invoker closure — by `erp.apply_row_security()` and its siblings. Every
+migration ends by re-running them, and the build proves a second run changes
+nothing.
 
 Hand-written policies are how a table ends up with three of the four it needed.
 
@@ -83,39 +86,41 @@ Hand-written policies are how a table ends up with three of the four it needed.
 nobody registered — restrictive by default. Forgetting to register a table gets
 you a locked-down table and a failing assertion, not an unprotected one.
 
-### The two allow-lists
+### The allow-lists
 
 Where a rule must have exceptions, the exceptions are enumerated with a written
-rationale rather than left to judgement:
+rationale rather than left to judgement, and an assertion refuses an exception
+nobody wrote down:
 
-- **`erp_meta.security_definer_allowance`** — 5 entries. A `SECURITY DEFINER`
-  function runs as the owner, who bypasses row-level security. Every one in the
-  product schemas is listed here with the reason it needs the privilege; an
-  unlisted one fails the build.
-- **`erp_meta.public_write_allowance`** — 18 entries. The API functions
-  permitted to write, each naming the gate it reaches. A volatile
-  `public.erp_*` function that is not listed fails the build; so does one whose
-  gate no longer authorises.
+- **`erp_meta.security_definer_allowance`** — <!-- count:definer_allowances -->162<!-- /count --> entries. A `SECURITY DEFINER` function runs as the owner, who bypasses row-level security. Every one in the product schemas is listed with the reason it needs the privilege.
+- **`erp_meta.public_write_allowance`** — <!-- count:write_allowances -->393<!-- /count --> entries. The doors permitted to be volatile, each naming the gate it reaches. A volatile `public.erp_*` function that is not listed fails the build; so does one whose gate no longer authorises.
+- **`erp_meta.check_run_exemption`** — the catalogue checks CI cannot run without an argument, each naming what drives it instead.
+- **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->16<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->2<!-- /count --> waiting for their screen with the path recorded.
+- **`erp_meta.linter_finding_allowance`** — the host's security lints, reimplemented in `erp.linter_report()`, with every remaining finding either fixed or allowed with a reason.
 
 ---
 
 ## 3. Schemas
 
-| Schema     | Contents            | Role                                                                 |
-| ---------- | ------------------- | -------------------------------------------------------------------- |
-| `erp`      | 129 tables, 8 views | Tenant data and the engines                                          |
-| `erp_ref`  | 19 tables           | Product content — what the product knows, identical for every tenant |
-| `erp_meta` | 9 tables            | Platform metadata: the registry, the allow-lists, the exemptions     |
-| `erp_ai`   | 2 tables            | B10. Separate so "never in the transaction path" is checkable        |
-| `erp_test` | 0 tables            | The harness. Suites build their own tenants and destroy them         |
-| `public`   | 28 functions        | The only surface PostgREST exposes                                   |
+| Schema        | Contents                                                                                          | Role                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `erp`         | <!-- count:erp_tables -->238<!-- /count --> tables, <!-- count:erp_views -->15<!-- /count --> views | Tenant data and the engines                                                              |
+| `erp_ref`     | <!-- count:ref_tables -->69<!-- /count --> tables                                                 | Product content — what the product knows, identical for every tenant                     |
+| `erp_meta`    | <!-- count:meta_tables -->63<!-- /count --> tables                                                | Platform metadata: the registers, the allow-lists, the exemptions, incidents, releases   |
+| `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
+| `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
+| `erp_test`    | <!-- count:suites -->104<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
+| `public`      | <!-- count:doors -->543<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 
-Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`.
+Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`; `pg_cron` and `pg_net`
+where the host has them.
 
-The `erp` schema is **not** exposed to PostgREST. Doing so would put ~130 tables
-on the REST surface at once; row-level security would still hold, but
+The `erp` schema is **not** exposed to PostgREST. Doing so would put every
+table on the REST surface at once; row-level security would still hold, but
 _protected by RLS_ and _deliberately exposed_ are different claims and only the
-second is a design.
+second is a design. `authenticated` reaches `erp.*` only through the invoker
+closure of the doors, computed and granted by `erp.refresh_invoker_reach()`;
+nothing in the product schemas is executable by `public` or `anon`.
 
 ---
 
@@ -127,191 +132,184 @@ forbidden. Tenant context is a transaction-local GUC, never session-scoped,
 because a pooled connection would otherwise carry it to whoever it served next.
 
 **B2 — Audit stream and event store.** Append-only, with payloads validated
-against JSON Schema at write time.
+against JSON Schema at write time — enforced in SQL as well as by the
+extension, because the local build's copy of the extension once said yes to
+everything.
 
 **B3 — Configuration and rules.** Effective-dated configuration where an
 exclusion constraint over `daterange` guarantees at most one version in force.
 Rules are JsonLogic, interpreted by `erp.jsonlogic` — one rule language, reused
-everywhere a decision is configurable.
+everywhere a decision is configurable, from an approval chain to a dimension's
+derivation.
 
 **B4 — State machines and approvals.** Lifecycles are configuration. Approval
 chains route by JsonLogic over the request context; a step that does not apply
-is recorded as `skipped` rather than omitted, so the audit shows it was
-considered.
+is recorded as `skipped` rather than omitted. A transition's declared effects
+are executed, and an effect kind the executor does not know is refused at
+promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
-through a resource key and a locale fallback chain.
+through a resource key and a locale fallback chain with an `en` floor.
+<!-- count:en_strings -->2558<!-- /count --> English strings, a German core pack
+of <!-- count:de_strings -->558<!-- /count -->, a tenant's own terms under
+`custom.`, and a report of what a locale still serves from English.
 
 **B6 — Change promotion.** Configuration in a live environment cannot be edited
 directly — it changes by promoting a reviewed change set, or it does not
-change. The author of a change set may not approve it.
+change. <!-- count:promotable_surfaces -->43<!-- /count --> promotable surfaces,
+each guarded; the author of a change set may not approve it.
 
 **B7 — Canonical domain model.** Parties, products, the stock ledger with
-deferred-constraint balance checks, the document spine, finance, planning. One
-spine carries all thirteen document types of spec 4.5.
+deferred-constraint balance checks, an owner and a keeper on every position,
+the document spine, finance with a numbered journal and an exact valuation the
+ledger agrees with to the penny, planning with a multi-level explosion and a
+plan that is kept rather than replaced.
 
 **B8 — Integration.** A transactional outbox with an `xid8` watermark, an
-idempotent command gateway, and a hard rule that the database holds credential
-_references_ and never credentials — enforced by `erp_ref.looks_like_secret()`.
+idempotent command gateway whose commands are `queued`, `in_flight`,
+`ambiguous` or settled — never re-sent without knowing — and a hard rule that
+the database holds credential _references_ and never credentials.
 
 **B9 — Scheduler, notifications, reporting.** The scheduler's dead-man's switch
-(`erp.silent_jobs()`) answers the question a dashboard of failures cannot: not
-"did anything fail" but "has each job run as recently as its own schedule says
-it should have". Quiet hours _defer_, never suppress. A KPI has exactly one
-calculation in force at a time, by exclusion constraint.
+answers not "did anything fail" but "has each job run as recently as its own
+schedule says it should have". <!-- count:job_handlers -->29<!-- /count -->
+handlers, run by the database where they can be and by the worker where they
+must make a request. Quiet hours _defer_, never suppress. A report has one
+version in force; a pack assembles several on a schedule.
 
 **B10 — Configuration intelligence.** Proposes, never applies. Its boundary is
 checked by walking the call graph transitively from every registered
-transaction-path function: a one-hop check would be defeated by a single helper.
+transaction-path function.
 
 ---
 
 ## 5. Above the foundation
 
-**The write surface.** Provisioning creates a tenant, its root entity, an
+**The write surface.** Provisioning creates a tenant, its root company, an
 administrator role holding every permission, and the first administrator as an
 _invited_ principal with a single-use token. Self-service onboarding creates a
-tenant for a caller who has none. Both routes exist because they answer
-different questions.
+tenant for a caller who has none, inside a bootstrap window that `go_live()`
+closes.
 
-**The dispatch worker** (`worker/`, ~520 lines). The one component that must
-live outside the database, because the database deliberately holds no
-credentials. Its entire vocabulary is claim, do, report. The database decides
-what is due, what may overlap, what a failure costs and when the next attempt
-happens — so a bug in the worker cannot corrupt a schedule.
+**The dispatch worker** (`worker/`). The one component that must live outside
+the database, because the database deliberately holds no credentials. Its
+vocabulary is claim, do, report — with a lease it must finish inside, a mark
+before the wire so a request that was sent is never sent twice, and a pass
+record the console reads.
 
-**Procurement** — the module that proves the thesis. No new tables. Three state
-machines, a value-banded approval chain, numbering rules and document types,
-promoted through B6 exactly as a customer's own change would be.
+**The modules.** Procurement, sales, inventory, finance, planning, production,
+quality, logistics, receivables, master data, reporting and commercial:
+<!-- count:modules -->12<!-- /count --> installers, each a change set. A
+second organisation, structurally unlike the first — three companies in three
+jurisdictions, standard costing, pallet identity, a third-party site, a
+consignor, its own words — is onboarded through doors alone by a suite that
+reads its own source and refuses any `erp.*` call.
+
+**The platform.** Its own organisation, a price book and quotes, contracts and
+renewals; incidents declared with components and scope, communicated on a
+timer to every channel from one row, published to the status page through the
+gateway, reviewed and closed; <!-- count:platform_dependencies -->5<!-- /count -->
+providers polled, an outage below the platform declared and resolved by the
+poll; releases recorded and proved; a restore drill that records itself.
 
 ---
 
 ## 6. Testing
 
 `.github/workflows/schema.yml` stands the product up from nothing on every
-push: an empty PostgreSQL 17.6, the host bootstrap (~80 lines — the entire
-Supabase surface), then every migration with `--single-transaction`.
+push: an empty PostgreSQL, the host bootstrap, then every migration with
+`--single-transaction`, then one organisation seeded with a year of trading.
 
-**Twenty structural assertions** read the catalogue and need no fixtures.
-**Sixteen adversarial suites** — 386 cases — build their own tenants, attack
-them, and destroy them. (These counts were stale in this document for some
-time, which is its own small illustration: a number nothing checks is a number
-that drifts.)
+**The catalogue.** `erp.ci_check_catalogue()` reads `pg_proc` and returns every
+check the build can call — <!-- count:assertions -->89<!-- /count --> structural
+assertions, <!-- count:suites -->104<!-- /count --> adversarial suites, the
+whole-database reconciliation last, over every organisation, every posting rule
+in force and every bound company. The runner hands the names it ran back to
+`erp.assert_ci_ran()`, which refuses if the catalogue holds one it did not run.
+A negative step creates an assertion, leaves it out of the list, and proves the
+build refuses.
 
-Each suite asserts its own case count. That is not ceremony: a suite that
-quietly loses a case reports success, and this repository has lost three
-isolation cases exactly that way. A suite must also leave nothing behind — one
-did not, and could therefore only ever run once.
+Each suite asserts its own case count, counts a null verdict as a failure, and
+rolls its organisation back. A suite that quietly loses a case reports success,
+and this repository has lost three isolation cases exactly that way.
 
-Two things the workflow checks that applying migrations to a long-lived
-database structurally cannot: that the sequence still applies to an _empty_
-cluster, and that the generators are idempotent.
+**The rehearsals.** Three run against a stub endpoint on every push: a command
+and an email drained in anger by the real worker; a worker killed before it
+sent, an endpoint that hangs, an endpoint that fails once; an incident declared
+and communicated to an organisation in-app and by email, published to the
+status page under its key, prompted on its timer, declared and resolved below
+the platform by the poll.
 
-A second job covers the product's TypeScript, which for a long time nothing
-built: `bun run typecheck` for the dispatch worker, and `deno check` for the
-Edge Function that shares its core. The schema being green while the worker
-does not compile should be two answers, not one — and for a while it was
-neither, because nobody asked the second question.
+**The two directions.** `supabase/ci/app_doors.sh` extracts every `erp_*` name
+the application uses: each must exist, and each door the application does not
+name must be in `erp_meta.api_only_door` with the caller it exists for.
+`supabase/ci/screen_strings.sh` proves every screen string has the row a tenant
+renames it by. `docs/build_counts.sh --check` proves this document and the
+README quote the database.
+
+**The console.** `erp.platform_assurance()` runs the
+<!-- count:diagnostic_checks -->98<!-- /count --> registered diagnostics
+(<!-- count:diagnostic_checks_in_ci -->79<!-- /count --> of them also in CI) and
+answers green or names what is wrong; every migration ends by requiring it green.
 
 ---
 
 ## 7. What this found
 
 None of these was found by reading code. Each was found by building from
-scratch, or by an assertion, or by running the thing.
+scratch, by an assertion, or by running the thing.
 
-| Defect                                                                    | How it surfaced                            |
-| ------------------------------------------------------------------------- | ------------------------------------------ |
-| A view bypassed RLS because a view runs as its owner, who holds BYPASSRLS | Adversarial isolation case                 |
-| A `SECURITY DEFINER` frame allowed privilege escalation                   | Definer allow-list                         |
-| 104 tables were missing tenant-freeze triggers                            | Generated coverage check                   |
-| Service principals were unreachable — nothing could create one            | Building B8's worker contract              |
-| Session-scoped tenant context was unsafe under connection pooling         | Commit-boundary test                       |
-| Three isolation cases had silently vanished from the repository           | Building CI from scratch                   |
-| Two CI "fixes" merged while changing nothing at all                       | Reading the artefact, not the tick         |
-| A purchase order silently ran the _requisition's_ lifecycle               | Driving procurement end to end             |
-| Six `SECURITY DEFINER` functions on the public API                        | Assertions, after a parallel branch merged |
-| A seed with hard-coded UUIDs failed the build on an empty database        | CI going red                               |
-| Self-service tenants were never governed, permanently                     | Asking whether the product was too strict  |
-| A solo administrator could install no configuration at all                | The same question, from the other side     |
-| The two tenant-creation doors built two different tenants                 | Trying to configure one of them            |
-| 58 operations were reachable from nowhere                                 | Counting the public API against `erp.*`    |
-| A test suite left its tenant behind, so it could only run once            | Re-reading my own merged code              |
-| The Edge Function had never compiled                                      | A warning on a passing check               |
-
-The last three of the merge batch arrived when a second line of work merged.
-The assertions caught all of them within minutes.
-
-The four after that came from a question rather than a test — "is the app
-restrictive about writing to the database and creating tenants?" — and the
-answer turned out to be both yes and no at once, which is the shape of most of
-this section. `erp.guard_live_configuration()` reads the environment marked
-`is_self` to decide whether a tenant is still being built. The self-service door
-created no such row, so the guard's `coalesce(is_live, false)` answered "still
-being built" for ever: those tenants were not governed leniently, they were
-never governed. Meanwhile B6's refusal to let the author of a change set approve
-it — correct, and the reason the guard exists — meant a person on their own
-could not install a single module, because there was nobody else to approve it.
-Too loose and too tight, from the same missing row.
-
-The last one is mine, found after the change above had merged green. Fifteen of
-the sixteen adversarial suites end with the same three lines — open a purge
-window, delete the tenant, close it — and the sixteenth, which I had just
-written, ended by clearing the session claims and stopping. CI could not see it:
-the database is created empty, the suite is the only thing that has ever run,
-and the cluster is thrown away a minute later. Two local databases could see it
-immediately — both carried a leftover tenant, and both refused the suite on its
-second run, failing on a unique tenant code rather than on anything under test.
-The suite also fabricates rows in `auth.users`, which is the platform's identity
-table rather than the product's and has no foreign key to cascade along, so
-those survived too. **The green tick again described the run, not the artefact.**
-
-The one after it came from a ⚠️ next to a check that passed. The Supabase
-branching integration warned that only functions declared in `config.toml` are
-deployed to preview branches, and `supabase/functions/dispatch` was not declared
-— so it was skipped. Following that up found something larger than a missing
-config block: the function had never compiled. Its shared core
-(`worker/src/core/`) uses extensionless relative imports, which Deno refuses, so
-module resolution failed at the first hop past `index.ts`. A `deno check` on the
-file reported twenty errors. Nothing in this repository had ever run one: the
-build is a PostgreSQL build, and the two TypeScript entrypoints that talk to the
-schema were outside it. A deploy command sat in the file's own header comment,
-and the file it described could not be deployed.
+| Defect                                                                                       | How it surfaced                                       |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| A view bypassed RLS because a view runs as its owner, who holds BYPASSRLS                    | Adversarial isolation case                            |
+| 104 tables were missing tenant-freeze triggers                                               | Generated coverage check                              |
+| Session-scoped tenant context was unsafe under connection pooling                            | Commit-boundary test                                  |
+| Twelve assertions, including all four reconciliations, existed and were never run            | Building the catalogue runner                         |
+| The JSON validator was a `select true` stub on the local build                               | Three gateway cases that passed for the wrong reason  |
+| 731 PUBLIC execute grants were load-bearing                                                  | Revoking them                                         |
+| No journal ever had a number                                                                 | Reading the eight insert sites                        |
+| Average costing rounded to whole pence per receipt; valuation never equalled the ledger      | The costing suite, then a year of trading             |
+| Ownership and custody existed nowhere; consignment stock was valued as owned                 | Designing the second organisation                     |
+| The allocation policy was configuration nothing read                                         | The same design                                       |
+| Nothing scheduled anything; the engine claimed the worker's jobs and failed them every minute | Making the platform run itself                        |
+| A dry run could never settle; an expired lease re-sent what had been sent                    | The recovery rehearsal                                |
+| A restored copy carried an anon grant on every door                                          | Restoring a dump and running the console              |
+| Twenty-three suite wrappers counted a null verdict as a pass                                 | The costing suite's first failure                     |
+| A planning run never re-ran, because its own suggestions were supply                         | Writing the scenario comparison                       |
+| A door defaulted to a value its table refuses                                                | Giving the door a screen                              |
+| Sixty doors were reachable from a SQL client and nowhere else                                | Counting the API against the application              |
 
 ### The lesson
 
-**Verify the artefact, not the green tick.** Twice in this build a change was
-merged that reported success and did nothing. Both times the tick was read and
-the log was not.
+**Verify the artefact, not the green tick.** More than once a change merged
+that reported success and did nothing. Each time the tick was read and the log
+was not. The rehearsals, the catalogue runner and the two-direction door check
+exist so the tick and the artefact are the same thing.
 
 ---
 
-## 8. Known gaps
+## 8. What is still not proven
 
-- **`transition.effects` and `state.on_enter`/`on_exit` are never executed.**
-  Stored configuration that nothing reads. `erp.assert_no_dead_configuration()`
-  now fails the build if any is declared, so the gap is loud rather than silent
-  — but executing effects is real work still outstanding.
-- **Two migration naming conventions.** Hand-numbered `00NN` files and
-  timestamped ones. _Every_ `00NN` file sorts before _every_ timestamped file,
-  so anything correcting a timestamped migration must itself be timestamped
-  later. A fix numbered `0045` was silently undone by files that ran after it.
-- **`.env` is committed** and there is no `.gitignore` rule for it. Today it
-  holds only publishable values; that is where a `service_role` key eventually
-  lands.
-- **Local development on PostgreSQL 16** runs `pg_jsonschema` 0.3.3, which does
-  not enforce `required`. Three gateway cases fail locally and pass on CI's
-  17.6 image.
-- **The Edge Function has never run on a schedule.** It builds (`deno check`),
-  it deploys (the preview branch on the pull request that declared it reported
-  Edge Functions green, which also settled the open question of whether the
-  bundler follows the import out of `supabase/functions/` into
-  `worker/src/core/` — it does), and it runs: pointed at a local Clove ERP
-  database it refuses a wrong shared secret with a 403, connects with the npm
-  `postgres` driver, and returns B1's own `CLOVEERP_UNKNOWN_PRINCIPAL` for a
-  fabricated principal. What has not happened is a real pass: no schedule
-  points at it and no secrets are set, so nothing has yet drained an outbox
-  through it in anger.
+Stated plainly, because the register would be worth nothing otherwise.
+
+- **Point-in-time recovery has never been drilled.** The dump-and-restore
+  drill runs quarterly and records itself; a PITR is performed on the host and
+  is recorded by the operator through `erp_platform_record_restore_drill('pitr', …)`
+  once done.
+- **The status page is under Cloudflare's own availability.** It stores what
+  the gateway publishes and serves it; a page served from the product's
+  database would die with it, which is the decision recorded as
+  `status_page_published_through_the_gateway`.
+- **German beyond the core pack** is served from English and reported as such
+  by `erp_untranslated('de')`; a tenant's own words stay untranslated in every
+  other locale by design.
+- **Customs documentation is not built** (`customs_documentation_not_built`).
+- **Consolidation does not translate currencies**: a member in another
+  currency is refused, not summed. Settlement fees are recorded on the
+  statement, not posted.
+- **The live route depends on a secret** (`CLOVEERP_LIVE_DATABASE_URL`) and on
+  the branching integration's production deploy; both are the owner's, and
+  `supabase/ops/README.md` says what each carries.
 
 ---
 
@@ -324,6 +322,8 @@ bun install && bun run dev
 # The full build, exactly as CI runs it
 psql -f supabase/ci/00_host_bootstrap.sql
 for f in supabase/migrations/*.sql; do psql --single-transaction -f "$f"; done
+psql -f supabase/ci/seed_demo.sql
+supabase/ci/run_checks.sh
 
 # The worker
 cd worker && bun install && bun run src/main.ts
@@ -349,12 +349,9 @@ nothing to authorise against:
 select public.erp_onboard_tenant('Acme Ltd', 'acme');
 ```
 
-It builds the same tenant the operator door does — root entity, administrator
-role, `is_self` environment — with one difference: the environment is not yet
-live. That is the **bootstrap window**. Inside it, `erp.install_module_config()`
-approves and promotes in the same call, because separation of duties has nobody
-to separate from. `erp.go_live()` closes it, and refuses to close it over dead
-configuration or over a tenant with a single administrator — either would leave
-a tenant that is governed and unable to change. After that a self-service tenant
-is governed exactly as a provisioned one is: configuration moves through a
-promoted change set, and an author may not approve their own.
+It builds the same tenant the operator door does, with one difference: the
+environment is not yet live. That is the **bootstrap window**. Inside it, an
+installer approves and promotes in the same call, because separation of duties
+has nobody to separate from. `erp.go_live()` closes it, and refuses to close it
+over dead configuration or over a tenant with a single administrator. After
+that a self-service tenant is governed exactly as a provisioned one is.

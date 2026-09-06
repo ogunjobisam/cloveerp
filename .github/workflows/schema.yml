@@ -222,12 +222,14 @@ jobs:
         # organisation's history still shows it. D35 and D36, by the log.
         run: supabase/ci/incident_rehearsal.sh
 
-      - name: Every door the application names exists
+      - name: Every door has a home
         # The application calls the database by bare string, and nothing
         # compared those strings with the schema: the generated types file is
         # imported by nothing the app uses, and six invalidation keys named
         # doors that do not exist. This extracts every erp_* literal from src
-        # and hands the list to erp.assert_app_doors_exist().
+        # and hands the list to erp.assert_app_doors_exist() — and then to
+        # erp.assert_doors_have_a_home(), which refuses a door that no screen
+        # names and no row in erp_meta.api_only_door accounts for.
         run: supabase/ci/app_doors.sh
 
       - name: Every screen string has a row it can be renamed by
@@ -242,6 +244,19 @@ jobs:
         # A migration seeds what exists on the day it is written. Only this
         # notices the two hundred and second.
         run: supabase/ci/screen_strings.sh
+
+      - name: The documents quote the database
+        # README.md, docs/ARCHITECTURE.md and the Word document carry figures
+        # — migrations, doors, tables, suites, the Part 5 totals — inside
+        # markers that docs/build_counts.sh reads back from the built database.
+        # A number nothing checks is a number that drifts: the architecture
+        # document said "49 migrations" against 259 on disk for a week. The
+        # Word document is rebuilt from the same figures and compared
+        # paragraph by paragraph with the one committed.
+        run: |
+          docs/build_counts.sh --check
+          pip install --quiet python-docx
+          python3 docs/what_has_been_built/build.py --check
 
       - name: The generators are idempotent
         # Row security, append-only guards, attribution, audit coverage and
