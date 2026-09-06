@@ -35,12 +35,21 @@ const empty = (): DrainReport => ({
  * quietly failing to fire. B9 refuses a job naming an unknown handler_code, so
  * this is the other half of that promise: the database knows the handler is
  * declared, and only the worker knows whether anything implements it.
+ *
+ * A handler with a SQL body is implemented — by the database, through
+ * erp.run_claimed_job(). Only a handler that has no SQL body and nothing
+ * registered here is a job that will never run. Until this distinction the
+ * check demanded a TypeScript implementation for every enabled job, and since
+ * every handler now has a SQL body, a worker pointed at a real organisation
+ * refused to start.
  */
 export async function assertHandlersExist(sql: Sql): Promise<void> {
   const rows = await sql`
     select distinct j.handler_code
       from erp.job j
-     where j.is_enabled and j.schedule_kind <> 'manual'`;
+      join erp_ref.job_handler h on h.code = j.handler_code
+     where j.is_enabled and j.schedule_kind <> 'manual'
+       and h.sql_function is null`;
 
   const missing = rows
     .map((r) => String(r["handler_code"]))
@@ -79,10 +88,16 @@ async function drainJobs(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: Dra
     const handler = handlerFor(handlerCode);
 
     if (!handler) {
-      await asPrincipal(sql, b, (tx) =>
-        tx`select erp.fail_job_run(${runId}::bigint,
-             ${`no handler registered for ${handlerCode}`}, '{}'::jsonb, false)`);
-      out.jobsFailed += 1;
+      // Not this process's to run — but the database may have a body for it.
+      // erp.run_claimed_job() executes a SQL handler for a claimed run and
+      // settles the run itself; a handler with neither a SQL body nor a
+      // registration here is the only thing that fails. Until this branch the
+      // worker failed every SQL-handled job it happened to claim first.
+      const [settled] = await asPrincipal(sql, b, (tx) =>
+        tx`select erp.run_claimed_job(${runId}::bigint) as outcome`);
+      const outcome = (settled?.["outcome"] ?? {}) as { outcome?: string };
+      if (outcome.outcome === "ok") out.jobsSucceeded += 1;
+      else out.jobsFailed += 1;
       continue;
     }
 
@@ -113,6 +128,22 @@ async function drainJobs(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: Dra
 // ---------------------------------------------------------------------------
 
 /**
+ * Where a system's requests go.
+ *
+ * The adapter schema for example_http names the address `base_url` and forbids
+ * any other key, and this file read `endpoint` — a key no valid connection
+ * could carry. Every delivery therefore failed with "has no endpoint
+ * configured" against a system whose connection was exactly as the schema
+ * required. `endpoint` is still honoured for an adapter that declares it;
+ * `base_url` is what the shipped adapter says.
+ */
+function endpointOf(connection: unknown): string | null {
+  const c = (connection ?? {}) as Record<string, unknown>;
+  const value = c["endpoint"] ?? c["base_url"];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
  * Delivering one message to one external system.
  *
  * Deliberately the only place a credential is touched. It is resolved from the
@@ -125,16 +156,21 @@ async function deliver(
   endpoint: string | null,
   credential: string | null,
   payload: unknown,
+  idempotencyKey: string | null = null,
 ): Promise<void> {
   if (!endpoint) {
     throw new Error(`external system ${systemCode} has no endpoint configured`);
   }
 
+  // The command's own key travels with it, so a receiver can tell a retry of
+  // the same command from a second command that happens to look alike. D19:
+  // an outbound write carries its idempotency key all the way out.
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(credential ? { authorization: `Bearer ${credential}` } : {}),
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
     },
     body: JSON.stringify(payload),
   });
@@ -159,9 +195,7 @@ async function drainOutbox(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: D
       tx`select connection, credential_ref from erp.external_system
           where tenant_id = ${b.tenantId}::uuid and code = ${systemCode}`);
 
-    const endpoint = ((system?.["connection"] ?? {}) as Record<string, unknown>)["endpoint"] as
-      | string
-      | null;
+    const endpoint = endpointOf(system?.["connection"]);
     const credential = resolveCredential((system?.["credential_ref"] ?? null) as string | null);
 
     for (const message of claimed) {
@@ -199,9 +233,7 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
       tx`select connection, credential_ref from erp.external_system
           where tenant_id = ${b.tenantId}::uuid and code = ${systemCode}`);
 
-    const endpoint = ((system?.["connection"] ?? {}) as Record<string, unknown>)["endpoint"] as
-      | string
-      | null;
+    const endpoint = endpointOf(system?.["connection"]);
     const credential = resolveCredential((system?.["credential_ref"] ?? null) as string | null);
 
     for (const command of claimed) {
@@ -216,7 +248,13 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
       }
 
       try {
-        await deliver(systemCode, endpoint ?? null, credential, command["payload"]);
+        await deliver(
+          systemCode,
+          endpoint ?? null,
+          credential,
+          command["payload"],
+          (command["idempotency_key"] as string | null) ?? null,
+        );
         await asPrincipal(sql, b, (tx) =>
           tx`select erp.complete_command(${id}::uuid, '{}'::jsonb)`);
         out.commandsSucceeded += 1;
@@ -255,6 +293,7 @@ async function sweepDeletedTenants(sql: Sql, out: DrainReport) {
 
 export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainReport> {
   const out = empty();
+  const startedAt = new Date();
   await sweepDeletedTenants(sql, out);
   for (const binding of cfg.bindings) {
     await drainJobs(sql, binding, cfg, out);
@@ -262,5 +301,9 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
     await drainCommands(sql, binding, cfg, out);
     await drainEmail(sql, binding, cfg, out);
   }
+  // The evidence. A pass that drained nothing is still a pass, and the console
+  // reads the last one to say whether anybody is draining at all; a worker that
+  // cannot record its pass is reported by the exception, not hidden by it.
+  await sql`select erp.record_drain_pass(${cfg.workerName}, ${startedAt}, ${JSON.stringify(out)}::jsonb)`;
   return out;
 }

@@ -182,6 +182,22 @@ jobs:
           rollback;
           SQL
 
+      - name: A queue drains in anger
+        # Every suite above proves a command can be claimed and settled and an
+        # email queued; none proves anything received either. This starts a
+        # receiver, queues one command and one email against the demonstration
+        # organisation, runs the worker for one pass, and reads back that the
+        # command succeeded with one POST carrying its idempotency key, the
+        # email is sent with the provider's id, and the pass is recorded. The
+        # first run of it found three defects no suite could see: the worker
+        # refused to start against jobs with SQL handlers, read a connection
+        # key the adapter forbids, and the email queue could not be queued.
+        run: |
+          set -euo pipefail
+          npm install -g bun
+          (cd worker && bun install --frozen-lockfile)
+          supabase/ci/drain_rehearsal.sh
+
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
         # with no code impact. That is only true of strings erp_ref.resource
