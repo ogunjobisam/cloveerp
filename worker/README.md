@@ -60,6 +60,10 @@ Configuration, all from the environment and none of it from the database:
     CLOVEERP_SYSTEMS        comma-separated external system codes to drain
     CLOVEERP_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
     CLOVEERP_WORKER_NAME    the name a claim is recorded under (default clove-erp-worker-<pid>)
+    CLOVEERP_LEASE_SECONDS  how long a claim lasts before the reclaimer settles it (default 300)
+    CLOVEERP_HTTP_TIMEOUT_MS how long one outbound request may take (default 30000; must be under the lease)
+    CLOVEERP_ONCE           1 to run a single pass and exit (what the build does)
+    CLOVEERP_RESEND_ENDPOINT where email is posted instead of Resend (the build's stub)
     RESEND_API_KEY          the send credential for the email handler
     <REF>                   the value a credential_ref names — see below
 

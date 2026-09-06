@@ -19,6 +19,16 @@ export type WorkerConfig = {
   pollMs: number;
   workerName: string;
   /**
+   * How long a claim lasts, in seconds. A worker that dies keeps its claims
+   * this long; after it the reclaimer settles them — back to the queue if
+   * nothing was sent, ambiguous if something was. Must outlast the HTTP
+   * timeout below, or a request could still be answering when its command is
+   * declared unknown.
+   */
+  leaseSeconds: number;
+  /** How long one outbound request may take before it counts as no answer. */
+  httpTimeoutMs: number;
+  /**
    * Absent means this worker sends no email, which is a state to report rather
    * than to fail on: an organisation without a key configured must not stop the
    * drain for every other organisation this process serves.
@@ -63,14 +73,34 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       );
     }
 
+    const leaseSeconds = Number(env["CLOVEERP_LEASE_SECONDS"] ?? 300);
+    const httpTimeoutMs = Number(env["CLOVEERP_HTTP_TIMEOUT_MS"] ?? 30_000);
+    if (!(leaseSeconds > 0) || !(httpTimeoutMs > 0)) {
+      throw new Error(
+        "CLOVEERP_LEASE_SECONDS and CLOVEERP_HTTP_TIMEOUT_MS must be positive numbers.",
+      );
+    }
+    if (httpTimeoutMs >= leaseSeconds * 1000) {
+      throw new Error(
+        `CLOVEERP_HTTP_TIMEOUT_MS (${httpTimeoutMs}) must be under the lease ` +
+          `(CLOVEERP_LEASE_SECONDS ${leaseSeconds}): a request that can outlive its ` +
+          `lease would be reclaimed as unknown while it was still answering.`,
+      );
+    }
+
     return {
       databaseUrl: required("CLOVEERP_DATABASE_URL"),
       bindings: tenants.map((tenantId, i) => ({ tenantId, principalId: principals[i]! })),
       systems: env["CLOVEERP_SYSTEMS"]
-        ? env["CLOVEERP_SYSTEMS"].split(",").map((s) => s.trim()).filter(Boolean)
+        ? env["CLOVEERP_SYSTEMS"]
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
         : [],
       pollMs: Number(env["CLOVEERP_POLL_MS"] ?? 5000),
       workerName: env["CLOVEERP_WORKER_NAME"] ?? `clove-erp-worker-${process.pid ?? "edge"}`,
+      leaseSeconds,
+      httpTimeoutMs,
       resendApiKey: env["RESEND_API_KEY"]?.trim() || null,
     };
   } finally {

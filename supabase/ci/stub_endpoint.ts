@@ -42,6 +42,39 @@ const received: Received = {
 
 const port = Number(process.argv[2] ?? process.env["STUB_PORT"] ?? 8788);
 
+/**
+ * Per-route evidence, for the recovery rehearsal: every POST is logged under
+ * its path with its key, so a script can read back exactly how many requests
+ * each system received and in what order.
+ *
+ *   POST /orders/hang   — the first request ever on this route is never
+ *                         answered (the endpoint stopped mid-command); later
+ *                         requests are answered 200. What a worker's timeout
+ *                         and the ambiguous state are for.
+ *   POST /orders/flaky  — the first request is answered 503; later requests
+ *                         200. What a backoff is for.
+ */
+type Route = {
+  requests: number;
+  keys: string[];
+  duplicateKeys: number;
+  log: { at: string; key: string | null }[];
+};
+const routes: Record<string, Route> = {};
+const route = (path: string): Route =>
+  (routes[path] ??= { requests: 0, keys: [], duplicateKeys: 0, log: [] });
+
+function record(path: string, key: string | null): Route {
+  const r = route(path);
+  r.requests += 1;
+  r.log.push({ at: new Date().toISOString(), key });
+  if (key) {
+    if (r.keys.includes(key)) r.duplicateKeys += 1;
+    else r.keys.push(key);
+  }
+  return r;
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -50,7 +83,7 @@ const server = Bun.serve({
   async fetch(req: Request) {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/health") return json({ ok: true });
-    if (req.method === "GET" && url.pathname === "/received") return json(received);
+    if (req.method === "GET" && url.pathname === "/received") return json({ ...received, routes });
 
     if (req.method === "POST" && url.pathname === "/orders") {
       const key = req.headers.get("idempotency-key");
@@ -60,6 +93,26 @@ const server = Bun.serve({
         if (received.orderKeys.includes(key)) received.duplicateKeys += 1;
         else received.orderKeys.push(key);
       }
+      record(url.pathname, key);
+      return json({ ok: true, idempotency_key: key });
+    }
+
+    if (req.method === "POST" && url.pathname === "/orders/hang") {
+      const key = req.headers.get("idempotency-key");
+      await req.json().catch(() => null);
+      const r = record(url.pathname, key);
+      if (r.requests === 1) {
+        // Never answered. The connection stays open until the client gives up.
+        await new Promise<void>(() => {});
+      }
+      return json({ ok: true, idempotency_key: key });
+    }
+
+    if (req.method === "POST" && url.pathname === "/orders/flaky") {
+      const key = req.headers.get("idempotency-key");
+      await req.json().catch(() => null);
+      const r = record(url.pathname, key);
+      if (r.requests === 1) return json({ error: "not now" }, 503);
       return json({ ok: true, idempotency_key: key });
     }
 

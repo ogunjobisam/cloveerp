@@ -47,7 +47,9 @@ export async function drainEmail(
   const claimed = (await asPrincipal(
     sql,
     b,
-    (tx) => tx`select * from erp.claim_email_batch(50)`,
+    // The claim carries this worker's name and takes a lease, so a message
+    // abandoned mid-send is visibly held and reclaimable, not stuck for ever.
+    (tx) => tx`select * from erp.claim_email_batch(50, ${cfg.workerName})`,
   )) as unknown as EmailRow[];
 
   if (claimed.length === 0) return;

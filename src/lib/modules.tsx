@@ -644,7 +644,7 @@ export const FINANCE: ModuleDef = {
         { kind: "date", name: "p_payment_date", label: "Payment date" },
         { kind: "text", name: "p_currency", label: "Currency", hint: "Three-letter code." },
       ],
-      invalidates: ["erp_payment_runs", "erp_payables_ageing"],
+      invalidates: ["erp_payment_proposals"],
     },
     {
       label: "Approve a payment run",
@@ -659,7 +659,7 @@ export const FINANCE: ModuleDef = {
           "Payment proposal",
         ),
       ],
-      invalidates: ["erp_payment_runs", "erp_payables_ageing"],
+      invalidates: ["erp_payment_proposals"],
     },
     {
       label: "Apply cash",
@@ -1162,7 +1162,7 @@ export const PRODUCTION: ModuleDef = {
         },
         { kind: "date", name: "p_planned_end", label: "Planned finish" },
       ],
-      invalidates: ["erp_works_orders", "erp_shop_floor"],
+      invalidates: ["erp_works_orders"],
     },
     {
       label: "Release a works order",
@@ -1187,7 +1187,7 @@ export const PRODUCTION: ModuleDef = {
           ],
         },
       ],
-      invalidates: ["erp_works_orders", "erp_shop_floor"],
+      invalidates: ["erp_works_orders"],
     },
     {
       label: "Issue components",
@@ -1205,7 +1205,7 @@ export const PRODUCTION: ModuleDef = {
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         pickBatch(),
       ],
-      invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
+      invalidates: ["erp_works_orders", "erp_stock_health"],
     },
     {
       label: "Book operation time",
@@ -1224,7 +1224,7 @@ export const PRODUCTION: ModuleDef = {
         { kind: "number", name: "p_completed", label: "Completed" },
         { kind: "number", name: "p_scrapped", label: "Scrapped" },
       ],
-      invalidates: ["erp_works_orders", "erp_shop_floor"],
+      invalidates: ["erp_works_orders"],
     },
     {
       label: "Receive output",
@@ -1241,7 +1241,7 @@ export const PRODUCTION: ModuleDef = {
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         { kind: "text", name: "p_batch_number", label: "Batch number" },
       ],
-      invalidates: ["erp_works_orders", "erp_shop_floor", "erp_stock_health"],
+      invalidates: ["erp_works_orders", "erp_stock_health"],
     },
     {
       label: "Close a works order",
@@ -1256,7 +1256,7 @@ export const PRODUCTION: ModuleDef = {
           "Works order",
         ),
       ],
-      invalidates: ["erp_works_orders", "erp_shop_floor"],
+      invalidates: ["erp_works_orders"],
     },
   ],
 
@@ -1420,7 +1420,7 @@ export const QUALITY: ModuleDef = {
         },
         pickBatch(),
       ],
-      invalidates: ["erp_quality_events", "erp_open_quality_events"],
+      invalidates: ["erp_quality_events"],
     },
     {
       label: "Record an inspection result",
@@ -1439,7 +1439,7 @@ export const QUALITY: ModuleDef = {
         { kind: "text", name: "p_text_value", label: "Observed value" },
         { kind: "text", name: "p_instrument", label: "Instrument" },
       ],
-      invalidates: ["erp_open_inspections", "erp_quality_events"],
+      invalidates: ["erp_inspections", "erp_quality_events"],
     },
     {
       label: "Disposition an inspection",
@@ -1469,7 +1469,7 @@ export const QUALITY: ModuleDef = {
         },
         { kind: "text", name: "p_note", label: "Note" },
       ],
-      invalidates: ["erp_open_inspections", "erp_quality_events", "erp_batches"],
+      invalidates: ["erp_inspections", "erp_quality_events", "erp_batches"],
     },
     {
       label: "Raise a recall",
@@ -1526,7 +1526,7 @@ export const QUALITY: ModuleDef = {
         { kind: "text", name: "p_corrective_action", label: "Corrective action", required: true },
         { kind: "text", name: "p_preventive_action", label: "Preventive action", required: true },
       ],
-      invalidates: ["erp_quality_events", "erp_open_quality_events"],
+      invalidates: ["erp_quality_events"],
     },
   ],
 
@@ -1656,7 +1656,7 @@ export const LOGISTICS: ModuleDef = {
         },
         { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: true },
       ],
-      invalidates: ["erp_shipments", "erp_open_shipments"],
+      invalidates: ["erp_shipments"],
       mapArgs: (v) => ({
         p_site_id: v["p_site_id"],
         p_planned_despatch: v["p_planned_despatch"],
@@ -1680,7 +1680,7 @@ export const LOGISTICS: ModuleDef = {
         ),
         { kind: "date", name: "p_required_by", label: "Required by", required: false },
       ],
-      invalidates: ["erp_shipments", "erp_open_shipments"],
+      invalidates: ["erp_shipments"],
     },
     {
       label: "Book a shipment",
@@ -1704,7 +1704,7 @@ export const LOGISTICS: ModuleDef = {
           hint: "In minor units — pence, cents.",
         },
       ],
-      invalidates: ["erp_shipments", "erp_open_shipments", "erp_delivery_performance"],
+      invalidates: ["erp_shipments", "erp_delivery_performance"],
     },
     {
       label: "Record proof of delivery",

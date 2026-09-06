@@ -58,6 +58,47 @@ migration as applied without applying it, which is the one way to misuse it.
 The connector remains available for reading and for an emergency; it is no
 longer how a change lands.
 
+## Releases and rollback
+
+A release is a row. `deploy.yml` writes one to `erp_meta.release` after the
+migrations apply and before the database is proved: the commit, the moment the
+deploy started, the migration ledger as it stood, and — once
+`erp.platform_assurance()` and `erp.assert_whole_database_reconciles()` pass —
+`proved_at`. `erp.release_report()` reads the register beside the ledger, the
+platform console's deployment screen shows the last five, and a ledger that has
+moved past the last recorded release is a finding of
+`erp.assert_release_integrity()`: a migration that reached live without a
+deploy is what the release route exists to prevent (D27).
+
+Three things can be rolled back, and they roll back differently.
+
+- **The schema does not roll back; it rolls forward.** No down migration is
+  written (D27); a migration that must be undone is undone by the next
+  migration, which says why. `supabase/ci/migrations_immutable.sh` refuses an
+  edited file, so history stays what was applied.
+- **The application rolls back by publishing the previous build** in Lovable.
+  That is safe only when the previous build's doors still exist on the current
+  schema, which the `compat` job in `schema.yml` proves on every pull request:
+  it builds the schema as `main` has it and as the pull request leaves it,
+  extracts every door name the application calls on each side, and fails the
+  request if `main`'s application calls a door the request removes. A door
+  that must go is kept as a shim for one release first.
+- **Data rolls back by point-in-time recovery** to `deployed_at_start` of the
+  release being undone — the `pitr` commitment — and a restore is only a hope
+  until it has been drilled. `restore_drill.yml` drills it quarterly: dump,
+  restore into an isolated PostgreSQL of the live major version, run the
+  console and the reconciliation, then keep one organisation and run them
+  again. Since 6 September 2026 the drill records itself through
+  `erp.record_restore_drill()`, so `erp.continuity_report()` reads `proved`
+  from a row a drill wrote rather than `never drilled` from a table nothing
+  could write to. A drill done by hand is recorded through
+  `erp_platform_record_restore_drill` by the operator who did it.
+
+A rehearsal of the application rollback on live — publish the previous build,
+walk the routes, republish — is the owner's to perform; the `compat` job says
+beforehand whether it can succeed, and this file is where its date is recorded
+when it has been done.
+
 ### Settings that live only in the dashboard
 
 Two authentication settings cannot be expressed in `supabase/config.toml` and

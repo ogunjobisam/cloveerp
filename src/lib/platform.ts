@@ -202,10 +202,28 @@ export type TenantConfiguration = {
   determination_findings: number;
 };
 
+/** One deploy of main to live, as erp_meta.release records it. */
+export type Release = {
+  id: string;
+  recorded_at: string;
+  deployed_at_start: string;
+  git_sha: string;
+  app_build: string | null;
+  migrations_recorded: number;
+  migrations_high: string | null;
+  proved: boolean;
+  recorded_by: string;
+  ledger_now: string | null;
+  moved_since: boolean;
+  note: string | null;
+};
+
 export type DeploymentState = {
   migrations_known: boolean;
   migrations: { version: string; name: string | null }[];
   counts: Record<string, number>;
   registers: Record<string, number>;
+  /** The last five releases; empty on a database nothing has deployed to. */
+  releases?: Release[];
   generated_at: string;
 };
