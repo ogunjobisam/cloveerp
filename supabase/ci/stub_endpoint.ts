@@ -26,6 +26,8 @@ type Received = {
   duplicateKeys: number;
   emails: number;
   emailIds: string[];
+  hooks: number;
+  lastHook: unknown;
   lastOrder: unknown;
   lastEmail: unknown;
 };
@@ -36,6 +38,8 @@ const received: Received = {
   duplicateKeys: 0,
   emails: 0,
   emailIds: [],
+  hooks: 0,
+  lastHook: null,
   lastOrder: null,
   lastEmail: null,
 };
@@ -150,6 +154,19 @@ const server = Bun.serve({
       const f = feeds[feed[1]] ?? { indicator: "none", description: "All Systems Operational" };
       record(url.pathname, null);
       return json({ page: { id: feed[1], name: feed[1] }, status: f });
+    }
+
+    // A chat service, or anything else that takes a JSON post. This is where
+    // a webhook notification lands: erp.claim_webhook_batch() hands the
+    // worker the channel's URL, and erp.complete_webhook() refuses to call the
+    // message sent unless what comes back is quoted, so this answers with an
+    // id worth quoting.
+    if (req.method === "POST" && url.pathname === "/hooks") {
+      const key = req.headers.get("idempotency-key");
+      received.hooks += 1;
+      received.lastHook = await req.json().catch(() => null);
+      record(url.pathname, key);
+      return json({ id: `hook_${received.hooks}` });
     }
 
     if (req.method === "POST" && url.pathname === "/emails") {

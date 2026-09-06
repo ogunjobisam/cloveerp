@@ -91,16 +91,28 @@ select erp.submit_command('ci_counterpart', 'order.create',
 insert into erp.notification (tenant_id, severity, app_user_id, channel_kind, subject, body, status)
 values (:'tenant_id', 'info', :'admin_id', 'email', 'CI drain rehearsal', 'A queue drained in anger.', 'pending')
 returning id as notification_id \gset
+
+-- And a webhook, which until 20260906144000 dispatch marked sent inside a
+-- database that cannot make an HTTP request. The channel names where the post
+-- goes; the worker is what posts it, and complete_webhook() refuses to call it
+-- sent without what the other end answered.
+select erp.upsert_notification_channel('ci_hook', 'CI chat', 'webhook',
+         jsonb_build_object('url', '${STUB}/hooks')) as channel_id \gset
+insert into erp.notification (tenant_id, severity, app_user_id, channel_kind, subject, body, status)
+values (:'tenant_id', 'high', :'admin_id', 'webhook', 'CI webhook rehearsal', 'A post that leaves the database.', 'pending')
+returning id as hook_id \gset
 select d.sent as dispatched from erp.dispatch_notifications() d \gset
 select n.status as queued_status from erp.notification n where n.id = :'notification_id' \gset
+select n.status as hook_queued from erp.notification n where n.id = :'hook_id' \gset
 commit;
-\echo :tenant_id|:principal_id|:command_id|:notification_id|:queued_status
+\echo :tenant_id|:principal_id|:command_id|:notification_id|:queued_status|:hook_id|:hook_queued
 SQL
 )
 line=$(printf '%s\n' "$setup" | tail -n 1)
-IFS='|' read -r TENANT PRINCIPAL COMMAND NOTIFICATION QUEUED <<<"$line"
+IFS='|' read -r TENANT PRINCIPAL COMMAND NOTIFICATION QUEUED HOOK HOOK_QUEUED <<<"$line"
 echo "tenant $TENANT, principal $PRINCIPAL, command $COMMAND, notification $NOTIFICATION ($QUEUED)"
 [[ "$QUEUED" == "queued" ]] || { echo "dispatch left the email at '$QUEUED', not queued" >&2; exit 1; }
+[[ "$HOOK_QUEUED" == "queued" ]] || { echo "dispatch left the webhook at '$HOOK_QUEUED', not queued" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # 3. One pass of the worker
@@ -136,6 +148,11 @@ received=$(curl -fsS "$STUB/received")
 check "the stub received one order"        "$(jq -r '.orders' <<<"$received")" "1"
 check "carrying the command's key"         "$(jq -r '.orderKeys[0] // "none"' <<<"$received")" "$KEY"
 check "and one email"                      "$(jq -r '.emails' <<<"$received")" "1"
+check "and one webhook post"               "$(jq -r '.hooks' <<<"$received")" "1"
+check "carrying the message's own key"     "$(jq -r '.routes["/hooks"].keys[0] // "none"' <<<"$received")" "clove-notification-$HOOK"
+check "the webhook says sent, with what the other end answered" \
+  "$($PSQL_CMD -tA -c "select status || '|' || coalesce(provider_message_id, '-') from erp.notification where id = '$HOOK'")" \
+  "sent|http 200 hook_1"
 
 check "the command succeeded" \
   "$($PSQL_CMD -q -tAc "select status from erp.command where id = '$COMMAND'")" "succeeded"
@@ -154,4 +171,4 @@ else
 fi
 
 [[ $fail -eq 0 ]] || { echo; echo "worker log follows"; cat "${RUNNER_TEMP:-/tmp}/clove-stub.log"; exit 1; }
-echo "a command and an email left the building, once each, and the database knows it"
+echo "a command, an email and a webhook left the building, once each, and the database knows it"
