@@ -310,13 +310,21 @@ Stated plainly, because the register would be worth nothing otherwise.
 - **The live route depends on a secret** (`CLOVEERP_LIVE_DATABASE_URL`) and on
   the branching integration's production deploy; both are the owner's, and
   `supabase/ops/README.md` says what each carries.
+- **The application is published by hand, and separately.** The schema is
+  deployed by `deploy.yml` on merge; the front end is built and published from
+  the Lovable editor onto a Cloudflare Worker serving `cloveerp.com`. Nothing
+  in this repository publishes it, so for a while after either deployment the
+  other is behind — which is what the `compat` job measures. Every `VITE_*`
+  value is inlined at build time, so the published bundle's configuration can
+  only be changed by publishing again.
 
 ---
 
 ## 9. Running it
 
 ```sh
-# The application
+# The application. It comes up against the project named in src/lib/erp.ts;
+# VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY point it elsewhere.
 bun install && bun run dev
 
 # The full build, exactly as CI runs it

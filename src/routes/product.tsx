@@ -90,7 +90,7 @@ function Nav() {
           Pricing
         </a>
         <Link
-          to="/"
+          to="/signin"
           className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-surface transition-transform active:scale-[0.98]"
         >
           Sign in
@@ -122,7 +122,7 @@ function Hero() {
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link
-              to="/"
+              to="/signin"
               className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-surface transition-transform active:scale-[0.98]"
             >
               Start exploring
@@ -417,7 +417,7 @@ function Pricing() {
           </div>
           <div className="flex flex-col gap-3">
             <Link
-              to="/"
+              to="/signin"
               className="rounded-full bg-surface px-6 py-3.5 text-center text-sm font-semibold text-accent ring-2 ring-surface/20 transition-transform active:scale-[0.98]"
             >
               Start exploring with demo data
@@ -446,7 +446,7 @@ function Footer() {
         <Link to="/contact" className="underline underline-offset-2">
           Contact us
         </Link>
-        <Link to="/" className="underline underline-offset-2">
+        <Link to="/signin" className="underline underline-offset-2">
           Sign in
         </Link>
       </p>

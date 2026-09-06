@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import { CONTACT_EMAIL } from "../lib/brand";
+import { supabasePublishableKey, supabaseUrl } from "../lib/erp";
 import { Logo, Wordmark } from "../components/erp/logo";
 
 /**
@@ -87,10 +88,11 @@ export function outcomeFor(
 }
 
 function endpoint(): string | null {
-  const base =
-    (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) ??
-    (import.meta.env["SUPABASE_URL"] as string | undefined);
-  return base ? `${base.replace(/\/$/, "")}/functions/v1/enquiry` : null;
+  // The same resolution the rest of the application uses: the environment
+  // where the host sets it, the build's own project otherwise. Reading the
+  // variable directly here is what left this form telling visitors it could
+  // not reach us on a build whose host set nothing.
+  return supabaseUrl ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/enquiry` : null;
 }
 
 function ContactPage() {
@@ -122,9 +124,7 @@ function ContactPage() {
           // Sent when it exists. The function itself does not verify a JWT —
           // the caller has no session — but the Supabase gateway is happier
           // with a key present, and this one is publishable by definition.
-          ...(import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"]
-            ? { apikey: import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string }
-            : {}),
+          ...(supabasePublishableKey ? { apikey: supabasePublishableKey } : {}),
         },
         body: JSON.stringify({
           full_name: data.get("full_name"),

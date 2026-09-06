@@ -36,8 +36,16 @@ bun install
 bun run dev
 ```
 
-Point it at a Supabase project with `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_PUBLISHABLE_KEY` (see `.env.example`).
+It comes up against the project it is built for. To point it somewhere else —
+a preview, a second project — set `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY` (see `.env.example`); both default to the
+project named in `src/lib/erp.ts`, because a build that can only read them
+from its host is a build that can be published unable to talk to anything, and
+was.
+
+The application is published by hand from Lovable, which builds it to a
+Cloudflare Worker; the schema is deployed separately by `deploy.yml` on merge.
+`supabase/ops/README.md` carries both routes.
 
 ### The database
 

@@ -17,16 +17,76 @@ import { createClient, type Session } from "@supabase/supabase-js";
  * the point rather than an omission.
  */
 
-const url = import.meta.env["VITE_SUPABASE_URL"] as string | undefined;
-const key = import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined;
+/**
+ * The project this build talks to when the host names no other.
+ *
+ * These are here rather than only in the environment because a build that
+ * reads only the environment is a build that can arrive unconfigured, and one
+ * did: the values lived in a tracked `.env` until it left version control, and
+ * from then on every publish shipped an application whose first screen told the
+ * visitor to set two variables. The application is published by hand from
+ * Lovable and the values are inlined at build time, so nothing downstream could
+ * repair it either.
+ *
+ * The publishable key is public by design. Supabase ships it in the client
+ * bundle of every application built on it — this one included, before and after
+ * this change — and it is the key the browser presents on every request. On
+ * this project it opens nothing on its own: `anon` holds EXECUTE on no function
+ * in any product schema (`erp.assert_no_public_execute`), the `erp` schema is
+ * not exposed to PostgREST at all, and every table is behind row-level
+ * security. What it buys is that every build starts connected — Lovable's
+ * publish, the build CI runs with no environment at all, a fresh clone, a fork.
+ *
+ * The environment still wins where it is set, which is how a preview or a
+ * second project is pointed elsewhere without touching the source.
+ */
+const DEFAULT_SUPABASE_URL = "https://xpzffnnhnhcqyjqcueja.supabase.co";
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwemZmbm5obmhjcXlqcWN1ZWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMDIyNDIsImV4cCI6MjEwMzU3ODI0Mn0.PKnEUURM8CTNVkBjgA_pCoQJheGmL_6I7UD1-5Uywjk";
+
+const url = (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) || DEFAULT_SUPABASE_URL;
+const key =
+  (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ||
+  DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+
+/** The project this build talks to. Read these rather than the variables. */
+export const supabaseUrl = url;
+export const supabasePublishableKey = key;
 
 export const isConfigured = Boolean(url && key);
 
 export const supabase = isConfigured
-  ? createClient(url!, key!, {
+  ? createClient(url, key, {
       auth: { persistSession: true, autoRefreshToken: true },
     })
   : null;
+
+/**
+ * Whether this browser is holding a session, without waiting to ask.
+ *
+ * `supabase.auth.getSession()` is asynchronous, so the first paint cannot know
+ * whether anybody is signed in; the root route needs to, because it shows the
+ * product page to a visitor and the desk to a person who works here, and
+ * flashing one before the other is worse than either. supabase-js persists the
+ * session under a key derived from the project ref, so its presence is a good
+ * enough hint to render against — and only a hint: the real check still runs
+ * and still decides.
+ *
+ * False on the server, where there is no storage and no session, so the public
+ * page is what gets rendered into the HTML.
+ */
+export function hasStoredSession(): boolean {
+  if (typeof window === "undefined") return false;
+  const ref = url.match(/^https?:\/\/([^.]+)\./)?.[1];
+  if (!ref) return false;
+  try {
+    return Boolean(window.localStorage.getItem(`sb-${ref}-auth-token`));
+  } catch {
+    // A private window, or site data blocked. Treated as signed out: the
+    // visitor sees the public page and can still sign in from it.
+    return false;
+  }
+}
 
 export type ErpEntity = { id: string; code: string; name: string };
 export type ErpSite = { id: string; code: string; name: string; entity_id: string | null };

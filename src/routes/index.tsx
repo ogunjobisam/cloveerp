@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Navigate, createFileRoute } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 
 import { FirstRun } from "../components/erp/first-run";
 import { Gate } from "../components/erp/gate";
+import { hasStoredSession } from "../lib/erp";
 import { Launchpad } from "../components/erp/launchpad";
 import { useErpSession } from "../components/erp/session-context";
 import { PageHeader, Prose } from "../components/erp/page";
@@ -10,13 +11,19 @@ import { SeedDemoAction } from "../components/erp/seed";
 import { useT } from "../lib/i18n";
 
 /**
- * The Work area's home.
+ * The Work area's home — and, for anybody else, the front door.
  *
  * Three things, in the order a person needs them: who and where they are,
  * their first steps if they have any left, and the flow of screens they may
  * open. The scope selectors live in the header, the permission list lives on
  * the permissions screen, and the settings live in their own area — none of
  * them is the reason somebody opens the product in the morning.
+ *
+ * A visitor with no session is not here for any of that, and used to get a
+ * password box — or, on a build with no project configured, a message naming
+ * two environment variables. They go to the product page instead, which needs
+ * no database and is what the domain should answer with. Sign-in has its own
+ * route now, linked from there.
  */
 
 export const Route = createFileRoute("/")({
@@ -26,28 +33,37 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Sign in to Clove ERP: your organisation's finance, inventory and operations on one append-only, tenant-isolated ledger, with every action audited.",
+          "Your organisation's finance, inventory and operations on one append-only, tenant-isolated ledger, with every action audited.",
       },
-      { property: "og:title", content: "Clove ERP — Your work, one governed ledger" },
-      {
-        property: "og:description",
-        content:
-          "Finance, inventory and operations on one append-only, tenant-isolated ledger, with every action audited.",
-      },
-      { property: "og:type", content: "website" },
-      { property: "og:url", content: "https://cloveerp.com/" },
-      { property: "og:image", content: "https://cloveerp.com/og-image.png" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:image", content: "https://cloveerp.com/og-image.png" },
+      // Neither a page to index nor a page to share: for a visitor this is a
+      // redirect to the product page, and for everybody else it is their own
+      // desk behind the gate. The product page carries the description, the
+      // card and the canonical URL a link should resolve to.
+      { name: "robots", content: "noindex, follow" },
     ],
-    links: [{ rel: "canonical", href: "https://cloveerp.com/" }],
+    links: [{ rel: "canonical", href: "https://cloveerp.com/product" }],
   }),
-  component: () => (
+  component: Home,
+});
+
+/**
+ * The desk for somebody signed in, the product page for everybody else.
+ *
+ * `hasStoredSession()` is read rather than awaited because the decision has to
+ * be made on the first paint: waiting would show a spinner to a visitor and a
+ * marketing page to a colleague, each for a moment, and both are wrong. It is
+ * false on the server, so the HTML at `/` is the redirect and never a second
+ * copy of `/product` for a crawler to index. Whether the stored session is any
+ * good is still `Gate`'s question, and it still asks it.
+ */
+function Home() {
+  if (!hasStoredSession()) return <Navigate to="/product" replace />;
+  return (
     <Gate>
       <Overview />
     </Gate>
-  ),
-});
+  );
+}
 
 /**
  * One-click exploration. Seeding creates a demo tenant — entities, sites, a

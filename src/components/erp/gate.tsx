@@ -79,7 +79,14 @@ function GoogleGlyph() {
   );
 }
 
-function SignIn() {
+/**
+ * The sign-in screen, on its own so `/signin` can be a place you go.
+ *
+ * Inside `Gate` it needs no `onSignedIn`: the auth state changes, the gate
+ * re-renders, and the route the person asked for is behind it. On its own
+ * route there is nothing watching, so the caller says where to go next.
+ */
+export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +98,7 @@ function SignIn() {
     setError(null);
     const { error } = await supabase!.auth.signInWithPassword({ email, password });
     if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
+    else onSignedIn?.();
     setBusy(false);
   }
 
