@@ -245,6 +245,19 @@ jobs:
         # notices the two hundred and second.
         run: supabase/ci/screen_strings.sh
 
+      - name: The documents quote the database
+        # README.md, docs/ARCHITECTURE.md and the Word document carry figures
+        # — migrations, doors, tables, suites, the Part 5 totals — inside
+        # markers that docs/build_counts.sh reads back from the built database.
+        # A number nothing checks is a number that drifts: the architecture
+        # document said "49 migrations" against 259 on disk for a week. The
+        # Word document is rebuilt from the same figures and compared
+        # paragraph by paragraph with the one committed.
+        run: |
+          docs/build_counts.sh --check
+          pip install --quiet python-docx
+          python3 docs/what_has_been_built/build.py --check
+
       - name: The generators are idempotent
         # Row security, append-only guards, attribution, audit coverage and
         # execute grants are all GENERATED from the registers, and every migration ends by
