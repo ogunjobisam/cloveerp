@@ -40,3 +40,10 @@ supabase/.temp/
 .env
 .env.*
 !.env.example
+
+# Deno writes this when anybody runs the Edge Function typecheck locally
+# (`deno check --import-map supabase/functions/import_map.json ...`). It is not
+# tracked deliberately: the build resolves the same import map on a runner
+# whose Deno version is its own, and a lock file recorded here would fail that
+# check on an integrity mismatch rather than catching anything.
+deno.lock
