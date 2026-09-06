@@ -229,6 +229,14 @@ const zeroIsGood = (n: number, label: string) => ({
 export const INVENTORY: ModuleDef = {
   inquiries: [
     {
+      label: "Stock policies",
+      description:
+        "How a handling unit is identified and counted, by product class, by site or by the step it is built at.",
+      permission: "inventory.read",
+      fn: "erp_container_identity_policies",
+      fields: [],
+    },
+    {
       label: "Available to promise",
       description: "What can still be committed for one product at one site, on a date.",
       permission: "inventory.read",
@@ -278,6 +286,98 @@ export const INVENTORY: ModuleDef = {
   permission: "inventory.read",
   group: "move",
   actions: [
+    {
+      label: "Consume consigned stock",
+      description:
+        "Take a supplier's consigned stock into the company's ownership where it stands. Costed at the consigned price and posted against goods received not invoiced, because the supplier will invoice what was used.",
+      permission: "inventory.adjust",
+      fn: "erp_consume_consignment",
+      fields: [
+        pickItem(),
+        pickSite(),
+        pickLocation(),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        pickParty("supplier", "p_supplier_party_id", "Supplier who owns it", true),
+        pickBatch("p_batch_id", "Batch (if controlled)"),
+        reason("p_reason", "What it was used for", false),
+      ],
+      invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_batches"],
+    },
+    {
+      label: "Hand stock to another keeper",
+      description:
+        "Give stock the company keeps into someone else's keeping — a third-party warehouse, a contract manufacturer — where it stands. The owner and the valuation do not move.",
+      permission: "inventory.adjust",
+      fn: "erp_hand_over_custody",
+      fields: [
+        pickItem(),
+        pickSite(),
+        pickLocation(),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        pickParty(undefined, "p_keeper_party_id", "Who takes it into their keeping", true),
+        pickBatch("p_batch_id", "Batch (if controlled)"),
+        reason("p_reason", "Why", false),
+      ],
+      invalidates: ["erp_stock_health", "erp_count_tasks"],
+    },
+    {
+      label: "Propose an identity policy",
+      description:
+        "How handling units are identified and counted, for a product class or a site. Proposed as a change, so it is approved and promoted like any other configuration.",
+      permission: "administration.configure",
+      fn: "erp_propose_identity_policy",
+      fields: [
+        { kind: "text", name: "p_code", label: "Code", required: true },
+        { kind: "text", name: "p_name", label: "Name", required: true },
+        { kind: "text", name: "p_item_class", label: "Product class (blank for all)" },
+        { kind: "text", name: "p_site_code", label: "Site code (blank for all)" },
+        { kind: "text", name: "p_device_task_code", label: "Device step (blank for all)" },
+        {
+          kind: "choice",
+          name: "p_identity_level",
+          label: "Identified at",
+          required: true,
+          choices: ["none", "unit", "case", "carton", "pallet", "master_pallet"].map((v) => ({
+            value: v,
+            label: v,
+          })),
+        },
+        {
+          kind: "choice",
+          name: "p_count_method",
+          label: "Counted",
+          required: true,
+          choices: [
+            { value: "by_unit", label: "By unit" },
+            { value: "by_container", label: "By container" },
+            { value: "hybrid", label: "By container where one exists, else by unit" },
+          ],
+        },
+        { kind: "date", name: "p_effective_from", label: "In force from" },
+        { kind: "text", name: "p_change_set_id", label: "Change id (blank for a new one)" },
+      ],
+      invalidates: ["erp_container_identity_policies", "erp_change_sets"],
+    },
+    {
+      label: "Propose how stock is chosen",
+      description:
+        "The allocation policy for a company or one of its sites: which stock a promise takes first. Proposed as a change like any other configuration.",
+      permission: "administration.configure",
+      fn: "erp_propose_allocation_policy",
+      mapArgs: argsWith({ json: ["p_value"] }),
+      fields: [
+        { kind: "text", name: "p_entity_code", label: "Company code", required: true },
+        { kind: "text", name: "p_site_code", label: "Site code (blank for the whole company)" },
+        {
+          kind: "text",
+          name: "p_value",
+          label: 'The policy, as configuration — {"default": "fifo"}',
+          required: true,
+        },
+        { kind: "text", name: "p_change_set_id", label: "Change id (blank for a new one)" },
+      ],
+      invalidates: ["erp_change_sets"],
+    },
     {
       label: "Commit an allocation",
       description:
@@ -477,6 +577,9 @@ export const INVENTORY: ModuleDef = {
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         reason("p_reason", "Reason", true),
         pickBatch("p_batch_id", "Batch (if controlled)"),
+        // Blank means the company's own stock. A supplier's consigned position
+        // is written off as the supplier's: no cost, no journal.
+        pickParty(undefined, "p_owner_party_id", "Owner (blank for the company)", false),
       ],
       invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_stock_ageing", "erp_batches"],
     },

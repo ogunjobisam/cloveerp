@@ -100,6 +100,16 @@ type Health = {
   oldest_pending_minutes: number | null;
 };
 
+type ChannelRow = {
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+  settings: Record<string, unknown>;
+  credential_ref: string | null;
+  is_enabled: boolean;
+};
+
 const CHANNELS = ["email", "sms", "push", "webhook"];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const FIELD = `${TOUCH} mt-1 w-full rounded-md border border-input bg-background px-3 text-sm`;
@@ -203,10 +213,14 @@ function Notifications() {
                     name: "p_channel_kind",
                     label: "Channel",
                     required: true,
-                    choices: ["in_app", "email", "sms", "push", "webhook"].map((s) => ({
-                      value: s,
-                      label: s,
-                    })),
+                    // sms and push are not offered: the product has no such
+                    // channel, and the door refuses them by name rather than
+                    // marking a message sent that nothing sent.
+                    choices: [
+                      { value: "in_app", label: "In app" },
+                      { value: "email", label: "Email" },
+                      { value: "webhook", label: "Webhook" },
+                    ],
                   },
                   { kind: "text", name: "p_template_code", label: "Template code" },
                   { kind: "number", name: "p_digest_minutes", label: "Digest every (minutes)" },
@@ -250,6 +264,98 @@ function Notifications() {
               },
             ]}
           />
+
+          <ActionBar
+            title={ui("Channels")}
+            note={ui(
+              "Where a message goes when it is not in-app: an email sender, or a webhook that posts to a chat service. A webhook names its URL here and its credential as a reference, never the credential itself.",
+            )}
+            actions={[
+              {
+                label: "Configure a channel",
+                permission: "administration.configure",
+                fn: "erp_upsert_notification_channel",
+                mapArgs: (values: Record<string, string>) => ({
+                  p_code: values["p_code"],
+                  p_name: values["p_name"],
+                  p_kind: values["p_kind"],
+                  p_settings: values["p_url"] ? { url: values["p_url"] } : {},
+                  p_credential_ref: values["p_credential_ref"] || null,
+                  p_is_enabled: values["p_is_enabled"] !== "false",
+                }),
+                fields: [
+                  { kind: "text", name: "p_code", label: "Code", required: true },
+                  { kind: "text", name: "p_name", label: "Name", required: true },
+                  {
+                    kind: "choice",
+                    name: "p_kind",
+                    label: "Kind",
+                    required: true,
+                    choices: [
+                      { value: "email", label: "Email" },
+                      { value: "webhook", label: "Webhook" },
+                    ],
+                  },
+                  {
+                    kind: "text",
+                    name: "p_url",
+                    label: "Where the post goes (webhook only)",
+                    hint: "The full https URL. A token in the URL is a credential; put it in the reference below instead.",
+                  },
+                  {
+                    kind: "text",
+                    name: "p_credential_ref",
+                    label: "Credential reference",
+                    hint: "A pointer into a secret store, such as env://OPS_CHAT_TOKEN. Never the secret.",
+                  },
+                  {
+                    kind: "choice",
+                    name: "p_is_enabled",
+                    label: "Enabled",
+                    boolean: true,
+                    choices: [
+                      { value: "true", label: "Yes" },
+                      { value: "false", label: "No" },
+                    ],
+                  },
+                ],
+                invalidates: ["erp_notification_channels"],
+              },
+            ]}
+          />
+
+          <DataPanel<ChannelRow>
+            title={ui("Configured channels")}
+            description={ui(
+              "What this organisation has configured. A message routed to a kind with no enabled channel fails with its reason and is delivered in-app instead, so nothing addressed to somebody is lost.",
+            )}
+            fn="erp_notification_channels"
+            empty={ui(
+              "No channel is configured, so only in-app delivery works. Add one under Actions above.",
+            )}
+          >
+            {(rows) => (
+              <Table columns={["Code", "Name", "Kind", "Where", "State"]}>
+                {rows.map((c) => (
+                  <tr key={c.id} className="border-b border-border/50 last:border-0">
+                    <td className="py-2 pr-4 font-mono text-xs">{c.code}</td>
+                    <td className="py-2 pr-4">{c.name}</td>
+                    <td className="py-2 pr-4">{c.kind}</td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground">
+                      {String(c.settings?.["url"] ?? "—")}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {c.is_enabled ? (
+                        <Pill tone="ok">{ui("On")}</Pill>
+                      ) : (
+                        <Pill tone="muted">{ui("Off")}</Pill>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+          </DataPanel>
 
           <DataPanel<RouteRow>
             title={ui("Routes")}
