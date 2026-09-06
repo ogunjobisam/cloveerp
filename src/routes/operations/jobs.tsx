@@ -56,6 +56,7 @@ type Health = {
   in_outage: boolean;
   next_run_at: string | null;
   running: number;
+  queued: number;
   last_outcome: string | null;
   runs_24h: number;
   failures_24h: number;
@@ -214,7 +215,18 @@ function Jobs() {
         emptyAction={<SeedDemoAction />}
       >
         {(rows) => (
-          <Table columns={["Job", "State", "Next run", "Running", "24h runs", "Failed", "Skipped"]}>
+          <Table
+            columns={[
+              "Job",
+              "State",
+              "Next run",
+              "Running",
+              "Queued",
+              "24h runs",
+              "Failed",
+              "Skipped",
+            ]}
+          >
             {rows.map((r) => (
               <tr key={r.job_code} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{r.job_code}</td>
@@ -235,6 +247,10 @@ function Jobs() {
                   {r.next_run_at ? new Date(r.next_run_at).toLocaleString() : "—"}
                 </td>
                 <td className="py-2 pr-4">{r.running}</td>
+                {/* A run somebody asked for, waiting for an engine to take it. */}
+                <td className="py-2 pr-4">
+                  {r.queued > 0 ? <Pill tone="warn">{r.queued}</Pill> : "0"}
+                </td>
                 <td className="py-2 pr-4">{r.runs_24h}</td>
                 <td className="py-2 pr-4">
                   {r.failures_24h > 0 ? <Pill tone="warn">{r.failures_24h}</Pill> : "0"}

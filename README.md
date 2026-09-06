@@ -22,12 +22,12 @@ and checked on every push; the words around them are written by a person.
 |                        |                                                                                                                                                                                                                                        |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Specification          | <!-- count:spec_version -->v1.6<!-- /count -->, Parts 1–23; every product decision D1–D<!-- count:product_decisions -->41<!-- /count --> registered and bound to the check that enforces it                                            |
-| Schema                 | <!-- count:migrations -->269<!-- /count --> migrations, <!-- count:erp_tables -->238<!-- /count --> tenant tables, <!-- count:ref_tables -->69<!-- /count --> product-content tables, <!-- count:meta_tables -->63<!-- /count --> platform tables |
-| Public API             | <!-- count:doors -->543<!-- /count --> doors, every one with a screen or a registered caller; <!-- count:doors_pending_screen -->2<!-- /count --> waiting for a screen                                                                 |
+| Schema                 | <!-- count:migrations -->277<!-- /count --> migrations, <!-- count:erp_tables -->239<!-- /count --> tenant tables, <!-- count:ref_tables -->72<!-- /count --> product-content tables, <!-- count:meta_tables -->64<!-- /count --> platform tables |
+| Public API             | <!-- count:doors -->553<!-- /count --> doors, every one with a screen or a registered caller; <!-- count:doors_pending_screen -->2<!-- /count --> waiting for a screen                                                                 |
 | Part 5 capabilities    | <!-- count:part5_built -->96<!-- /count --> built, <!-- count:part5_partial -->0<!-- /count --> partial, <!-- count:part5_absent -->1<!-- /count --> absent by a recorded decision, of <!-- count:part5_total -->97<!-- /count -->       |
-| Verification           | <!-- count:catalogue_checks -->180<!-- /count --> catalogue checks run from an empty database on every push: <!-- count:assertions -->89<!-- /count --> structural assertions, <!-- count:suites -->104<!-- /count --> adversarial suites |
+| Verification           | <!-- count:catalogue_checks -->188<!-- /count --> catalogue checks run from an empty database on every push: <!-- count:assertions -->89<!-- /count --> structural assertions, <!-- count:suites -->112<!-- /count --> adversarial suites |
 | Rehearsed on every push | A queue drained in anger, a worker killed mid-dispatch and an endpoint that never answers, an incident declared and communicated, every door named by the application, every screen string renameable, the documents' figures         |
-| Languages              | English and a German core pack (<!-- count:de_strings -->558<!-- /count --> strings) with fallback; <!-- count:legislation_packs -->4<!-- /count --> legislation packs with provenance                                                    |
+| Languages              | English and a German core pack (<!-- count:de_strings -->561<!-- /count --> strings) with fallback; <!-- count:legislation_packs -->4<!-- /count --> legislation packs with provenance                                                    |
 
 ## Running it
 
@@ -36,8 +36,16 @@ bun install
 bun run dev
 ```
 
-Point it at a Supabase project with `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_PUBLISHABLE_KEY` (see `.env.example`).
+It comes up against the project it is built for. To point it somewhere else —
+a preview, a second project — set `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY` (see `.env.example`); both default to the
+project named in `src/lib/erp.ts`, because a build that can only read them
+from its host is a build that can be published unable to talk to anything, and
+was.
+
+The application is published by hand from Lovable, which builds it to a
+Cloudflare Worker; the schema is deployed separately by `deploy.yml` on merge.
+`supabase/ops/README.md` carries both routes.
 
 ### The database
 

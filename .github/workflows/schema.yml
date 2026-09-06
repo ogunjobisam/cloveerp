@@ -348,6 +348,23 @@ jobs:
           bun run test
           bun run build
 
+      - name: The build it produced can reach a project
+        # This job builds with no VITE_* set, which is exactly the state the
+        # published application shipped in for a day: green here, and a first
+        # screen telling the visitor to set two environment variables. A build
+        # is only a build if the thing it produces can talk to something, so
+        # the artefact is read rather than trusted.
+        run: |
+          set -euo pipefail
+          ref="$(grep -oE 'https://[a-z0-9]+\.supabase\.co' src/lib/erp.ts | head -n 1 | sed -E 's#https://([a-z0-9]+)\..*#\1#')"
+          test -n "$ref" || { echo "src/lib/erp.ts names no Supabase project"; exit 1; }
+          if grep -rql "$ref" .output/public/assets; then
+            echo "the built bundle names project $ref"
+          else
+            echo "the built bundle names no Supabase project: it would render 'Not connected to a project'"
+            exit 1
+          fi
+
       - name: The Edge Functions build
         # deno check resolves the whole import graph and typechecks it, which
         # is what the Edge Runtime will do to it. This is the check that was

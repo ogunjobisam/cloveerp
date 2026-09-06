@@ -2,6 +2,7 @@ import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { resolveCredential } from "./config.ts";
 import { asPrincipal, type Sql } from "./db.ts";
 import { drainEmail } from "./email.ts";
+import { drainWebhooks } from "./webhook.ts";
 import { handlerFor, registeredCodes } from "./handlers.ts";
 
 export type DrainReport = {
@@ -21,9 +22,19 @@ export type DrainReport = {
   emailClaimed: number;
   emailSent: number;
   emailFailed: number;
+  /** Webhook notifications: dispatch queues them, this worker posts them. */
+  webhooksClaimed: number;
+  webhooksSent: number;
+  webhooksFailed: number;
   tenantsPurged: number;
   /** What erp.reclaim_stranded_work() returned to the queues before this pass claimed anything. */
-  reclaimed: { commands: number; runs: number; messages: number; email: number };
+  reclaimed: {
+    commands: number;
+    runs: number;
+    messages: number;
+    email: number;
+    webhook: number;
+  };
 };
 
 const empty = (): DrainReport => ({
@@ -41,8 +52,11 @@ const empty = (): DrainReport => ({
   emailClaimed: 0,
   emailSent: 0,
   emailFailed: 0,
+  webhooksClaimed: 0,
+  webhooksSent: 0,
+  webhooksFailed: 0,
   tenantsPurged: 0,
-  reclaimed: { commands: 0, runs: 0, messages: 0, email: 0 },
+  reclaimed: { commands: 0, runs: 0, messages: 0, email: 0, webhook: 0 },
 });
 
 /** The counterpart answered, and said no. */
@@ -441,6 +455,7 @@ async function reclaimStranded(sql: Sql, b: TenantBinding, out: DrainReport) {
   out.reclaimed.runs += Number(r["runs"] ?? 0);
   out.reclaimed.messages += Number(r["messages"] ?? 0);
   out.reclaimed.email += Number(r["email"] ?? 0);
+  out.reclaimed.webhook += Number(r["webhook"] ?? 0);
 }
 
 export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainReport> {
@@ -453,6 +468,7 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
     await drainOutbox(sql, binding, cfg, out);
     await drainCommands(sql, binding, cfg, out);
     await drainEmail(sql, binding, cfg, out);
+    await drainWebhooks(sql, binding, cfg, out);
   }
   // The evidence. A pass that drained nothing is still a pass, and the console
   // reads the last one to say whether anybody is draining at all; a worker that

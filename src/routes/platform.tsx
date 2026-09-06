@@ -201,10 +201,35 @@ function PlatformConsole() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["erp_platform_me"] }),
   });
 
-  if (!isConfigured || !ready) {
+  // Two different things, and folding them together left the console spinning
+  // for ever on a build with no project rather than saying so once.
+  if (!isConfigured) {
     return (
       <Frame>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <Card
+          title="Not connected to a project"
+          icon={<ShieldCheck className="size-4 text-primary" />}
+        >
+          <p className="text-sm text-muted-foreground">
+            This build has no Supabase project configured, so there is nothing for the console to
+            read. Set{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">VITE_SUPABASE_URL</code> and{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+              VITE_SUPABASE_PUBLISHABLE_KEY
+            </code>{" "}
+            in the host and publish again.
+          </p>
+        </Card>
+      </Frame>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <Frame>
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading…
+        </p>
       </Frame>
     );
   }
@@ -215,7 +240,7 @@ function PlatformConsole() {
         <Card title="Sign in first" icon={<ShieldCheck className="size-4 text-primary" />}>
           <p className="text-sm text-muted-foreground">
             The platform console is only offered to signed-in platform staff.{" "}
-            <Link to="/" className="underline underline-offset-2">
+            <Link to="/signin" className="underline underline-offset-2">
               Sign in
             </Link>{" "}
             and come back.

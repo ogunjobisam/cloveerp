@@ -101,8 +101,17 @@ export const pickItem = (name = "p_item_id", label = "Product"): Field => ({
   options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
 });
 
+/**
+ * A business partner, optionally of one role.
+ *
+ * The role is optional because not every party a screen needs plays one of
+ * them: the keeper stock is handed to, or the owner a write-off names, is
+ * whoever it is — a provider, a contract manufacturer, the company itself.
+ * Passing no role lists them all, which is what erp_parties() does with no
+ * p_role_kind rather than with an empty one.
+ */
 export const pickParty = (
-  roleKind: string,
+  roleKind?: string,
   name = "p_party_id",
   label = "Business partner",
   required = true,
@@ -113,7 +122,7 @@ export const pickParty = (
   required,
   options: {
     fn: "erp_parties",
-    args: { p_role_kind: roleKind },
+    ...(roleKind ? { args: { p_role_kind: roleKind } } : {}),
     value: "party_id",
     label: ["code", "name"],
   },

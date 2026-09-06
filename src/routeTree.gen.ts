@@ -18,6 +18,7 @@ import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SigninRouteImport } from './routes/signin'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AdministrationAccessibilityRouteImport } from './routes/administration/accessibility'
 import { Route as AdministrationAdoptionRouteImport } from './routes/administration/adoption'
@@ -104,6 +105,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -337,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
@@ -390,6 +397,7 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
@@ -444,6 +452,7 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/administration/accessibility': typeof AdministrationAccessibilityRoute
   '/administration/adoption': typeof AdministrationAdoptionRoute
@@ -499,6 +508,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/settings'
+    | '/signin'
     | '/sitemap.xml'
     | '/administration/accessibility'
     | '/administration/adoption'
@@ -552,6 +562,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/settings'
+    | '/signin'
     | '/sitemap.xml'
     | '/administration/accessibility'
     | '/administration/adoption'
@@ -605,6 +616,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/settings'
+    | '/signin'
     | '/sitemap.xml'
     | '/administration/accessibility'
     | '/administration/adoption'
@@ -659,6 +671,7 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
+  SigninRoute: typeof SigninRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AdministrationAccessibilityRoute: typeof AdministrationAccessibilityRoute
   AdministrationAdoptionRoute: typeof AdministrationAdoptionRoute
@@ -766,6 +779,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sitemap.xml': {
@@ -1075,6 +1095,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
+  SigninRoute: SigninRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   AdministrationAccessibilityRoute: AdministrationAccessibilityRoute,
   AdministrationAdoptionRoute: AdministrationAdoptionRoute,

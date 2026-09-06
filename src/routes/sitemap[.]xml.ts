@@ -13,9 +13,13 @@ interface SitemapEntry {
  * Only the pages a visitor can reach without signing in belong here. Every
  * other route sits behind the tenant gate, so listing it would advertise a
  * sign-in screen rather than a page.
+ *
+ * `/` is not one of them, which is what this comment always claimed and the
+ * list did not: the root is the desk for somebody signed in and a redirect to
+ * the product page for everybody else, so listing it offered a crawler either
+ * a sign-in screen or a second copy of a page already here.
  */
 const entries: SitemapEntry[] = [
-  { path: "/", changefreq: "weekly", priority: "0.8" },
   { path: "/product", changefreq: "weekly", priority: "1.0" },
   { path: "/contact", changefreq: "monthly", priority: "0.7" },
 ];

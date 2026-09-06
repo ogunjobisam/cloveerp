@@ -9,7 +9,7 @@ import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
-import { Pill, Table } from "../../components/erp/panel";
+import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
 
 /**
@@ -26,6 +26,16 @@ import { callErp, hasPermission } from "../../lib/erp";
  * matter what this screen offers. The screen's job is to make the sequence
  * visible, not to shorten it.
  */
+
+/** One row of erp_module_installations(): what this organisation holds. */
+type ModuleInstallation = {
+  install_code: string;
+  module_code: string;
+  installer_version: number;
+  current_version: number;
+  upgrade_available: boolean;
+  installed_at: string | null;
+};
 
 export const Route = createFileRoute("/administration/configuration")({
   head: () => ({
@@ -242,6 +252,73 @@ function Configuration() {
       ) : (
         <ChangeSetsPanel sets={data ?? []} onDone={invalidate} />
       )}
+
+      <DataPanel<ModuleInstallation>
+        title="Installed modules"
+        description="What this organisation has installed, the version it holds, and whether the product ships a later one. An organisation configured before an installer changed keeps what it was given until it is upgraded."
+        fn="erp_module_installations"
+        empty="No module has been installed for this organisation yet."
+      >
+        {(rows) => (
+          <Table columns={["Module", "Installed version", "Current", "Upgrade", "Installed"]}>
+            {rows.map((r) => (
+              <tr key={r.install_code} className="border-b border-border/50 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{r.install_code}</td>
+                <td className="py-2 pr-4">{r.installer_version}</td>
+                <td className="py-2 pr-4">{r.current_version}</td>
+                <td className="py-2 pr-4">
+                  {r.upgrade_available ? (
+                    <Pill tone="warn">Available</Pill>
+                  ) : (
+                    <span className="text-muted-foreground">Up to date</span>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.installed_at ? new Date(r.installed_at).toLocaleDateString() : "—"}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <ActionBar
+        title="Module upgrades"
+        note="What a later version of an installer would add that this organisation does not hold. The upgrade is a change like any other: promoted at once where the environment is not live, and left for a second administrator where it is."
+        actions={[
+          {
+            label: "What an upgrade would add",
+            permission: "administration.read",
+            fn: "erp_module_upgrade_plan",
+            fields: [
+              {
+                kind: "text",
+                name: "p_install_code",
+                label: "Module",
+                required: true,
+                hint: "The install code from the table above, such as inventory-operations.",
+              },
+            ],
+          },
+          {
+            label: "Upgrade a module's configuration",
+            description:
+              "Raises the change that brings this organisation up to the installer's current version.",
+            permission: "administration.configure",
+            fn: "erp_upgrade_module_configuration",
+            fields: [
+              {
+                kind: "text",
+                name: "p_install_code",
+                label: "Module",
+                required: true,
+                hint: "The install code from the table above.",
+              },
+            ],
+            invalidates: ["erp_module_installations", "erp_change_sets"],
+          },
+        ]}
+      />
 
       <ActionBar
         title="Changes and snapshots"
