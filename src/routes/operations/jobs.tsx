@@ -62,6 +62,22 @@ type Health = {
   skips_24h: number;
 };
 
+type Evidence = {
+  queue: string;
+  last_claimed_at: string | null;
+  last_settled_at: string | null;
+  worker: string | null;
+  detail: string | null;
+};
+
+const QUEUE_LABEL: Record<string, string> = {
+  jobs: "Scheduled jobs",
+  commands: "Outbound commands",
+  messages: "Integration messages",
+  email: "Email",
+  platform: "The platform's last pass",
+};
+
 function Jobs() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -224,6 +240,31 @@ function Jobs() {
                   {r.failures_24h > 0 ? <Pill tone="warn">{r.failures_24h}</Pill> : "0"}
                 </td>
                 <td className="py-2 pr-4 text-muted-foreground">{r.skips_24h}</td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<Evidence>
+        title="Dispatch evidence"
+        description="The last time each queue was claimed and settled, by which worker, and when the platform last drained at all. A queue nobody has claimed is a queue nobody is draining."
+        fn="erp_dispatch_evidence"
+        empty="No queue has reported yet."
+      >
+        {(rows) => (
+          <Table columns={["Queue", "Last claimed", "Last settled", "Worker", "Detail"]}>
+            {rows.map((r) => (
+              <tr key={r.queue} className="border-b border-border/50 last:border-0">
+                <td className="py-2 pr-4">{QUEUE_LABEL[r.queue] ?? r.queue}</td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.last_claimed_at ? new Date(r.last_claimed_at).toLocaleString() : "never"}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.last_settled_at ? new Date(r.last_settled_at).toLocaleString() : "never"}
+                </td>
+                <td className="py-2 pr-4 font-mono text-xs">{r.worker ?? "—"}</td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">{r.detail ?? ""}</td>
               </tr>
             ))}
           </Table>

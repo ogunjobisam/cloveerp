@@ -15,7 +15,23 @@
  * reads on a screen, so it must never carry a credential.
  */
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+/**
+ * Where the request goes. Resend's API, unless the environment names another
+ * endpoint — which only the build does, pointing it at a stub that records
+ * the request and answers with an id, so "sent" can be proved without a key.
+ * Read from whichever runtime is hosting this file: Bun and Node carry
+ * process.env, Deno carries Deno.env.
+ */
+function resendEndpoint(): string {
+  const g = globalThis as unknown as {
+    process?: { env?: Record<string, string | undefined> };
+    Deno?: { env?: { get(name: string): string | undefined } };
+  };
+  const override = g.process?.env?.["CLOVEERP_RESEND_ENDPOINT"] ?? g.Deno?.env?.get("CLOVEERP_RESEND_ENDPOINT");
+  return override && override.trim().length > 0 ? override.trim() : "https://api.resend.com/emails";
+}
+
+const RESEND_ENDPOINT = resendEndpoint();
 
 export type EmailRow = {
   id: string;

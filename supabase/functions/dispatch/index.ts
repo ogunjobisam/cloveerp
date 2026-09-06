@@ -35,8 +35,19 @@ Deno.serve(async (req: Request) => {
   // A scheduler invoking this is the only legitimate caller. Requiring a shared
   // secret keeps a public function URL from becoming a way for anyone to drive
   // the outbox — the work itself is all gated, but the request rate is not.
+  //
+  // Unconditional. The first version stood down when the secret was unset,
+  // which made "nobody configured it" indistinguishable from "anyone may call
+  // it"; a function deployed without its secret now refuses every request and
+  // says why, rather than serving the outbox to the internet.
   const expected = Deno.env.get("CLOVEERP_DISPATCH_SECRET");
-  if (expected && req.headers.get("x-dispatch-secret") !== expected) {
+  if (!expected) {
+    return new Response(
+      JSON.stringify({ error: "CLOVEERP_DISPATCH_SECRET is not set; the dispatch function refuses until it is" }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
+  if (req.headers.get("x-dispatch-secret") !== expected) {
     return new Response("forbidden", { status: 403 });
   }
 

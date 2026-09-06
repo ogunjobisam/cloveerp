@@ -33,19 +33,28 @@ async function main() {
       `systems: ${cfg.systems.join(", ") || "(none)"}`,
   );
 
+  // CLOVEERP_ONCE=1: one pass, then exit. What the build runs to prove a queue
+  // drains in anger, and what an operator runs by hand to see one pass happen.
+  const once = process.env["CLOVEERP_ONCE"] === "1";
+
   while (!stopping) {
     try {
       const report = await drainOnce(sql, cfg);
       const did =
         report.jobsClaimed + report.messagesClaimed + report.commandsClaimed +
-          report.tenantsPurged >
+          report.emailClaimed + report.tenantsPurged >
         0;
-      if (did) console.log(`[clove-erp] ${JSON.stringify(report)}`);
+      if (did || once) console.log(`[clove-erp] ${JSON.stringify(report)}`);
     } catch (err) {
       // A pass that throws is this process failing, not the work failing —
       // anything claimed keeps its lease and is reclaimed by the database.
       console.error(`[clove-erp] pass failed: ${(err as Error).message}`);
+      if (once) {
+        await sql.end({ timeout: 10 });
+        process.exit(1);
+      }
     }
+    if (once) break;
     await new Promise((r) => setTimeout(r, cfg.pollMs));
   }
 
