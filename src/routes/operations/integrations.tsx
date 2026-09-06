@@ -78,6 +78,88 @@ function Integrations() {
             ],
             invalidates: ["erp_integration_backlog", "erp_integration_health"],
           },
+          {
+            label: "Reconcile an ambiguous command",
+            description:
+              "A command that was sent and never answered is ambiguous until a person says what the other side did. The evidence is kept.",
+            permission: "administration.integrate",
+            fn: "erp_reconcile_ambiguous_command",
+            fields: [
+              { kind: "text", name: "p_command_id", label: "Command id", required: true },
+              {
+                kind: "choice",
+                name: "p_outcome",
+                label: "What happened",
+                required: true,
+                choices: [
+                  { value: "succeeded", label: "It succeeded" },
+                  { value: "failed", label: "It failed" },
+                  { value: "requeue", label: "Send it again" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "p_evidence",
+                label: "Evidence",
+                required: true,
+                hint: "What you saw on the other side.",
+              },
+            ],
+            invalidates: ["erp_integration_backlog", "erp_integration_health"],
+          },
+          {
+            label: "Cancel a queued command",
+            permission: "administration.integrate",
+            fn: "erp_cancel_command",
+            fields: [
+              { kind: "text", name: "p_command_id", label: "Command id", required: true },
+              { kind: "text", name: "p_reason", label: "Reason", required: true },
+            ],
+            invalidates: ["erp_integration_backlog", "erp_integration_health"],
+          },
+          {
+            label: "Submit a command",
+            description:
+              "Queues one operation on a connected system for the worker to deliver. A dry run is settled as simulated and sends nothing.",
+            permission: "administration.integrate",
+            fn: "erp_submit_command",
+            fields: [
+              { kind: "text", name: "p_system_code", label: "System", required: true },
+              { kind: "text", name: "p_operation_code", label: "Operation", required: true },
+              {
+                kind: "text",
+                name: "p_payload",
+                label: "Payload",
+                required: true,
+                hint: "JSON, validated against the operation's schema.",
+              },
+              {
+                kind: "choice",
+                name: "p_dry_run",
+                label: "Dry run",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "p_idempotency_key",
+                label: "Idempotency key",
+                hint: "Left empty, one is generated.",
+              },
+            ],
+            mapArgs: (v) => ({
+              p_system_code: v["p_system_code"],
+              p_operation_code: v["p_operation_code"],
+              p_payload: JSON.parse(v["p_payload"] ?? "{}"),
+              p_dry_run: v["p_dry_run"] === "true",
+              p_idempotency_key: v["p_idempotency_key"] || null,
+            }),
+            invalidates: ["erp_integration_backlog", "erp_integration_health"],
+          },
         ]}
       />
 

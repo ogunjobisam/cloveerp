@@ -301,6 +301,22 @@ function Distribution() {
             invalidates: ["erp_report_packs"],
           },
           {
+            label: "Remove a report from a pack",
+            permission: "reporting.define",
+            fn: "erp_remove_report_pack_item",
+            fields: [
+              pickFrom("erp_report_packs", "code", ["code", "name"], "p_pack_code", "Pack"),
+              pickFrom(
+                "erp_report_versions",
+                "report_code",
+                ["report_code", "report_name"],
+                "p_report_code",
+                "Report",
+              ),
+            ],
+            invalidates: ["erp_report_packs"],
+          },
+          {
             label: "Assemble a pack",
             permission: "reporting.export",
             fn: "erp_assemble_report_pack",

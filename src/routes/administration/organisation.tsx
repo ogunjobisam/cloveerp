@@ -234,6 +234,52 @@ function Organisation() {
         note="Departments and membership. A person's primary department at capture is the one that routes their request."
         actions={[
           {
+            label: "Create a company",
+            description:
+              "A further legal entity of this organisation, with its own currency, country, locales and fiscal year. Finance is installed for it separately.",
+            permission: "administration.configure",
+            fn: "erp_create_entity",
+            fields: [
+              { kind: "text", name: "p_code", label: "Code", required: true },
+              { kind: "text", name: "p_name", label: "Name", required: true },
+              { kind: "text", name: "p_legal_name", label: "Legal name" },
+              {
+                kind: "text",
+                name: "p_base_currency",
+                label: "Currency",
+                required: true,
+                hint: "Three-letter code.",
+              },
+              {
+                kind: "text",
+                name: "p_country_code",
+                label: "Country",
+                required: true,
+                hint: "Two-letter code.",
+              },
+              {
+                kind: "text",
+                name: "p_reporting_locale",
+                label: "Reporting locale",
+                hint: "For example en-GB or de.",
+              },
+              { kind: "text", name: "p_document_locale", label: "Document locale" },
+              {
+                kind: "number",
+                name: "p_fiscal_year_start_month",
+                label: "Fiscal year starts in month",
+                hint: "1 to 12.",
+              },
+              {
+                kind: "text",
+                name: "p_parent_code",
+                label: "Parent company code",
+                hint: "For a subsidiary.",
+              },
+            ],
+            invalidates: ["erp_entities"],
+          },
+          {
             label: "Add or amend a department",
             permission: "administration.configure",
             fn: "erp_upsert_department",

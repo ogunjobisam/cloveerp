@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { Field } from "../components/erp/action";
 import type { Column } from "../components/erp/auto";
 import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
@@ -171,6 +172,53 @@ const date = (header: string, field: string): Column<Row> => ({
   cell: (r) => shortDate(r[field]),
 });
 
+/** A yes/no the form sends as a boolean, never as the words. */
+const yesNo = (name: string, label: string, hint?: string): Field => ({
+  kind: "choice",
+  name,
+  label,
+  required: true,
+  boolean: true,
+  choices: [
+    { value: "false", label: "No" },
+    { value: "true", label: "Yes" },
+  ],
+  ...(hint ? { hint } : {}),
+});
+
+/** A company, chosen from the organisation's own. */
+const pickEntity = (name = "p_entity_id", label = "Company", required = true): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_entities", value: "entity_id", label: ["code", "name"] },
+});
+
+/**
+ * The form sends every field as text. Most doors take text; some take a JSON
+ * object or a number, and this rebuilds the arguments with those parsed, so a
+ * door that wants {"demand_multiplier": 2} is not handed the six characters.
+ * An empty field is left out, so the door's own default applies.
+ */
+const argsWith =
+  (spec: { json?: string[]; numbers?: string[]; arrays?: string[] }) =>
+  (values: Record<string, string>): Record<string, unknown> => {
+    const args: Record<string, unknown> = {};
+    for (const [name, raw] of Object.entries(values)) {
+      if (raw === "") continue;
+      if (spec.json?.includes(name)) args[name] = JSON.parse(raw);
+      else if (spec.numbers?.includes(name)) args[name] = Number(raw);
+      else if (spec.arrays?.includes(name))
+        args[name] = raw
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+      else args[name] = raw;
+    }
+    return args;
+  };
+
 /** A count, coloured by whether zero is the good answer. */
 const zeroIsGood = (n: number, label: string) => ({
   value: String(n),
@@ -230,6 +278,149 @@ export const INVENTORY: ModuleDef = {
   permission: "inventory.read",
   group: "move",
   actions: [
+    {
+      label: "Commit an allocation",
+      description:
+        "Turn a reservation into a pick from one location and batch, under the site's allocation policy.",
+      fn: "erp_commit_allocation",
+      fields: [
+        {
+          kind: "text",
+          name: "p_allocation_id",
+          label: "Allocation id",
+          required: true,
+          hint: "The reservation the sales line holds; leave location and batch empty to let the policy choose.",
+        },
+        pickLocation("p_location_id", "Location", false),
+        pickBatch("p_batch_id", "Batch", false),
+      ],
+      invalidates: ["erp_stock_health", "erp_release_sequence"],
+    },
+    {
+      label: "Amend a batch",
+      description: "Change one controlled field of a batch. The old value and the reason are kept.",
+      fn: "erp_amend_batch",
+      fields: [
+        pickBatch("p_batch_id", "Batch", true),
+        {
+          kind: "choice",
+          name: "p_field",
+          label: "Field",
+          required: true,
+          choices: [
+            { value: "expires_on", label: "Expiry date" },
+            { value: "retest_on", label: "Retest date" },
+            { value: "best_before_on", label: "Best before" },
+            { value: "status", label: "Status" },
+            { value: "supplier_lot", label: "Supplier lot" },
+            { value: "origin_country", label: "Country of origin" },
+          ],
+        },
+        {
+          kind: "text",
+          name: "p_value",
+          label: "New value",
+          required: true,
+          hint: "A date as YYYY-MM-DD; a status as its code.",
+        },
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_batches", "erp_expiry_horizon"],
+    },
+    {
+      label: "Create a batch",
+      description: "A batch of a product, with the dates the label carries.",
+      fn: "erp_create_batch",
+      fields: [
+        pickItem(),
+        { kind: "text", name: "p_batch_number", label: "Batch number", required: true },
+        { kind: "date", name: "p_expires_on", label: "Expires on" },
+        { kind: "date", name: "p_manufactured_on", label: "Manufactured on" },
+        pickParty("supplier", "p_supplier_party_id", "Supplier", false),
+      ],
+      invalidates: ["erp_batches"],
+    },
+    {
+      label: "Build a handling unit",
+      description: "A case, carton or pallet at a location, within the site's identity policy.",
+      fn: "erp_create_handling_unit",
+      fields: [
+        pickSite(),
+        pickLocation("p_location_id", "Location", true),
+        {
+          kind: "choice",
+          name: "p_container_type",
+          label: "Kind",
+          required: true,
+          choices: [
+            { value: "case", label: "Case" },
+            { value: "carton", label: "Carton" },
+            { value: "pallet", label: "Pallet" },
+            { value: "master_pallet", label: "Master pallet" },
+          ],
+        },
+        {
+          kind: "text",
+          name: "p_parent_container_id",
+          label: "Inside handling unit",
+          hint: "The id of the coarser unit this one goes into, if any.",
+        },
+        { kind: "text", name: "p_code", label: "Code", hint: "Left empty, one is generated." },
+        {
+          kind: "select",
+          name: "p_item_id",
+          label: "Product",
+          required: false,
+          options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+      ],
+      invalidates: ["erp_stock_health"],
+    },
+    {
+      label: "Set product controls",
+      description:
+        "Batch and serial control, shelf life and quarantine on receipt, for one product.",
+      permission: "master_data.write",
+      fn: "erp_set_item_controls",
+      fields: [
+        pickItem(),
+        yesNo("p_is_batch_controlled", "Batch controlled"),
+        yesNo("p_has_expiry", "Has an expiry date"),
+        { kind: "number", name: "p_shelf_life_days", label: "Shelf life (days)" },
+        {
+          kind: "number",
+          name: "p_min_remaining_shelf_life_days",
+          label: "Minimum remaining shelf life (days)",
+        },
+        yesNo("p_quarantine_on_receipt", "Quarantine on receipt"),
+        yesNo("p_is_serial_controlled", "Serial controlled"),
+      ],
+      invalidates: ["erp_items"],
+    },
+    {
+      label: "Set a standard cost",
+      description: "The standard a product is valued at, at one site, under standard costing.",
+      fn: "erp_set_standard_cost",
+      fields: [
+        pickItem(),
+        pickSite(),
+        {
+          kind: "money",
+          name: "p_unit_cost_minor",
+          label: "Unit cost",
+          currency: "GBP",
+          required: true,
+        },
+        {
+          kind: "text",
+          name: "p_currency",
+          label: "Currency",
+          required: true,
+          hint: "Three-letter code.",
+        },
+      ],
+      invalidates: ["erp_stock_valuation"],
+    },
     {
       label: "Raise count tasks",
       description: "Ask a counting programme for its next set of tasks.",
@@ -552,6 +743,56 @@ export const INVENTORY: ModuleDef = {
 export const FINANCE: ModuleDef = {
   inquiries: [
     {
+      label: "Consolidated trial balance",
+      description:
+        "The worksheet for a group: what the companies hold per account, what the group ledger eliminates, and the consolidated figure.",
+      permission: "finance.read",
+      fn: "erp_consolidated_trial_balance",
+      fields: [
+        pickEntity("p_parent_entity_id", "Parent company"),
+        { kind: "date", name: "p_as_at", label: "As at" },
+      ],
+    },
+    {
+      label: "Eliminations",
+      description: "What has been eliminated in a group ledger, when, why and by which journal.",
+      permission: "finance.read",
+      fn: "erp_eliminations",
+      fields: [pickEntity("p_parent_entity_id", "Parent company")],
+    },
+    {
+      label: "Settlement statement",
+      description:
+        "One provider statement line by line: what each line settled, how it was matched, and the candidates for a line nobody could place.",
+      permission: "finance.read",
+      fn: "erp_settlement_statement",
+      fields: [
+        pickFrom(
+          "erp_settlement_statements",
+          "statement_id",
+          ["provider", "statement_ref", "status"],
+          "p_statement_id",
+          "Statement",
+        ),
+      ],
+    },
+    {
+      label: "Preview a document's dimensions",
+      description:
+        "What each journal line would be stamped with when this document posts, and whether the combination rules let it through.",
+      permission: "finance.read",
+      fn: "erp_preview_dimensions",
+      fields: [
+        pickFrom(
+          "erp_documents",
+          "document_id",
+          ["document_number", "document_type", "state"],
+          "p_document_id",
+          "Document",
+        ),
+      ],
+    },
+    {
       label: "Credit position",
       description: "Limit, exposure and what is left for one customer.",
       permission: "finance.read",
@@ -574,6 +815,125 @@ export const FINANCE: ModuleDef = {
   permission: "finance.read",
   group: "settle",
   actions: [
+    {
+      label: "Add a company to a group",
+      description:
+        "Puts a subsidiary under its parent, installs the parent's group ledger and promotes the elimination rule.",
+      permission: "finance.configure",
+      fn: "erp_configure_consolidation",
+      fields: [
+        pickEntity("p_parent_entity_id", "Parent company"),
+        pickEntity("p_member", "Subsidiary"),
+      ],
+      mapArgs: (v) => ({
+        p_parent_entity_id: v["p_parent_entity_id"],
+        p_member_entity_ids: [v["p_member"]],
+      }),
+      invalidates: ["erp_entities", "erp_ledgers"],
+    },
+    {
+      label: "Eliminate intercompany balances",
+      description:
+        "Posts what the group's companies owe each other into the group ledger as at a date. Refused while any pair disagrees.",
+      permission: "finance.post",
+      fn: "erp_post_intercompany_elimination",
+      fields: [
+        pickEntity("p_parent_entity_id", "Parent company"),
+        { kind: "date", name: "p_as_at", label: "As at", required: true },
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_trial_balance", "erp_intercompany_position"],
+    },
+    {
+      label: "Set an exchange rate",
+      description: "A rate from one currency to another from a date, with where it came from.",
+      permission: "finance.configure",
+      fn: "erp_set_exchange_rate",
+      fields: [
+        { kind: "text", name: "p_from", label: "From currency", required: true },
+        { kind: "text", name: "p_to", label: "To currency", required: true },
+        { kind: "number", name: "p_rate", label: "Rate", required: true },
+        { kind: "date", name: "p_valid_from", label: "Valid from", required: true },
+        {
+          kind: "choice",
+          name: "p_type",
+          label: "Kind of rate",
+          required: true,
+          choices: [
+            { value: "spot", label: "Spot" },
+            { value: "average", label: "Average" },
+            { value: "closing", label: "Closing" },
+          ],
+        },
+        {
+          kind: "text",
+          name: "p_source",
+          label: "Source",
+          required: true,
+          hint: "Who published it.",
+        },
+      ],
+      invalidates: ["erp_trial_balance"],
+    },
+    {
+      label: "Reconcile a settlement statement",
+      description:
+        "Matches each line to an open receivable by the invoice it names, else by an amount only one item has.",
+      permission: "finance.post",
+      fn: "erp_reconcile_settlement_statement",
+      fields: [
+        pickFrom(
+          "erp_settlement_statements",
+          "statement_id",
+          ["provider", "statement_ref", "status"],
+          "p_statement_id",
+          "Statement",
+        ),
+      ],
+      invalidates: ["erp_settlement_statements"],
+    },
+    {
+      label: "Match a settlement line",
+      description:
+        "A person's match of one line to one open receivable, with a note that says why.",
+      permission: "finance.post",
+      fn: "erp_match_settlement_line",
+      fields: [
+        {
+          kind: "text",
+          name: "p_line_id",
+          label: "Statement line id",
+          required: true,
+          hint: "From the Settlement statement question below.",
+        },
+        {
+          kind: "text",
+          name: "p_subledger_item_id",
+          label: "Receivable item id",
+          required: true,
+          hint: "One of the candidates the same question lists.",
+        },
+        { kind: "text", name: "p_note", label: "Note", required: true },
+      ],
+      invalidates: ["erp_settlement_statements"],
+    },
+    {
+      label: "Apply a settlement statement",
+      description:
+        "Settles every matched line's receivable as cash. Refused while a line is unmatched.",
+      permission: "finance.post",
+      fn: "erp_apply_settlement_statement",
+      fields: [
+        pickFrom(
+          "erp_settlement_statements",
+          "statement_id",
+          ["provider", "statement_ref", "status"],
+          "p_statement_id",
+          "Statement",
+        ),
+      ],
+      invalidates: ["erp_settlement_statements", "erp_receivables_ageing", "erp_trial_balance"],
+    },
     {
       label: "Open a period close",
       permission: "finance.close_period",
@@ -890,6 +1250,27 @@ export const FINANCE: ModuleDef = {
       ],
     },
     {
+      title: "Settlement statements",
+      description:
+        "Provider statements imported, reconciled and applied, with what is still unmatched.",
+      fn: "erp_settlement_statements",
+      empty:
+        "No settlement statement imported. Stage one on the Imports screen as a settlement_statement batch and load it.",
+      emptyAction: { label: "Open Imports", to: "/master-data/imports" },
+      rowKey: (r, i) => String(r["statement_id"] ?? i),
+      columns: [
+        { header: "Provider", cell: "provider" },
+        { header: "Statement", cell: "statement_ref" },
+        date("Date", "statement_date"),
+        { header: "Gross", cell: "gross_minor", numeric: true },
+        { header: "Fees", cell: "fee_minor", numeric: true },
+        { header: "Net", cell: "net_minor", numeric: true },
+        { header: "Lines", cell: "lines", numeric: true },
+        { header: "Unmatched", cell: "unmatched", numeric: true },
+        pill("status"),
+      ],
+    },
+    {
       title: "Intercompany position",
       description: "What each company owes another, before elimination.",
       fn: "erp_intercompany_position",
@@ -960,6 +1341,76 @@ export const PLANNING: ModuleDef = {
       fn: "erp_calculate_policy",
       fields: [pickItem(), pickSite()],
     },
+    {
+      label: "Why this planned order",
+      description:
+        "The demand behind a planned order, and the component orders it caused: forecast, sales order or a parent order above it.",
+      permission: "planning.read",
+      fn: "erp_planned_order_pegging",
+      fields: [
+        pickFrom(
+          "erp_planned_orders",
+          "planned_order_id",
+          ["item", "kind", "quantity", "required_by"],
+          "p_planned_order_id",
+          "Planned order",
+        ),
+      ],
+    },
+    {
+      label: "Dependent demand of a run",
+      description: "What the production orders a run raised ask of their components, by date.",
+      permission: "planning.read",
+      fn: "erp_dependent_demand",
+      fields: [
+        pickFrom(
+          "erp_planning_runs",
+          "run_id",
+          ["site_code", "started_at", "scenario_code"],
+          "p_planning_run_id",
+          "Planning run",
+        ),
+      ],
+    },
+    {
+      label: "Compare two runs",
+      description:
+        "Per product, what each run planned and the difference — a baseline against a scenario, or two baselines.",
+      permission: "planning.read",
+      fn: "erp_compare_planning_runs",
+      fields: [
+        pickFrom(
+          "erp_planning_runs",
+          "run_id",
+          ["site_code", "started_at", "scenario_code"],
+          "p_run_a",
+          "First run",
+        ),
+        pickFrom(
+          "erp_planning_runs",
+          "run_id",
+          ["site_code", "started_at", "scenario_code"],
+          "p_run_b",
+          "Second run",
+        ),
+      ],
+    },
+    {
+      label: "Forecast lines",
+      description:
+        "Every bucket of one forecast version, with the statistical figure beside any adjustment.",
+      permission: "planning.read",
+      fn: "erp_forecast_lines",
+      fields: [
+        pickFrom(
+          "erp_forecast_versions",
+          "version_id",
+          ["forecast", "version", "status"],
+          "p_version_id",
+          "Forecast version",
+        ),
+      ],
+    },
   ],
   key: "planning",
   path: "/planning",
@@ -978,7 +1429,99 @@ export const PLANNING: ModuleDef = {
         pickSite(),
         { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
       ],
-      invalidates: ["erp_planned_orders", "erp_planner_workbench"],
+      invalidates: ["erp_planned_orders", "erp_planner_workbench", "erp_planning_runs"],
+    },
+    {
+      label: "Run a scenario",
+      description:
+        "Plan one site under assumptions, beside the baseline. A scenario's orders are never supply and cannot be firmed; compare it with the baseline instead.",
+      permission: "planning.run",
+      fn: "erp_run_planning",
+      fields: [
+        pickSite(),
+        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+        { kind: "text", name: "p_scenario_code", label: "Scenario code", required: true },
+        {
+          kind: "text",
+          name: "p_assumptions",
+          label: "Assumptions",
+          hint: 'JSON: demand_multiplier, lead_time_days_delta, reorder_point_multiplier — for example {"demand_multiplier": 1.5}.',
+        },
+        { kind: "text", name: "p_label", label: "Label" },
+      ],
+      mapArgs: argsWith({ json: ["p_assumptions"], numbers: ["p_horizon_days"] }),
+      invalidates: ["erp_planning_runs"],
+    },
+    {
+      label: "Firm a planned order",
+      description:
+        "A bought item becomes a purchase order of the type you name; a made item becomes a works order.",
+      permission: "planning.firm",
+      fn: "erp_firm_planned_order",
+      fields: [
+        pickFrom(
+          "erp_planned_orders",
+          "planned_order_id",
+          ["item", "kind", "quantity", "required_by"],
+          "p_planned_order_id",
+          "Planned order",
+        ),
+        {
+          kind: "text",
+          name: "p_document_type_code",
+          label: "Purchase order type",
+          hint: "For a bought item, for example purchase_order. Leave empty for a made item.",
+        },
+      ],
+      invalidates: ["erp_planned_orders", "erp_documents", "erp_works_orders"],
+    },
+    {
+      label: "Adjust a forecast bucket",
+      description: "Change one bucket of a draft forecast. The statistical figure stays beside it.",
+      permission: "planning.forecast",
+      fn: "erp_adjust_forecast_line",
+      fields: [
+        {
+          kind: "text",
+          name: "p_line_id",
+          label: "Forecast line id",
+          required: true,
+          hint: "From the Forecast lines question below.",
+        },
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_forecast_lines"],
+    },
+    {
+      label: "Record a forecast event",
+      description:
+        "A promotion, a launch or a closure the statistics cannot know about: a window and a multiplier the next run applies.",
+      permission: "planning.forecast",
+      fn: "erp_upsert_forecast_event",
+      fields: [
+        { kind: "text", name: "p_code", label: "Code", required: true },
+        { kind: "text", name: "p_name", label: "Name", required: true },
+        { kind: "date", name: "p_starts_on", label: "Starts on", required: true },
+        { kind: "date", name: "p_ends_on", label: "Ends on", required: true },
+        {
+          kind: "number",
+          name: "p_multiplier",
+          label: "Multiplier",
+          required: true,
+          hint: "2 doubles demand in the window; 0.5 halves it.",
+        },
+        reason("p_reason", "Reason", true),
+        pickSite("p_site_id", "Site", false),
+        {
+          kind: "select",
+          name: "p_item_id",
+          label: "Product",
+          required: false,
+          options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+      ],
+      invalidates: ["erp_forecast_events"],
     },
     {
       label: "Run a forecast",
@@ -1075,8 +1618,44 @@ export const PLANNING: ModuleDef = {
         { header: "Site", cell: "site" },
         { header: "Kind", cell: "order_kind" },
         { header: "Quantity", cell: "quantity", numeric: true },
-        date("Required", "required_on"),
+        date("Required", "required_by"),
         date("Release", "release_on"),
+        { header: "Pegged to", cell: "pegged_to" },
+        pill("status"),
+      ],
+    },
+    {
+      title: "Planning runs",
+      description:
+        "Every run kept: baselines, the runs they superseded, and scenarios beside them.",
+      fn: "erp_planning_runs",
+      empty: "No planning run yet. Run planning for a site and the run is kept here.",
+      rowKey: (r, i) => String(r["run_id"] ?? i),
+      columns: [
+        { header: "Site", cell: "site_code" },
+        date("Started", "started_at"),
+        { header: "Scenario", cell: "scenario_code" },
+        { header: "Label", cell: "label" },
+        { header: "Orders", cell: "orders_raised", numeric: true },
+        { header: "Exceptions", cell: "exceptions_raised", numeric: true },
+        { header: "Current baseline", cell: "is_current_baseline" },
+      ],
+    },
+    {
+      title: "Forecast events",
+      description: "The windows and multipliers the forecast applies, with their reasons.",
+      fn: "erp_forecast_events",
+      empty: "No forecast events. Record one when something the statistics cannot know is coming.",
+      rowKey: (r, i) => String(r["id"] ?? i),
+      columns: [
+        { header: "Code", cell: "code" },
+        { header: "Name", cell: "name" },
+        date("From", "starts_on"),
+        date("To", "ends_on"),
+        { header: "Multiplier", cell: "multiplier", numeric: true },
+        { header: "Product", cell: "item_code" },
+        { header: "Site", cell: "site_code" },
+        { header: "Reason", cell: "reason" },
         pill("status"),
       ],
     },
@@ -1640,6 +2219,42 @@ export const LOGISTICS: ModuleDef = {
   permission: "logistics.read",
   group: "move",
   actions: [
+    {
+      label: "Confirm a delivery",
+      description:
+        "The customer has it. Confirming is what closes the delivery and starts the clock on the invoice.",
+      permission: "logistics.plan",
+      fn: "erp_confirm_delivery",
+      fields: [
+        pickFrom(
+          "erp_documents",
+          "document_id",
+          ["document_number", "state"],
+          "p_delivery_id",
+          "Delivery",
+          { p_type_code: "delivery", p_limit: 100 },
+        ),
+      ],
+      invalidates: ["erp_documents", "erp_delivery_performance"],
+    },
+    {
+      label: "Record a failed delivery",
+      description: "It did not arrive, and why. The reason is what the carrier review reads.",
+      permission: "logistics.plan",
+      fn: "erp_fail_delivery",
+      fields: [
+        pickFrom(
+          "erp_documents",
+          "document_id",
+          ["document_number", "state"],
+          "p_delivery_id",
+          "Delivery",
+          { p_type_code: "delivery", p_limit: 100 },
+        ),
+        reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_documents", "erp_delivery_performance"],
+    },
     {
       label: "Plan a shipment",
       description: "Group deliveries leaving one site on one day.",
@@ -2330,6 +2945,15 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Accounting codes and the matrix that decides the nominal account and analysis — with a gap report and no suspense fallback.",
     permission: "finance.configure",
+    group: "configure",
+  },
+  {
+    path: "/finance/dimensions",
+    titleKey: "nav.finance_dimensions",
+    title: "Analysis dimensions",
+    blurb:
+      "Cost centres, projects and the like: their values, how a posting derives them, and which combinations are allowed.",
+    permission: "finance.read",
     group: "configure",
   },
   {

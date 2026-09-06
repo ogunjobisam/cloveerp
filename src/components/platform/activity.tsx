@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { ActionBar } from "../erp/actions-bar";
 import { OfferOwnership } from "../erp/ownership";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
@@ -33,6 +34,45 @@ import {
 import { Card, Fail, TokenNotice, statusTone, INPUT } from "./kit";
 
 /** Every platform action, including each entry into a customer company. */
+
+/**
+ * What was done inside a customer's organisation under a support access, in
+ * the customer's own record. The access id is on the continuity screen the
+ * customer reads and on the platform audit row that opened it.
+ */
+export function SupportActionLog() {
+  return (
+    <ActionBar
+      title="Log a support action"
+      note="Every action taken under a support access is recorded against it, with the reason, so the customer's continuity screen shows what was done and why."
+      actions={[
+        {
+          label: "Record a support action",
+          fn: "erp_platform_record_support_action",
+          fields: [
+            { kind: "text", name: "p_access_id", label: "Support access id", required: true },
+            { kind: "text", name: "p_action", label: "What was done", required: true },
+            { kind: "text", name: "p_reason", label: "Why", required: true },
+            { kind: "text", name: "p_object_type", label: "Kind of record touched" },
+            { kind: "text", name: "p_object_id", label: "Record id" },
+            {
+              kind: "choice",
+              name: "p_is_write",
+              label: "It changed something",
+              required: true,
+              boolean: true,
+              choices: [
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No, read only" },
+              ],
+            },
+          ],
+          invalidates: ["erp_platform_audit"],
+        },
+      ]}
+    />
+  );
+}
 
 export function Activity() {
   const [action, setAction] = useState("");

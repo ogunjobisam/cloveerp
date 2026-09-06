@@ -11,6 +11,7 @@ import {
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
+import { InquiryBoard } from "../../components/erp/inquiry";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { PURCHASING_KPIS } from "../../lib/modules";
@@ -113,6 +114,119 @@ function Procurement() {
             invalidates: ["erp_match_workbench", "erp_grni"],
           },
           {
+            label: "Set an order's behaviour",
+            description:
+              "Standard, blanket, consignment, drop-ship or intercompany. Fixed once the order is sent.",
+            permission: "procurement.order",
+            fn: "erp_set_order_behaviour",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_document_id",
+                "Purchase order",
+                { p_type_code: "purchase_order", p_limit: 100 },
+              ),
+              pickFrom("erp_order_behaviours", "code", ["name"], "p_behaviour", "Behaviour"),
+              {
+                kind: "date",
+                name: "p_valid_to",
+                label: "Blanket agreement runs to",
+                hint: "For a blanket order only.",
+              },
+            ],
+            invalidates: ["erp_documents", "erp_document"],
+          },
+          {
+            label: "Call off a blanket order",
+            description:
+              "Raises a standard purchase order against the agreement. Each line consumes a blanket line.",
+            permission: "procurement.order",
+            fn: "erp_call_off_blanket_order",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_blanket_id",
+                "Blanket order",
+                { p_type_code: "purchase_order", p_limit: 100 },
+              ),
+              {
+                kind: "text",
+                name: "p_lines",
+                label: "Lines",
+                required: true,
+                hint: 'JSON: [{"line_id": "…", "quantity": 10, "required_date": "2026-10-01"}]. The Blanket position question lists the line ids.',
+              },
+            ],
+            mapArgs: (v) => ({
+              p_blanket_id: v["p_blanket_id"],
+              p_lines: JSON.parse(v["p_lines"] ?? "[]"),
+            }),
+            invalidates: ["erp_documents"],
+          },
+          {
+            label: "Confirm a drop-ship",
+            description:
+              "The supplier delivered straight to the customer: both the purchase and the sales order are fulfilled, and no stock moves here.",
+            permission: "procurement.receive",
+            fn: "erp_confirm_drop_ship",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_purchase_order_id",
+                "Drop-ship order",
+                { p_type_code: "purchase_order", p_limit: 100 },
+              ),
+              { kind: "date", name: "p_delivered_on", label: "Delivered on", required: true },
+              { kind: "text", name: "p_reference", label: "Carrier reference" },
+            ],
+            invalidates: ["erp_documents", "erp_document"],
+          },
+          {
+            label: "Route an approval by value",
+            description:
+              "Stamp which chain a value in a currency would route to, for a department, before raising the document.",
+            permission: "procurement.order",
+            fn: "erp_stamp_approval_routing",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_object_type",
+                label: "Object",
+                required: true,
+                choices: [{ value: "document", label: "Document" }],
+              },
+              {
+                kind: "text",
+                name: "p_object_id",
+                label: "Object id",
+                required: true,
+              },
+              {
+                kind: "number",
+                name: "p_value_minor",
+                label: "Value (minor units)",
+                required: true,
+              },
+              { kind: "text", name: "p_currency", label: "Currency", required: true },
+              pickFrom(
+                "erp_departments",
+                "department_id",
+                ["code", "name"],
+                "p_department_id",
+                "Department",
+                undefined,
+                false,
+              ),
+            ],
+            invalidates: ["erp_document_approval_chain"],
+          },
+          {
             label: "Resolve a purchase price",
             description:
               "What should this supplier charge for this product today, and on what basis?",
@@ -143,6 +257,28 @@ function Procurement() {
                 ["charge_code", "description", "receipt"],
                 "p_landed_cost_id",
                 "Landed cost",
+              ),
+            ],
+          },
+        ]}
+      />
+
+      <InquiryBoard
+        inquiries={[
+          {
+            label: "Blanket position",
+            description:
+              "What was agreed on a blanket order, what the call-offs have consumed, and what is left, line by line.",
+            permission: "procurement.read",
+            fn: "erp_blanket_position",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_blanket_id",
+                "Blanket order",
+                { p_type_code: "purchase_order", p_limit: 100 },
               ),
             ],
           },
