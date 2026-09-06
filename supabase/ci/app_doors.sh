@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Every door the application names exists.
+# Every door the application names exists, and every door has a home.
 #
 # The application calls the database by name: callErp("erp_something", args)
 # through supabase.rpc, and every panel, action and invalidation key in
@@ -43,3 +43,11 @@ list=$(printf "'%s'," "${doors[@]}")
 list="array[${list%,}]::text[]"
 out=$($PSQL_CMD -tAc "select erp.assert_app_doors_exist($list);")
 echo "$out"
+
+# The other direction. Every door the application does not name must be
+# registered in erp_meta.api_only_door with the caller it exists for; a door
+# with neither a screen nor a row is a capability nobody can reach, which is
+# the claim this product makes about itself and has to keep. A row for a door
+# that a screen now names is stale and fails too.
+home=$($PSQL_CMD -tAc "select erp.assert_doors_have_a_home($list);")
+echo "$home"
