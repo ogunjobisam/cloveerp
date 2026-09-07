@@ -158,14 +158,12 @@ function Governance() {
                   label="Approve"
                   fn="erp_decide_approval"
                   args={{ p_task_id: r["task_id"], p_decision: "approved" }}
-                  permission="administration.approve"
                   invalidates={["erp_my_approvals", "erp_change_requests"]}
                 />
                 <RpcButton
                   label="Reject"
                   fn="erp_decide_approval"
                   args={{ p_task_id: r["task_id"], p_decision: "rejected" }}
-                  permission="administration.approve"
                   invalidates={["erp_my_approvals", "erp_change_requests"]}
                 />
               </span>
