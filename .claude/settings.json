@@ -1,0 +1,61 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(src/**)",
+      "Edit(worker/**)",
+      "Edit(supabase/**)",
+      "Edit(docs/**)",
+      "Write(src/**)",
+      "Write(worker/**)",
+      "Write(supabase/migrations/**)",
+      "Write(supabase/ci/**)",
+
+      "Bash(bun install:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(bun run lint:*)",
+      "Bash(bun run test:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun run format:*)",
+      "Bash(bun test:*)",
+      "Bash(bun run dev:*)",
+      "Bash(deno check:*)",
+      "Bash(psql:*)",
+      "Bash(supabase/ci/*)",
+      "Bash(docs/build_counts.sh:*)",
+
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git switch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git merge:*)",
+      "Bash(git stash:*)",
+      "Bash(git push origin:*)",
+
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(gh pr:*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/*.pem)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git rebase:*)",
+      "Bash(git commit --amend:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm -rf:*)",
+      "Bash(npm install:*)",
+      "Bash(supabase db reset:*)",
+      "Bash(supabase db push:*)"
+    ]
+  }
+}
