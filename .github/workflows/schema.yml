@@ -232,6 +232,22 @@ jobs:
         # names and no row in erp_meta.api_only_door accounts for.
         run: supabase/ci/app_doors.sh
 
+      - name: Every permission code the screens name exists
+        # The other bare string the application calls the database with. The
+        # gate is hasPermission(session, "module.action"), and a code the
+        # catalogue does not hold is in no session's list — so the control is
+        # refused for everybody, in silence, with no error and no refusal to
+        # notice. The approve and reject buttons on /governance asked for
+        # administration.approve, which the catalogue has never had, and were
+        # disabled for every role including the owner.
+        #
+        # No permission suite can see that: one that asserts a role cannot
+        # press the button agrees with a screen nobody can press it on. This
+        # extracts every permission code from src and hands the list to
+        # erp.assert_app_permissions_exist(), which refuses one that is not in
+        # erp_ref.permission.
+        run: supabase/ci/app_permissions.sh
+
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
         # with no code impact. That is only true of strings erp_ref.resource
