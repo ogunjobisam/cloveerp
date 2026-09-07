@@ -6,8 +6,10 @@ Connected to Lovable: never force-push, rebase, amend or squash pushed commits.
 
 ## Read this before exploring
 
-277 migrations, 52 route files, 209 assertion functions, 179 source files.
-Do not scan the repo to orient yourself — everything you need is below.
+This repository is large: hundreds of migrations, hundreds of assertion
+functions, dozens of routes. Do not scan it to orient yourself — everything you
+need is below. (No figures are quoted here on purpose: a number nothing checks
+is a number that drifts. `docs/build_counts.sh` holds the ones that are checked.)
 If a path here is wrong, say so and ask. Do not go looking.
 
 ## Where things live
@@ -23,6 +25,8 @@ If a path here is wrong, say so and ask. Do not go looking.
 - `src/lib/erp.ts` — the Supabase client, `callErp()`, `hasPermission()`.
 - `supabase/migrations/` — forward-only, immutable once pushed.
 - `supabase/ci/` — the build's own checks. Read these before writing a new one.
+- `supabase/ops/` — the operator's runbook: equivalence checks, live
+  reconciliation, one-off routines. Not part of the build.
 - `supabase/functions/` — `dispatch`, `enquiry` (Deno).
 - `worker/` — the dispatch worker (Bun).
 - `docs/ARCHITECTURE.md` — carries figures checked against the built database.
@@ -64,7 +68,7 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
 
 - There is no role enum. Roles are tenant data: principal → grant → role →
   permission codes like `administration.roles`, `sales.order`, `finance.post`.
-- The client gate is `hasPermission(session, "module.action")` — 21 call sites.
+- The client gate is `hasPermission(session, "module.action")`.
 - The database refuses regardless of the UI. Hiding a control is convenience,
   never the enforcement. Never add a UI check as the only guard.
 - Every table is tenant-scoped and `current_tenant_id()` is resolved by the
