@@ -60,6 +60,10 @@ on:
         description: 'The highest migration version already on live, e.g. 20260905040000. Everything up to it is recorded as applied; everything after it is left for replay to apply.'
         type: string
         default: ''
+      repair_gateway_bodies:
+        description: 'One-off: run supabase/ops/20260908_gateway_function_bodies.sh against live, re-emitting the twelve function bodies the remaining migrations patch, then stop.'
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-live
@@ -125,6 +129,42 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Re-emit the twelve gateway function bodies (one-off)
+        if: github.event_name == 'workflow_dispatch' && inputs.repair_gateway_bodies
+        # Seventeen of the migrations still to apply rewrite an existing
+        # function by text, and refuse when the body is not the one they were
+        # written against. Live's is not, because everything up to
+        # 20260905040000 arrived through the connector rather than by replaying
+        # the files: functionally equivalent, textually different.
+        #
+        # supabase/ops/20260908_gateway_function_bodies.sh does the work. It
+        # runs here rather than on somebody's laptop because it needs a
+        # PostgreSQL to build the reference in, and that has to be the image
+        # the product is verified against — pg_jsonschema is a Rust extension
+        # apt does not carry, and a reference built on a different host is not
+        # the reference.
+        #
+        # Pinned to the same image and major version as schema.yml, for the
+        # same reason: what live is compared against must be what CI builds.
+        run: |
+          set -euo pipefail
+          docker run -d --name clove-erp-reference \
+            -e POSTGRES_PASSWORD=postgres -p 5432:5432 \
+            supabase/postgres:17.6.1.167
+          for i in $(seq 1 60); do
+            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then break; fi
+            if [[ "$i" -eq 60 ]]; then
+              echo "::error::the reference PostgreSQL did not become ready within 60s"
+              docker logs clove-erp-reference 2>&1 | tail -40 >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          CLOVEERP_LIVE_DATABASE_URL="$DB_URL" \
+            ./supabase/ops/20260908_gateway_function_bodies.sh --apply \
+            2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Record every repository migration as applied (one-off)
         if: github.event_name == 'workflow_dispatch' && inputs.mark_applied
@@ -204,8 +244,42 @@ jobs:
           supabase migration list --db-url "$DB_URL" | tail -20
           echo "Recorded. Re-run this workflow without mark_applied to deploy." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Pause the scheduler for the length of the replay
+        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
+        # The retry below survives a deadlock; not having one is better.
+        #
+        # cron.job fires erp.run_due_jobs_all_tenants() every minute, and a
+        # replay runs for tens of minutes doing DDL that takes locks across
+        # hundreds of objects. On the first real deploy the two crossed and cost
+        # twelve migrations of progress. A queue that waits half an hour is a
+        # queue that waits; the worker picks up where it left off, and the
+        # ordering gate is what keeps that safe.
+        #
+        # Best effort, deliberately. If the deploy's role may not write
+        # cron.job, that is a warning and not a reason to refuse to deploy —
+        # the retry is the guarantee, this is the optimisation.
+        run: |
+          set -euo pipefail
+          if [[ "$(psql "$DB_URL" -tAc "select to_regclass('cron.job') is not null")" != "t" ]]; then
+            echo "no cron.job on this host; nothing to pause"
+            exit 0
+          fi
+          paused=$(psql "$DB_URL" -tAc \
+            "select coalesce(string_agg(jobid::text, ','), '') from cron.job where active" || true)
+          if [[ -z "$paused" ]]; then
+            echo "no active scheduled job; nothing to pause"
+            exit 0
+          fi
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
+               "update cron.job set active = false where jobid in ($paused)"; then
+            echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
+            echo "paused scheduled job(s): $paused"
+          else
+            echo "::warning::could not pause cron.job; the replay will run against a live scheduler and rely on the deadlock retry."
+          fi
+
       - name: Apply pending migrations by replay
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         # A deadlock is a coincidence, not a verdict on the deploy.
         #
         # Every migration ends by re-running the generators, and
@@ -273,7 +347,7 @@ jobs:
         # One row per deploy, written before the database is proved so that
         # the proof's own release clause — the ledger has moved past the last
         # recorded release — reads this deploy, not the one before it.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         run: |
           set -euo pipefail
           release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
@@ -286,7 +360,7 @@ jobs:
         # destroy organisations and do not belong on live. erp.platform_assurance()
         # runs every registered assertion; the whole-database reconciliation
         # visits every organisation. Either failing fails the deploy, loudly.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         run: |
           set -euo pipefail
           bad=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
@@ -312,3 +386,29 @@ jobs:
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'release ' || left(git_sha, 12) || ' recorded ' || recorded_at || ', ledger at ' || coalesce(migrations_high, '(none)') || ', proved ' || proved from erp.release_report() limit 1;"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start the scheduler again
+        # always(), and unconditional: whatever happened above — a failed
+        # replay, an assurance that would not go green, a cancelled run — the
+        # scheduler goes back on. A deploy that leaves the platform's own clock
+        # stopped has done more damage than the one it was avoiding.
+        #
+        # No-op when nothing was paused, so this is safe on every path that
+        # never reached the pause: PAUSED_JOBS is simply unset.
+        #
+        # A failure here fails the job even when the deploy itself succeeded.
+        # The scheduler being off is not a footnote to a green deploy.
+        if: always()
+        run: |
+          set -uo pipefail
+          if [[ -z "${PAUSED_JOBS:-}" ]]; then
+            echo "nothing was paused"
+            exit 0
+          fi
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
+               "update cron.job set active = true where jobid in (${PAUSED_JOBS})"; then
+            echo "scheduled job(s) running again: ${PAUSED_JOBS}"
+          else
+            echo "::error::could not re-enable cron.job (${PAUSED_JOBS}). The platform scheduler is STOPPED on live: run 'update cron.job set active = true where jobid in (${PAUSED_JOBS});' by hand now."
+            exit 1
+          fi
