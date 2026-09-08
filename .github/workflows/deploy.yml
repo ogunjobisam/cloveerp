@@ -305,12 +305,21 @@ jobs:
             echo "no active scheduled job; nothing to pause"
             exit 0
           fi
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
+          # pg_cron's own API first. On 8 September the direct UPDATE came back
+          # "permission denied for table job": the deploy's role can read
+          # cron.job but does not own it. cron.alter_job() checks that the role
+          # owns the job rather than the catalogue, which is the grant a
+          # deploying role is actually likely to have.
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qtc \
+               "select cron.alter_job(jobid, active := false) from cron.job where jobid in ($paused)"; then
+            echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
+            echo "paused scheduled job(s) via cron.alter_job: $paused"
+          elif psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
                "update cron.job set active = false where jobid in ($paused)"; then
             echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
-            echo "paused scheduled job(s): $paused"
+            echo "paused scheduled job(s) by update: $paused"
           else
-            echo "::warning::could not pause cron.job; the replay will run against a live scheduler and rely on the deadlock retry."
+            echo "::warning::could not pause cron.job by either route; THE SCHEDULER IS STILL RUNNING and the replay relies on the deadlock retry. Nothing needs undoing afterwards."
           fi
 
       - name: Apply pending migrations by replay
@@ -441,7 +450,11 @@ jobs:
             echo "nothing was paused"
             exit 0
           fi
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
+          # Both routes, whichever paused it: a resume that fails because it
+          # picked the wrong one is the failure this step exists to prevent.
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qtc \
+               "select cron.alter_job(jobid, active := true) from cron.job where jobid in (${PAUSED_JOBS})" \
+             || psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
                "update cron.job set active = true where jobid in (${PAUSED_JOBS})"; then
             echo "scheduled job(s) running again: ${PAUSED_JOBS}"
           else
