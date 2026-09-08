@@ -56,3 +56,8 @@ blob-report/
 # whose Deno version is its own, and a lock file recorded here would fail that
 # check on an integrity mismatch rather than catching anything.
 deno.lock
+
+# Written by supabase/ops/20260908_gateway_function_bodies.sh in report-only
+# mode: the CREATE OR REPLACE statements it would run against live, for a
+# person to read before running them. Output, not source.
+gateway_repair.sql

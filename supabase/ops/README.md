@@ -48,12 +48,36 @@ the environment the work is done from, and none should be.
 repository migrations it already carries: every change up to and including
 `20260905040000` reached live through the Supabase MCP connector, which
 recorded its own names rather than the repository's filenames. Run `deploy`
-by hand once with `mark_applied = true`, on a commit whose migrations are all
-already on live (the merge of PR #59, `edbd793`, or any later commit whose
-new migrations have been applied by hand). Every repository version is then
-recorded as applied and replay starts from the next one. Running it twice is
-harmless; running it on a commit with an unapplied migration would record that
-migration as applied without applying it, which is the one way to misuse it.
+by hand once with `mark_applied = true` and `mark_applied_through` set to the
+highest version already on live — `20260905040000`. The stamps naming no
+repository file are reverted, everything at or below the boundary is recorded
+as applied, and replay starts from the one after it. Running it twice is
+harmless; running it without the boundary would record every later migration as
+applied without applying it, which is the one way to misuse it, so the workflow
+refuses without one.
+
+**This was done on 8 September 2026**: 160 connector-era stamps reverted, 242
+recorded as applied. The replay that followed applied 14 more
+(`20260906010000` through `20260906111000`) and then stopped, and the two
+things it ran into are worth knowing before the next one.
+
+*A deadlock.* Every migration ends by re-running the generators, and
+`erp.apply_row_security()` and `erp.apply_execute_grants()` take heavy locks
+across hundreds of objects; the `cron.job` that fires every minute crossed with
+them twenty-eight minutes in. `deploy.yml` now retries three times on `40P01`
+and resumes from the migration that lost, so this costs a delay rather than a
+deploy. Consider pausing `cron.job` for a long replay anyway.
+
+*The text-surgery wall.* Seventeen of the remaining migrations rewrite an
+existing function by reading `pg_get_functiondef()` and requiring exact
+substrings. The connector left bodies that are functionally equivalent and
+textually different, so those guards refuse — correctly. Twelve functions are
+affected, all in the write gateway and the worker.
+`20260908_gateway_function_bodies.sh` builds the repository from empty to
+live's own high-water mark, compares the twelve, and re-emits the reference
+body for any that differ. Run it report-only first. Once it reports no
+differences, dispatch `deploy` with `mark_applied` unset and the replay
+continues.
 
 The connector remains available for reading and for an emergency; it is no
 longer how a change lands.
