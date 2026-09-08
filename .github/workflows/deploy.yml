@@ -28,9 +28,19 @@ name: deploy
 #
 # One-off: the live project's history table holds the names the connector
 # recorded, not the repository's filenames. Run this workflow by hand with
-# mark_applied = true once, on the commit whose migrations are all already on
-# live, and every repository version is recorded as applied. Replay starts
-# from the next one.
+# mark_applied = true once, giving mark_applied_through — the highest version
+# already on live. The stamps naming no repository file are reverted, every
+# version up to that boundary is recorded as applied, and replay starts from
+# the one after it.
+#
+# The boundary is an input rather than "everything in this checkout" because
+# there is no commit that both contains this workflow and carries only the
+# migrations live already has: supabase/ops/README.md records that everything
+# up to 20260905040000 reached live through the connector, and this workflow
+# arrived after that, in the merge of PR #60. Marking the whole checkout
+# applied on main would record every later migration as applied without
+# applying it — the one way to misuse this, and a silent, permanent divergence
+# rather than a failed deploy. So it refuses without the boundary.
 #
 # --include-all, always. Without it the CLI applies only migrations newer than
 # the newest applied, and this repository has already had a fix silently
@@ -43,9 +53,13 @@ on:
   workflow_dispatch:
     inputs:
       mark_applied:
-        description: 'One-off: record every repository migration as already applied on live, then stop. Use once, on a commit whose migrations are all on live.'
+        description: 'One-off: reconcile the live migration history with this repository, then stop. Requires mark_applied_through.'
         type: boolean
         default: false
+      mark_applied_through:
+        description: 'The highest migration version already on live, e.g. 20260905040000. Everything up to it is recorded as applied; everything after it is left for replay to apply.'
+        type: string
+        default: ''
 
 concurrency:
   group: deploy-live
@@ -129,9 +143,39 @@ jobs:
         # Reverting a stamp deletes its row. It undoes nothing the connector
         # did — the schema those statements built is still there — it declares
         # the repository the record from here on, which is the whole point.
+        env:
+          THROUGH: ${{ inputs.mark_applied_through }}
         run: |
           set -euo pipefail
-          versions=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | sort -u)
+
+          # No boundary, no repair. Recording a migration as applied without
+          # applying it is not recoverable by a later deploy: replay skips what
+          # the history table already claims, so the change is stranded and
+          # live diverges from the repository for good. A refusal here costs a
+          # re-dispatch; the default it replaces costs the schema.
+          if [[ -z "${THROUGH// /}" ]]; then
+            echo "::error::mark_applied needs mark_applied_through: the highest migration version already on live (supabase/ops/README.md records 20260905040000 as the last the connector applied). Without it this would record every later migration as applied without applying it."
+            exit 1
+          fi
+          if ! [[ "$THROUGH" =~ ^[0-9]+$ ]]; then
+            echo "::error::mark_applied_through must be a bare version, e.g. 20260905040000; got '$THROUGH'."
+            exit 1
+          fi
+
+          # Numerically, not as strings: the repository carries both 0001 and
+          # 20260905040000 and a lexicographic compare across those lengths is
+          # only accidentally right. Every version is well inside a double.
+          all=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | sort -u)
+          versions=$(printf '%s\n' "$all" | awk -v t="$THROUGH" '$1 + 0 <= t + 0')
+          pending=$(printf '%s\n' "$all" | awk -v t="$THROUGH" '$1 + 0 > t + 0')
+
+          n_at=$(printf '%s' "$versions" | grep -c . || true)
+          n_after=$(printf '%s' "$pending" | grep -c . || true)
+          if [[ "$n_at" -eq 0 ]]; then
+            echo "::error::no migration in this repository is at or below $THROUGH; the boundary is wrong."
+            exit 1
+          fi
+          echo "boundary $THROUGH: $n_at at or below it, $n_after after it left for replay to apply"
 
           # An absent history table is a project nothing has pushed to, which
           # is not an error: there is simply nothing stale to clear.
@@ -142,7 +186,9 @@ jobs:
             remote=""
           fi
 
-          stale=$(comm -23 <(printf '%s\n' "$remote" | grep -v '^$' | sort -u) <(printf '%s\n' "$versions") | tr '\n' ' ')
+          # Against the whole repository, not the bounded set: a stamp naming a
+          # migration above the boundary is recorded and real, not stale.
+          stale=$(comm -23 <(printf '%s\n' "$remote" | grep -v '^$' | sort -u) <(printf '%s\n' "$all") | tr '\n' ' ')
           if [[ -n "${stale// /}" ]]; then
             echo "reverting $(echo $stale | wc -w) stamp(s) naming no migration in this repository"
             # shellcheck disable=SC2086
