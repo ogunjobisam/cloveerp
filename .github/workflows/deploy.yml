@@ -114,9 +114,44 @@ jobs:
 
       - name: Record every repository migration as applied (one-off)
         if: github.event_name == 'workflow_dispatch' && inputs.mark_applied
+        # Both directions, because the history table and the repository
+        # disagree in both and `supabase db push` refuses on either half.
+        #
+        # The first version of this step marked the repository's versions
+        # applied and stopped, which was half the job. The first dry run that
+        # ever reached live proved it: the history table held 160 stamps the
+        # connector recorded, the repository holds 278 files, and the two sets
+        # do not intersect at all — not one stamp names a file, not one file is
+        # recorded. Marking the 278 applied would have left the push refusing
+        # on the 160, with the error the CLI actually returns:
+        # "Remote migration versions not found in local migrations directory".
+        #
+        # Reverting a stamp deletes its row. It undoes nothing the connector
+        # did — the schema those statements built is still there — it declares
+        # the repository the record from here on, which is the whole point.
         run: |
           set -euo pipefail
-          versions=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | tr '\n' ' ')
+          versions=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | sort -u)
+
+          # An absent history table is a project nothing has pushed to, which
+          # is not an error: there is simply nothing stale to clear.
+          if [[ "$(psql "$DB_URL" -tAc "select to_regclass('supabase_migrations.schema_migrations') is not null")" == "t" ]]; then
+            remote=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc \
+              "select version from supabase_migrations.schema_migrations order by version")
+          else
+            remote=""
+          fi
+
+          stale=$(comm -23 <(printf '%s\n' "$remote" | grep -v '^$' | sort -u) <(printf '%s\n' "$versions") | tr '\n' ' ')
+          if [[ -n "${stale// /}" ]]; then
+            echo "reverting $(echo $stale | wc -w) stamp(s) naming no migration in this repository"
+            # shellcheck disable=SC2086
+            supabase migration repair --status reverted $stale --db-url "$DB_URL"
+          else
+            echo "no stale stamps: every recorded version names a migration in this repository"
+          fi
+
+          versions=$(printf '%s\n' "$versions" | tr '\n' ' ')
           echo "marking $(echo $versions | wc -w) versions applied"
           # shellcheck disable=SC2086
           supabase migration repair --status applied $versions --db-url "$DB_URL"
