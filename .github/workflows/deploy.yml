@@ -206,16 +206,68 @@ jobs:
 
       - name: Apply pending migrations by replay
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.mark_applied) }}
+        # A deadlock is a coincidence, not a verdict on the deploy.
+        #
+        # Every migration ends by re-running the generators, and
+        # erp.apply_row_security() and erp.apply_execute_grants() take heavy
+        # locks across hundreds of objects. Anything else touching the database
+        # at that moment can cross with them — on the first real deploy it was a
+        # session running erp.apply_execute_grants() itself, twenty-eight
+        # minutes and twelve migrations in:
+        #
+        #   ERROR: deadlock detected (SQLSTATE 40P01)
+        #   Process 1095739 waits for AccessShareLock on relation 38200;
+        #     blocked by process 1098150.
+        #
+        # PostgreSQL picks a victim and aborts it. The right answer is to go
+        # again: the migrations that already applied are recorded, so a re-run
+        # resumes at the one that lost rather than starting over, and the one
+        # that lost rolled back whole. Twelve migrations of progress should not
+        # be thrown away because a minutely job wanted the same table.
+        #
+        # Only on 40P01. Every other failure is this deploy's to answer for,
+        # and retrying it would turn one honest error into three.
         run: |
           set -euo pipefail
           # The moment before anything changed: the point-in-time-recovery
           # target a rollback of this deploy would restore to. Recorded on the
-          # release row below.
+          # release row below, and taken once rather than per attempt — a
+          # retry is the same deploy, so it is the same target.
           echo "DEPLOY_STARTED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
           echo "## Applied" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          supabase db push --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+          attempts=3
+          log="$RUNNER_TEMP/push.log"
+          applied=false
+          for attempt in $(seq 1 "$attempts"); do
+            if supabase db push --include-all --db-url "$DB_URL" 2>&1 \
+                 | tee "$log" | tee -a "$GITHUB_STEP_SUMMARY"; then
+              applied=true
+              break
+            fi
+
+            if ! grep -q '40P01' "$log"; then
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::the replay failed for a reason that is not a deadlock; not retrying. The migrations applied before it are recorded, so a later run resumes from there."
+              exit 1
+            fi
+
+            if [[ "$attempt" -lt "$attempts" ]]; then
+              # Back off enough to clear a minutely job's window.
+              wait=$((attempt * 30))
+              echo "::warning::deadlock (40P01) on attempt ${attempt} of ${attempts}; retrying in ${wait}s from the migration that lost."
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "-- deadlock on attempt ${attempt}; resuming --" >> "$GITHUB_STEP_SUMMARY"
+              sleep "$wait"
+            fi
+          done
+
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$applied" != true ]]; then
+            echo "::error::deadlocked on all ${attempts} attempts. Something is contending for the same objects throughout — check cron.job and pg_stat_activity before running again."
+            exit 1
+          fi
 
       - name: Record the release
         # One row per deploy, written before the database is proved so that
