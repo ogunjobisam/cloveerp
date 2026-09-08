@@ -65,15 +65,28 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: deploy-live
-  cancel-in-progress: false
-
 jobs:
   dry-run:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Its own group, per branch, and not the deploy's.
+    #
+    # deploy-live was declared on the workflow, so both jobs were in it, and
+    # GitHub keeps exactly one run queued per group: a third arrival cancels
+    # the one already waiting. On the merge of #73 that is precisely what
+    # happened — the push to main queued behind a running replay, a pull
+    # request dry run arrived thirty-five seconds later, and the production
+    # deploy of the merge was cancelled by a job that only reads. It went
+    # grey, not red, and nothing on the merged pull request said the deploy
+    # it caused had been thrown away.
+    #
+    # A read cannot be allowed to displace a write. The dry run now cancels
+    # only its own earlier self on the same branch, which is what you want
+    # when a pull request is pushed to twice in a minute.
+    concurrency:
+      group: deploy-dry-run-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -118,6 +131,13 @@ jobs:
     # than any replay this repository has run and short enough to notice.
     # Cancelling still runs the resume step, which is always().
     timeout-minutes: 60
+    # One deploy against live at a time, and never two replays at once. A
+    # newer deploy may cancel an older one still queued: --include-all means
+    # the newer applies everything the older would have, so the migrations
+    # are not lost with the run.
+    concurrency:
+      group: deploy-live
+      cancel-in-progress: false
     env:
       DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
     steps:
