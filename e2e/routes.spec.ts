@@ -54,11 +54,35 @@ test.describe("signed in, an organisation with no data yet", () => {
       // is that the shell did not hand back a blank document.
       await expect(page.locator("body")).not.toBeEmpty();
 
-      // A heading, whatever it says. Every screen in this product has one, and
-      // a page that renders without one has usually failed to load its data
-      // rather than deliberately gone without.
+      // Not the error boundary, first and before anything else.
+      //
+      // The first version of this test asked only for a heading, and passed on
+      // every desk route while every one of them was rendering the root error
+      // boundary — whose heading is "This page didn't load", which is a
+      // heading, and visible, and not empty. A green suite that proves the
+      // error page works is worse than no suite, because it is believed.
+      await expect(
+        page.getByRole("heading", { name: "This page didn't load" }),
+        `${route.path} rendered the root error boundary`,
+      ).toBeHidden();
+
+      if (route.kind === "desk") {
+        // The desk, specifically: the shell's own navigation. This is what
+        // distinguishes a screen that loaded from the sign-in screen, the
+        // onboarding screen and the boundary, all three of which have a
+        // heading and none of which is this route.
+        await expect(
+          page.getByRole("navigation", { name: "Areas" }).first(),
+          `${route.path} did not reach the desk`,
+        ).toBeVisible({ timeout: 20_000 });
+      }
+
+      // A heading, whatever it says. The words come through the terminology
+      // layer and a tenant may rename any of them, so what is asserted is that
+      // there is one and it says something.
       const heading = page.getByRole("heading").first();
       await expect(heading, `${route.path} rendered no heading`).toBeVisible({ timeout: 20_000 });
+      await expect(heading, `${route.path} rendered an empty heading`).not.toBeEmpty();
 
       expect(backend.crashes, `${route.path} threw:\n${backend.crashes.join("\n")}`).toEqual([]);
     });

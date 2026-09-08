@@ -157,6 +157,30 @@ export const NO_TENANT_SESSION: ErpSession = {
   permissions: [],
 };
 
+/**
+ * The handful of functions the shell itself calls on every screen.
+ *
+ * These get a real shape rather than the empty default, and the reason is a
+ * finding rather than a convenience. `erp_service_notices` declares an object
+ * with two array fields and ServiceBanner reads them straight —
+ * `n.incidents.filter(...)` after a `if (!n) return null` that an empty array
+ * passes — so an unexpected payload there does not cost the banner, it costs
+ * the whole desk: the banner renders inside the shell, so the throw reaches the
+ * root error boundary and every screen becomes "This page didn't load".
+ *
+ * A correct database never sends that payload, so this is not a defect the
+ * build should fail on. It is worth knowing that the blast radius of one
+ * malformed banner response is the entire application, and it is worth these
+ * tests exercising the shape the screens are actually written against rather
+ * than one that only proves the boundary works.
+ */
+const SHELL: Record<string, unknown> = {
+  erp_service_notices: { maintenance: [], incidents: [] },
+  erp_is_platform_organisation: false,
+  erp_platform_me: { is_staff: false, role: null, claimable: false },
+  erp_my_tenants: [],
+};
+
 /** How a refusal arrives: PostgREST's shape, carrying the engine's own words. */
 export type RpcFailure = {
   status?: number;
@@ -273,6 +297,7 @@ async function install(page: Page, session: ErpSession | null): Promise<Backend>
 
     if (payloads.has(fn)) return json(route, payloads.get(fn));
     if (fn === "erp_session") return json(route, session ?? NO_TENANT_SESSION);
+    if (fn in SHELL) return json(route, SHELL[fn]);
     return json(route, EMPTY);
   });
 
