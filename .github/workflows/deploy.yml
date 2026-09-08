@@ -73,6 +73,7 @@ jobs:
   dry-run:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -109,6 +110,14 @@ jobs:
   apply:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # A replay that blocks on a lock rather than deadlocking gets no 40P01 and
+    # no retry — it just waits. On the default six-hour job timeout it would
+    # wait holding the deploy-live concurrency group and, worse, holding the
+    # scheduler paused: every deploy behind it queued and the platform's clock
+    # stopped, for six hours, with nothing red to say so. An hour is longer
+    # than any replay this repository has run and short enough to notice.
+    # Cancelling still runs the resume step, which is always().
+    timeout-minutes: 60
     env:
       DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
     steps:
