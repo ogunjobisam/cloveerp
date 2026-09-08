@@ -41,6 +41,15 @@ supabase/.temp/
 .env.*
 !.env.example
 
+# Playwright. The storage states are signed-in sessions for the two throwaway
+# accounts the smoke suite uses, written by its setup project on every run; the
+# reports and traces are output. None of it is worth tracking and the first is
+# a bearer token, however disposable the stack that issued it.
+e2e/.auth/
+playwright-report/
+test-results/
+blob-report/
+
 # Deno writes this when anybody runs the Edge Function typecheck locally
 # (`deno check --import-map supabase/functions/import_map.json ...`). It is not
 # tracked deliberately: the build resolves the same import map on a runner

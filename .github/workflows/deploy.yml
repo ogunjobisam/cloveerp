@@ -20,15 +20,27 @@ name: deploy
 # Two jobs:
 #
 #   dry-run  — on every pull request: what WOULD apply, and the remote history.
+#              Both jobs refuse without the secret rather than pass having
+#              looked at nothing; the secret is what makes either of them real.
 #   apply    — on push to main: apply, then prove the result with the same
 #              checks the build runs. A deploy that applied and did not check
 #              is the silent-job problem moved to production.
 #
 # One-off: the live project's history table holds the names the connector
 # recorded, not the repository's filenames. Run this workflow by hand with
-# mark_applied = true once, on the commit whose migrations are all already on
-# live, and every repository version is recorded as applied. Replay starts
-# from the next one.
+# mark_applied = true once, giving mark_applied_through — the highest version
+# already on live. The stamps naming no repository file are reverted, every
+# version up to that boundary is recorded as applied, and replay starts from
+# the one after it.
+#
+# The boundary is an input rather than "everything in this checkout" because
+# there is no commit that both contains this workflow and carries only the
+# migrations live already has: supabase/ops/README.md records that everything
+# up to 20260905040000 reached live through the connector, and this workflow
+# arrived after that, in the merge of PR #60. Marking the whole checkout
+# applied on main would record every later migration as applied without
+# applying it — the one way to misuse this, and a silent, permanent divergence
+# rather than a failed deploy. So it refuses without the boundary.
 #
 # --include-all, always. Without it the CLI applies only migrations newer than
 # the newest applied, and this repository has already had a fix silently
@@ -41,9 +53,13 @@ on:
   workflow_dispatch:
     inputs:
       mark_applied:
-        description: 'One-off: record every repository migration as already applied on live, then stop. Use once, on a commit whose migrations are all on live.'
+        description: 'One-off: reconcile the live migration history with this repository, then stop. Requires mark_applied_through.'
         type: boolean
         default: false
+      mark_applied_through:
+        description: 'The highest migration version already on live, e.g. 20260905040000. Everything up to it is recorded as applied; everything after it is left for replay to apply.'
+        type: string
+        default: ''
 
 concurrency:
   group: deploy-live
@@ -59,13 +75,27 @@ jobs:
         with:
           version: 2.116.0
       - name: What would apply
+        # A dry run that could not see live must not be green.
+        #
+        # This warned and exited 0, so every pull request carried a green
+        # deploy check that had compared nothing with anything. The secret has
+        # never been set, and the apply job below has therefore failed on
+        # every merge to main since this workflow was written — four in a row,
+        # each in fifteen seconds, under a green tick on the pull request that
+        # caused it. The warning was the only notice, and a warning on a
+        # passing check is the notice nobody reads.
+        #
+        # A fork's pull request gets no secrets and would fail here. That is
+        # the right answer and not a hypothetical to design around: this
+        # repository has had no fork pull request, and one arriving is a
+        # decision to take then, in the open, rather than a hole to leave now.
         env:
           DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
         run: |
           set -euo pipefail
           if [[ -z "${DB_URL}" ]]; then
-            echo "::warning::CLOVEERP_LIVE_DATABASE_URL is not set; the dry run cannot see live and has checked nothing."
-            exit 0
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so this dry run compared nothing with live. Add the session-pooler connection string as a repository secret; until it is set, no merge to main can deploy."
+            exit 1
           fi
           echo "## Migrations that would apply" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -98,9 +128,76 @@ jobs:
 
       - name: Record every repository migration as applied (one-off)
         if: github.event_name == 'workflow_dispatch' && inputs.mark_applied
+        # Both directions, because the history table and the repository
+        # disagree in both and `supabase db push` refuses on either half.
+        #
+        # The first version of this step marked the repository's versions
+        # applied and stopped, which was half the job. The first dry run that
+        # ever reached live proved it: the history table held 160 stamps the
+        # connector recorded, the repository holds 278 files, and the two sets
+        # do not intersect at all — not one stamp names a file, not one file is
+        # recorded. Marking the 278 applied would have left the push refusing
+        # on the 160, with the error the CLI actually returns:
+        # "Remote migration versions not found in local migrations directory".
+        #
+        # Reverting a stamp deletes its row. It undoes nothing the connector
+        # did — the schema those statements built is still there — it declares
+        # the repository the record from here on, which is the whole point.
+        env:
+          THROUGH: ${{ inputs.mark_applied_through }}
         run: |
           set -euo pipefail
-          versions=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | tr '\n' ' ')
+
+          # No boundary, no repair. Recording a migration as applied without
+          # applying it is not recoverable by a later deploy: replay skips what
+          # the history table already claims, so the change is stranded and
+          # live diverges from the repository for good. A refusal here costs a
+          # re-dispatch; the default it replaces costs the schema.
+          if [[ -z "${THROUGH// /}" ]]; then
+            echo "::error::mark_applied needs mark_applied_through: the highest migration version already on live (supabase/ops/README.md records 20260905040000 as the last the connector applied). Without it this would record every later migration as applied without applying it."
+            exit 1
+          fi
+          if ! [[ "$THROUGH" =~ ^[0-9]+$ ]]; then
+            echo "::error::mark_applied_through must be a bare version, e.g. 20260905040000; got '$THROUGH'."
+            exit 1
+          fi
+
+          # Numerically, not as strings: the repository carries both 0001 and
+          # 20260905040000 and a lexicographic compare across those lengths is
+          # only accidentally right. Every version is well inside a double.
+          all=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | sort -u)
+          versions=$(printf '%s\n' "$all" | awk -v t="$THROUGH" '$1 + 0 <= t + 0')
+          pending=$(printf '%s\n' "$all" | awk -v t="$THROUGH" '$1 + 0 > t + 0')
+
+          n_at=$(printf '%s' "$versions" | grep -c . || true)
+          n_after=$(printf '%s' "$pending" | grep -c . || true)
+          if [[ "$n_at" -eq 0 ]]; then
+            echo "::error::no migration in this repository is at or below $THROUGH; the boundary is wrong."
+            exit 1
+          fi
+          echo "boundary $THROUGH: $n_at at or below it, $n_after after it left for replay to apply"
+
+          # An absent history table is a project nothing has pushed to, which
+          # is not an error: there is simply nothing stale to clear.
+          if [[ "$(psql "$DB_URL" -tAc "select to_regclass('supabase_migrations.schema_migrations') is not null")" == "t" ]]; then
+            remote=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc \
+              "select version from supabase_migrations.schema_migrations order by version")
+          else
+            remote=""
+          fi
+
+          # Against the whole repository, not the bounded set: a stamp naming a
+          # migration above the boundary is recorded and real, not stale.
+          stale=$(comm -23 <(printf '%s\n' "$remote" | grep -v '^$' | sort -u) <(printf '%s\n' "$all") | tr '\n' ' ')
+          if [[ -n "${stale// /}" ]]; then
+            echo "reverting $(echo $stale | wc -w) stamp(s) naming no migration in this repository"
+            # shellcheck disable=SC2086
+            supabase migration repair --status reverted $stale --db-url "$DB_URL"
+          else
+            echo "no stale stamps: every recorded version names a migration in this repository"
+          fi
+
+          versions=$(printf '%s\n' "$versions" | tr '\n' ' ')
           echo "marking $(echo $versions | wc -w) versions applied"
           # shellcheck disable=SC2086
           supabase migration repair --status applied $versions --db-url "$DB_URL"
