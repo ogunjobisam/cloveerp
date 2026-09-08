@@ -416,12 +416,30 @@ jobs:
       # is the difference between a smoke test and signing into production.
       # playwright.config.ts refuses to run without an explicit target and
       # refuses the live ref by name; this is the belt to that pair of braces.
+      #
+      # NOT ON PULL REQUESTS, and that is a cost decision rather than a
+      # confidence one. `supabase start` replays every migration in
+      # supabase/migrations against a real Supabase host, and on the day this
+      # was written that step alone ran past twenty minutes — on top of a build
+      # already near twenty. Three pull request pushes in twenty minutes put
+      # three of those in flight at once and took the repository's Actions
+      # budget to its ceiling, at which point GitHub refuses to start any job
+      # at all: the schema build, the deploy, everything. A check that stops
+      # the whole build from running is worse than a check that runs later.
+      #
+      # So it runs on push to main — the branch that deploys, where it is worth
+      # twenty minutes — and on demand. A pull request keeps the fast
+      # typescript job it had. Everything above still runs on every pull
+      # request: typecheck, lint, unit tests, build, the bundle's project, and
+      # the Edge Functions.
       # -----------------------------------------------------------------------
       - uses: supabase/setup-cli@v1
+        if: github.event_name != 'pull_request'
         with:
           version: 2.116.0
 
       - name: Start a Supabase stack and give it two accounts
+        if: github.event_name != 'pull_request'
         # `supabase start` applies every migration in supabase/migrations to a
         # real Supabase host — GoTrue, PostgREST and Postgres, not the bare
         # cluster the schema job builds. That difference is the point: the
@@ -468,6 +486,7 @@ jobs:
           create "e2e-demo@clove.invalid" "e2e-demo-password-1"
 
       - name: The application boots, signs in and draws a module page
+        if: github.event_name != 'pull_request'
         env:
           VITE_SUPABASE_URL: ${{ env.E2E_API_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.E2E_ANON_KEY }}
@@ -480,7 +499,7 @@ jobs:
         # A failed browser test with no trace is a re-run request. The trace is
         # only written on a retry, so this uploads whatever exists and does not
         # fail the job for finding nothing.
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
