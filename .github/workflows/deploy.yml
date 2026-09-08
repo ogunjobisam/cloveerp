@@ -65,14 +65,28 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: deploy-live
-  cancel-in-progress: false
-
 jobs:
   dry-run:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Its own group, per branch, and not the deploy's.
+    #
+    # deploy-live was declared on the workflow, so both jobs were in it, and
+    # GitHub keeps exactly one run queued per group: a third arrival cancels
+    # the one already waiting. On the merge of #73 that is precisely what
+    # happened — the push to main queued behind a running replay, a pull
+    # request dry run arrived thirty-five seconds later, and the production
+    # deploy of the merge was cancelled by a job that only reads. It went
+    # grey, not red, and nothing on the merged pull request said the deploy
+    # it caused had been thrown away.
+    #
+    # A read cannot be allowed to displace a write. The dry run now cancels
+    # only its own earlier self on the same branch, which is what you want
+    # when a pull request is pushed to twice in a minute.
+    concurrency:
+      group: deploy-dry-run-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -109,6 +123,21 @@ jobs:
   apply:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # A replay that blocks on a lock rather than deadlocking gets no 40P01 and
+    # no retry — it just waits. On the default six-hour job timeout it would
+    # wait holding the deploy-live concurrency group and, worse, holding the
+    # scheduler paused: every deploy behind it queued and the platform's clock
+    # stopped, for six hours, with nothing red to say so. An hour is longer
+    # than any replay this repository has run and short enough to notice.
+    # Cancelling still runs the resume step, which is always().
+    timeout-minutes: 60
+    # One deploy against live at a time, and never two replays at once. A
+    # newer deploy may cancel an older one still queued: --include-all means
+    # the newer applies everything the older would have, so the migrations
+    # are not lost with the run.
+    concurrency:
+      group: deploy-live
+      cancel-in-progress: false
     env:
       DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
     steps:
@@ -276,12 +305,21 @@ jobs:
             echo "no active scheduled job; nothing to pause"
             exit 0
           fi
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
+          # pg_cron's own API first. On 8 September the direct UPDATE came back
+          # "permission denied for table job": the deploy's role can read
+          # cron.job but does not own it. cron.alter_job() checks that the role
+          # owns the job rather than the catalogue, which is the grant a
+          # deploying role is actually likely to have.
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qtc \
+               "select cron.alter_job(jobid, active := false) from cron.job where jobid in ($paused)"; then
+            echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
+            echo "paused scheduled job(s) via cron.alter_job: $paused"
+          elif psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
                "update cron.job set active = false where jobid in ($paused)"; then
             echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
-            echo "paused scheduled job(s): $paused"
+            echo "paused scheduled job(s) by update: $paused"
           else
-            echo "::warning::could not pause cron.job; the replay will run against a live scheduler and rely on the deadlock retry."
+            echo "::warning::could not pause cron.job by either route; THE SCHEDULER IS STILL RUNNING and the replay relies on the deadlock retry. Nothing needs undoing afterwards."
           fi
 
       - name: Apply pending migrations by replay
@@ -412,7 +450,11 @@ jobs:
             echo "nothing was paused"
             exit 0
           fi
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
+          # Both routes, whichever paused it: a resume that fails because it
+          # picked the wrong one is the failure this step exists to prevent.
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qtc \
+               "select cron.alter_job(jobid, active := true) from cron.job where jobid in (${PAUSED_JOBS})" \
+             || psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
                "update cron.job set active = true where jobid in (${PAUSED_JOBS})"; then
             echo "scheduled job(s) running again: ${PAUSED_JOBS}"
           else
