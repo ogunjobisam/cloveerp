@@ -179,11 +179,27 @@ jobs:
               echo "── $(basename "$f")"
               $PSQL --single-transaction -f "$f"
             done
+            # Dumped and restored inside the container, not on the runner.
+            #
+            # The runner has Ubuntu's postgresql-client, which is 16.15, and the
+            # server is the Supabase image at 17.6. psql spans that difference
+            # without complaint — which is why every build so far has worked —
+            # but pg_dump and pg_restore refuse a server newer than themselves,
+            # and the first run of this cache found out the hard way:
+            #
+            #   pg_dump: error: aborting because of server version mismatch
+            #   detail: server version: 17.6; pg_dump version: 16.15
+            #
+            # The container's own tools match its server by construction, so
+            # they are the ones that do this. Nothing else in the job changes.
+            #
             # Dumped before the seed, so what is cached is the schema this
             # repository describes rather than one with a demonstration
             # organisation already in it. Written aside and moved, so an
             # interrupted dump cannot be restored on the next run.
-            pg_dump --format=custom --file="$dump.new" "$PGDATABASE"
+            docker exec -e PGPASSWORD=postgres clove-erp-pg \
+              pg_dump --format=custom --username=postgres --dbname="$PGDATABASE" \
+              > "$dump.new"
             mv "$dump.new" "$dump"
             echo "built from the migrations, and cached for the next run"
           }
@@ -193,7 +209,9 @@ jobs:
           # outcome that must not exist is a green build on a schema nobody can
           # account for.
           if [[ -s "$dump" ]]; then
-            if pg_restore --exit-on-error --dbname="$PGDATABASE" "$dump"; then
+            if docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
+                 pg_restore --exit-on-error --username=postgres --dbname="$PGDATABASE" \
+                 < "$dump"; then
               echo "restored the schema these migrations built earlier"
               exit 0
             fi
