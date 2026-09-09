@@ -1,83 +1,91 @@
-# Supplier invoicing, payment and supplier balances
+# Supplier bills, payment and supplier balances
 
-Today the purchase side stops at goods received. The receipt raises the "goods
-received not invoiced" accrual, and then nothing: there is no supplier bill, no
-supplier balance, and the payment run always finds nothing to pay. This closes
-that loop and then proves the finance figures line by line.
+## What I found (it changes the plan)
+
+Most of the supplier bill already exists in the engine and was never switched on.
+
+`erp.configure_procurement_controls` — the "Procurement controls" item on the
+Configuration screen — already installs a purchase invoice: its own lifecycle
+(draft → registered → paid, with dispute and cancel), its own numbering
+(`PINV-000001`), and a posting rule that debits goods-received-not-invoiced and
+credits trade payables. The demonstration organisation has never had it
+installed, which is exactly why roughly £830k sits in the accrual, no supplier
+balance exists, and a payment run finds nothing to pay.
+
+So this is smaller than planned. What is genuinely missing:
+
+1. Nothing installs procurement controls during onboarding, so no organisation
+   gets supplier bills unless somebody knows to press that button.
+2. There is no way to raise a bill from a goods receipt — only line-by-line
+   against an order line, with the quantity typed by hand.
+3. Approving a payment run marks it approved and stops. No bank payment is
+   posted, no payable is settled, no bill is marked paid.
+4. There is no supplier balances or payables ageing anywhere in the product.
 
 ## What you will be able to do
 
-1. Raise a supplier bill against a goods receipt — quantities and prices come
-   from what was actually received, so the bill is matched, not typed.
-2. Post it. That clears the accrual raised by the receipt, puts any price
-   difference to purchase price variance, and creates the supplier balance.
-3. See a **Supplier balances** panel on Financials: what is owed per supplier,
-   aged into current / 30 / 60 / 90+ buckets, what has been paid, and what is
-   held.
-4. Propose a payment run — it now finds the open bills, holds anything in
-   dispute or with an unresolved match exception, and totals the rest.
-5. Approve and then **pay** the run: money leaves the bank account, the supplier
-   balance settles, and each bill moves to paid.
-
-## Controls kept as they are
-
-- The person who proposes a payment run still cannot approve it.
-- A bill that disagrees with the receipt is held, not quietly dropped.
-- Paying needs the payment permission; matching the bill needs the purchasing
-  match permission. Nothing is enforced in the screen alone — the database
-  refuses independently.
+- Receive goods, then raise the supplier's bill straight from the receipt: the
+  quantities and prices come from what actually arrived, not from typing.
+- See **Supplier balances** on Financials — owed, aged into 0–30/31–60/61–90/90+,
+  paid, and anything held back by a match exception.
+- Propose a payment run, have somebody else approve it, then **pay** it: the
+  bank is credited, the payable settled, the bills marked paid, and the
+  supplier balance goes to nil.
+- Watch goods-received-not-invoiced drain as bills are registered, instead of
+  growing for ever.
 
 ## Technical shape
 
-**Migration (one, forward-only, with its own assertions):**
+One forward-only migration:
 
-- `erp_ref.document_type` gains `supplier_invoice_reference`
-  (`affects_finance`, no stock, party required, create permission
-  `procurement.match`).
-- Procurement configuration change set gains: `supplier_invoice` state machine
-  (draft → received → paid / disputed / cancelled), numbering rule `SINV-`,
-  document type `supplier_invoice`, posting rules `supplier_invoice`
-  (dr 3200 GRNI at received value, cr 3100 payables at invoice value,
-  balancing 6200 purchase price variance) and `supplier_payment`
-  (dr 3100, cr 2100).
-- `erp.supplier_invoice_from_receipt(p_receipt_id, p_their_reference)` — mirror
-  of `invoice_from_delivery`; copies received lines, links `invoices` relations,
-  advances `quantity_invoiced` so GRNI drains.
-- `erp.execute_payment_run(p_proposal_id)` — approved runs only; posts one
-  journal per party, settles `subledger_item.settled_minor`, transitions each
-  bill to paid, marks the proposal `paid`.
-- Reads: `erp.supplier_balances()`, `erp.payables_ageing(p_as_at)`,
-  `erp.payment_proposal_lines(p_proposal_id)`.
-- Public wrappers `erp_supplier_invoice_from_receipt`,
-  `erp_execute_payment_run`, `erp_supplier_balances`, `erp_payables_ageing`,
-  `erp_payment_proposal_lines`, each asserting its own governance in the same
-  migration, granted to `authenticated` only.
-- `erp_test.assert_procure_to_pay_suite` — receipt → bill → GRNI drained to
-  zero → payable created → run proposed, approved, paid → payable settled →
-  journals balance. Registered in `erp.ci_check_catalogue()`.
-- Existing `erp.assert_subledger_reconciles` extended to prove the payable
-  control account equals the sum of its subledger, and that the ageing buckets
-  sum to the outstanding total on both sides.
+- **Configuration.** Add a `supplier_payment` posting rule (debit trade
+  payables, credit bank) to `erp.configure_procurement_controls`, and install
+  procurement controls as part of demonstration/onboarding configuration so a
+  new organisation has supplier bills from day one.
+- **`erp.bill_from_receipt(receipt, their_reference, invoice_date)`** — opens a
+  `purchase_invoice` for the receipt's supplier, copies each received line
+  through the existing `erp.invoice_against` (so three-way match and GRNI
+  progress keep working), sets the due date from the supplier's payment terms,
+  and relates the bill to the receipt. Refuses an unposted receipt and refuses
+  billing the same receipt twice.
+- **`erp.pay_payment_run(proposal)`** — for an approved proposal: posts the
+  bank/payable journal per line through the existing posting rule, settles the
+  payable subledger items, transitions each fully-settled bill to `paid`,
+  marks the proposal `paid`, and raises an event. Refuses a proposal that is
+  not approved, refuses to pay twice, and keeps held lines unpaid.
+- **Reads:** `erp.supplier_balances()`, `erp.payables_ageing(as_at)`,
+  `erp.payment_proposal_lines(proposal)`.
+- **Doors:** `erp_bill_from_receipt`, `erp_pay_payment_run`,
+  `erp_supplier_balances`, `erp_payables_ageing`, `erp_payment_proposal_lines`
+  — invoker-rights wrappers, execute revoked from public/anon, granted to
+  authenticated, mutating doors registered in the write-allowance register with
+  their gate.
+- **Proof:** a new `erp_test.supplier_bill_suite()` walking order → receipt →
+  bill → proposal → approval → payment → settled, plus refusals (unposted
+  receipt, double bill, unapproved run, double payment, self-approval), and
+  reconciliation cases asserting GRNI drains by exactly the billed value,
+  payables equal the sum of open bills, and the ageing buckets sum to the
+  control account.
 
-**Screens:**
+## Screens
 
-- `src/routes/procurement/index.tsx` — "Bill against a receipt" action and a
-  Supplier invoices document panel.
-- `src/routes/finance/index.tsx` (via `src/lib/modules.tsx`) — Supplier
-  balances panel (owed / aged / paid / held), payables ageing, payment run
-  actions including the new Pay step and a proposal lines inquiry.
-- Money shown in major units through the existing currency formatting.
+- **Purchasing** — "Bill a receipt" action, and a Purchase invoices panel.
+- **Financials** — Supplier balances panel, Payables ageing panel, payment run
+  proposal lines inquiry, and a "Pay an approved run" action beside the
+  existing propose/approve pair.
 
-**Report-accuracy pass (run, then reported to you):**
+All new wording registered as renameable resource strings in English and German.
 
-Reconcile, line by line: trial balance nets to zero; receivable control =
-customer subledger = aged debt buckets; payable control = supplier subledger =
-aged creditor buckets; bank control = cash applied and payments made; stock
-control = valued movements; GRNI = received-not-invoiced report; commitments
-net off. Any discrepancy is fixed, not annotated.
+## Report-accuracy pass
+
+After the journey runs, reconcile line by line and report the numbers:
+trial balance nets to zero; every journal balances; receivables and payables
+control accounts equal their subledgers; both ageing reports equal their
+control account; GRNI equals received-not-invoiced by line; bank movements
+equal cash applied plus payments made; inventory value equals the stock ledger.
 
 ## Verification
 
-`bun run typecheck`, `bun run lint`, `bun run test`, `bun run build`, plus the
-new suite and a browser walk of the supplier journey end to end: purchase
-order → goods receipt → supplier bill → payment run → settled balance.
+`bun run typecheck`, `bun run lint`, `bun run test`, `bun run build`, the
+migration's own assertion suites, and a browser walk of the whole supplier
+journey on the demonstration organisation.
