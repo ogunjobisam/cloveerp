@@ -19,6 +19,23 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A superseded run's answer is worthless, so it should not still be running.
+#
+# There was no concurrency block here, and on 8-9 September ten of twenty-one
+# runs were already obsolete while still burning minutes — several went stale
+# two or three minutes in and then ran for another half hour. A push costs
+# about fifty-six minutes of runner time across these jobs, so that was roughly
+# five hours spent on commits that no longer existed, and it is what took the
+# account to its Actions ceiling twice, at which point GitHub refuses to start
+# any job at all: this build, the deploy, everything.
+#
+# Cancelling on pull requests only. A push to main is a release: two of them
+# queue rather than one replacing the other, because the second cancelling the
+# first would leave whatever the first was proving unproven.
+concurrency:
+  group: schema-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-assert:
     runs-on: ubuntu-latest
@@ -599,8 +616,49 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  compat:
+  # Does this pull request touch anything the schema comparison could see?
+  #
+  # Twenty seconds, to decide whether to spend thirty minutes.
+  changes:
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      schema: ${{ steps.decide.outputs.schema }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: decide
+        # Anything unexpected answers yes. A check skipped when it should have
+        # run is a hole in the build; a check run when it need not have is a
+        # bill, and the bill is the cheaper mistake.
+        run: |
+          set -uo pipefail
+          say() { echo "schema=$1" >> "$GITHUB_OUTPUT"; echo "schema=$1"; exit 0; }
+
+          base=$(git merge-base "origin/${{ github.base_ref }}" HEAD) || say true
+          changed=$(git diff --name-only "$base" HEAD) || say true
+          [[ -n "$changed" ]] || say true
+
+          if grep -qE '^supabase/' <<< "$changed"; then say true; fi
+          say false
+
+  compat:
+    needs: changes
+    # Only when this pull request changes something under supabase/.
+    #
+    # The job builds the schema twice — the merge base and this head — and
+    # fails when main's application calls a door this pull request removes.
+    # Both the doors it adds and the doors it removes come from the migrations,
+    # so a pull request that changes no migration has an empty set of each, and
+    # the comparison can only conclude that nothing was removed. Thirty minutes
+    # to prove A equals A.
+    #
+    # supabase/ rather than supabase/migrations/, because the two builds each
+    # use their own side's supabase/ci/00_host_bootstrap.sql and a change there
+    # could in principle move a door too.
+    if: github.event_name == 'pull_request' && needs.changes.outputs.schema == 'true'
     runs-on: ubuntu-latest
     env:
       PGHOST: localhost
