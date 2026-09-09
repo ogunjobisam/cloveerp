@@ -132,6 +132,33 @@ jobs:
         # this file is short is the point: it is the whole Supabase surface.
         run: $PSQL -f supabase/ci/00_host_bootstrap.sql
 
+      # The database this build asserts against, restored when these exact
+      # migrations have built one before.
+      #
+      # Replaying two hundred and seventy-eight files one at a time, each
+      # re-running the generators, takes eighteen minutes, and it ran on every
+      # push — including eleven in a row that changed nothing under supabase/.
+      # It cannot simply be skipped when no migration changed: four of the
+      # checks below compare src against this database, so they need one whether
+      # or not the schema moved. What can be skipped is building it twice for
+      # the same migrations.
+      #
+      # The cache replaces the construction, never the verification. Every
+      # assertion in erp.ci_check_catalogue() still runs against whatever comes
+      # out, cache or not, so a restore that lost something is caught by the
+      # hundreds of checks that exist to catch exactly that.
+      #
+      # Keyed on the migrations and the bootstrap together, and deliberately
+      # with no restore-keys: a near-miss cache is a wrong database, and there
+      # is no version of that worth having. Change one migration and the key
+      # changes and the replay runs in full. The image tag is in the key too,
+      # because the extensions come from the image.
+      - name: A database, if these migrations have built one before
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/clove_erp.dump
+          key: clove-erp-schema-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
+
       - name: Apply every migration, in order, to an empty database
         # --single-transaction so a migration is atomic. Without it psql
         # autocommits each statement, and a migration that fails halfway leaves
@@ -143,11 +170,58 @@ jobs:
         # Safe here because no migration uses CREATE INDEX CONCURRENTLY or
         # anything else that refuses to run inside a transaction block.
         run: |
-          set -euo pipefail
-          for f in supabase/migrations/*.sql; do
-            echo "── $(basename "$f")"
-            $PSQL --single-transaction -f "$f"
-          done
+          set -uo pipefail
+          dump="$RUNNER_TEMP/clove_erp.dump"
+
+          replay() {
+            set -euo pipefail
+            for f in supabase/migrations/*.sql; do
+              echo "── $(basename "$f")"
+              $PSQL --single-transaction -f "$f"
+            done
+            # Dumped and restored inside the container, not on the runner.
+            #
+            # The runner has Ubuntu's postgresql-client, which is 16.15, and the
+            # server is the Supabase image at 17.6. psql spans that difference
+            # without complaint — which is why every build so far has worked —
+            # but pg_dump and pg_restore refuse a server newer than themselves,
+            # and the first run of this cache found out the hard way:
+            #
+            #   pg_dump: error: aborting because of server version mismatch
+            #   detail: server version: 17.6; pg_dump version: 16.15
+            #
+            # The container's own tools match its server by construction, so
+            # they are the ones that do this. Nothing else in the job changes.
+            #
+            # Dumped before the seed, so what is cached is the schema this
+            # repository describes rather than one with a demonstration
+            # organisation already in it. Written aside and moved, so an
+            # interrupted dump cannot be restored on the next run.
+            docker exec -e PGPASSWORD=postgres clove-erp-pg \
+              pg_dump --format=custom --username=postgres --dbname="$PGDATABASE" \
+              > "$dump.new"
+            mv "$dump.new" "$dump"
+            echo "built from the migrations, and cached for the next run"
+          }
+
+          # A cache that will not restore is a cache that is ignored. Anything
+          # other than a clean restore drops the database and replays: the one
+          # outcome that must not exist is a green build on a schema nobody can
+          # account for.
+          if [[ -s "$dump" ]]; then
+            if docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
+                 pg_restore --exit-on-error --username=postgres --dbname="$PGDATABASE" \
+                 < "$dump"; then
+              echo "restored the schema these migrations built earlier"
+              exit 0
+            fi
+            echo "::warning::the cached schema did not restore; building from the migrations instead"
+            psql -v ON_ERROR_STOP=1 -d postgres -c 'drop database if exists clove_erp'
+            psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_erp'
+            $PSQL -f supabase/ci/00_host_bootstrap.sql
+          fi
+
+          replay
 
       - name: Seed a demonstration organisation for the build to reconcile
         # Every suite cleans up after itself, so at the end of the build the
