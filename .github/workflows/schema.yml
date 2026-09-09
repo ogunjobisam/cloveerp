@@ -157,8 +157,17 @@ jobs:
         id: schema_cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/clove_erp.dump
-          key: clove-erp-schema-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
+          # Two halves, because a database is not the whole of what these
+          # migrations build. Roles are cluster-level and pg_dump does not
+          # carry them.
+          path: |
+            ${{ runner.temp }}/clove_erp.dump
+            ${{ runner.temp }}/clove_erp.roles.sql
+          # v2: the v1 entries hold a database dump and no roles, which is the
+          # shape that could not be restored. A new generation rather than a
+          # tolerated one — an entry that cannot restore would be replayed on
+          # every run and never replaced, because its key is already taken.
+          key: clove-erp-schema-v2-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
 
       - name: Apply every migration, in order, to an empty database
         # --single-transaction so a migration is atomic. Without it psql
@@ -173,6 +182,7 @@ jobs:
         run: |
           set -uo pipefail
           dump="$RUNNER_TEMP/clove_erp.dump"
+          roles="$RUNNER_TEMP/clove_erp.roles.sql"
 
           # Say which path this is taking, before taking it.
           #
@@ -183,6 +193,7 @@ jobs:
           # announces itself.
           echo "cache-hit: ${{ steps.schema_cache.outputs.cache-hit || 'false' }}"
           echo "dump present: $([[ -s "$dump" ]] && echo "yes, $(wc -c < "$dump") bytes" || echo no)"
+          echo "roles present: $([[ -s "$roles" ]] && echo "yes, $(wc -c < "$roles") bytes" || echo no)"
 
           replay() {
             set -euo pipefail
@@ -211,7 +222,24 @@ jobs:
             docker exec -e PGPASSWORD=postgres clove-erp-pg \
               pg_dump --format=custom --username=postgres --dbname="$PGDATABASE" \
               > "$dump.new"
+
+            # And the roles, which pg_dump structurally cannot carry: they
+            # belong to the cluster, not the database. The migrations create
+            # their own — clove_enquiry among them — so a restore into a fresh
+            # container met grants naming a role nothing had created:
+            #
+            #   pg_restore: error: could not execute query:
+            #   ERROR:  role "clove_enquiry" does not exist
+            #
+            # which is what sent the first three warm runs back to a full
+            # replay. --no-role-passwords so nothing resembling a credential
+            # is written into a cache.
+            docker exec -e PGPASSWORD=postgres clove-erp-pg \
+              pg_dumpall --roles-only --no-role-passwords --username=postgres \
+              > "$roles.new"
+
             mv "$dump.new" "$dump"
+            mv "$roles.new" "$roles"
             echo "built from the migrations, and cached for the next run"
           }
 
@@ -240,10 +268,17 @@ jobs:
               -c 'create database clove_erp template template0'
           }
 
-          if [[ -s "$dump" ]]; then
+          if [[ -s "$dump" && -s "$roles" ]]; then
             restore_log="$RUNNER_TEMP/pg_restore.log"
 
+            # The roles first, and deliberately without ON_ERROR_STOP: most of
+            # what pg_dumpall writes is already in this image, and "role
+            # already exists" is the correct answer for those. Whether the
+            # handful the migrations create all arrived is not decided here —
+            # it is decided by --exit-on-error below, which is why tolerating
+            # errors at this line costs nothing.
             if fresh_database > "$restore_log" 2>&1 &&
+               psql -d postgres -f "$roles" >> "$restore_log" 2>&1 &&
                docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
                  pg_restore --exit-on-error --username=postgres --dbname="$PGDATABASE" \
                  >> "$restore_log" 2>&1 < "$dump"; then
