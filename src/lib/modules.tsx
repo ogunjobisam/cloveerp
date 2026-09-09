@@ -1184,6 +1184,30 @@ export const FINANCE: ModuleDef = {
       invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
     },
     {
+      // Approving a run used to be the end of it: the proposal said approved
+      // and nothing left the bank. This is the step that moves the money.
+      label: "Pay an approved run",
+      permission: "finance.post",
+      fn: "erp_pay_payment_run",
+      fields: [
+        pickFrom(
+          "erp_payment_proposals",
+          "proposal_id",
+          ["reference", "payment_date", "status"],
+          "p_proposal_id",
+          "Payment proposal",
+        ),
+      ],
+      invalidates: [
+        "erp_payment_proposals",
+        "erp_supplier_balances",
+        "erp_payables_ageing",
+        "erp_trial_balance",
+        "erp_documents",
+      ],
+    },
+    {
+
       label: "Allocate a landed cost",
       permission: "finance.post",
       fn: "erp_allocate_landed_cost",
