@@ -93,6 +93,16 @@ export default defineConfig({
       name: "ui",
       use: { ...devices["Desktop Chrome"] },
       testMatch: /(routes|desk)\.spec\.ts/,
+      // Ninety seconds, because the first visit to a route compiles it.
+      //
+      // The suite is pointed at the dev server rather than a preview — the
+      // reason is under webServer below — and Vite compiles a route the first
+      // time somebody asks for it. Fifty-two routes means fifty-two cold
+      // compiles, and under two workers that regularly costs more than the
+      // default thirty seconds all by itself. Three runs each failed four or
+      // five routes at exactly 30.0s, and never quite the same ones: the
+      // giveaway that it was the clock rather than the screens.
+      timeout: 90_000,
     },
   ],
 
