@@ -154,10 +154,23 @@ jobs:
       # changes and the replay runs in full. The image tag is in the key too,
       # because the extensions come from the image.
       - name: A database, if these migrations have built one before
+        id: schema_cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/clove_erp.dump
-          key: clove-erp-schema-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
+          # Three parts, because a database is not the whole of what these
+          # migrations build. Roles are cluster-level, so pg_dump does not
+          # carry them; the third is what the roles are supposed to look like
+          # once restored, which is not the same claim as their existing.
+          path: |
+            ${{ runner.temp }}/clove_erp.dump
+            ${{ runner.temp }}/clove_erp.roles.sql
+            ${{ runner.temp }}/clove_erp.roles.tsv
+          # A new generation each time the shape changes, never a tolerated
+          # old one: an entry that cannot restore would be replayed on every
+          # run and never replaced, because its key is already taken. v1 held
+          # a database and no roles. v2 held roles whose attributes did not
+          # survive being applied.
+          key: clove-erp-schema-v3-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
 
       - name: Apply every migration, in order, to an empty database
         # --single-transaction so a migration is atomic. Without it psql
@@ -172,6 +185,31 @@ jobs:
         run: |
           set -uo pipefail
           dump="$RUNNER_TEMP/clove_erp.dump"
+          roles="$RUNNER_TEMP/clove_erp.roles.sql"
+          roles_expected="$RUNNER_TEMP/clove_erp.roles.tsv"
+
+          # What every role in this cluster is, in seven columns. Written when
+          # the migrations build it and compared after a restore, because a
+          # role that exists is not the same claim as a role that is what it
+          # was — and the difference is the whole of what went wrong below.
+          role_shape() {
+            psql -tAF$'\t' -d postgres -c \
+              "select rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
+                      rolcanlogin, rolbypassrls
+                 from pg_catalog.pg_roles order by rolname"
+          }
+
+          # Say which path this is taking, before taking it.
+          #
+          # The first warm run replayed and the log could not say why: a miss
+          # went to the replay in silence, and eighteen minutes of migration
+          # NOTICEs buried the only other evidence. A step whose behaviour
+          # cannot be read afterwards is a step that cannot be trusted, so it
+          # announces itself.
+          echo "cache-hit: ${{ steps.schema_cache.outputs.cache-hit || 'false' }}"
+          echo "dump present: $([[ -s "$dump" ]] && echo "yes, $(wc -c < "$dump") bytes" || echo no)"
+          echo "roles present: $([[ -s "$roles" ]] && echo "yes, $(wc -c < "$roles") bytes" || echo no)"
+          echo "role shape present: $([[ -s "$roles_expected" ]] && echo yes || echo no)"
 
           replay() {
             set -euo pipefail
@@ -200,7 +238,27 @@ jobs:
             docker exec -e PGPASSWORD=postgres clove-erp-pg \
               pg_dump --format=custom --username=postgres --dbname="$PGDATABASE" \
               > "$dump.new"
+
+            # And the roles, which pg_dump structurally cannot carry: they
+            # belong to the cluster, not the database. The migrations create
+            # their own — clove_enquiry among them — so a restore into a fresh
+            # container met grants naming a role nothing had created:
+            #
+            #   pg_restore: error: could not execute query:
+            #   ERROR:  role "clove_enquiry" does not exist
+            #
+            # which is what sent the first three warm runs back to a full
+            # replay. --no-role-passwords so nothing resembling a credential
+            # is written into a cache.
+            docker exec -e PGPASSWORD=postgres clove-erp-pg \
+              pg_dumpall --roles-only --no-role-passwords --username=postgres \
+              > "$roles.new"
+
+            role_shape > "$roles_expected.new"
+
             mv "$dump.new" "$dump"
+            mv "$roles.new" "$roles"
+            mv "$roles_expected.new" "$roles_expected"
             echo "built from the migrations, and cached for the next run"
           }
 
@@ -208,20 +266,94 @@ jobs:
           # other than a clean restore drops the database and replays: the one
           # outcome that must not exist is a green build on a schema nobody can
           # account for.
-          if [[ -s "$dump" ]]; then
-            if docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
+          # An empty database for the dump to land in, and empty in the sense
+          # pg_restore means.
+          #
+          # Two things were wrong with creating it the obvious way. "Bootstrap
+          # the host" runs two steps earlier and the dump carries everything it
+          # created, so restoring over it meets objects that already exist —
+          # and under --exit-on-error that is an abort, not a warning. And a
+          # database created the default way is copied from template1, which in
+          # this image is not bare; template0 is what pg_restore documents and
+          # the only starting point whose contents are known.
+          #
+          # WITH (FORCE) because one background connection is enough to refuse
+          # a drop, and a refused drop here is silent: this step runs without
+          # set -e, so the failure would carry on into a restore over a
+          # populated database and look like a bad cache.
+          fresh_database() {
+            psql -v ON_ERROR_STOP=1 -d postgres \
+              -c 'drop database if exists clove_erp with (force)' \
+              -c 'create database clove_erp template template0'
+          }
+
+          # Three attributes pg_dumpall names that this cluster cannot set.
+          #
+          # It writes, for every role:
+          #
+          #   ALTER ROLE clove_enquiry WITH NOSUPERUSER NOINHERIT ... NOBYPASSRLS;
+          #
+          # and PostgreSQL requires a superuser to name SUPERUSER, REPLICATION
+          # or BYPASSRLS at all — even to say NO, even when nothing changes.
+          # This cluster's postgres has CREATEROLE and BYPASSRLS and not
+          # SUPERUSER, deliberately, because the hosted one does not either. So
+          # the whole ALTER was refused, the role kept CREATE ROLE's defaults,
+          # and clove_enquiry came back INHERIT when the migration made it
+          # NOINHERIT. erp_test.assert_ingress_suite is what noticed.
+          #
+          # Dropping those three tokens leaves an ALTER this cluster can run.
+          # It changes no outcome for any role built here: NOSUPERUSER,
+          # NOREPLICATION and NOBYPASSRLS are what CREATE ROLE gives anyway.
+          # A role that genuinely needed one of them would come back wrong —
+          # which is why what lands is compared below rather than assumed.
+          settable() {
+            sed -E '/^ALTER ROLE /s/ (NO)?(SUPERUSER|REPLICATION|BYPASSRLS)\b//g' "$roles"
+          }
+
+          if [[ -s "$dump" && -s "$roles" && -s "$roles_expected" ]]; then
+            restore_log="$RUNNER_TEMP/pg_restore.log"
+
+            # The roles first, without ON_ERROR_STOP: most of what pg_dumpall
+            # writes is already in this image and "role already exists" is the
+            # correct answer for those. Tolerating that is only safe because
+            # the shape comparison below is what actually decides — the first
+            # version of this said pg_restore would decide, and pg_restore
+            # only ever checks that a role exists.
+            if fresh_database > "$restore_log" 2>&1 &&
+               settable | psql -d postgres >> "$restore_log" 2>&1 &&
+               docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
                  pg_restore --exit-on-error --username=postgres --dbname="$PGDATABASE" \
-                 < "$dump"; then
-              echo "restored the schema these migrations built earlier"
-              exit 0
+                 >> "$restore_log" 2>&1 < "$dump"; then
+
+              if role_shape | diff -u "$roles_expected" - >> "$restore_log" 2>&1; then
+                echo "restored the schema these migrations built earlier"
+                exit 0
+              fi
+              echo "::warning::the restored cluster's roles are not the ones these migrations build"
             fi
+
             echo "::warning::the cached schema did not restore; building from the migrations instead"
-            psql -v ON_ERROR_STOP=1 -d postgres -c 'drop database if exists clove_erp'
-            psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_erp'
+            echo "── why the restore failed ──"
+            head -40 "$restore_log"
+
+            fresh_database
             $PSQL -f supabase/ci/00_host_bootstrap.sql
           fi
 
           replay
+
+          # Said twice, deliberately.
+          #
+          # A replay writes something like a million characters of migration
+          # NOTICEs, and the log this build can retrieve afterwards is the tail
+          # of that — so a diagnosis printed before the replay is a diagnosis
+          # nobody can read. The first warm run failed here and the reason was
+          # already off the end of the log by the time anyone looked. It is
+          # repeated after the noise so it survives.
+          if [[ -s "${restore_log:-}" ]]; then
+            echo "── the restore that failed, before this replay ──"
+            head -40 "$restore_log"
+          fi
 
       - name: Seed a demonstration organisation for the build to reconcile
         # Every suite cleans up after itself, so at the end of the build the
