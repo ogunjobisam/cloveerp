@@ -157,17 +157,20 @@ jobs:
         id: schema_cache
         uses: actions/cache@v4
         with:
-          # Two halves, because a database is not the whole of what these
-          # migrations build. Roles are cluster-level and pg_dump does not
-          # carry them.
+          # Three parts, because a database is not the whole of what these
+          # migrations build. Roles are cluster-level, so pg_dump does not
+          # carry them; the third is what the roles are supposed to look like
+          # once restored, which is not the same claim as their existing.
           path: |
             ${{ runner.temp }}/clove_erp.dump
             ${{ runner.temp }}/clove_erp.roles.sql
-          # v2: the v1 entries hold a database dump and no roles, which is the
-          # shape that could not be restored. A new generation rather than a
-          # tolerated one — an entry that cannot restore would be replayed on
-          # every run and never replaced, because its key is already taken.
-          key: clove-erp-schema-v2-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
+            ${{ runner.temp }}/clove_erp.roles.tsv
+          # A new generation each time the shape changes, never a tolerated
+          # old one: an entry that cannot restore would be replayed on every
+          # run and never replaced, because its key is already taken. v1 held
+          # a database and no roles. v2 held roles whose attributes did not
+          # survive being applied.
+          key: clove-erp-schema-v3-pg17.6.1.167-${{ hashFiles('supabase/migrations/**', 'supabase/ci/00_host_bootstrap.sql') }}
 
       - name: Apply every migration, in order, to an empty database
         # --single-transaction so a migration is atomic. Without it psql
@@ -183,6 +186,18 @@ jobs:
           set -uo pipefail
           dump="$RUNNER_TEMP/clove_erp.dump"
           roles="$RUNNER_TEMP/clove_erp.roles.sql"
+          roles_expected="$RUNNER_TEMP/clove_erp.roles.tsv"
+
+          # What every role in this cluster is, in seven columns. Written when
+          # the migrations build it and compared after a restore, because a
+          # role that exists is not the same claim as a role that is what it
+          # was — and the difference is the whole of what went wrong below.
+          role_shape() {
+            psql -tAF$'\t' -d postgres -c \
+              "select rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
+                      rolcanlogin, rolbypassrls
+                 from pg_catalog.pg_roles order by rolname"
+          }
 
           # Say which path this is taking, before taking it.
           #
@@ -194,6 +209,7 @@ jobs:
           echo "cache-hit: ${{ steps.schema_cache.outputs.cache-hit || 'false' }}"
           echo "dump present: $([[ -s "$dump" ]] && echo "yes, $(wc -c < "$dump") bytes" || echo no)"
           echo "roles present: $([[ -s "$roles" ]] && echo "yes, $(wc -c < "$roles") bytes" || echo no)"
+          echo "role shape present: $([[ -s "$roles_expected" ]] && echo yes || echo no)"
 
           replay() {
             set -euo pipefail
@@ -238,8 +254,11 @@ jobs:
               pg_dumpall --roles-only --no-role-passwords --username=postgres \
               > "$roles.new"
 
+            role_shape > "$roles_expected.new"
+
             mv "$dump.new" "$dump"
             mv "$roles.new" "$roles"
+            mv "$roles_expected.new" "$roles_expected"
             echo "built from the migrations, and cached for the next run"
           }
 
@@ -268,22 +287,49 @@ jobs:
               -c 'create database clove_erp template template0'
           }
 
-          if [[ -s "$dump" && -s "$roles" ]]; then
+          # Three attributes pg_dumpall names that this cluster cannot set.
+          #
+          # It writes, for every role:
+          #
+          #   ALTER ROLE clove_enquiry WITH NOSUPERUSER NOINHERIT ... NOBYPASSRLS;
+          #
+          # and PostgreSQL requires a superuser to name SUPERUSER, REPLICATION
+          # or BYPASSRLS at all — even to say NO, even when nothing changes.
+          # This cluster's postgres has CREATEROLE and BYPASSRLS and not
+          # SUPERUSER, deliberately, because the hosted one does not either. So
+          # the whole ALTER was refused, the role kept CREATE ROLE's defaults,
+          # and clove_enquiry came back INHERIT when the migration made it
+          # NOINHERIT. erp_test.assert_ingress_suite is what noticed.
+          #
+          # Dropping those three tokens leaves an ALTER this cluster can run.
+          # It changes no outcome for any role built here: NOSUPERUSER,
+          # NOREPLICATION and NOBYPASSRLS are what CREATE ROLE gives anyway.
+          # A role that genuinely needed one of them would come back wrong —
+          # which is why what lands is compared below rather than assumed.
+          settable() {
+            sed -E '/^ALTER ROLE /s/ (NO)?(SUPERUSER|REPLICATION|BYPASSRLS)\b//g' "$roles"
+          }
+
+          if [[ -s "$dump" && -s "$roles" && -s "$roles_expected" ]]; then
             restore_log="$RUNNER_TEMP/pg_restore.log"
 
-            # The roles first, and deliberately without ON_ERROR_STOP: most of
-            # what pg_dumpall writes is already in this image, and "role
-            # already exists" is the correct answer for those. Whether the
-            # handful the migrations create all arrived is not decided here —
-            # it is decided by --exit-on-error below, which is why tolerating
-            # errors at this line costs nothing.
+            # The roles first, without ON_ERROR_STOP: most of what pg_dumpall
+            # writes is already in this image and "role already exists" is the
+            # correct answer for those. Tolerating that is only safe because
+            # the shape comparison below is what actually decides — the first
+            # version of this said pg_restore would decide, and pg_restore
+            # only ever checks that a role exists.
             if fresh_database > "$restore_log" 2>&1 &&
-               psql -d postgres -f "$roles" >> "$restore_log" 2>&1 &&
+               settable | psql -d postgres >> "$restore_log" 2>&1 &&
                docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
                  pg_restore --exit-on-error --username=postgres --dbname="$PGDATABASE" \
                  >> "$restore_log" 2>&1 < "$dump"; then
-              echo "restored the schema these migrations built earlier"
-              exit 0
+
+              if role_shape | diff -u "$roles_expected" - >> "$restore_log" 2>&1; then
+                echo "restored the schema these migrations built earlier"
+                exit 0
+              fi
+              echo "::warning::the restored cluster's roles are not the ones these migrations build"
             fi
 
             echo "::warning::the cached schema did not restore; building from the migrations instead"
