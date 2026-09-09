@@ -94,25 +94,15 @@ test.describe("signed in, an organisation with no data yet", () => {
       await expect(heading, `${route.path} rendered no heading`).toBeVisible({ timeout: 20_000 });
       await expect(heading, `${route.path} rendered an empty heading`).not.toBeEmpty();
 
-      // One known throw, on one route, named so that it cannot hide a second.
+      // No allowance any more.
       //
-      // `/` renders the public page on the server and the desk in the browser,
-      // because the server cannot see localStorage and hasStoredSession() is
-      // what decides. React calls that a hydration mismatch, throws, and
-      // regenerates the tree — for every signed-in visitor, every time they
-      // open the root. src/lib/erp.ts documents the hint as the way to avoid
-      // "flashing one before the other"; this is that flash, with an exception
-      // attached.
-      //
-      // It is a defect in src rather than in this suite, and fixing src is not
-      // what a testing change should do, so it is allowed here by name. Every
-      // other throw on `/` still fails, and if the mismatch is fixed this
-      // allowance simply stops matching anything.
-      const known = (message: string) =>
-        route.path === "/" && message.includes("Hydration failed because the server rendered HTML");
-      const unexpected = backend.crashes.filter((c) => !known(c));
-
-      expect(unexpected, `${route.path} threw:\n${unexpected.join("\n")}`).toEqual([]);
+      // `/` used to throw a hydration mismatch for every signed-in visitor —
+      // the server cannot read localStorage, so it rendered the product page
+      // while the browser rendered the desk — and this suite allowed that one
+      // message by name. ClientOnly now defers the fork to after hydration, so
+      // there is one tree and nothing to reconcile. The allowance is gone
+      // rather than kept as a courtesy: if it comes back, this fails.
+      expect(backend.crashes, `${route.path} threw:\n${backend.crashes.join("\n")}`).toEqual([]);
     });
   }
 });
