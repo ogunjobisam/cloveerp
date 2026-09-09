@@ -493,7 +493,7 @@ jobs:
         run: |
           set -euo pipefail
           bunx playwright install --with-deps chromium
-          bun run test:e2e
+          bunx playwright test --project=integration
 
       - name: What the browser saw when it failed
         # A failed browser test with no trace is a re-run request. The trace is
@@ -528,6 +528,77 @@ jobs:
   #
   # Pull requests only: on main there is no other side to compare with.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Every screen, in a browser, with no stack behind it
+  #
+  # Its own job rather than a step inside `typescript`, because that job
+  # finishes in about a minute and this one takes nine. Bolted on, it would put
+  # nine minutes on the critical path of every pull request; beside it, the
+  # wait is whatever the slowest job already was.
+  #
+  # This one DOES run on pull requests, and that is the difference between it
+  # and the six-test suite above. That one starts a Supabase stack, which
+  # replays every migration and took the Actions budget to its ceiling — the
+  # note above it explains why it waits for main. This one starts nothing. The
+  # application's own two HTTP paths, /auth/v1 and /rest/v1/rpc, are answered
+  # from inside the page, so there is no Docker, no database and no sign-in,
+  # and the cost is a browser and a dev server.
+  #
+  # What it proves is the half no schema assertion can reach: that all
+  # fifty-two routes render, that the gate shows the right one of its four
+  # states, and that nothing throws. It does not prove the database returns
+  # these shapes — erp.assert_* and the erp_test suites do that, against the
+  # database that answers.
+  browser:
+    runs-on: ubuntu-latest
+    # Longer than the suite needs and far shorter than the six-hour default: a
+    # hung dev server should fail, not idle.
+    timeout-minutes: 30
+
+    env:
+      # Set, and deliberately not live. src/lib/erp.ts inlines the live project
+      # as its fallback so that every build starts connected, which makes one
+      # unset variable the difference between a mocked suite and a browser
+      # pointed at production. playwright.config.ts refuses an unset target and
+      # refuses the live ref by name; this names a host that does not exist,
+      # and every request to it is answered inside the page regardless.
+      VITE_SUPABASE_URL: https://e2e.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: e2e-not-a-real-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        run: |
+          set -euo pipefail
+          npm install -g bun
+          bun --version
+
+      - name: Install the application and a browser
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+
+      - name: Every route renders, and the desk behaves
+        run: |
+          set -euo pipefail
+          bunx playwright test --project=ui
+
+      - name: What the browser saw when it failed
+        # The trace is written on a retry, which CI is configured for, so a
+        # failure here arrives with the run attached rather than as a request
+        # to reproduce it.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
   compat:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
