@@ -82,6 +82,19 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   and friends). They must be idempotent.
 - A new public function must assert its own governance in the same migration —
   `supabase/ci/boundary_in_migration.sh`.
+- **`.github/workflows/deploy.yml` is the only way a migration reaches
+  production.** Not the connector, not a console, not by hand. On 8 September a
+  replay and something else applied the same migrations at the same time and
+  met on a `CREATE OR REPLACE`; the deploy lost twenty-three minutes of work to
+  a duplicate-key error, and the other writer had already carried on. Two
+  routes into one database is how that happens, and only one of them records a
+  release, proves the result, or can be rolled back to a known point.
+- `.mcp.json` therefore asks for `docs`, `debugging` and `development` only.
+  Those read. The groups that write — `database` (`apply_migration`,
+  `execute_sql`), `functions` (`deploy_edge_function`), `branching`, `account`
+  — are not requested, so a session that opens this repository cannot reach
+  production by accident. Needing one of them for an incident is a reason to
+  add it deliberately and take it out again, not a reason to leave it on.
 
 ## Lovable
 
