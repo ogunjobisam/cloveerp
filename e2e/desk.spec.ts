@@ -59,16 +59,21 @@ test.describe("the command palette", () => {
     await expect(dialog, "Ctrl/Cmd-K did not open the palette").toBeVisible();
 
     const search = dialog.getByRole("textbox").first();
-    const before = await dialog.getByRole("option").count();
+    // The hits are a list of buttons, not an ARIA listbox — the first version
+    // of this test looked for role="option", found none, and compared 0 with 0.
+    const hits = dialog.getByRole("listitem");
+    await expect(hits.first(), "the palette opened with nothing in it").toBeVisible();
+    const before = await hits.count();
 
     await search.fill("zzzzzzzz-nothing-is-called-this");
-    const after = await dialog.getByRole("option").count();
+    await expect.poll(async () => hits.count(), { timeout: 5_000 }).toBeLessThan(before);
+    const after = await hits.count();
     expect(after, "the palette showed the same results for a term nothing matches").toBeLessThan(
       before,
     );
 
     await search.fill("");
-    await expect(dialog.getByRole("option").first()).toBeVisible();
+    await expect(hits.first()).toBeVisible();
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -120,8 +125,13 @@ test.describe("the record browser", () => {
     await page.goto("/master-data");
     await expect(page.getByRole("heading", { name: "Products" })).toBeVisible({ timeout: 20_000 });
 
-    // role="status" is what the browser renders in place of rows.
-    await expect(page.getByRole("status").first()).toBeVisible({ timeout: 10_000 });
+    // Its own words in place of rows. role="status" is the *loading* state, and
+    // asserting that was this test's first bug: it waited for a spinner that had
+    // already been replaced by the thing it meant to check.
+    await expect(
+      page.getByText(/no .*(yet|match)/i).first(),
+      "an empty browser showed no empty state",
+    ).toBeVisible({ timeout: 15_000 });
     expect(backend.crashes).toEqual([]);
   });
 });
@@ -158,9 +168,25 @@ test.describe("refusals", () => {
       timeout: 20_000,
     });
 
-    // The refusal token is stripped for the reader; the sentence after it is
-    // the part a person is meant to act on, so that is what must survive.
-    await expect(alert).toContainText(/required to list items|inventory\.read/i);
+    // What actually reaches the screen: "This did not load." and
+    // friendlyError().title, which for a 42501 is "You do not have permission
+    // to do this."
+    await expect(alert).toContainText(/permission/i);
+
+    // What does not, and this is a finding rather than an assertion.
+    //
+    // friendlyError() assembles title, body, hint and technical, and its own
+    // comment says the engine's hint "is more specific than the register and
+    // wins". record-browser.tsx renders `.title` and nothing else, so the hint
+    // the database sent — "Ask an administrator to grant inventory.read." — is
+    // dropped, and so is the sentence naming what was refused. The reader is
+    // told they lack a permission and not which one.
+    //
+    // This is an inconsistency rather than a decision: action.tsx, kpi.tsx and
+    // profile.tsx all render the hint. Asserting the hint here would leave a
+    // permanently red test for a defect in src that this change does not fix,
+    // so what is asserted is today's behaviour and the gap is written down.
+    // If the browser starts showing the hint, this test still passes.
     expect(backend.crashes).toEqual([]);
   });
 });

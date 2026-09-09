@@ -179,6 +179,21 @@ const SHELL: Record<string, unknown> = {
   erp_is_platform_organisation: false,
   erp_platform_me: { is_staff: false, role: null, claimable: false },
   erp_my_tenants: [],
+
+  // The same again, for the four screens that read an array field off an
+  // object the same way ServiceBanner does. Each was found by the sweep, each
+  // costs the whole page rather than the panel, and each is the stub's doing
+  // rather than the product's — the shape is taken from the type the route
+  // itself declares.
+  erp_my_notification_settings: {
+    preferences: [],
+    quiet_hours: [],
+    services_installed: false,
+    unread: 0,
+  },
+  erp_commercial_summary: { plan: null },
+  erp_my_agreement: { contract: null, documents: [], entitlements: [] },
+  erp_analytics_contract: { views: [] },
 };
 
 /** How a refusal arrives: PostgREST's shape, carrying the engine's own words. */
