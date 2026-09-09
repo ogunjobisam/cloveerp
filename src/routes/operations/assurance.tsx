@@ -54,6 +54,7 @@ function Assurance() {
         title="Structural assertions"
         description="Run live against this database, not read from a cached result."
         fn="erp_platform_assurance"
+        loading="Running every check against this database. This takes up to a minute."
         empty="No checks were returned, which is itself unexpected."
       >
         {(rows) => (
