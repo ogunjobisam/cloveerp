@@ -1207,7 +1207,6 @@ export const FINANCE: ModuleDef = {
       ],
     },
     {
-
       label: "Allocate a landed cost",
       permission: "finance.post",
       fn: "erp_allocate_landed_cost",

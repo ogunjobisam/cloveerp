@@ -98,7 +98,6 @@ function Procurement() {
             ],
           },
           {
-
             label: "Receive against an order",
             permission: "procurement.receive",
             fn: "erp_receive_against",
@@ -345,7 +344,6 @@ function Procurement() {
         partyRole="supplier"
         empty="No supplier bills yet. Bill a posted goods receipt from the actions above."
       />
-
     </div>
   );
 }
