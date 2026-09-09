@@ -229,6 +229,15 @@ export type Database = {
       erp_batch_audit: { Args: { p_batch_id: string }; Returns: Json }
       erp_batch_record: { Args: { p_works_order_id: string }; Returns: Json }
       erp_batches: { Args: { p_limit?: number }; Returns: Json }
+      erp_bill_from_receipt: {
+        Args: {
+          p_due_date?: string
+          p_invoice_date?: string
+          p_receipt_id: string
+          p_their_reference?: string
+        }
+        Returns: Json
+      }
       erp_blanket_position: { Args: { p_blanket_id: string }; Returns: Json }
       erp_book_operation_time: {
         Args: {
@@ -1025,6 +1034,12 @@ export type Database = {
         Returns: Json
       }
       erp_party_posting_classes: { Args: { p_limit?: number }; Returns: Json }
+      erp_pay_payment_run: { Args: { p_proposal_id: string }; Returns: Json }
+      erp_payables_ageing: { Args: { p_as_at?: string }; Returns: Json }
+      erp_payment_proposal_lines: {
+        Args: { p_proposal_id: string }
+        Returns: Json
+      }
       erp_payment_proposals: { Args: { p_limit?: number }; Returns: Json }
       erp_permissions_directory: { Args: never; Returns: Json }
       erp_personal_data_register: { Args: never; Returns: Json }
@@ -2179,6 +2194,7 @@ export type Database = {
         }
         Returns: string
       }
+      erp_supplier_balances: { Args: never; Returns: Json }
       erp_supplier_qualification: { Args: never; Returns: Json }
       erp_supply_demand: {
         Args: { p_horizon_days?: number; p_item_id: string; p_site_id: string }
