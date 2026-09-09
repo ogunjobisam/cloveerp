@@ -71,6 +71,33 @@ function Procurement() {
         note="Goods-in, matching and supplier qualification — the verbs between the documents."
         actions={[
           {
+            label: "Bill a receipt",
+            description:
+              "The supplier's bill, raised from a posted goods receipt: the quantities and the prices are what arrived, not what somebody typed.",
+            permission: "procurement.match",
+            fn: "erp_bill_from_receipt",
+            fields: [
+              pickFrom(
+                "erp_documents",
+                "document_id",
+                ["document_number", "state"],
+                "p_receipt_id",
+                "Goods receipt",
+                { p_type_code: "goods_receipt", p_limit: 100 },
+              ),
+              { kind: "text", name: "p_their_reference", label: "Supplier's invoice number" },
+              { kind: "date", name: "p_invoice_date", label: "Invoice date" },
+              { kind: "date", name: "p_due_date", label: "Due date" },
+            ],
+            invalidates: [
+              "erp_documents",
+              "erp_grni",
+              "erp_match_workbench",
+              "erp_supplier_balances",
+              "erp_payables_ageing",
+            ],
+          },
+          {
             label: "Receive against an order",
             permission: "procurement.receive",
             fn: "erp_receive_against",
@@ -307,6 +334,15 @@ function Procurement() {
         baseType="receipt"
         partyRole="supplier"
         empty="No receipts yet. A receipt is recorded against a purchase order, and posting it is what puts stock on hand."
+      />
+
+      <DocumentPanel
+        title="Purchase invoices"
+        description="The supplier's bill. Registering one clears the goods-received accrual and puts the balance on the supplier."
+        baseType="invoice_reference"
+        typeCode="purchase_invoice"
+        partyRole="supplier"
+        empty="No supplier bills yet. Bill a posted goods receipt from the actions above."
       />
     </div>
   );

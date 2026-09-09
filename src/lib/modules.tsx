@@ -1184,6 +1184,29 @@ export const FINANCE: ModuleDef = {
       invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
     },
     {
+      // Approving a run used to be the end of it: the proposal said approved
+      // and nothing left the bank. This is the step that moves the money.
+      label: "Pay an approved run",
+      permission: "finance.post",
+      fn: "erp_pay_payment_run",
+      fields: [
+        pickFrom(
+          "erp_payment_proposals",
+          "proposal_id",
+          ["reference", "payment_date", "status"],
+          "p_proposal_id",
+          "Payment proposal",
+        ),
+      ],
+      invalidates: [
+        "erp_payment_proposals",
+        "erp_supplier_balances",
+        "erp_payables_ageing",
+        "erp_trial_balance",
+        "erp_documents",
+      ],
+    },
+    {
       label: "Allocate a landed cost",
       permission: "finance.post",
       fn: "erp_allocate_landed_cost",
@@ -1242,6 +1265,25 @@ export const FINANCE: ModuleDef = {
   },
   worklists: [
     {
+      title: "Supplier balances",
+      description:
+        "What is owed to each supplier, what is overdue, what has been paid, and what a match exception is holding back.",
+      fn: "erp_supplier_balances",
+      empty:
+        "Nothing is owed to a supplier. Registering a supplier bill puts a balance here; paying an approved run clears it.",
+      rowKey: (r, i) => String(r["party_id"] ?? i),
+      columns: [
+        { header: "Supplier", cell: "party" },
+        { header: "Owed", cell: moneyCell("owing_minor"), numeric: true },
+        { header: "Overdue", cell: moneyCell("overdue_minor"), numeric: true },
+        { header: "Paid", cell: moneyCell("paid_minor"), numeric: true },
+        { header: "Held", cell: moneyCell("held_minor"), numeric: true },
+        date("Oldest due", "oldest_due_date"),
+        { header: "Open bills", cell: "open_documents", numeric: true },
+      ],
+    },
+
+    {
       title: "Dunning worklist",
       description: "Customers overdue enough to contact.",
       fn: "erp_dunning_worklist",
@@ -1273,6 +1315,25 @@ export const FINANCE: ModuleDef = {
     },
   ],
   reports: [
+    {
+      title: "Payables ageing",
+      description: "What is owed to suppliers, banded by how overdue it is.",
+      fn: "erp_payables_ageing",
+      empty:
+        "Nothing outstanding to suppliers. A registered supplier bill appears here, banded by how close its due date is.",
+      rowKey: (r, i) => String(r["party_id"] ?? i),
+      columns: [
+        { header: "Supplier", cell: "party" },
+        { header: "Currency", cell: "currency" },
+        { header: "Not due", cell: moneyCell("not_due_minor"), numeric: true },
+        { header: "1–30", cell: moneyCell("days_1_30_minor"), numeric: true },
+        { header: "31–60", cell: moneyCell("days_31_60_minor"), numeric: true },
+        { header: "61–90", cell: moneyCell("days_61_90_minor"), numeric: true },
+        { header: "90+", cell: moneyCell("days_90_plus_minor"), numeric: true },
+        { header: "Total", cell: moneyCell("total_minor"), numeric: true },
+      ],
+    },
+
     {
       title: "Slow-moving stock provision",
       description:
