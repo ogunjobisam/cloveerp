@@ -336,6 +336,16 @@ function Procurement() {
         partyRole="supplier"
         empty="No receipts yet. A receipt is recorded against a purchase order, and posting it is what puts stock on hand."
       />
+
+      <DocumentPanel
+        title="Purchase invoices"
+        description="The supplier's bill. Registering one clears the goods-received accrual and puts the balance on the supplier."
+        baseType="invoice_reference"
+        typeCode="purchase_invoice"
+        partyRole="supplier"
+        empty="No supplier bills yet. Bill a posted goods receipt from the actions above."
+      />
+
     </div>
   );
 }
