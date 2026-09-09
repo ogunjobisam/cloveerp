@@ -1242,6 +1242,25 @@ export const FINANCE: ModuleDef = {
   },
   worklists: [
     {
+      title: "Supplier balances",
+      description:
+        "What is owed to each supplier, what is overdue, what has been paid, and what a match exception is holding back.",
+      fn: "erp_supplier_balances",
+      empty:
+        "Nothing is owed to a supplier. Registering a supplier bill puts a balance here; paying an approved run clears it.",
+      rowKey: (r, i) => String(r["party_id"] ?? i),
+      columns: [
+        { header: "Supplier", cell: "party" },
+        { header: "Owed", cell: moneyCell("owing_minor"), numeric: true },
+        { header: "Overdue", cell: moneyCell("overdue_minor"), numeric: true },
+        { header: "Paid", cell: moneyCell("paid_minor"), numeric: true },
+        { header: "Held", cell: moneyCell("held_minor"), numeric: true },
+        date("Oldest due", "oldest_due_date"),
+        { header: "Open bills", cell: "open_documents", numeric: true },
+      ],
+    },
+
+    {
       title: "Dunning worklist",
       description: "Customers overdue enough to contact.",
       fn: "erp_dunning_worklist",
