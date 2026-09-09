@@ -28,6 +28,18 @@ const LIVE_PROJECT_REF = "xpzffnnhnhcqyjqcueja";
 
 const target = process.env["VITE_SUPABASE_URL"];
 
+/**
+ * A Chromium that is already on the host.
+ *
+ * Playwright resolves a browser build pinned to its own version, and a host
+ * that provisions Chromium separately — a container image that ships one, a
+ * distribution package — will not have that exact build. Downloading a second
+ * copy to satisfy the pin is the usual answer and is not available offline, so
+ * the path is an input instead. Unset everywhere it is not needed, which is
+ * everywhere Playwright installed its own.
+ */
+const chromiumPath = process.env["CLOVEERP_E2E_CHROMIUM"];
+
 if (!target) {
   throw new Error(
     "CLOVEERP_E2E_NO_TARGET: VITE_SUPABASE_URL is not set, so the application would fall back to " +
@@ -55,6 +67,7 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
+    ...(chromiumPath ? { launchOptions: { executablePath: chromiumPath } } : {}),
   },
 
   projects: [
@@ -62,11 +75,34 @@ export default defineConfig({
     // suite needs and writes their storage states; every test below reuses one
     // of them and none of them types a password.
     { name: "setup", testMatch: /auth\.setup\.ts/ },
+
+    // The suite that talks to a real stack. Six tests, one sign-in, and the
+    // only place in this directory where the answers come from a database.
     {
-      name: "chromium",
+      name: "integration",
       use: { ...devices["Desktop Chrome"] },
       dependencies: ["setup"],
-      testIgnore: /auth\.setup\.ts/,
+      testMatch: /smoke\.spec\.ts/,
+    },
+
+    // The suite that answers Supabase from inside the browser. No stack, no
+    // sign-in, no dependency on the project above — which is what lets it run
+    // where there is no Docker, this container included, and in a build that
+    // has never once managed to start a stack.
+    {
+      name: "ui",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /(routes|desk)\.spec\.ts/,
+      // Ninety seconds, because the first visit to a route compiles it.
+      //
+      // The suite is pointed at the dev server rather than a preview — the
+      // reason is under webServer below — and Vite compiles a route the first
+      // time somebody asks for it. Fifty-two routes means fifty-two cold
+      // compiles, and under two workers that regularly costs more than the
+      // default thirty seconds all by itself. Three runs each failed four or
+      // five routes at exactly 30.0s, and never quite the same ones: the
+      // giveaway that it was the clock rather than the screens.
+      timeout: 90_000,
     },
   ],
 

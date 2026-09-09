@@ -95,10 +95,37 @@ function statusWord(status: string): string {
 }
 
 function AccessibilityStatement() {
-  const { data, isPending, error } = useQuery({
+  const {
+    data: raw,
+    isPending,
+    error,
+  } = useQuery({
     queryKey: ["erp_accessibility_statement", {}],
     queryFn: () => callErp<Statement>("erp_accessibility_statement", {}),
   });
+
+  // Filled in once here rather than guarded at each of the dozen reads below.
+  //
+  // callErp's type argument is a promise about the shape, not a check of it —
+  // it casts. This screen reads data.counts.total and data.checked_by.manual
+  // straight, so a response missing either threw, and because the throw
+  // reaches the root boundary it did not cost this screen, it cost the
+  // application: every route became "This page didn't load".
+  const data = raw
+    ? {
+        ...raw,
+        counts: raw.counts ?? {
+          met: 0,
+          partially_met: 0,
+          not_met: 0,
+          not_applicable: 0,
+          total: 0,
+        },
+        checked_by: raw.checked_by ?? { automated: "—", manual: "—", register: "—" },
+        exceptions: raw.exceptions ?? [],
+        criteria: raw.criteria ?? [],
+      }
+    : raw;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">

@@ -83,11 +83,18 @@ export function ServiceBanner() {
   if (!n) return null;
 
   const soon = Date.now() + 24 * 60 * 60 * 1000;
-  const incidents = n.incidents
+
+  // `?? []` on both, because this banner renders inside the shell and a throw
+  // here does not cost the banner — it costs every screen in the product. The
+  // guard above passes anything that is not null, and callErp's cast is a
+  // promise about the shape rather than a check of it, so one unexpected
+  // response turned the whole desk into "This page didn't load". A missing
+  // banner is the right failure; a missing application is not.
+  const incidents = (n.incidents ?? [])
     .filter((i) => i.state !== "resolved")
     .map((i) => ({ ...i, key: `${i.code}:${i.updates[0]?.id ?? "declared"}` }))
     .filter((i) => !dismissed.includes(i.key));
-  const windows = n.maintenance
+  const windows = (n.maintenance ?? [])
     .filter(
       (w) =>
         w.state === "in_progress" ||

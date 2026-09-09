@@ -1,4 +1,4 @@
-import { Navigate, createFileRoute } from "@tanstack/react-router";
+import { ClientOnly, Navigate, createFileRoute } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 
 import { FirstRun } from "../components/erp/first-run";
@@ -51,12 +51,33 @@ export const Route = createFileRoute("/")({
  *
  * `hasStoredSession()` is read rather than awaited because the decision has to
  * be made on the first paint: waiting would show a spinner to a visitor and a
- * marketing page to a colleague, each for a moment, and both are wrong. It is
- * false on the server, so the HTML at `/` is the redirect and never a second
- * copy of `/product` for a crawler to index. Whether the stored session is any
- * good is still `Gate`'s question, and it still asks it.
+ * marketing page to a colleague, each for a moment, and both are wrong.
+ * Whether the stored session is any good is still `Gate`'s question, and it
+ * still asks it.
+ *
+ * The decision is made after hydration rather than during it, and that is the
+ * whole of what ClientOnly is doing here. The session lives in localStorage,
+ * which the server cannot read, so the server always concluded "no session"
+ * and the browser of anybody signed in concluded the opposite — two different
+ * trees for the same route. React calls that a hydration mismatch, throws, and
+ * regenerates the tree, which every signed-in visitor paid for on every visit
+ * to the root. A browser test found it; nothing else could, because the server
+ * and the client are each individually right.
+ *
+ * The fallback is nothing rather than a spinner. `/` is a fork in the road and
+ * not a screen: it carries noindex and a canonical pointing at `/product`, so
+ * the HTML it serves has no job beyond existing, and an empty first frame is
+ * shorter than the regeneration it replaces.
  */
 function Home() {
+  return (
+    <ClientOnly fallback={null}>
+      <Fork />
+    </ClientOnly>
+  );
+}
+
+function Fork() {
   if (!hasStoredSession()) return <Navigate to="/product" replace />;
   return (
     <Gate>
