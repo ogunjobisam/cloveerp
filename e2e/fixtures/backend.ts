@@ -199,6 +199,10 @@ const SHELL: Record<string, unknown> = {
     capabilities: [],
     meters: [],
     invoices: [],
+    renewal: null,
+    subscription: null,
+    sub_processors: [],
+    service_commitments: [],
   },
   erp_personal_data_register: { fields: [], exemptions: [] },
   erp_permissions_directory: {
