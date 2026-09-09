@@ -193,7 +193,23 @@ const SHELL: Record<string, unknown> = {
   },
   erp_commercial_summary: { plan: null },
   erp_my_agreement: { contract: null, documents: [], entitlements: [] },
-  erp_analytics_contract: { views: [] },
+  erp_analytics_contract: {
+    views: [],
+    credentials: [],
+    services_installed: false,
+    findings: [],
+  },
+  erp_accessibility_statement: {
+    product: "Clove ERP",
+    standard: "WCAG 2.2",
+    level_claimed: "AA",
+    conformance: "partially conforms",
+    reviewed_on: "2026-01-01",
+    counts: { met: 0, partially_met: 0, not_met: 0, not_applicable: 0, total: 0 },
+    checked_by: { automated: "", manual: "", register: "" },
+    exceptions: [],
+    criteria: [],
+  },
 };
 
 /** How a refusal arrives: PostgREST's shape, carrying the engine's own words. */
@@ -341,10 +357,20 @@ export const test = base.extend<Fixtures>({
   // here because the React hooks lint rule reads a call to something named
   // `use` as a React hook and refuses it, which it is not and cannot be:
   // this file never renders.
-  backend: async ({ page, session }, provide) => {
-    const backend = await install(page, session);
-    await provide(backend);
-  },
+  // auto, so it installs whether or not a test names it.
+  //
+  // It was not, and the cost was two wasted diagnostics: a test that takes only
+  // `{ page }` got no interception at all, so its browser reached for the real
+  // host, was refused, and rendered the sign-in screen — which reads exactly
+  // like a session that failed to establish. A fixture whose absence is
+  // invisible and whose symptom is plausible is a trap; this one is always on.
+  backend: [
+    async ({ page, session }, provide) => {
+      const backend = await install(page, session);
+      await provide(backend);
+    },
+    { auto: true },
+  ],
 });
 
 export { expect } from "@playwright/test";

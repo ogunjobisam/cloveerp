@@ -32,6 +32,9 @@ test.describe("navigation", () => {
   });
 
   test("the browser's back button returns to the previous screen", async ({ page }) => {
+    // Three navigations, each of which may be the first time this dev server
+    // has compiled that route. The default thirty seconds is a budget for one.
+    test.setTimeout(90_000);
     await page.goto("/inventory");
     await expect(page.getByRole("navigation", { name: "Areas" }).first()).toBeVisible({
       timeout: 20_000,

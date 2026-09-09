@@ -10,8 +10,15 @@
 export type Kind =
   /** Reachable with no session at all. */
   | "public"
-  /** Behind the gate: signed out, these render the sign-in screen. */
-  | "desk";
+  /** Behind the gate, and inside the desk: the shell's Areas navigation is there. */
+  | "desk"
+  /**
+   * Behind the gate and deliberately without the desk. `<Gate bare>` keeps the
+   * session, the scope and the terminology and drops the shell — /device is a
+   * warehouse screen, and a person holding a scanner has no use for an area
+   * switcher.
+   */
+  | "bare";
 
 export type RouteUnderTest = {
   path: string;
@@ -31,7 +38,7 @@ export const ROUTES: readonly RouteUnderTest[] = [
   { path: "/profile", kind: "desk", file: "profile.tsx" },
   { path: "/settings", kind: "desk", file: "settings.tsx" },
   { path: "/notifications", kind: "desk", file: "notifications.tsx" },
-  { path: "/device", kind: "desk", file: "device.tsx" },
+  { path: "/device", kind: "bare", file: "device.tsx" },
 
   { path: "/administration/accessibility", kind: "desk", file: "administration/accessibility.tsx" },
   { path: "/administration/adoption", kind: "desk", file: "administration/adoption.tsx" },

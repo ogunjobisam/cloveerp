@@ -66,6 +66,16 @@ test.describe("signed in, an organisation with no data yet", () => {
         `${route.path} rendered the root error boundary`,
       ).toBeHidden();
 
+      if (route.kind === "bare") {
+        // No desk here by design, so what is asserted is the other half: the
+        // gate let us through. The sign-in screen also has a heading, and
+        // without this a bare route could fail to authenticate and still pass.
+        await expect(
+          page.getByRole("heading", { name: "Sign in to Clove ERP" }),
+          `${route.path} did not get past the gate`,
+        ).toBeHidden();
+      }
+
       if (route.kind === "desk") {
         // The desk, specifically: the shell's own navigation. This is what
         // distinguishes a screen that loaded from the sign-in screen, the
