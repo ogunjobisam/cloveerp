@@ -113,7 +113,9 @@ function TenantLifecycle() {
         title="Platform assurance"
         description="What the platform itself says about this organisation's configuration and isolation."
         fn="erp_platform_assurance"
+        loading="Running every check against this database. This takes up to a minute."
         empty="No assurance checks reported. That is itself unexpected — the platform runs these against every organisation."
+
         rowKey={(r, i) => `${String(r["code"] ?? i)}-${i}`}
         columns={[
           // check_code / state / result were none of them keys this RPC returns,

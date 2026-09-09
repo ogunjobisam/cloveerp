@@ -2,7 +2,7 @@ import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { callErp } from "../../lib/erp";
+import { ErpError, callErp } from "../../lib/erp";
 import { EmptyState, Prose } from "./page";
 
 /**
@@ -27,6 +27,7 @@ export function DataPanel<T>({
   args,
   empty,
   emptyAction,
+  loading,
   children,
 }: {
   title: string;
@@ -39,13 +40,28 @@ export function DataPanel<T>({
    * panels that are empty precisely because nothing is wrong.
    */
   emptyAction?: ReactNode;
+  /**
+   * What to say while it loads, where a bare "Loading…" would read as stuck.
+   * A panel that runs every structural assertion against the database takes
+   * the best part of a minute, and saying so is the difference between waiting
+   * and reloading.
+   */
+  loading?: string;
   children: (rows: T[]) => ReactNode;
 }) {
   const { data, isPending, error } = useQuery({
     queryKey: [fn, args ?? {}],
     queryFn: () => callErp<T[]>(fn, args ?? {}),
-    refetchInterval: 30_000,
+    // Not while it is failing. A refusal polled every thirty seconds is a
+    // refusal repeated for as long as the screen is open, and the answer will
+    // not have changed.
+    refetchInterval: (q) => (q.state.error ? false : 30_000),
   });
+
+  // A refusal is not a fault. A panel the account may not read says so in the
+  // ordinary voice of the page rather than in red, because nothing is broken:
+  // this is simply somebody else's panel.
+  const refused = error instanceof ErpError && error.isPermissionDenied;
 
   return (
     // min-w-0 so a wide table inside cannot stretch this section past the
@@ -61,7 +77,12 @@ export function DataPanel<T>({
       <div className="px-4 py-4 sm:px-5">
         {isPending ? (
           <p role="status" className="text-sm text-muted-foreground">
-            Loading…
+            {loading ?? "Loading…"}
+          </p>
+        ) : refused ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            This account does not hold the permission this panel needs, so there is nothing to show
+            here.
           </p>
         ) : error ? (
           <div role="alert">

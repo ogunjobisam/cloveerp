@@ -30,6 +30,7 @@ export function AutoPanel<T extends Record<string, unknown>>({
   args,
   empty,
   emptyAction,
+  loading,
   columns,
   rowKey,
 }: {
@@ -40,6 +41,8 @@ export function AutoPanel<T extends Record<string, unknown>>({
   empty: string;
   /** Where the emptiness is fixed, when it is fixed on another screen. */
   emptyAction?: { label: string; to: string };
+  /** What to say while a slow call runs, where "Loading…" would read as stuck. */
+  loading?: string;
   columns: Column<T>[];
   rowKey: (row: T, index: number) => string;
 }) {
@@ -52,6 +55,7 @@ export function AutoPanel<T extends Record<string, unknown>>({
       fn={fn}
       {...(args ? { args } : {})}
       empty={ui(empty)}
+      {...(loading ? { loading: ui(loading) } : {})}
       {...(emptyAction
         ? { emptyAction: <GoTo to={emptyAction.to}>{ui(emptyAction.label)}</GoTo> }
         : {})}

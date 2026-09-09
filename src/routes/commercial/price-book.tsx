@@ -8,7 +8,7 @@ import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { useErpSession } from "../../components/erp/session-context";
-import { callErp, hasPermission } from "../../lib/erp";
+import { ErpError, callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
 /**
@@ -174,7 +174,9 @@ function PriceBook() {
   const q = useQuery({
     queryKey: ["erp_price_book"],
     queryFn: () => callErp<PriceBookReport>("erp_price_book"),
-    refetchInterval: 60_000,
+    // Not while it is failing: a refusal re-asked every minute is the same
+    // refusal, and the console fills with it.
+    refetchInterval: (query) => (query.state.error ? false : 60_000),
   });
 
   const currencies = Array.from(new Set((q.data?.books ?? []).flatMap((b) => b.currencies)));
@@ -189,6 +191,12 @@ function PriceBook() {
 
       {q.isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : q.error instanceof ErpError && q.error.isPermissionDenied ? (
+        <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
+          {ui(
+            "This account does not hold the permission the price book needs, so there is nothing to show here.",
+          )}
+        </p>
       ) : q.error ? (
         <div role="alert" className="rounded-xl border border-border bg-card p-4 sm:p-5">
           <p className="text-sm font-medium text-destructive">This did not load.</p>
