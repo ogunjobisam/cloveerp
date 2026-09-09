@@ -219,31 +219,60 @@ jobs:
           # other than a clean restore drops the database and replays: the one
           # outcome that must not exist is a green build on a schema nobody can
           # account for.
-          if [[ -s "$dump" ]]; then
-            # Into an empty database, not the bootstrapped one.
-            #
-            # "Bootstrap the host" ran two steps ago and the dump carries
-            # everything it created, so restoring over it means pg_restore
-            # meeting objects that already exist — and with --exit-on-error
-            # that is an abort, not a warning. Dropping and recreating first
-            # costs nothing: the roles the bootstrap makes are cluster-level
-            # and survive, and everything database-scoped is in the dump.
-            psql -v ON_ERROR_STOP=1 -d postgres -c 'drop database if exists clove_erp'
-            psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_erp'
+          # An empty database for the dump to land in, and empty in the sense
+          # pg_restore means.
+          #
+          # Two things were wrong with creating it the obvious way. "Bootstrap
+          # the host" runs two steps earlier and the dump carries everything it
+          # created, so restoring over it meets objects that already exist —
+          # and under --exit-on-error that is an abort, not a warning. And a
+          # database created the default way is copied from template1, which in
+          # this image is not bare; template0 is what pg_restore documents and
+          # the only starting point whose contents are known.
+          #
+          # WITH (FORCE) because one background connection is enough to refuse
+          # a drop, and a refused drop here is silent: this step runs without
+          # set -e, so the failure would carry on into a restore over a
+          # populated database and look like a bad cache.
+          fresh_database() {
+            psql -v ON_ERROR_STOP=1 -d postgres \
+              -c 'drop database if exists clove_erp with (force)' \
+              -c 'create database clove_erp template template0'
+          }
 
-            if docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
+          if [[ -s "$dump" ]]; then
+            restore_log="$RUNNER_TEMP/pg_restore.log"
+
+            if fresh_database > "$restore_log" 2>&1 &&
+               docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
                  pg_restore --exit-on-error --username=postgres --dbname="$PGDATABASE" \
-                 < "$dump"; then
+                 >> "$restore_log" 2>&1 < "$dump"; then
               echo "restored the schema these migrations built earlier"
               exit 0
             fi
+
             echo "::warning::the cached schema did not restore; building from the migrations instead"
-            psql -v ON_ERROR_STOP=1 -d postgres -c 'drop database if exists clove_erp'
-            psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_erp'
+            echo "── why the restore failed ──"
+            head -40 "$restore_log"
+
+            fresh_database
             $PSQL -f supabase/ci/00_host_bootstrap.sql
           fi
 
           replay
+
+          # Said twice, deliberately.
+          #
+          # A replay writes something like a million characters of migration
+          # NOTICEs, and the log this build can retrieve afterwards is the tail
+          # of that — so a diagnosis printed before the replay is a diagnosis
+          # nobody can read. The first warm run failed here and the reason was
+          # already off the end of the log by the time anyone looked. It is
+          # repeated after the noise so it survives.
+          if [[ -s "${restore_log:-}" ]]; then
+            echo "── the restore that failed, before this replay ──"
+            head -40 "$restore_log"
+          fi
 
       - name: Seed a demonstration organisation for the build to reconcile
         # Every suite cleans up after itself, so at the end of the build the
