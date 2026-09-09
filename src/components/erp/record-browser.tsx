@@ -1,6 +1,6 @@
-import { friendlyError } from "@/lib/errors";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { ErrorNote } from "./action";
 import { EmptyState, Prose } from "./page";
 
 /**
@@ -287,9 +287,20 @@ export function RecordBrowser<T>({
                 Loading…
               </p>
             ) : error ? (
-              <div role="alert" className="px-4 py-4 sm:px-5">
-                <p className="text-sm font-medium text-destructive">This did not load.</p>
-                <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
+              // ErrorNote rather than the title alone.
+              //
+              // This rendered friendlyError(error).title and stopped, so a
+              // refusal arrived as "You do not have permission to do this."
+              // and nothing else — while the engine had sent
+              // "inventory.read is required to list items" and the hint "Ask
+              // an administrator to grant inventory.read." friendlyError
+              // assembles all of it and its own comment says the engine's hint
+              // wins over the register; this component was throwing that away
+              // on the main way anybody lists records. action.tsx, kpi.tsx and
+              // profile.tsx already showed it, so this was an inconsistency
+              // rather than a decision.
+              <div className="px-4 py-4 sm:px-5">
+                <ErrorNote error={error} />
               </div>
             ) : visible.length === 0 ? (
               <div className="px-4 py-4 sm:px-5">

@@ -151,7 +151,20 @@ function Distribution() {
   const { session } = useErpSession();
   const contract = useQuery({
     queryKey: ["erp_analytics_contract", {}],
-    queryFn: () => callErp<Contract>("erp_analytics_contract"),
+    queryFn: async () => {
+      // The arrays, filled in once. callErp's type argument casts rather than
+      // checks, and every read below trusts it; a response missing one field
+      // threw, and the throw reaches the root boundary, so the cost was not
+      // this panel but every screen in the product.
+      const d = await callErp<Contract>("erp_analytics_contract");
+      return {
+        ...d,
+        views: d?.views ?? [],
+        credentials: d?.credentials ?? [],
+        findings: d?.findings ?? [],
+        services_installed: d?.services_installed ?? false,
+      };
+    },
   });
   const install = useErpAction({
     fn: "erp_configure_reporting",

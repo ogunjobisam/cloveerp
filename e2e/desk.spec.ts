@@ -171,27 +171,73 @@ test.describe("refusals", () => {
       timeout: 20_000,
     });
 
-    // What actually reaches the screen: "This did not load." and
-    // friendlyError().title, which for a 42501 is "You do not have permission
-    // to do this."
+    // Everything the database said, now that the browser shows it.
+    //
+    // This asserted only that the word "permission" appeared, and recorded in
+    // a comment that the hint was being dropped: record-browser.tsx rendered
+    // friendlyError(error).title alone, so "Ask an administrator to grant
+    // inventory.read." never arrived and neither did the sentence naming what
+    // was refused. It renders ErrorNote now, the same component action.tsx and
+    // kpi.tsx use, so the assertion is the whole refusal rather than its first
+    // line.
     await expect(alert).toContainText(/permission/i);
+    await expect(alert, "the sentence naming what was refused was dropped").toContainText(
+      /required to list items/i,
+    );
+    await expect(alert, "the engine's hint was dropped").toContainText(
+      /ask an administrator to grant inventory\.read/i,
+    );
 
-    // What does not, and this is a finding rather than an assertion.
-    //
-    // friendlyError() assembles title, body, hint and technical, and its own
-    // comment says the engine's hint "is more specific than the register and
-    // wins". record-browser.tsx renders `.title` and nothing else, so the hint
-    // the database sent — "Ask an administrator to grant inventory.read." — is
-    // dropped, and so is the sentence naming what was refused. The reader is
-    // told they lack a permission and not which one.
-    //
-    // This is an inconsistency rather than a decision: action.tsx, kpi.tsx and
-    // profile.tsx all render the hint. Asserting the hint here would leave a
-    // permanently red test for a defect in src that this change does not fix,
-    // so what is asserted is today's behaviour and the gap is written down.
-    // If the browser starts showing the hint, this test still passes.
     expect(backend.crashes).toEqual([]);
   });
+});
+
+test.describe("one panel's data cannot cost the application", () => {
+  /**
+   * The regression test for the blast radius.
+   *
+   * Five components read an array field off a query result without checking it
+   * was there — ServiceBanner, the notification preferences, the commercial
+   * agreement, the analytics contract and the accessibility statement. Because
+   * every one of them renders inside the shell, the throw reached the root
+   * error boundary, so an unexpected payload from one banner did not cost the
+   * banner: it cost every screen in the product, which became "This page
+   * didn't load".
+   *
+   * `callErp<T>()` casts rather than checks, so the type argument is a promise
+   * about the response and not a guarantee of it. This sends the emptiest
+   * thing JSON can carry to each of the five and asserts the desk survives it.
+   * A correct database never sends this; the point is what happens when
+   * something does.
+   */
+  const NAKED = [
+    "erp_service_notices",
+    "erp_my_notification_settings",
+    "erp_my_agreement",
+    "erp_analytics_contract",
+    "erp_accessibility_statement",
+  ];
+
+  for (const [path, fn] of [
+    ["/inventory", "erp_service_notices"],
+    ["/notifications", "erp_my_notification_settings"],
+    ["/administration/commercial", "erp_my_agreement"],
+    ["/reporting/distribution", "erp_analytics_contract"],
+    ["/administration/accessibility", "erp_accessibility_statement"],
+  ] as const) {
+    test(`${path} survives ${fn} answering with nothing`, async ({ page, backend }) => {
+      for (const name of NAKED) backend.rpc(name, {});
+
+      await page.goto(path);
+
+      await expect(
+        page.getByRole("heading", { name: "This page didn't load" }),
+        `${fn} returning {} took down ${path}`,
+      ).toBeHidden();
+      await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 30_000 });
+      expect(backend.crashes, `${path} threw:\n${backend.crashes.join("\n")}`).toEqual([]);
+    });
+  }
 });
 
 test.describe("the layout on a phone", () => {

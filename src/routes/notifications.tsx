@@ -123,7 +123,20 @@ function Notifications() {
   const { session } = useErpSession();
   const settings = useQuery({
     queryKey: ["erp_my_notification_settings", {}],
-    queryFn: () => callErp<Settings>("erp_my_notification_settings"),
+    queryFn: async () => {
+      // The arrays, filled in once. callErp's type argument casts rather than
+      // checks, and every read below trusts it; a response missing one field
+      // threw, and the throw reaches the root boundary, so the cost was not
+      // this panel but every screen in the product.
+      const d = await callErp<Settings>("erp_my_notification_settings");
+      return {
+        ...d,
+        preferences: d?.preferences ?? [],
+        quiet_hours: d?.quiet_hours ?? [],
+        services_installed: d?.services_installed ?? false,
+        unread: d?.unread ?? 0,
+      };
+    },
   });
   const install = useErpAction({
     fn: "erp_configure_notifications",
