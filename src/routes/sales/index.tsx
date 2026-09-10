@@ -43,6 +43,21 @@ export const Route = createFileRoute("/sales/")({
  */
 const SALES_ACTIONS: ActionSpec[] = [
   {
+    label: "Convert to a sales order",
+    title: "Turn this quotation into a sales order",
+    description:
+      "A quotation the customer has accepted becomes an order. Every line still outstanding is carried across at the quoted price, and the order remembers the quotation it came from.",
+    permission: "sales.order",
+    fn: "erp_convert_document",
+    fields: [
+      pickParty("customer", "p_party_id", "Customer", false),
+      pickSite("p_site_id", "Site the goods ship from", false),
+    ],
+    emptyNote: "Only a quotation that has been sent and accepted converts into an order.",
+    invalidates: ["erp_documents"],
+    submitLabel: "Create the sales order",
+  },
+  {
     label: "Resolve a price",
     description: "What would this customer pay for this product today?",
     permission: "sales.price",
@@ -172,6 +187,7 @@ function Sales() {
               typeCode: "quotation",
               partyRole: "customer",
               recordArg: "p_document_id",
+              actionFn: "erp_convert_document",
               createFn: "erp_resolve_price",
             },
             {
