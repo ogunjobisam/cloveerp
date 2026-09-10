@@ -79,6 +79,26 @@ const SALES_ACTIONS: ActionSpec[] = [
     ],
   },
   {
+    label: "Pick the order",
+    description:
+      "Reserves anything on the order that is not reserved yet, then picks it from the stock that is actually on the shelf. One press does both halves.",
+    permission: "sales.despatch",
+    fn: "erp_pick_document",
+    fields: [
+      pickFrom(
+        "erp_documents",
+        "document_id",
+        ["document_number", "state"],
+        "p_document_id",
+        "Sales order",
+        { p_type_code: "sales_order", p_limit: 100 },
+      ),
+      pickLocation("p_location_id", "Pick from location", false),
+      pickBatch("p_batch_id", "Batch", false),
+    ],
+    invalidates: ["erp_documents", "erp_document"],
+  },
+  {
     label: "Release a credit hold",
     permission: "sales.credit_release",
     fn: "erp_release_credit_hold",
