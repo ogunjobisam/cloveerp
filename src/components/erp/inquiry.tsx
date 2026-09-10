@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { ActionButton, ErrorNote, type Field } from "./action";
+import { ActionButton, ComboField, ErrorNote, MultiField, type Field } from "./action";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 
@@ -66,11 +66,21 @@ function Value({ value }: { value: unknown }) {
 function Inquiry({ spec }: { spec: InquirySpec }) {
   const { session } = useErpSession();
   const { ui } = useT();
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const f of spec.fields) if (f.default) out[f.name] = f.default;
+    return out;
+  });
+  const [lists, setLists] = useState<Record<string, string[]>>({});
   const ask = useMutation({
     mutationFn: () => {
       const args: Record<string, unknown> = {};
       for (const f of spec.fields) {
+        if (f.kind === "multi") {
+          const chosen = lists[f.name] ?? [];
+          if (chosen.length > 0) args[f.name] = chosen;
+          continue;
+        }
         const raw = values[f.name] ?? "";
         if (raw === "") continue;
         args[f.name] = f.kind === "number" ? Number(raw) : raw;
@@ -95,8 +105,10 @@ function Inquiry({ spec }: { spec: InquirySpec }) {
           ask.mutate();
         }}
       >
-        {spec.fields.map((f) => (
-          <label key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+        {spec.fields.map((f) => {
+          const Wrap = f.kind === "multi" ? "div" : "label";
+          return (
+          <Wrap key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {ui(f.label)}
             </span>
@@ -132,16 +144,31 @@ function Inquiry({ spec }: { spec: InquirySpec }) {
                 value={values[f.name] ?? ""}
                 onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
               />
+            ) : f.kind === "combo" ? (
+              <ComboField
+                field={f}
+                value={values[f.name] ?? ""}
+                onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
+              />
+            ) : f.kind === "multi" ? (
+              <MultiField
+                field={f}
+                value={lists[f.name] ?? []}
+                onChange={(v) => setLists((p) => ({ ...p, [f.name]: v }))}
+              />
             ) : (
               <input
                 type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"}
+                placeholder={f.kind === "rows" ? "" : (f.placeholder ?? "")}
                 value={values[f.name] ?? ""}
                 onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
                 className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
               />
             )}
-          </label>
-        ))}
+            {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
+          </Wrap>
+          );
+        })}
         <ActionButton type="submit" busy={ask.isPending}>
           {ask.isPending ? ui("Asking…") : ui("Ask")}
         </ActionButton>

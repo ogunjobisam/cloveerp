@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { ActionButton, ErrorNote, useErpAction } from "../components/erp/action";
-import { ActionBar } from "../components/erp/actions-bar";
+import { ActionBar, codeField } from "../components/erp/actions-bar";
 import { Gate } from "../components/erp/gate";
 import { PageHeader, TOUCH } from "../components/erp/page";
 import { DataPanel, Pill, Table } from "../components/erp/panel";
@@ -187,8 +187,18 @@ function Notifications() {
                 permission: "administration.configure",
                 fn: "erp_upsert_notification_route",
                 fields: [
-                  { kind: "text", name: "p_code", label: "Code", required: true },
-                  { kind: "text", name: "p_name", label: "Name", required: true },
+                  codeField("p_code", "Code", "APPROVALS-FINANCE", {
+                    fn: "erp_notification_routes",
+                    value: "code",
+                    label: ["code", "name"],
+                  }),
+                  {
+                    kind: "text",
+                    name: "p_name",
+                    label: "Name",
+                    required: true,
+                    placeholder: "Finance approvals",
+                  },
                   {
                     kind: "text",
                     name: "p_event_pattern",
@@ -218,9 +228,27 @@ function Notifications() {
                       { value: "object_owner", label: "Whoever owns the affected object" },
                     ],
                   },
-                  { kind: "text", name: "p_role_code", label: "Role code" },
-                  { kind: "text", name: "p_department_code", label: "Department code" },
-                  { kind: "text", name: "p_app_user_id", label: "Person id" },
+                  {
+                    kind: "text",
+                    name: "p_role_code",
+                    label: "Role code",
+                    placeholder: "finance-approver",
+                    hint: "Only when the audience is a role. Codes are listed on the Permissions page.",
+                  },
+                  {
+                    kind: "combo",
+                    name: "p_department_code",
+                    label: "Department code",
+                    hint: "Only when the audience is a department.",
+                    options: { fn: "erp_departments", value: "code", label: ["code", "name"] },
+                  },
+                  {
+                    kind: "select",
+                    name: "p_app_user_id",
+                    label: "Person",
+                    hint: "Only when the audience is one named person.",
+                    options: { fn: "erp_principals", value: "id", label: ["display_name"] },
+                  },
                   {
                     kind: "choice",
                     name: "p_channel_kind",
@@ -235,14 +263,30 @@ function Notifications() {
                       { value: "webhook", label: "Webhook" },
                     ],
                   },
-                  { kind: "text", name: "p_template_code", label: "Template code" },
+                  {
+                    kind: "combo",
+                    name: "p_template_code",
+                    label: "Template code",
+                    hint: "Optional. The wording used for the message.",
+                    options: {
+                      fn: "erp_output_templates",
+                      value: "code",
+                      label: ["code", "kind"],
+                    },
+                  },
                   { kind: "number", name: "p_digest_minutes", label: "Digest every (minutes)" },
                   {
                     kind: "number",
                     name: "p_escalate_after_minutes",
                     label: "Escalate after (minutes)",
                   },
-                  { kind: "text", name: "p_escalate_to_role_code", label: "Escalate to role" },
+                  {
+                    kind: "text",
+                    name: "p_escalate_to_role_code",
+                    label: "Escalate to role",
+                    placeholder: "finance-manager",
+                    hint: "Who hears about it if nobody acts in time.",
+                  },
                   {
                     kind: "choice",
                     name: "p_is_mandatory",
@@ -261,7 +305,17 @@ function Notifications() {
                 permission: "administration.configure",
                 fn: "erp_set_notification_route_status",
                 fields: [
-                  { kind: "text", name: "p_code", label: "Route code", required: true },
+                  {
+                    kind: "combo",
+                    name: "p_code",
+                    label: "Route code",
+                    required: true,
+                    options: {
+                      fn: "erp_notification_routes",
+                      value: "code",
+                      label: ["code", "name"],
+                    },
+                  },
                   {
                     kind: "choice",
                     name: "p_status",
@@ -297,8 +351,14 @@ function Notifications() {
                   p_is_enabled: values["p_is_enabled"] !== "false",
                 }),
                 fields: [
-                  { kind: "text", name: "p_code", label: "Code", required: true },
-                  { kind: "text", name: "p_name", label: "Name", required: true },
+                  codeField("p_code", "Code", "OPS-WEBHOOK"),
+                  {
+                    kind: "text",
+                    name: "p_name",
+                    label: "Name",
+                    required: true,
+                    placeholder: "Operations webhook",
+                  },
                   {
                     kind: "choice",
                     name: "p_kind",

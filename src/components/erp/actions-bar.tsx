@@ -27,7 +27,10 @@ export type ActionSpec = {
   /** Query keys — the `fn` names of the reads this action makes stale. */
   invalidates?: string[];
   /** For arguments the form cannot express directly — arrays, mostly. */
-  mapArgs?: (values: Record<string, string>) => Record<string, unknown>;
+  mapArgs?: (
+    values: Record<string, string>,
+    picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
+  ) => Record<string, unknown>;
   submitLabel?: string;
 };
 
@@ -200,4 +203,154 @@ export const pickBatch = (name = "p_batch_id", label = "Batch", required = false
   label,
   required,
   options: { fn: "erp_batches", value: "batch_id", label: ["batch_number", "item"] },
+});
+
+/**
+ * A code being created.
+ *
+ * Both halves of the problem in one control: the house style is shown in the
+ * box, and the codes already in use are offered underneath it, so a new one
+ * looks like its neighbours instead of like whatever the typist had in mind.
+ */
+export const codeField = (
+  name: string,
+  label: string,
+  example: string,
+  options?: { fn: string; value: string; label: string[]; args?: Record<string, unknown> },
+): Field =>
+  options
+    ? {
+        kind: "combo",
+        name,
+        label,
+        required: true,
+        placeholder: example,
+        hint: `A short code of your own choosing — for example ${example}. Pick an existing one to reuse it.`,
+        options,
+      }
+    : {
+        kind: "text",
+        name,
+        label,
+        required: true,
+        placeholder: example,
+        hint: `A short code of your own choosing — for example ${example}.`,
+      };
+
+/** An existing document, shown as its number. */
+export const pickDocument = (
+  typeCode: string,
+  name = "p_document_id",
+  label = "Document",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: {
+    fn: "erp_documents",
+    args: { p_type_code: typeCode, p_limit: 200 },
+    value: "document_id",
+    label: ["document_number", "state"],
+  },
+});
+
+/** A draft change set, chosen rather than remembered. */
+export const pickChangeSet = (
+  name = "p_change_set_id",
+  label = "Change set",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_change_sets", value: "change_set_id", label: ["code", "name", "status"] },
+});
+
+/** An analysis dimension. */
+export const pickDimension = (
+  name = "p_dimension_code",
+  label = "Dimension",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
+});
+
+/** A reason code from the register, for the actions that require one. */
+export const pickReasonCode = (
+  category?: string,
+  name = "p_reason_code",
+  label = "Reason code",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: {
+    fn: "erp_reason_codes",
+    ...(category ? { args: { p_category: category } } : {}),
+    value: "code",
+    label: ["code", "name"],
+  },
+});
+
+/** An accounting period. */
+export const pickFiscalPeriod = (
+  name = "p_fiscal_period_id",
+  label = "Period",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: {
+    fn: "erp_fiscal_periods",
+    value: "fiscal_period_id",
+    label: ["code", "ledger", "status"],
+  },
+});
+
+/** A unit of measure. */
+export const pickUom = (name = "p_uom_code", label = "Unit", required = true): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_uoms", value: "code", label: ["code", "name"] },
+});
+
+/** A currency. */
+export const pickCurrency = (name = "p_currency", label = "Currency", required = true): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_currencies", value: "code", label: ["code", "name"] },
+});
+
+/** A document type, optionally of one base type. */
+export const pickDocumentType = (
+  baseTypeCode?: string,
+  name = "p_type_code",
+  label = "Document type",
+  required = true,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: {
+    fn: "erp_document_types",
+    ...(baseTypeCode ? { args: { p_base_type_code: baseTypeCode } } : {}),
+    value: "code",
+    label: ["code", "name"],
+  },
 });

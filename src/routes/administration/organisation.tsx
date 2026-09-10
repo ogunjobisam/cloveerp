@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { type Field } from "../../components/erp/action";
-import { ActionBar, pickFrom, pickSite, reason } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  codeField,
+  pickCurrency,
+  pickFrom,
+  pickSite,
+  reason,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
@@ -240,16 +247,26 @@ function Organisation() {
             permission: "administration.configure",
             fn: "erp_create_entity",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
-              { kind: "text", name: "p_legal_name", label: "Legal name" },
+              codeField("p_code", "Code", "UK-TRADING", {
+                fn: "erp_entities",
+                value: "code",
+                label: ["code", "name"],
+              }),
               {
                 kind: "text",
-                name: "p_base_currency",
-                label: "Currency",
+                name: "p_name",
+                label: "Name",
                 required: true,
-                hint: "Three-letter code.",
+                placeholder: "Northwind Foods UK",
               },
+              {
+                kind: "text",
+                name: "p_legal_name",
+                label: "Legal name",
+                placeholder: "Northwind Foods (UK) Limited",
+                hint: "The registered name, if it differs from the one used day to day.",
+              },
+              { ...pickCurrency("p_base_currency", "Currency"), hint: "The books are kept in this." },
               {
                 kind: "text",
                 name: "p_country_code",
@@ -263,7 +280,13 @@ function Organisation() {
                 label: "Reporting locale",
                 hint: "For example en-GB or de.",
               },
-              { kind: "text", name: "p_document_locale", label: "Document locale" },
+              {
+                kind: "text",
+                name: "p_document_locale",
+                label: "Document locale",
+                placeholder: "en-GB",
+                hint: "The language printed documents use, if not the reporting one.",
+              },
               {
                 kind: "number",
                 name: "p_fiscal_year_start_month",
@@ -284,11 +307,23 @@ function Organisation() {
             permission: "administration.configure",
             fn: "erp_upsert_department",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              codeField("p_code", "Code", "FIN"),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Finance",
+              },
               pickPrincipal("p_manager_user_id", "Manager"),
               pickDepartment("p_parent_department_id", "Parent department", false),
-              { kind: "text", name: "p_default_cost_centre", label: "Default cost centre" },
+              {
+                kind: "text",
+                name: "p_default_cost_centre",
+                label: "Default cost centre",
+                placeholder: "CC-1000",
+                hint: "Charged by default for spend this department approves.",
+              },
               { kind: "date", name: "p_valid_from", label: "Valid from" },
             ],
             invalidates,
@@ -446,7 +481,14 @@ function Organisation() {
                   { value: "role", label: "A role" },
                 ],
               },
-              { kind: "text", name: "p_subject_id", label: "Subject identifier", required: true },
+              {
+                kind: "text",
+                name: "p_subject_id",
+                label: "Subject identifier",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "The id of the person, department or role chosen above — copy it from the list on this page.",
+              },
               {
                 kind: "choice",
                 name: "p_object_type",
@@ -562,8 +604,18 @@ function Organisation() {
             permission: "administration.configure",
             fn: "erp_create_site",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              codeField("p_code", "Code", "LEE-WH", {
+                fn: "erp_sites",
+                value: "code",
+                label: ["code", "name"],
+              }),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Leeds warehouse",
+              },
               {
                 kind: "choice",
                 name: "p_site_type",
@@ -635,8 +687,14 @@ function Organisation() {
             fn: "erp_create_location",
             fields: [
               pickSite(),
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name" },
+              codeField("p_code", "Code", "MAIN"),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                placeholder: "Main picking face",
+                hint: "Optional. The code is what people scan.",
+              },
               {
                 kind: "choice",
                 name: "p_location_type",

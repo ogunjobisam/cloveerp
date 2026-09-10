@@ -73,7 +73,13 @@ function Integrations() {
             permission: "administration.integrate",
             fn: "erp_replay_message",
             fields: [
-              { kind: "number", name: "p_message_id", label: "Message id", required: true },
+              {
+                kind: "number",
+                name: "p_message_id",
+                label: "Message id",
+                required: true,
+                hint: "The number shown against the message in the backlog below.",
+              },
               { kind: "text", name: "p_reason", label: "Reason", required: true },
             ],
             invalidates: ["erp_integration_backlog", "erp_integration_health"],
@@ -85,7 +91,14 @@ function Integrations() {
             permission: "administration.integrate",
             fn: "erp_reconcile_ambiguous_command",
             fields: [
-              { kind: "text", name: "p_command_id", label: "Command id", required: true },
+              {
+                kind: "text",
+                name: "p_command_id",
+                label: "Command id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy the id from the message shown in the backlog below.",
+              },
               {
                 kind: "choice",
                 name: "p_outcome",
@@ -112,7 +125,14 @@ function Integrations() {
             permission: "administration.integrate",
             fn: "erp_cancel_command",
             fields: [
-              { kind: "text", name: "p_command_id", label: "Command id", required: true },
+              {
+                kind: "text",
+                name: "p_command_id",
+                label: "Command id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy the id from the message shown in the backlog below.",
+              },
               { kind: "text", name: "p_reason", label: "Reason", required: true },
             ],
             invalidates: ["erp_integration_backlog", "erp_integration_health"],
@@ -124,8 +144,22 @@ function Integrations() {
             permission: "administration.integrate",
             fn: "erp_submit_command",
             fields: [
-              { kind: "text", name: "p_system_code", label: "System", required: true },
-              { kind: "text", name: "p_operation_code", label: "Operation", required: true },
+              {
+                kind: "text",
+                name: "p_system_code",
+                label: "System",
+                required: true,
+                placeholder: "WMS",
+                hint: "The short code of the connected system, as it appears in the backlog.",
+              },
+              {
+                kind: "text",
+                name: "p_operation_code",
+                label: "Operation",
+                required: true,
+                placeholder: "despatch.confirm",
+                hint: "The operation that system accepts, as agreed with whoever runs it.",
+              },
               {
                 kind: "text",
                 name: "p_payload",

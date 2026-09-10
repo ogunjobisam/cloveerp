@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
-import { ActionBar, reason } from "../../components/erp/actions-bar";
+import { ActionBar, codeField, reason } from "../../components/erp/actions-bar";
 import { AutoPanel } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
@@ -138,25 +138,45 @@ function MasterData() {
             permission: "master_data.write",
             fn: "erp_create_party_with_roles",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              codeField("p_code", "Code", "CUST-COOP", {
+                fn: "erp_parties",
+                value: "code",
+                label: ["code", "name"],
+              }),
               {
                 kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Co-op Wholesale Ltd",
+              },
+              {
+                kind: "multi",
                 name: "p_role_kinds",
                 label: "Roles",
                 required: true,
-                hint: "Comma separated: customer, supplier, carrier, manufacturer, broker, consignee, agent.",
+                hint: "Tick every role this partner plays.",
+                choices: ROLES.map((r) => ({ value: r, label: r })),
               },
-              { kind: "text", name: "p_country_code", label: "Country", hint: "Two-letter code." },
-              { kind: "text", name: "p_legal_name", label: "Legal name" },
+              {
+                kind: "text",
+                name: "p_country_code",
+                label: "Country",
+                placeholder: "GB",
+                hint: "Two-letter country code.",
+              },
+              {
+                kind: "text",
+                name: "p_legal_name",
+                label: "Legal name",
+                placeholder: "Co-operative Wholesale Limited",
+                hint: "The registered name, if it differs from the trading name.",
+              },
             ],
-            mapArgs: (v) => ({
+            mapArgs: (v, picked) => ({
               p_code: v["p_code"],
               p_name: v["p_name"],
-              p_role_kinds: (v["p_role_kinds"] ?? "")
-                .split(",")
-                .map((x) => x.trim())
-                .filter(Boolean),
+              p_role_kinds: picked?.lists["p_role_kinds"] ?? [],
               p_country_code: v["p_country_code"] || null,
               p_legal_name: v["p_legal_name"] || null,
             }),
@@ -201,8 +221,22 @@ function MasterData() {
                   { value: "item", label: "Product" },
                 ],
               },
-              { kind: "text", name: "p_survivor_id", label: "Survivor id", required: true },
-              { kind: "text", name: "p_duplicate_id", label: "Duplicate id", required: true },
+              {
+                kind: "text",
+                name: "p_survivor_id",
+                label: "Record being kept",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "The id of the record everything should point at afterwards.",
+              },
+              {
+                kind: "text",
+                name: "p_duplicate_id",
+                label: "Record being withdrawn",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "The id of the duplicate. Both ids are shown in the duplicate candidates list.",
+              },
               reason("p_reason", "Reason", true),
             ],
             invalidates: ["erp_parties", "erp_items"],
