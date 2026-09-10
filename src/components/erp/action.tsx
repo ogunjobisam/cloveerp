@@ -897,6 +897,16 @@ export function ActionDialog({
         >
           {ui("Cancel")}
         </ActionButton>
+        {alsoSubmit ? (
+          <ActionButton
+            variant="secondary"
+            busy={action.isPending}
+            disabled={takesMoney && Boolean(currencyError)}
+            onClick={() => action.mutate(alsoSubmit.args)}
+          >
+            {ui(alsoSubmit.label)}
+          </ActionButton>
+        ) : null}
         <ActionButton
           type="submit"
           busy={action.isPending}
@@ -904,6 +914,7 @@ export function ActionDialog({
         >
           {action.isPending ? ui("Working…") : ui(submitLabel)}
         </ActionButton>
+
       </div>
     </form>
   );
