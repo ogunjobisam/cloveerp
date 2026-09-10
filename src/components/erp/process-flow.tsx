@@ -345,12 +345,7 @@ function StageRecord({
       <div className="mt-4 flex flex-wrap gap-2">
         {row
           ? recordActions.map((a) => (
-              <StageAction
-                key={a.fn}
-                action={a}
-                prefill={prefill}
-                permitted={permitted(a)}
-              />
+              <StageAction key={a.fn} action={a} prefill={prefill} permitted={permitted(a)} />
             ))
           : null}
         {createAction ? (
@@ -425,7 +420,8 @@ function StageTab({
   const { ui } = useT();
   const { rows, isPending } = useStageRows(stage);
   const source = sourceOf(stage);
-  const count = source && !isPending ? (rows.length >= CAP ? `${CAP}+` : String(rows.length)) : null;
+  const count =
+    source && !isPending ? (rows.length >= CAP ? `${CAP}+` : String(rows.length)) : null;
 
   return (
     <li className="flex min-w-0 shrink-0 items-stretch gap-2">

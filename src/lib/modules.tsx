@@ -55,7 +55,6 @@ const SHIPMENT_LIST: StageList = {
   nounPlural: "shipments",
 };
 
-
 /**
  * One description of every module, used by every surface that talks about it.
  *
@@ -324,7 +323,6 @@ export const INVENTORY: ModuleDef = {
         createFn: "erp_hand_over_custody",
       },
     ],
-
   },
   inquiries: [
     {
@@ -1086,7 +1084,6 @@ export const FINANCE: ModuleDef = {
         hint: "Period close: the task list, then the close itself.",
         createFn: "erp_close_period",
       },
-
     ],
   },
   inquiries: [
@@ -2223,7 +2220,6 @@ export const PRODUCTION: ModuleDef = {
         recordArg: "p_works_order_id",
         actionFn: "erp_close_works_order",
       },
-
     ],
   },
   inquiries: [
@@ -2537,7 +2533,6 @@ export const QUALITY: ModuleDef = {
         hint: "Affected stock has shipped: raise a recall and log every action against the clock.",
         createFn: "erp_raise_recall",
       },
-
     ],
   },
   inquiries: [
@@ -2937,7 +2932,6 @@ export const LOGISTICS: ModuleDef = {
         recordArg: "p_shipment_id",
         actionFn: "erp_record_proof_of_delivery",
       },
-
     ],
   },
   key: "logistics",

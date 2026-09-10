@@ -357,7 +357,6 @@ function Procurement() {
               toLabel: "Open finance",
             },
           ],
-
         }}
         actions={PROCUREMENT_ACTIONS}
       />

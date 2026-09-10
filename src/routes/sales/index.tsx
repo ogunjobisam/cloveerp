@@ -186,7 +186,6 @@ function Sales() {
               toLabel: "Apply cash",
             },
           ],
-
         }}
         actions={SALES_ACTIONS}
       />
