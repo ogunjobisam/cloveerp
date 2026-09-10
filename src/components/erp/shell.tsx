@@ -189,20 +189,31 @@ function AreaSwitch({
   );
 }
 
+/**
+ * The section list, in either of the two places it appears: the dark rail on a
+ * wide screen and the light drawer on a narrow one. Same list, same order, two
+ * palettes — `tone` is the only difference between them.
+ */
 function NavList({
   items,
   area,
   pathname,
   hidden,
   onNavigate,
+  tone = "light",
 }: {
   items: NavItem[];
   area: Area;
   pathname: string;
   hidden: number;
   onNavigate?: () => void;
+  tone?: "light" | "dark";
 }) {
   const { t, ui } = useT();
+  const dark = tone === "dark";
+
+  const groupLabel = dark ? "text-sidebar-muted/80" : "text-muted-foreground";
+  const quiet = dark ? "text-sidebar-muted" : "text-muted-foreground";
 
   return (
     <>
@@ -212,11 +223,13 @@ function NavList({
         return (
           <div key={group} className="mb-4 last:mb-0">
             {group === "home" ? null : (
-              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p
+                className={`mb-1 px-3 text-[11px] font-medium uppercase tracking-wide ${groupLabel}`}
+              >
                 {ui(GROUP_LABELS[group])}
               </p>
             )}
-            <ul className="flex flex-col gap-1">
+            <ul className="flex flex-col gap-0.5">
               {inGroup.map((item) => {
                 const active =
                   item.group === "home"
@@ -233,12 +246,17 @@ function NavList({
                         TOUCH,
                         "flex items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
                         active
-                          ? "bg-accent/10 font-medium text-foreground shadow-[inset_2px_0_0_var(--accent)]"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          ? dark
+                            ? "bg-sidebar-active font-medium text-sidebar-foreground shadow-[inset_3px_0_0_var(--accent)]"
+                            : "bg-accent/10 font-medium text-foreground shadow-[inset_3px_0_0_var(--accent)]"
+                          : dark
+                            ? "text-sidebar-muted hover:bg-sidebar-active/60 hover:text-sidebar-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       ].join(" ")}
                     >
                       <Icon
-                        className={`size-4 shrink-0 ${active ? "text-accent" : "text-muted-foreground"}`}
+                        className={`size-4 shrink-0 ${active ? "text-accent" : quiet}`}
+                        aria-hidden="true"
                       />
                       <span className="truncate">{t(item.labelKey, item.label)}</span>
                     </Link>
@@ -251,7 +269,7 @@ function NavList({
       })}
 
       {hidden > 0 ? (
-        <p className="mt-4 px-3 text-xs text-muted-foreground">
+        <p className={`mt-4 px-3 text-xs ${quiet}`}>
           {ui(
             "Some sections are not shown because this account does not hold the permissions they require.",
           )}
