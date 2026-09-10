@@ -2216,6 +2216,11 @@ export type Database = {
       erp_start_interview: { Args: { p_code?: string }; Returns: Json }
       erp_start_training_scenario: { Args: { p_code: string }; Returns: Json }
       erp_stock_ageing: { Args: never; Returns: Json }
+      erp_stock_audit: { Args: { p_site_id?: string }; Returns: Json }
+      erp_stock_audit_lines: {
+        Args: { p_location_id?: string; p_site_id?: string }
+        Returns: Json
+      }
       erp_stock_health: { Args: never; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
       erp_stock_valuation: { Args: never; Returns: Json }
