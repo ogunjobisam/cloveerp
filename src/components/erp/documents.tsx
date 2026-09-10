@@ -177,3 +177,137 @@ export function DocumentPanel({
     </section>
   );
 }
+
+/**
+ * Raise a whole document on one screen.
+ *
+ * Header and lines are one form and one call: the partner, the dates and every
+ * product with its quantity and price. It used to be a form for the header and
+ * then a second visit to price each line, which is two pieces of work for one
+ * decision. `erp_create_document_full` writes it as a whole, so a rejected line
+ * leaves nothing half-made behind it.
+ */
+export function NewDocumentAction({
+  type,
+  partyRole,
+  label,
+}: {
+  type: DocType;
+  partyRole: string;
+  label?: string;
+}) {
+  const { session, scope } = useErpSession();
+  const { currencies } = useCurrencies();
+
+  return (
+    <ActionDialog
+      trigger={<ActionButton>{label ?? "New"}</ActionButton>}
+      title={`New ${type.name.toLowerCase()}`}
+      description="Partner, dates and every line on one form. It is saved as a whole: if a line is wrong, nothing is created."
+      // The permission the database checks, not one this screen guessed.
+      permission={type.create_permission}
+      fn="erp_create_document_full"
+      fields={[
+        {
+          kind: "select",
+          name: "p_party_id",
+          label: "Business partner",
+          required: type.requires_party,
+          options: {
+            fn: "erp_parties",
+            args: { p_role_kind: partyRole },
+            value: "party_id",
+            label: ["code", "name"],
+          },
+        },
+        // Only asked when the shell's scope has not already answered it: one
+        // site, or a site chosen up there, is not a question.
+        ...(type.requires_site && !scope.siteId && session.sites.length > 1
+          ? ([{ kind: "site", name: "p_site_id", label: "Site", required: true }] as const)
+          : []),
+        {
+          kind: "text",
+          name: "p_their_ref",
+          label: "Their reference",
+          placeholder: "COOP-PO-771",
+          hint: "Their own order or invoice number, so both sides can find it.",
+        },
+        { kind: "date", name: "p_required_date", label: "Required date" },
+        {
+          kind: "rows",
+          name: "p_lines",
+          label: "Lines",
+          addLabel: "Add a line",
+          hint: "Everything this document is for. A line left without a price takes the agreed price for that partner and product, where there is one.",
+          total: { quantity: "quantity", price: "unit_price_minor", currency: "GBP" },
+          columns: [
+            {
+              name: "item_id",
+              label: "Product",
+              kind: "select",
+              options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+            },
+            { name: "quantity", label: "Quantity", kind: "number", placeholder: "100" },
+            {
+              name: "unit_price_minor",
+              label: "Unit price",
+              kind: "money",
+              currency: "GBP",
+              placeholder: "1.85",
+            },
+            { name: "description", label: "Description", kind: "text" },
+          ],
+        },
+      ]}
+      mapArgs={(v, picked) => ({
+        p_type_code: type.code,
+        p_party_id: v["p_party_id"] || null,
+        p_site_id: v["p_site_id"] || scope.siteId || session.sites[0]?.id || null,
+        p_their_ref: v["p_their_ref"] || null,
+        p_required_date: v["p_required_date"] || null,
+        p_lines: (picked?.rows["p_lines"] ?? [])
+          .filter((row) => (row["item_id"] ?? "") !== "")
+          .map((row) => ({
+            item_id: row["item_id"],
+            quantity: Number(row["quantity"] ?? 0),
+            unit_price_minor: toMinor(row["unit_price_minor"] ?? "", minorUnitsOf(currencies, "GBP")),
+            description: row["description"] ?? null,
+          })),
+      })}
+      // One press for the straightforward case: raise it and move it on.
+      alsoSubmit={{ label: "Create and move on", args: { p_transition: "auto" } }}
+      invalidates={["erp_documents", "erp_document", "erp_document_lines"]}
+      submitLabel="Create"
+    />
+  );
+}
+
+/**
+ * The same form, reached from a step on a process strip.
+ *
+ * A step knows the configured type it stands for, not the record behind it, so
+ * the type is looked up here rather than passed down through the strip.
+ */
+export function NewDocumentForType({
+  typeCode,
+  partyRole,
+  label,
+}: {
+  typeCode: string;
+  partyRole: string;
+  label?: string;
+}) {
+  const { data: types } = useQuery({
+    queryKey: ["erp_document_types", { p_base_type_code: "" }],
+    queryFn: () => callErp<DocType[]>("erp_document_types", {}),
+  });
+  const type = types?.find((t) => t.code === typeCode);
+  if (!type) return null;
+  return (
+    <NewDocumentAction
+      type={type}
+      partyRole={partyRole}
+      {...(label ? { label } : {})}
+    />
+  );
+}
