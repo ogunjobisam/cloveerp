@@ -8,12 +8,14 @@ import {
   pickLine,
   pickParty,
   pickSite,
+  type ActionSpec,
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { ProcessFlow } from "../../components/erp/process-flow";
 import { PURCHASING_KPIS } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
 
@@ -54,22 +56,7 @@ export const Route = createFileRoute("/procurement/")({
  * opposite party role — which is either evidence for the thesis or a very
  * short file, depending on how generous you are feeling.
  */
-function Procurement() {
-  const { t } = useT();
-
-  return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.procurement", "Purchasing")}>
-        Requisition to purchase order to receipt. Receiving posts stock inbound through the same
-        bridge a delivery uses outbound.
-      </PageHeader>
-
-      <KpiRow kpis={PURCHASING_KPIS} />
-
-      <ActionBar
-        title="Goods-in, matching and qualification"
-        note="Goods-in, matching and supplier qualification — the verbs between the documents."
-        actions={[
+const PROCUREMENT_ACTIONS: ActionSpec[] = [
           {
             label: "Bill a receipt",
             description:
@@ -316,7 +303,63 @@ function Procurement() {
               ),
             ],
           },
-        ]}
+];
+
+function Procurement() {
+  const { t } = useT();
+
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title={t("nav.procurement", "Purchasing")}>
+        Requisition to purchase order to receipt. Receiving posts stock inbound through the same
+        bridge a delivery uses outbound.
+      </PageHeader>
+
+      <KpiRow kpis={PURCHASING_KPIS} />
+
+      <ProcessFlow
+        flow={{
+          title: "Purchase to pay, step by step",
+          note: "Each box is a step in the chain and shows what is sitting there now. The button on a box is the verb that moves work to the next one.",
+          stages: [
+            {
+              label: "Requisition",
+              hint: "Somebody asking for something, before anyone has committed to buying it.",
+              typeCode: "requisition",
+            },
+            {
+              label: "Purchase order",
+              hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
+              typeCode: "purchase_order",
+              actionFn: "erp_set_order_behaviour",
+            },
+            {
+              label: "Goods receipt",
+              hint: "What arrived. Posting a receipt is what puts stock on the shelf and raises the accrual.",
+              typeCode: "goods_receipt",
+              actionFn: "erp_receive_against",
+            },
+            {
+              label: "Supplier bill",
+              hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
+              typeCode: "purchase_invoice",
+              actionFn: "erp_bill_from_receipt",
+            },
+            {
+              label: "Payment",
+              hint: "Bills fall into a payment run, which somebody else approves before it is paid.",
+              to: "/finance",
+              toLabel: "Open finance",
+            },
+          ],
+        }}
+        actions={PROCUREMENT_ACTIONS}
+      />
+
+      <ActionBar
+        title="Goods-in, matching and qualification"
+        note="Goods-in, matching and supplier qualification — the verbs between the documents."
+        actions={PROCUREMENT_ACTIONS}
       />
 
       <InquiryBoard
