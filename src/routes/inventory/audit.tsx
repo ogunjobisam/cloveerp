@@ -82,7 +82,13 @@ type AuditLine = {
 };
 
 const day = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—";
+  iso
+    ? new Date(iso).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
 
 const qty = (n: number | null | undefined) =>
   n == null ? "—" : new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(n);
@@ -95,7 +101,13 @@ const signed = (n: number | null | undefined) => {
 };
 
 const stateTone = (state: AuditRow["state"]) =>
-  state === "variance" ? "bad" : state === "never counted" ? "warn" : state === "counting" ? "muted" : "ok";
+  state === "variance"
+    ? "bad"
+    : state === "never counted"
+      ? "warn"
+      : state === "counting"
+        ? "muted"
+        : "ok";
 
 const countTask = () =>
   pickFrom("erp_count_tasks", "task_id", ["item", "location", "status"], "p_task_id", "Count task");
