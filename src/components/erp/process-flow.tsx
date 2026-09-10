@@ -233,9 +233,12 @@ function StageList({
         ) : shown.length === 0 ? (
           <p className="px-4 py-4 text-sm text-muted-foreground sm:px-5">
             {rows.length === 0
-              ? `No ${source.nounPlural} at ${stage.label.toLowerCase()} yet.`
+              ? `No ${source.nounPlural} at ${stage.label.toLowerCase()} yet.${
+                  stage.fedBy ? ` ${stage.fedBy}` : ""
+                }`
               : `No ${source.nounPlural} match that search.`}
           </p>
+
         ) : (
           <ul>
             {shown.map((row) => {
