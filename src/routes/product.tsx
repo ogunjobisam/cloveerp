@@ -175,12 +175,12 @@ const JOURNEY: Feature[] = [
   {
     icon: TrendingUp,
     title: "Plan",
-    body: "Forecasts, demand and supply planning, and release sequencing — with scenario comparison before you commit.",
+    body: "Stock forecasts built on real usage and measured supplier lead times, with reorder points that raise the order for you.",
   },
   {
     icon: FileText,
     title: "Source",
-    body: "Requisitions, RFQs, purchase orders and supplier price resolution, with three-way match baked into receiving.",
+    body: "Requisitions approved and converted straight into purchase orders, with three-way match and delivery tolerances on receipt.",
   },
   {
     icon: Factory,
@@ -190,7 +190,7 @@ const JOURNEY: Feature[] = [
   {
     icon: Boxes,
     title: "Store",
-    body: "Bins, batches, putaway tasks and cycle counts — perpetual inventory valued to the penny.",
+    body: "Aisles, shelves and bins with storage rules, so put away and picking always land in the right place. Counted, valued to the penny.",
   },
   {
     icon: Truck,
@@ -205,7 +205,7 @@ const JOURNEY: Feature[] = [
   {
     icon: PoundSterling,
     title: "Settle",
-    body: "Sterling-native ledgers, invoicing from despatch, cash application, VAT-ready postings and bank reconciliation.",
+    body: "Supplier bills matched to goods received, payment runs, customer invoicing, cash application and VAT-ready postings.",
   },
 ];
 
