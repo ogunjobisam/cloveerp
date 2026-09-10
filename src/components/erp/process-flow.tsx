@@ -313,6 +313,10 @@ function StageRecord({
   const id = row && source ? String(row[source.id] ?? "") : "";
   const prefill: Record<string, unknown> =
     stage.recordArg && id ? { [stage.recordArg]: id } : ({} as Record<string, unknown>);
+  const summary =
+    row && source
+      ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
+      : undefined;
 
   return (
     <div className="min-w-0 px-4 py-4 sm:px-5">
