@@ -242,8 +242,21 @@ function PriceBook() {
                   permission="sales.price"
                   fn="erp_open_price_book"
                   fields={[
-                    { kind: "text", name: "p_code", label: "Code", required: true },
-                    { kind: "text", name: "p_name", label: "Name", required: true },
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "UK-STANDARD-2026",
+                      hint: "A short code for this price book.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "UK standard prices 2026",
+                    },
                     {
                       kind: "text",
                       name: "p_currencies",
@@ -252,7 +265,13 @@ function PriceBook() {
                       hint: "Three-letter codes separated by commas, for example GBP, EUR.",
                     },
                     { kind: "date", name: "p_effective_from", label: ui("Effective from") },
-                    { kind: "text", name: "p_note", label: "Note" },
+                    {
+                      kind: "text",
+                      name: "p_note",
+                      label: "Note",
+                      placeholder: "Agreed at the January pricing review",
+                      hint: "Optional. Why this price book exists.",
+                    },
                   ]}
                   mapArgs={(v) => ({
                     p_code: v["p_code"],
@@ -330,8 +349,21 @@ function PriceBook() {
                     permission="sales.price"
                     fn="erp_upsert_price_item"
                     fields={[
-                      { kind: "text", name: "p_code", label: "Code", required: true },
-                      { kind: "text", name: "p_name", label: "Name", required: true },
+                      {
+                        kind: "text",
+                        name: "p_code",
+                        label: "Code",
+                        required: true,
+                        placeholder: "SUB-CORE",
+                        hint: "A short code for the priced product.",
+                      },
+                      {
+                        kind: "text",
+                        name: "p_name",
+                        label: "Name",
+                        required: true,
+                        placeholder: "Core subscription",
+                      },
                       {
                         kind: "choice",
                         name: "p_kind",
@@ -377,7 +409,13 @@ function PriceBook() {
                         label: ui("Severity"),
                         choices: q.data.severities.map((s) => ({ value: s.code, label: s.name })),
                       },
-                      { kind: "text", name: "p_description", label: "Description" },
+                      {
+                        kind: "text",
+                        name: "p_description",
+                        label: "Description",
+                        placeholder: "Per user, per month",
+                        hint: "Optional. Shown on quotes.",
+                      },
                     ]}
                     mapArgs={(v) => ({
                       p_code: v["p_code"],
@@ -491,7 +529,13 @@ function PriceBook() {
                       { kind: "number", name: "p_infrastructure", label: ui("Infrastructure") },
                       { kind: "number", name: "p_support", label: ui("Support load") },
                       { kind: "number", name: "p_pass_through", label: ui("Pass-through") },
-                      { kind: "text", name: "p_basis", label: ui("Basis") },
+                      {
+                        kind: "text",
+                        name: "p_basis",
+                        label: ui("Basis"),
+                        placeholder: "per user per month",
+                        hint: "What the figures above are measured against.",
+                      },
                     ]}
                     mapArgs={(v) => ({
                       p_item_code: v["p_item_code"],

@@ -408,7 +408,13 @@ function Lines({
                 label: "Unit price",
                 currency,
               },
-              { kind: "text", name: "p_description", label: "Description" },
+              {
+                kind: "text",
+                name: "p_description",
+                label: "Description",
+                placeholder: "As agreed on the phone",
+                hint: "Optional. Overrides the product's own wording on this line.",
+              },
             ]}
             mapArgs={(v) => ({
               p_document_id: documentId,
@@ -478,7 +484,14 @@ function Lines({
                           label: "New quantity",
                           required: true,
                         },
-                        { kind: "text", name: "p_reason", label: "Reason", required: true },
+                        {
+                          kind: "text",
+                          name: "p_reason",
+                          label: "Reason",
+                          required: true,
+                          placeholder: "Customer reduced the order",
+                          hint: "Kept permanently against the amendment.",
+                        },
                       ]}
                       mapArgs={(v) => ({
                         p_line_id: l.line_id,

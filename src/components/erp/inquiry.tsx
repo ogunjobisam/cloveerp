@@ -108,65 +108,68 @@ function Inquiry({ spec }: { spec: InquirySpec }) {
         {spec.fields.map((f) => {
           const Wrap = f.kind === "multi" ? "div" : "label";
           return (
-          <Wrap key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {ui(f.label)}
-            </span>
-            {f.kind === "site" ? (
-              <select
-                value={values[f.name] ?? ""}
-                onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
-                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-              >
-                <option value="">{ui("Choose…")}</option>
-                {session.sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.code} — {s.name}
-                  </option>
-                ))}
-              </select>
-            ) : f.kind === "choice" ? (
-              <select
-                value={values[f.name] ?? ""}
-                onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
-                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-              >
-                <option value="">{ui("Choose…")}</option>
-                {f.choices.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {ui(c.label)}
-                  </option>
-                ))}
-              </select>
-            ) : f.kind === "select" ? (
-              <SelectInput
-                spec={f}
-                value={values[f.name] ?? ""}
-                onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
-              />
-            ) : f.kind === "combo" ? (
-              <ComboField
-                field={f}
-                value={values[f.name] ?? ""}
-                onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
-              />
-            ) : f.kind === "multi" ? (
-              <MultiField
-                field={f}
-                value={lists[f.name] ?? []}
-                onChange={(v) => setLists((p) => ({ ...p, [f.name]: v }))}
-              />
-            ) : (
-              <input
-                type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"}
-                placeholder={f.kind === "rows" ? "" : (f.placeholder ?? "")}
-                value={values[f.name] ?? ""}
-                onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
-                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-              />
-            )}
-            {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
-          </Wrap>
+            <Wrap key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {ui(f.label)}
+              </span>
+              {f.kind === "site" ? (
+                <select
+                  aria-label={ui(f.label)}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                >
+                  <option value="">{ui("Choose…")}</option>
+                  {session.sites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.code} — {s.name}
+                    </option>
+                  ))}
+                </select>
+              ) : f.kind === "choice" ? (
+                <select
+                  aria-label={ui(f.label)}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                >
+                  <option value="">{ui("Choose…")}</option>
+                  {f.choices.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {ui(c.label)}
+                    </option>
+                  ))}
+                </select>
+              ) : f.kind === "select" ? (
+                <SelectInput
+                  spec={f}
+                  value={values[f.name] ?? ""}
+                  onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
+                />
+              ) : f.kind === "combo" ? (
+                <ComboField
+                  field={f}
+                  value={values[f.name] ?? ""}
+                  onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
+                />
+              ) : f.kind === "multi" ? (
+                <MultiField
+                  field={f}
+                  value={lists[f.name] ?? []}
+                  onChange={(v) => setLists((p) => ({ ...p, [f.name]: v }))}
+                />
+              ) : (
+                <input
+                  aria-label={ui(f.label)}
+                  type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"}
+                  placeholder={f.kind === "rows" ? "" : (f.placeholder ?? "")}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                />
+              )}
+              {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
+            </Wrap>
           );
         })}
         <ActionButton type="submit" busy={ask.isPending}>

@@ -138,7 +138,13 @@ export function DocumentPanel({
                 ? ([{ kind: "site", name: "p_site_id", label: "Site", required: true }] as const)
                 : []),
 
-              { kind: "text", name: "p_their_ref", label: "Their reference" },
+              {
+                kind: "text",
+                name: "p_their_ref",
+                label: "Their reference",
+                placeholder: "COOP-PO-771",
+                hint: "Their own order or invoice number, so both sides can find it.",
+              },
               { kind: "date", name: "p_required_date", label: "Required date" },
             ]}
             mapArgs={(v) => ({

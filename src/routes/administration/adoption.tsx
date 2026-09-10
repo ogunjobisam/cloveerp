@@ -232,8 +232,22 @@ function Adoption() {
             description:
               "The same code again replaces the scenario. A completion check the product does not have is refused.",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_title", label: "Title", required: true },
+              {
+                kind: "text",
+                name: "p_code",
+                label: "Code",
+                required: true,
+                placeholder: "GOODS-IN-BASICS",
+                hint: "A short code for this training scenario.",
+              },
+              {
+                kind: "text",
+                name: "p_title",
+                label: "Title",
+                required: true,
+                placeholder: "Receiving a delivery",
+                hint: "What the learner will practise.",
+              },
               {
                 kind: "text",
                 name: "p_starting_state",

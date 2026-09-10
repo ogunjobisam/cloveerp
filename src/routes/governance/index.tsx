@@ -113,7 +113,13 @@ function Governance() {
                 required: true,
                 hint: 'JSON, for example {"name":"New name"}.',
               },
-              { kind: "text", name: "p_reason", label: "Reason" },
+              {
+                kind: "text",
+                name: "p_reason",
+                label: "Reason",
+                placeholder: "Corrected after the supplier's notice",
+                hint: "Optional. Shown to whoever approves this.",
+              },
             ],
             invalidates: ["erp_change_requests", "erp_my_approvals"],
             mapArgs: (v) => ({
@@ -146,7 +152,13 @@ function Governance() {
                 hint: 'JSON, for example {"item_class":"finished_good"}.',
               },
               { kind: "text", name: "p_changes", label: "Changes", required: true, hint: "JSON." },
-              { kind: "text", name: "p_reason", label: "Reason" },
+              {
+                kind: "text",
+                name: "p_reason",
+                label: "Reason",
+                placeholder: "Annual price review",
+                hint: "Optional. Shown to whoever approves this.",
+              },
             ],
             invalidates: ["erp_change_requests"],
             mapArgs: (v) => ({

@@ -290,9 +290,27 @@ function Distribution() {
             permission: "reporting.define",
             fn: "erp_upsert_report_pack",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
-              { kind: "text", name: "p_description", label: "Description" },
+              {
+                kind: "text",
+                name: "p_code",
+                label: "Code",
+                required: true,
+                placeholder: "MONTH-END",
+                hint: "A short code for this pack of reports.",
+              },
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Month-end pack",
+              },
+              {
+                kind: "text",
+                name: "p_description",
+                label: "Description",
+                placeholder: "Everything the board sees after close",
+              },
             ],
             invalidates: ["erp_report_packs"],
           },
@@ -340,7 +358,16 @@ function Distribution() {
             label: "Expose a governed view",
             permission: "administration.integrate",
             fn: "erp_expose_governed_view",
-            fields: [{ kind: "text", name: "p_view_code", label: "View code", required: true }],
+            fields: [
+              {
+                kind: "text",
+                name: "p_view_code",
+                label: "View code",
+                required: true,
+                placeholder: "sales_by_month",
+                hint: "The governed view outside tools will read.",
+              },
+            ],
             invalidates: ["erp_analytics_contract"],
           },
           {
@@ -348,8 +375,22 @@ function Distribution() {
             permission: "administration.integrate",
             fn: "erp_revise_analytics_contract",
             fields: [
-              { kind: "text", name: "p_view_code", label: "View code", required: true },
-              { kind: "text", name: "p_deprecation_notice", label: "What changes", required: true },
+              {
+                kind: "text",
+                name: "p_view_code",
+                label: "View code",
+                required: true,
+                placeholder: "sales_by_month",
+                hint: "The exposed view being changed.",
+              },
+              {
+                kind: "text",
+                name: "p_deprecation_notice",
+                label: "What changes",
+                required: true,
+                placeholder: "The margin column is replaced by margin_pct",
+                hint: "Shown to whoever depends on this view.",
+              },
               {
                 kind: "date",
                 name: "p_retire_after",
@@ -364,7 +405,14 @@ function Distribution() {
             permission: "administration.integrate",
             fn: "erp_retire_analytics_contract",
             fields: [
-              { kind: "text", name: "p_view_code", label: "View code", required: true },
+              {
+                kind: "text",
+                name: "p_view_code",
+                label: "View code",
+                required: true,
+                placeholder: "sales_by_month",
+                hint: "The exposed view being retired.",
+              },
               { kind: "number", name: "p_version", label: "Version", required: true },
             ],
             invalidates: ["erp_analytics_contract"],
@@ -374,8 +422,22 @@ function Distribution() {
             permission: "administration.integrate",
             fn: "erp_revoke_analytics_credential",
             fields: [
-              { kind: "text", name: "p_credential_id", label: "Credential id", required: true },
-              { kind: "text", name: "p_reason", label: "Why", required: true },
+              {
+                kind: "text",
+                name: "p_credential_id",
+                label: "Credential id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy it from the credential listed on this page.",
+              },
+              {
+                kind: "text",
+                name: "p_reason",
+                label: "Why",
+                required: true,
+                placeholder: "The analyst who held it has left",
+                hint: "Recorded permanently against the revocation.",
+              },
             ],
             invalidates: ["erp_analytics_contract"],
           },
@@ -634,7 +696,14 @@ function AnalyticsContract({ contract, error }: { contract: Contract | null; err
               description="Named for the tool that will hold it, scoped to exposed views, and shown once."
               fn="erp_issue_analytics_credential"
               fields={[
-                { kind: "text", name: "p_label", label: "Label", required: true },
+                {
+                  kind: "text",
+                  name: "p_label",
+                  label: "Label",
+                  required: true,
+                  placeholder: "Power BI — finance",
+                  hint: "Name it for the tool that will hold it.",
+                },
                 {
                   kind: "text",
                   name: "p_view_codes",

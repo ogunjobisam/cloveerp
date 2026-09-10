@@ -484,6 +484,13 @@ jobs:
         # notices the two hundred and second.
         run: supabase/ci/screen_strings.sh
 
+      - name: Every field says what belongs in it
+        # A form that asks for "Code" and accepts only one exact spelling is a
+        # guess, and the owner guessed wrong as often as anyone. Every free-text
+        # field in a dialog now carries a placeholder, a hint, or both; a picker
+        # where a list exists. This refuses the next unexplained box.
+        run: supabase/ci/form_fields.sh
+
       - name: The documents quote the database
         # README.md, docs/ARCHITECTURE.md and the Word document carry figures
         # — migrations, doors, tables, suites, the Part 5 totals — inside

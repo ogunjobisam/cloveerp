@@ -80,7 +80,13 @@ function Sales() {
             fn: "erp_reserve_for_line",
             fields: [
               pickLine("sales_order", "p_document_line_id", "Order line"),
-              { kind: "text", name: "p_policy_code", label: "Policy code" },
+              {
+                kind: "text",
+                name: "p_policy_code",
+                label: "Policy code",
+                placeholder: "FEFO",
+                hint: "Optional. Leave empty to use the product's usual rule.",
+              },
             ],
           },
           {
@@ -112,7 +118,13 @@ function Sales() {
                 "Original document",
                 { p_limit: 100 },
               ),
-              { kind: "text", name: "p_reason_code", label: "Reason code", required: true },
+              {
+                kind: "combo",
+                name: "p_reason_code",
+                label: "Reason code",
+                required: true,
+                options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
+              },
               reason("p_reason", "Reason", true),
               {
                 kind: "choice",
@@ -181,7 +193,13 @@ function Sales() {
               pickLine("sales_order", "p_line_id", "Sales order line"),
               pickBatch("p_batch_id", "Batch", false),
               pickLocation("p_location_id", "Location", false),
-              { kind: "text", name: "p_container_id", label: "Handling unit id" },
+              {
+                kind: "text",
+                name: "p_container_id",
+                label: "Handling unit id",
+                placeholder: "0f9c1a2e-…",
+                hint: "Optional. The pallet or tote this line must ship on.",
+              },
             ],
             invalidates: ["erp_document"],
           },
