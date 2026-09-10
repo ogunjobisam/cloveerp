@@ -332,7 +332,8 @@ function Procurement() {
             {
               label: "Purchase order",
               hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
-              fedBy: "Orders appear here once a requisition is turned into one, or a planned order is firmed.",
+              fedBy:
+                "Orders appear here once a requisition is turned into one, or a planned order is firmed.",
 
               typeCode: "purchase_order",
               recordArg: "p_document_id",

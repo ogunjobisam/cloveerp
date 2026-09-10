@@ -284,7 +284,8 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Put away",
         hint: "A task per pallet, from goods-in to the location it belongs in.",
-        fedBy: "Work appears here once goods are received into goods-in and put-away tasks are raised.",
+        fedBy:
+          "Work appears here once goods are received into goods-in and put-away tasks are raised.",
 
         list: {
           fn: "erp_warehouse_tasks",
@@ -2203,7 +2204,8 @@ export const PRODUCTION: ModuleDef = {
       {
         label: "Works order",
         hint: "What is to be made, how much, and by when.",
-        fedBy: "Orders appear here once one is raised, or once a planned order is firmed in planning.",
+        fedBy:
+          "Orders appear here once one is raised, or once a planned order is firmed in planning.",
 
         list: WORKS_ORDER_LIST,
         createFn: "erp_raise_works_order",

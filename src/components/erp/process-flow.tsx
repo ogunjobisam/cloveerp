@@ -238,7 +238,6 @@ function StageList({
                 }`
               : `No ${source.nounPlural} match that search.`}
           </p>
-
         ) : (
           <ul>
             {shown.map((row) => {

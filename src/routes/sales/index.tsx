@@ -156,7 +156,8 @@ function Sales() {
             {
               label: "Sales order",
               hint: "The commitment. Credit and stock availability both decide whether it can proceed.",
-              fedBy: "Orders appear here once a quotation is accepted, or an order is raised directly.",
+              fedBy:
+                "Orders appear here once a quotation is accepted, or an order is raised directly.",
 
               typeCode: "sales_order",
               recordArg: "p_document_id",
@@ -170,7 +171,8 @@ function Sales() {
             {
               label: "Delivery",
               hint: "Goods leaving. Posting a delivery is what takes the stock off the shelf.",
-              fedBy: "Deliveries appear here once stock has been reserved and picked against an order.",
+              fedBy:
+                "Deliveries appear here once stock has been reserved and picked against an order.",
 
               typeCode: "delivery",
               recordArg: "p_delivery_id",

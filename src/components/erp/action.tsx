@@ -530,7 +530,6 @@ export function outcomeOf(label: string, result: unknown, emptyNote?: string): s
   return `${label} — done.`;
 }
 
-
 export function ActionDialog({
   trigger,
   title,

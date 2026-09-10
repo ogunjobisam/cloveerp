@@ -99,7 +99,6 @@ export function ActionBar({
             invalidates={a.invalidates ?? []}
             submitLabel={a.submitLabel ?? a.label}
           />
-
         ))}
       </div>
     </section>
