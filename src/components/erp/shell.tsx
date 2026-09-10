@@ -492,6 +492,7 @@ export function Shell({
         </nav>
 
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          <Breadcrumbs />
           {children}
         </main>
       </div>
