@@ -313,6 +313,9 @@ function StockForecast() {
               ui("Over"),
               ui("Used per day"),
               ui("Lead time"),
+              ui("Measured over"),
+              ui("Planned lead time"),
+
               ui("Demand in the lead time"),
               ui("Safety stock"),
               ui("Order up to"),
