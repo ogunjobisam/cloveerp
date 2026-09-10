@@ -95,7 +95,10 @@ function OrderAction({ row, type }: { row: ForecastRow; type: DocType | undefine
   if (!type) return null;
   if (!row.supplier_party_id)
     return (
-      <span className="text-xs text-muted-foreground" title={ui("No supplier is set up for this product")}>
+      <span
+        className="text-xs text-muted-foreground"
+        title={ui("No supplier is set up for this product")}
+      >
         {ui("No supplier")}
       </span>
     );
@@ -143,7 +146,6 @@ function OrderAction({ row, type }: { row: ForecastRow; type: DocType | undefine
   );
 }
 
-
 const qty = (n: number | null | undefined, dp = 2) =>
   n === null || n === undefined
     ? "—"
@@ -174,11 +176,9 @@ function StockForecast() {
   // database will actually check before letting the button raise one.
   const { data: types } = useQuery({
     queryKey: ["erp_document_types", { p_base_type_code: "purchase_order" }],
-    queryFn: () =>
-      callErp<DocType[]>("erp_document_types", { p_base_type_code: "purchase_order" }),
+    queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: "purchase_order" }),
   });
   const poType = types?.[0];
-
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -217,7 +217,6 @@ function StockForecast() {
               ui("State"),
               ui("Order"),
             ]}
-
           >
             {rows.map((r) => (
               <tr
@@ -251,7 +250,6 @@ function StockForecast() {
                 <td className="py-2 pr-4">
                   <OrderAction row={r} type={poType} />
                 </td>
-
               </tr>
             ))}
           </Table>
