@@ -177,12 +177,172 @@ function Permissions() {
         </div>
       ) : data ? (
         <>
+          <PeoplePanel directory={data} onDone={invalidate} />
           <GrantForm directory={data} onDone={invalidate} />
           <GrantsPanel directory={data} onDone={invalidate} />
           <RolesPanel directory={data} onDone={invalidate} />
         </>
       ) : null}
     </div>
+  );
+}
+
+function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () => void }) {
+  const [selected, setSelected] = useState<string>(directory.principals[0]?.id ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Set<string> | null>(null);
+
+  const activeRoles = directory.roles.filter((r) => r.status === "active");
+  const person = directory.principals.find((p) => p.id === selected) ?? null;
+
+  const heldCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const g of directory.grants) {
+      if (g.app_user_id !== selected || !isGrantActive(g)) continue;
+      if (g.entity_id || g.site_id) continue;
+      const role = directory.roles.find((r) => r.id === g.role_id);
+      if (role) codes.add(role.code);
+    }
+    return codes;
+  }, [directory, selected]);
+
+  const ticked = pending ?? heldCodes;
+
+  const save = useMutation({
+    mutationFn: (codes: string[]) =>
+      callErp("erp_set_user_roles", {
+        p_app_user_id: selected,
+        p_role_codes: codes,
+        p_reason: "set from the roles panel",
+      }),
+    onSuccess: () => {
+      setPending(null);
+      setError(null);
+      onDone();
+    },
+    onError: (e) => setError(friendlyError(e).title),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => callErp("erp_remove_principal", { p_app_user_id: selected }),
+    onSuccess: () => {
+      setPending(null);
+      setError(null);
+      onDone();
+    },
+    onError: (e) => setError(friendlyError(e).title),
+  });
+
+  const toggle = (code: string) => {
+    const next = new Set(ticked);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    setPending(next);
+  };
+
+  return (
+    <section className="rounded-xl border border-border bg-card">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
+        <h2 className="text-sm font-semibold">People and the roles they hold</h2>
+        <Prose className="mt-0.5 text-xs text-muted-foreground">
+          Roles combine. Somebody who works across stock and the ledger holds both, and may do
+          everything either allows. Removing somebody ends their access without deleting them, so
+          the same email can be invited again later and return to the same record.
+        </Prose>
+      </header>
+
+      <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,16rem)_1fr]">
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Person
+          </span>
+          <select
+            value={selected}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              setPending(null);
+              setError(null);
+            }}
+            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+          >
+            <option value="">Choose…</option>
+            {directory.principals.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name}
+                {p.status !== "active" ? ` (${p.status})` : ""}
+              </option>
+            ))}
+          </select>
+          {person ? (
+            <span className="mt-1 text-xs text-muted-foreground">
+              {person.email ?? "no email"} · {person.kind} · {person.status}
+            </span>
+          ) : null}
+        </label>
+
+        <div className="flex flex-col gap-3">
+          {!person ? (
+            <p className="text-sm text-muted-foreground">Choose somebody to see their roles.</p>
+          ) : (
+            <>
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {activeRoles.map((r) => (
+                  <li key={r.id}>
+                    <label className="flex items-start gap-2 rounded-lg border border-border/60 p-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={ticked.has(r.code)}
+                        onChange={() => toggle(r.code)}
+                        className="mt-1 size-4"
+                      />
+                      <span className="min-w-0">
+                        <span className="font-medium">{r.name}</span>{" "}
+                        <span className="font-mono text-xs text-muted-foreground">{r.code}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {r.permissions.length} permission
+                          {r.permissions.length === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => save.mutate([...ticked])}
+                  disabled={save.isPending || pending === null}
+                  className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
+                >
+                  {save.isPending ? "Saving…" : "Save roles"}
+                </button>
+                {pending !== null ? (
+                  <button
+                    onClick={() => setPending(null)}
+                    className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
+                  >
+                    Discard changes
+                  </button>
+                ) : null}
+                <button
+                  onClick={() => remove.mutate()}
+                  disabled={remove.isPending}
+                  className={`${TOUCH} ml-auto inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium text-destructive disabled:opacity-50`}
+                >
+                  {remove.isPending ? "Removing…" : "Remove this person"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
