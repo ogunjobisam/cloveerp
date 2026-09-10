@@ -536,6 +536,13 @@ export function ActionDialog({
    * regardless of what the form built.
    */
   prefill?: Record<string, unknown>;
+  /**
+   * What this form is acting on, in words.
+   *
+   * A prefilled record is not asked for again, which leaves a form with no
+   * sign of which record it will change. This line puts it back.
+   */
+  context?: string;
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
