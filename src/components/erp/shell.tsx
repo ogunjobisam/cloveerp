@@ -500,5 +500,6 @@ export function Shell({
         </main>
       </div>
     </div>
+    </UnsavedChangesProvider>
   );
 }
