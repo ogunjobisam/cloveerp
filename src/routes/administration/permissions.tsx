@@ -130,8 +130,22 @@ function Permissions() {
             permission: "administration.users",
             fn: "erp_invite_principal",
             fields: [
-              { kind: "text", name: "p_email", label: "Email", required: true },
-              { kind: "text", name: "p_display_name", label: "Name", required: true },
+              {
+                kind: "text",
+                name: "p_email",
+                label: "Email",
+                required: true,
+                placeholder: "sam@northwindfoods.co.uk",
+                hint: "They sign in with this address.",
+              },
+              {
+                kind: "text",
+                name: "p_display_name",
+                label: "Name",
+                required: true,
+                placeholder: "Sam Ogunjobi",
+                hint: "The name shown beside their actions.",
+              },
             ],
             invalidates: ["erp_permissions_directory"],
           },
@@ -139,7 +153,16 @@ function Permissions() {
             label: "Create a service user",
             permission: "administration.users",
             fn: "erp_create_service_principal",
-            fields: [{ kind: "text", name: "p_display_name", label: "Name", required: true }],
+            fields: [
+              {
+                kind: "text",
+                name: "p_display_name",
+                label: "Name",
+                required: true,
+                placeholder: "Warehouse scanner",
+                hint: "A name for the machine account, not a person.",
+              },
+            ],
             invalidates: ["erp_permissions_directory"],
           },
         ]}

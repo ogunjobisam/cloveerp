@@ -246,8 +246,21 @@ function MasterData() {
             permission: "master_data.write",
             fn: "erp_create_uom",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "text",
+                name: "p_code",
+                label: "Code",
+                required: true,
+                placeholder: "EA",
+                hint: "The short code used on documents, for example EA, KG or BOX.",
+              },
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Each",
+              },
               {
                 kind: "choice",
                 name: "p_uom_class",
@@ -466,8 +479,21 @@ function NewItem() {
       permission="master_data.write"
       fn="erp_create_item"
       fields={[
-        { kind: "text", name: "p_code", label: "Code", required: true },
-        { kind: "text", name: "p_name", label: "Name", required: true },
+        {
+          kind: "text",
+          name: "p_code",
+          label: "Code",
+          required: true,
+          placeholder: "OAT-25",
+          hint: "How people will refer to this product everywhere.",
+        },
+        {
+          kind: "text",
+          name: "p_name",
+          label: "Name",
+          required: true,
+          placeholder: "Oat milk 1L, case of 12",
+        },
         {
           kind: "text",
           name: "p_item_class",
@@ -588,14 +614,28 @@ function NewParty() {
       permission="master_data.write"
       fn="erp_create_party"
       fields={[
-        { kind: "text", name: "p_code", label: "Code", required: true },
-        { kind: "text", name: "p_name", label: "Name", required: true },
         {
           kind: "text",
+          name: "p_code",
+          label: "Code",
+          required: true,
+          placeholder: "CUST-COOP",
+          hint: "How people will refer to this partner everywhere.",
+        },
+        {
+          kind: "text",
+          name: "p_name",
+          label: "Name",
+          required: true,
+          placeholder: "Co-op Wholesale Ltd",
+        },
+        {
+          kind: "choice",
           name: "p_role_kind",
           label: "Role",
           required: true,
-          hint: `One of: ${ROLES.join(", ")}.`,
+          choices: ROLES.map((r) => ({ value: r, label: r })),
+          hint: "More roles can be added afterwards.",
         },
         {
           kind: "text",

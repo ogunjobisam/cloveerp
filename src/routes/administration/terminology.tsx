@@ -121,6 +121,8 @@ function Terminology() {
                           name: "p_text",
                           label: "Wording",
                           required: true,
+                          placeholder: "Delivery note",
+                          hint: "What this should be called everywhere in the app.",
                         },
                       ]}
                       mapArgs={(values) => ({
@@ -176,7 +178,14 @@ function TenantTerm({ locale }: { locale: string }) {
               required: true,
               hint: "Lower-case words, digits and underscores, separated by dots.",
             },
-            { kind: "text", name: "p_value", label: "Wording", required: true },
+            {
+              kind: "text",
+              name: "p_value",
+              label: "Wording",
+              required: true,
+              placeholder: "Delivery note",
+              hint: "The words shown wherever this key appears.",
+            },
           ]}
           mapArgs={(values) => ({
             p_key: String(values["p_key"] ?? "").trim(),

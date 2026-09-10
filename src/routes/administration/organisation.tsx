@@ -266,7 +266,10 @@ function Organisation() {
                 placeholder: "Northwind Foods (UK) Limited",
                 hint: "The registered name, if it differs from the one used day to day.",
               },
-              { ...pickCurrency("p_base_currency", "Currency"), hint: "The books are kept in this." },
+              {
+                ...pickCurrency("p_base_currency", "Currency"),
+                hint: "The books are kept in this.",
+              },
               {
                 kind: "text",
                 name: "p_country_code",

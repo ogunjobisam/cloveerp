@@ -302,12 +302,15 @@ function Quotes() {
                       name: "p_party_code",
                       label: ui("Business partner code"),
                       required: true,
+                      placeholder: "CUST-COOP",
+                      hint: "The customer's code. It is created if it does not exist yet.",
                     },
                     {
                       kind: "text",
                       name: "p_party_name",
                       label: ui("Business partner name"),
                       required: true,
+                      placeholder: "Co-op Wholesale Ltd",
                     },
                     {
                       kind: "choice",
@@ -336,8 +339,16 @@ function Quotes() {
                       kind: "text",
                       name: "p_customer_tenant_code",
                       label: ui("Customer organisation code"),
+                      placeholder: "northwind",
+                      hint: "Only if this customer already runs their own organisation here.",
                     },
-                    { kind: "text", name: "p_notes", label: "Notes" },
+                    {
+                      kind: "text",
+                      name: "p_notes",
+                      label: "Notes",
+                      placeholder: "Pricing agreed with their buyer",
+                      hint: "Optional. Kept with the quote.",
+                    },
                   ]}
                   mapArgs={(v) => ({
                     p_party_code: v["p_party_code"],

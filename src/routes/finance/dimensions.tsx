@@ -102,7 +102,13 @@ function Dimensions() {
                 required: true,
                 hint: "CC, DEPT, PROJECT.",
               },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Cost centre",
+              },
               {
                 kind: "text",
                 name: "p_derivation",
@@ -140,9 +146,27 @@ function Dimensions() {
             fn: "erp_upsert_dimension_value",
             fields: [
               pickDimension(),
-              { kind: "text", name: "p_code", label: "Value code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
-              { kind: "text", name: "p_parent_code", label: "Parent value code" },
+              {
+                kind: "text",
+                name: "p_code",
+                label: "Value code",
+                required: true,
+                placeholder: "CC-1000",
+              },
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Leeds warehouse",
+              },
+              {
+                kind: "text",
+                name: "p_parent_code",
+                label: "Parent value code",
+                placeholder: "CC-1",
+                hint: "Optional. Use it to group values into a tree.",
+              },
               { kind: "date", name: "p_valid_from", label: "Valid from" },
               { kind: "date", name: "p_valid_to", label: "Valid to" },
               {
@@ -190,8 +214,21 @@ function Dimensions() {
             permission: "finance.configure",
             fn: "erp_upsert_dimension_rule",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "text",
+                name: "p_code",
+                label: "Code",
+                required: true,
+                placeholder: "CC-MANDATORY-SPEND",
+                hint: "A short code for this rule.",
+              },
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Cost centre required on spend",
+              },
               {
                 kind: "text",
                 name: "p_scope",
