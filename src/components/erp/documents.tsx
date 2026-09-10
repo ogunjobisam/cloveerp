@@ -253,7 +253,12 @@ export function NewDocumentAction({
               currency: "GBP",
               placeholder: "1.85",
             },
-            { name: "description", label: "Description", kind: "text" },
+            {
+              name: "description",
+              label: "Description",
+              kind: "text",
+              placeholder: "Rolled oats, 25kg sack",
+            },
           ],
         },
       ]}
