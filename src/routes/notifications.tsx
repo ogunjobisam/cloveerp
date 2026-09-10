@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { ActionButton, ErrorNote, useErpAction } from "../components/erp/action";
-import { ActionBar } from "../components/erp/actions-bar";
+import { ActionBar, codeField } from "../components/erp/actions-bar";
 import { Gate } from "../components/erp/gate";
 import { PageHeader, TOUCH } from "../components/erp/page";
 import { DataPanel, Pill, Table } from "../components/erp/panel";
