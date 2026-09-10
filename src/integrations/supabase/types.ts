@@ -1729,6 +1729,10 @@ export type Database = {
           | "closed"
           | "cancelled"
       }
+      erp_remove_principal: {
+        Args: { p_app_user_id: string; p_reason?: string }
+        Returns: Json
+      }
       erp_remove_quote_line: { Args: { p_line_id: string }; Returns: undefined }
       erp_remove_report_pack_item: {
         Args: { p_pack_code: string; p_report_code: string }
@@ -2098,6 +2102,14 @@ export type Database = {
           p_unit_cost_minor: number
         }
         Returns: string
+      }
+      erp_set_user_roles: {
+        Args: {
+          p_app_user_id: string
+          p_reason?: string
+          p_role_codes: string[]
+        }
+        Returns: Json
       }
       erp_settlement_statement: {
         Args: { p_statement_id: string }
