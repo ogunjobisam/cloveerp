@@ -348,11 +348,22 @@ function StageRecord({
       <div className="mt-4 flex flex-wrap gap-2">
         {row
           ? recordActions.map((a) => (
-              <StageAction key={a.fn} action={a} prefill={prefill} permitted={permitted(a)} />
+              <StageAction
+                key={a.fn}
+                action={a}
+                prefill={prefill}
+                permitted={permitted(a)}
+                context={summary}
+              />
             ))
           : null}
         {createAction ? (
-          <StageAction action={createAction} prefill={{}} permitted={permitted(createAction)} />
+          <StageAction
+            action={createAction}
+            prefill={{}}
+            permitted={permitted(createAction)}
+            context={`${ui(stage.label)} — ${ui(stage.hint)}`}
+          />
         ) : null}
         {stage.to ? (
           <Link
