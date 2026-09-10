@@ -357,7 +357,7 @@ function StageRecord({
                 action={a}
                 prefill={prefill}
                 permitted={permitted(a)}
-                context={summary}
+                {...(summary ? { context: summary } : {})}
               />
             ))
           : null}
