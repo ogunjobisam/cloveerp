@@ -521,6 +521,16 @@ export function ActionDialog({
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
 
+  // An open form with something typed into it is work in progress, and
+  // leaving the screen must ask before it is thrown away.
+  const untouched = useMemo(() => JSON.stringify(initialValues(fields)), [fields]);
+  useUnsavedGuard(
+    open &&
+      (JSON.stringify(values) !== untouched ||
+        Object.values(lists).some((l) => l.length > 0) ||
+        Object.values(rows).some((r) => r.length > 0)),
+  );
+
   // Only fetched when something on this form takes a price.
   const takesMoney = fields.some((f) => f.kind === "money");
   const { currencies, error: currencyError } = useCurrencies(takesMoney);
