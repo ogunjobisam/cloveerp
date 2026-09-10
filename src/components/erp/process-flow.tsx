@@ -449,6 +449,14 @@ function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[
   );
 }
 
+/**
+ * One step of the chain, drawn as an arrow pointing at the next one.
+ *
+ * The step used to be a card carrying its own hint, which made the strip three
+ * lines tall and the chain hard to read as a chain. The hint now sits under the
+ * strip for the step you are on — the only one it describes — and the arrows
+ * say the rest.
+ */
 function StageTab({
   stage,
   index,
@@ -469,32 +477,39 @@ function StageTab({
     source && !isPending ? (rows.length >= CAP ? `${CAP}+` : String(rows.length)) : null;
 
   return (
-    <li className="flex min-w-0 shrink-0 items-stretch gap-2">
-      {index > 0 ? (
-        <span aria-hidden="true" className="self-center text-muted-foreground">
-          →
-        </span>
-      ) : null}
+    <li className="min-w-0 flex-1 basis-40">
       <button
         type="button"
         onClick={onSelect}
         disabled={disabled}
         aria-pressed={active}
-        className={`flex w-52 shrink-0 flex-col rounded-lg border p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
+        title={ui(stage.hint)}
+        className={[
+          "flex h-14 w-full min-w-0 items-center gap-2 pr-5 text-left transition-colors",
+          index === 0 ? "step-chevron-first pl-4" : "step-chevron pl-7",
           active
-            ? "border-primary bg-background shadow-sm"
-            : "border-border bg-background hover:bg-muted/60"
-        } ${disabled ? "opacity-50" : ""}`}
+            ? "bg-accent text-accent-foreground"
+            : "bg-soft text-foreground hover:bg-muted-foreground/15",
+          disabled ? "opacity-50" : "",
+        ].join(" ")}
       >
-        <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-semibold">{ui(stage.label)}</span>
-          {count !== null ? (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
-              {count}
-            </span>
-          ) : null}
+        <span
+          className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold tabular-nums ${
+            active ? "bg-accent-foreground/25" : "bg-card text-muted-foreground"
+          }`}
+        >
+          {index + 1}
         </span>
-        <span className="mt-1 line-clamp-3 text-xs text-muted-foreground">{ui(stage.hint)}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{ui(stage.label)}</span>
+        {count !== null ? (
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
+              active ? "bg-accent-foreground/25" : "bg-card text-muted-foreground"
+            }`}
+          >
+            {count}
+          </span>
+        ) : null}
       </button>
     </li>
   );
@@ -520,15 +535,12 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
   const stage = flow.stages[Math.min(chosen, flow.stages.length - 1)];
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
+    <section className="min-w-0 rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
       <div className="p-4 sm:p-5">
         <h2 className="text-sm font-semibold">{ui(flow.title)}</h2>
         {flow.note ? <p className="mt-0.5 text-xs text-muted-foreground">{ui(flow.note)}</p> : null}
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Press a step to see what is sitting there.
-        </p>
         <div className="mt-3 overflow-x-auto pb-1">
-          <ol className="flex items-stretch gap-2">
+          <ol className="flex min-w-fit items-stretch gap-1">
             {flow.stages.map((s, i) => (
               <StageTab
                 key={s.label}
@@ -541,6 +553,7 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
             ))}
           </ol>
         </div>
+        {stage ? <p className="mt-2 text-xs text-muted-foreground">{ui(stage.hint)}</p> : null}
       </div>
 
       {stage ? <StageWorkbench key={stage.label} stage={stage} actions={actions} /> : null}
