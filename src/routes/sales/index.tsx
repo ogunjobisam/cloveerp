@@ -170,6 +170,7 @@ function Sales() {
               fedBy: "Quotations appear here once one is raised for a customer.",
 
               typeCode: "quotation",
+              partyRole: "customer",
               recordArg: "p_document_id",
               createFn: "erp_resolve_price",
             },
@@ -180,6 +181,7 @@ function Sales() {
                 "Orders appear here once a quotation is accepted, or an order is raised directly.",
 
               typeCode: "sales_order",
+              partyRole: "customer",
               recordArg: "p_document_id",
               createFn: "erp_promise_date",
             },
@@ -195,6 +197,7 @@ function Sales() {
                 "Deliveries appear here once stock has been reserved and picked against an order.",
 
               typeCode: "delivery",
+              partyRole: "customer",
               recordArg: "p_delivery_id",
               to: "/logistics",
               toLabel: "Open despatch",
@@ -205,6 +208,7 @@ function Sales() {
               fedBy: "Invoices appear here once a delivery is confirmed and invoiced.",
 
               typeCode: "sales_invoice",
+              partyRole: "customer",
               recordArg: "p_invoice_id",
               to: "/finance",
               toLabel: "Open finance",

@@ -481,6 +481,19 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_create_document_full: {
+        Args: {
+          p_currency?: string
+          p_lines?: Json
+          p_party_id?: string
+          p_required_date?: string
+          p_site_id?: string
+          p_their_ref?: string
+          p_transition?: string
+          p_type_code: string
+        }
+        Returns: Json
+      }
       erp_create_entity: {
         Args: {
           p_base_currency?: string

@@ -217,15 +217,33 @@ export type Field =
   /** A list of records, added a row at a time. Sent as an array of objects. */
   | ({
       kind: "rows";
-      columns: {
-        name: string;
-        label: string;
-        kind: "text" | "number" | "date";
-        placeholder?: string;
-      }[];
+      columns: RowColumn[];
       /** Values that should be sent as numbers rather than text. */
       addLabel?: string;
+      /**
+       * A running total across the rows, so a document adds up while it is
+       * being typed rather than after it has been saved.
+       */
+      total?: { quantity: string; price: string; currency: string };
     } & FieldBase);
+
+/**
+ * One column of a row editor.
+ *
+ * A line on a document names a product, and a product is chosen, never typed —
+ * the same rule the rest of the form obeys. `money` is entered in major units
+ * and sent in minor, exactly as the standalone money field does.
+ */
+export type RowColumn = {
+  name: string;
+  label: string;
+  kind: "text" | "number" | "date" | "money" | "select";
+  placeholder?: string;
+  /** For `select`. */
+  options?: OptionSource;
+  /** For `money`. */
+  currency?: string;
+};
 
 /** The label a picker shows for one row of its source. */
 function optionLabel(row: Record<string, unknown>, keys: string[]): string {
@@ -413,37 +431,98 @@ export function MultiField({
   );
 }
 
-/** A list of records, one row at a time. The alternative was typing JSON. */
+/** One cell of a row editor: a picker where the value names a record. */
+function RowCell({
+  column,
+  value,
+  onChange,
+}: {
+  column: RowColumn;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  if (column.kind === "select" && column.options)
+    return (
+      <SelectField
+        field={{
+          kind: "select",
+          name: column.name,
+          label: column.label,
+          options: column.options,
+        }}
+        value={value}
+        onChange={onChange}
+      />
+    );
+
+  return (
+    <input
+      aria-label={column.label}
+      type={
+        column.kind === "text" || column.kind === "select"
+          ? "text"
+          : column.kind === "date"
+            ? "date"
+            : "number"
+      }
+      inputMode={column.kind === "money" || column.kind === "number" ? "decimal" : undefined}
+      step={column.kind === "money" ? "any" : undefined}
+      value={value}
+      placeholder={column.placeholder ?? ""}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+    />
+  );
+}
+
+/**
+ * A list of records, one row at a time. The alternative was typing JSON.
+ *
+ * This is where a whole document gets written: the lines live on the same form
+ * as the header, so raising an order is one press rather than one press and
+ * then a visit to the document to price each line.
+ */
 function RowsField({
   field,
   value,
   onChange,
+  currencies,
 }: {
   field: Extract<Field, { kind: "rows" }>;
   value: Record<string, string>[];
   onChange: (v: Record<string, string>[]) => void;
+  currencies: Currency[] | undefined;
 }) {
+  const total = field.total;
+  const sum = total
+    ? value.reduce(
+        (acc, row) =>
+          acc + (Number(row[total.quantity] ?? 0) || 0) * (Number(row[total.price] ?? 0) || 0),
+        0,
+      )
+    : 0;
+
   return (
     <div className="flex flex-col gap-2">
       {value.map((row, index) => (
-        <div key={index} className="flex flex-wrap items-end gap-2">
+        <div
+          key={index}
+          className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2"
+        >
           {field.columns.map((c) => (
-            <label key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
+            <div key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {c.label}
+                {c.kind === "money" && c.currency ? ` (${c.currency})` : ""}
               </span>
-              <input
-                type={c.kind === "number" ? "number" : c.kind === "date" ? "date" : "text"}
+              <RowCell
+                column={c}
                 value={row[c.name] ?? ""}
-                placeholder={c.placeholder ?? ""}
-                onChange={(e) =>
-                  onChange(
-                    value.map((r, i) => (i === index ? { ...r, [c.name]: e.target.value } : r)),
-                  )
+                onChange={(v) =>
+                  onChange(value.map((r, i) => (i === index ? { ...r, [c.name]: v } : r)))
                 }
-                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
               />
-            </label>
+            </div>
           ))}
           <ActionButton
             variant="secondary"
@@ -453,10 +532,18 @@ function RowsField({
           </ActionButton>
         </div>
       ))}
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <ActionButton variant="secondary" onClick={() => onChange([...value, {}])}>
           {field.addLabel ?? "Add a line"}
         </ActionButton>
+        {total && value.length > 0 ? (
+          <span className="text-sm">
+            <span className="text-muted-foreground">Total </span>
+            <span className="font-medium tabular-nums">
+              {total.currency} {sum.toFixed(minorUnitsOf(currencies, total.currency) === 0 ? 0 : 2)}
+            </span>
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -544,6 +631,7 @@ export function ActionDialog({
 
   invalidates,
   submitLabel = "Save",
+  alsoSubmit,
   onDone,
 }: {
   trigger: ReactNode;
@@ -583,6 +671,13 @@ export function ActionDialog({
 
   invalidates: string[];
   submitLabel?: string;
+  /**
+   * A second way to finish.
+   *
+   * "Create" leaves a draft; "Create and send" does the same work and moves the
+   * document on. Two buttons on one form beat one button and a second visit.
+   */
+  alsoSubmit?: { label: string; args: Record<string, unknown> };
   onDone?: (result: unknown) => void;
 }) {
   const { session } = useErpSession();
@@ -603,12 +698,15 @@ export function ActionDialog({
         Object.values(rows).some((r) => r.length > 0)),
   );
 
-  // Only fetched when something on this form takes a price.
-  const takesMoney = fields.some((f) => f.kind === "money");
+  // Only fetched when something on this form takes a price — on the form
+  // itself, or in a column of a line editor.
+  const takesMoney = fields.some(
+    (f) => f.kind === "money" || (f.kind === "rows" && f.columns.some((c) => c.kind === "money")),
+  );
   const { currencies, error: currencyError } = useCurrencies(takesMoney);
 
   const action = useMutation({
-    mutationFn: () => callErp<unknown>(fn, buildArgs()),
+    mutationFn: (extra: Record<string, unknown> = {}) => callErp<unknown>(fn, buildArgs(extra)),
     onSuccess: (result) => {
       invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
       setValues(initialValues(fields));
@@ -624,8 +722,8 @@ export function ActionDialog({
     },
   });
 
-  function buildArgs(): Record<string, unknown> {
-    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}) };
+  function buildArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}), ...extra };
     const args: Record<string, unknown> = {};
 
     for (const f of fields) {
@@ -642,12 +740,18 @@ export function ActionDialog({
             for (const c of declared) {
               const raw = row[c.name] ?? "";
               if (raw === "") continue;
-              out[c.name] = c.kind === "number" ? Number(raw) : raw;
+              out[c.name] =
+                c.kind === "number"
+                  ? Number(raw)
+                  : c.kind === "money"
+                    ? toMinor(raw, minorUnitsOf(currencies, c.currency ?? "GBP"))
+                    : raw;
             }
             return out;
           })
           .filter((row) => Object.keys(row).length > 0);
         if (filled.length > 0) args[f.name] = filled;
+
         continue;
       }
       const raw = values[f.name] ?? "";
@@ -658,7 +762,7 @@ export function ActionDialog({
       else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
     }
-    return { ...args, ...(prefill ?? {}) };
+    return { ...args, ...(prefill ?? {}), ...extra };
   }
 
   // Not offered rather than offered-and-disabled. The database still decides.
@@ -673,14 +777,14 @@ export function ActionDialog({
    * because taking over the screen to ask one thing is worse, not better.
    */
   const shown = fields.filter((f) => !(prefill && f.name in prefill));
-  const asPage = shown.length > 2;
+  const asPage = shown.length > 2 || shown.some((f) => f.kind === "rows");
 
   const body = (
     <form
       className="flex flex-col gap-3"
       onSubmit={(e) => {
         e.preventDefault();
-        action.mutate();
+        action.mutate({});
       }}
     >
       {context ? (
@@ -728,6 +832,7 @@ export function ActionDialog({
                   field={f}
                   value={rows[f.name] ?? []}
                   onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
+                  currencies={currencies}
                 />
               ) : f.kind === "choice" || f.kind === "site" ? (
                 <select
@@ -800,6 +905,16 @@ export function ActionDialog({
         >
           {ui("Cancel")}
         </ActionButton>
+        {alsoSubmit ? (
+          <ActionButton
+            variant="secondary"
+            busy={action.isPending}
+            disabled={takesMoney && Boolean(currencyError)}
+            onClick={() => action.mutate(alsoSubmit.args)}
+          >
+            {ui(alsoSubmit.label)}
+          </ActionButton>
+        ) : null}
         <ActionButton
           type="submit"
           busy={action.isPending}

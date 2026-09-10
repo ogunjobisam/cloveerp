@@ -6,6 +6,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import type { ActionSpec } from "./actions-bar";
+import { NewDocumentForType } from "./documents";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 
@@ -46,6 +47,12 @@ export type Stage = {
   hint: string;
   /** Lists documents of this type code, via public.erp_documents. */
   typeCode?: string;
+  /**
+   * Which side of the trade this step's documents name, when one may be raised
+   * here: `customer`, `provider`, and so on. Raising happens on this step, on
+   * one screen — header and lines together — rather than on the list screen.
+   */
+  partyRole?: string;
   /** Any other read whose rows are what is sitting at this stage. */
   list?: StageList;
   /** Which argument the chosen record fills on this stage's verbs. */
@@ -374,6 +381,13 @@ function StageRecord({
               />
             ))
           : null}
+        {stage.typeCode ? (
+          <NewDocumentForType
+            typeCode={stage.typeCode}
+            {...(stage.partyRole ? { partyRole: stage.partyRole } : {})}
+            label={`New ${ui(stage.label).toLowerCase()}`}
+          />
+        ) : null}
         {createAction ? (
           <StageAction
             action={createAction}
