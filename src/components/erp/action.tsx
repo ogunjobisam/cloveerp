@@ -571,8 +571,9 @@ export function ActionDialog({
       else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
     }
-    return args;
+    return { ...args, ...(prefill ?? {}) };
   }
+
 
   // Not offered rather than offered-and-disabled. The database still decides.
   if (permission && !hasPermission(session, permission)) return null;
