@@ -576,21 +576,18 @@ export function ActionDialog({
   // Not offered rather than offered-and-disabled. The database still decides.
   if (permission && !hasPermission(session, permission)) return null;
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) action.reset();
-      }}
-    >
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[85vh] w-[92vw] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{ui(title)}</DialogTitle>
-          {description ? <DialogDescription>{ui(description)}</DialogDescription> : null}
-        </DialogHeader>
+  /**
+   * A question or two is a confirmation; a form is a piece of work.
+   *
+   * Anything asking for more than two things opens as its own screen — a full
+   * work area with room for pickers and line editors — rather than a box
+   * floating over the list behind it. Short confirmations stay as the box,
+   * because taking over the screen to ask one thing is worse, not better.
+   */
+  const shown = fields.filter((f) => !(prefill && f.name in prefill));
+  const asPage = shown.length > 2;
 
+  const body = (
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {
