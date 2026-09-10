@@ -187,6 +187,7 @@ function Sales() {
               typeCode: "quotation",
               partyRole: "customer",
               recordArg: "p_document_id",
+              actionFn: "erp_convert_document",
               createFn: "erp_resolve_price",
             },
             {
