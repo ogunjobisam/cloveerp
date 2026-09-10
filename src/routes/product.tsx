@@ -23,7 +23,7 @@ import warehouseImg from "../assets/landing-warehouse.jpg";
 import financeImg from "../assets/landing-finance.jpg";
 import shotFinance from "../assets/product-finance.png";
 import shotWarehouse from "../assets/product-warehouse.png";
-import shotEncryption from "../assets/product-encryption.png";
+import shotForecast from "../assets/product-forecast.png";
 import { Logo, Wordmark } from "../components/erp/logo";
 
 export const Route = createFileRoute("/product")({
@@ -342,19 +342,19 @@ const SHOTS: Shot[] = [
   },
   {
     src: shotWarehouse,
-    alt: "Clove ERP Inventory and warehouse dashboard with stock value, cover KPIs and open count tasks",
+    alt: "Clove ERP warehouse workbench showing goods in, put away, move and count with a searchable receipt list",
     icon: Boxes,
-    label: "Warehouse",
+    label: "Warehouse workbench",
     caption:
-      "Stock health, valuation and count tasks, all derived from the perpetual inventory ledger.",
+      "Pick a step, pick a record: goods in, put away, move and count, with batch and expiry on every line.",
   },
   {
-    src: shotEncryption,
-    alt: "Clove ERP encryption keys panel showing the per-tenant key register with rotation and destruction controls",
-    icon: Vault,
-    label: "Encryption keys",
+    src: shotForecast,
+    alt: "Clove ERP stock forecast listing usage per day, lead time, reorder point and days of cover with an order button per product",
+    icon: TrendingUp,
+    label: "Stock forecast",
     caption:
-      "Each company holds its own key in the platform vault — rotated or destroyed on your word alone.",
+      "Usage, measured supplier lead times and reorder points — with a purchase order one click away.",
   },
 ];
 
