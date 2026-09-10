@@ -125,10 +125,12 @@ function StageAction({
   action,
   prefill,
   permitted,
+  context,
 }: {
   action: ActionSpec;
   prefill: Record<string, unknown>;
   permitted: boolean;
+  context?: string;
 }) {
   const { ui } = useT();
 
