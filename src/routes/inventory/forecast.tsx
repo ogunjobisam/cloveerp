@@ -60,6 +60,11 @@ type ForecastRow = {
   usage_per_day: number;
   lead_time_days: number;
   lead_time_demand: number;
+  planned_lead_time_days: number;
+  measured_lead_time_days: number | null;
+  measured_deliveries: number;
+  lead_time_source: string;
+
   safety_stock: number | null;
   reorder_point: number | null;
   order_up_to: number | null;
@@ -73,7 +78,38 @@ type ForecastRow = {
   state: string;
 };
 
+/**
+ * The lead time, with where it came from.
+ *
+ * A supplier's promise and a supplier's record are different numbers. Where
+ * deliveries have actually been received against orders, the days between the
+ * order and the receipt are the honest figure and the one the reorder point
+ * uses; the planned figure only stands in until there is history.
+ */
+function LeadTime({ row }: { row: ForecastRow }) {
+  const { ui } = useT();
+  if (!row.lead_time_days) return <span>—</span>;
+  const measured = row.lead_time_source === "measured";
+  return (
+    <span
+      title={
+        measured
+          ? `${ui("Measured over")} ${row.measured_deliveries} ${ui("deliveries")}${
+              row.planned_lead_time_days ? ` · ${ui("planned")} ${row.planned_lead_time_days}d` : ""
+            }`
+          : ui("No deliveries received yet, so the planned lead time is used")
+      }
+    >
+      {row.lead_time_days}d
+      <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {measured ? ui("actual") : ui("planned")}
+      </span>
+    </span>
+  );
+}
+
 /** The configured purchase-order type, and the permission it really needs. */
+
 type DocType = {
   document_type_id: string;
   code: string;
@@ -160,6 +196,12 @@ const day = (iso: string | null) =>
       })
     : "—";
 
+/** How much delivery history the measured lead time rests on. */
+const measuredOver = (r: ForecastRow) =>
+  r.measured_deliveries > 0
+    ? `${qty(r.measured_lead_time_days, 1)}d · ${r.measured_deliveries}`
+    : "—";
+
 const tone = (state: string) =>
   state === "out of stock" || state === "order now"
     ? "bad"
@@ -235,8 +277,9 @@ function StockForecast() {
                 <td className="py-2 pr-4 tabular-nums">{qty(r.demand)}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.usage_per_day, 3)}</td>
                 <td className="py-2 pr-4 tabular-nums">
-                  {r.lead_time_days ? `${r.lead_time_days}d` : "—"}
+                  <LeadTime row={r} />
                 </td>
+
                 <td className="py-2 pr-4 tabular-nums">{qty(r.reorder_point)}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.days_cover, 1)}</td>
                 <td className="py-2 pr-4">{day(r.reorder_by)}</td>
@@ -274,6 +317,9 @@ function StockForecast() {
               ui("Over"),
               ui("Used per day"),
               ui("Lead time"),
+              ui("Measured over"),
+              ui("Planned lead time"),
+
               ui("Demand in the lead time"),
               ui("Safety stock"),
               ui("Order up to"),
@@ -292,8 +338,13 @@ function StockForecast() {
                 <td className="py-2 pr-4 tabular-nums">{`${r.usage_days}d`}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.usage_per_day, 3)}</td>
                 <td className="py-2 pr-4 tabular-nums">
-                  {r.lead_time_days ? `${r.lead_time_days}d` : "—"}
+                  <LeadTime row={r} />
                 </td>
+                <td className="py-2 pr-4 tabular-nums">{measuredOver(r)}</td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {r.planned_lead_time_days ? `${r.planned_lead_time_days}d` : "—"}
+                </td>
+
                 <td className="py-2 pr-4 tabular-nums">{qty(r.lead_time_demand)}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.safety_stock)}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.order_up_to)}</td>
