@@ -1769,6 +1769,8 @@ export const PLANNING: ModuleDef = {
       {
         label: "Forecast",
         hint: "Demand per period, from history and from what you know that history does not.",
+        fedBy: "Forecasts appear here once one has been run for a period.",
+
         list: {
           fn: "erp_forecast_versions",
           args: { p_limit: 200 },
@@ -1784,6 +1786,8 @@ export const PLANNING: ModuleDef = {
       {
         label: "Sign off",
         hint: "A forecast nobody has agreed to is a spreadsheet. Signing it off is what plans use it.",
+        fedBy: "Forecasts appear here once one has been run at the forecast step.",
+
         list: {
           fn: "erp_forecast_versions",
           args: { p_limit: 200 },
@@ -1805,6 +1809,8 @@ export const PLANNING: ModuleDef = {
       {
         label: "Planned order",
         hint: "What the run says to buy or make, before anyone has committed to it.",
+        fedBy: "Orders appear here once a requirements run has been made.",
+
         list: {
           fn: "erp_planned_orders",
           args: { p_limit: 200 },
@@ -2197,12 +2203,16 @@ export const PRODUCTION: ModuleDef = {
       {
         label: "Works order",
         hint: "What is to be made, how much, and by when.",
+        fedBy: "Orders appear here once one is raised, or once a planned order is firmed in planning.",
+
         list: WORKS_ORDER_LIST,
         createFn: "erp_raise_works_order",
       },
       {
         label: "Release",
         hint: "Releasing an order is what makes it work the floor can start.",
+        fedBy: "Orders appear here once one has been raised at the works order step.",
+
         list: WORKS_ORDER_LIST,
         recordArg: "p_works_order_id",
         actionFn: "erp_release_works_order",
