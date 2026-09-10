@@ -78,7 +78,40 @@ type ForecastRow = {
   state: string;
 };
 
+/**
+ * The lead time, with where it came from.
+ *
+ * A supplier's promise and a supplier's record are different numbers. Where
+ * deliveries have actually been received against orders, the days between the
+ * order and the receipt are the honest figure and the one the reorder point
+ * uses; the planned figure only stands in until there is history.
+ */
+function LeadTime({ row }: { row: ForecastRow }) {
+  const { ui } = useT();
+  if (!row.lead_time_days) return <span>—</span>;
+  const measured = row.lead_time_source === "measured";
+  return (
+    <span
+      title={
+        measured
+          ? `${ui("Measured over")} ${row.measured_deliveries} ${ui("deliveries")}${
+              row.planned_lead_time_days
+                ? ` · ${ui("planned")} ${row.planned_lead_time_days}d`
+                : ""
+            }`
+          : ui("No deliveries received yet, so the planned lead time is used")
+      }
+    >
+      {row.lead_time_days}d
+      <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {measured ? ui("actual") : ui("planned")}
+      </span>
+    </span>
+  );
+}
+
 /** The configured purchase-order type, and the permission it really needs. */
+
 type DocType = {
   document_type_id: string;
   code: string;
