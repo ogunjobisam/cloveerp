@@ -11,11 +11,13 @@ import {
   pickParty,
   pickSite,
   reason,
+  type ActionSpec,
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { ProcessFlow } from "../../components/erp/process-flow";
 import { SALES_KPIS } from "../../lib/modules";
 
 export const Route = createFileRoute("/sales/")({
@@ -39,6 +41,94 @@ export const Route = createFileRoute("/sales/")({
  * numbering, its lifecycle, the permission to raise one — comes from the
  * database.
  */
+const SALES_ACTIONS: ActionSpec[] = [
+  {
+    label: "Resolve a price",
+    description: "What would this customer pay for this product today?",
+    permission: "sales.price",
+    fn: "erp_resolve_price",
+    fields: [
+      pickItem(),
+      pickParty("customer"),
+      { kind: "number", name: "p_quantity", label: "Quantity" },
+    ],
+  },
+  {
+    label: "Promise a date",
+    permission: "sales.order",
+    fn: "erp_promise_date",
+    fields: [
+      pickItem(),
+      pickSite(),
+      { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+    ],
+  },
+  {
+    label: "Reserve stock for a line",
+    permission: "sales.order",
+    fn: "erp_reserve_for_line",
+    fields: [
+      pickLine("sales_order", "p_document_line_id", "Order line"),
+      {
+        kind: "text",
+        name: "p_policy_code",
+        label: "Policy code",
+        placeholder: "FEFO",
+        hint: "Optional. Leave empty to use the product's usual rule.",
+      },
+    ],
+  },
+  {
+    label: "Release a credit hold",
+    permission: "sales.credit_release",
+    fn: "erp_release_credit_hold",
+    fields: [
+      pickFrom(
+        "erp_documents",
+        "document_id",
+        ["document_number", "status"],
+        "p_document_id",
+        "Document",
+        { p_limit: 100 },
+      ),
+      reason("p_reason", "Reason", true),
+    ],
+  },
+  {
+    label: "Raise a customer return",
+    permission: "sales.order",
+    fn: "erp_raise_customer_return",
+    fields: [
+      pickFrom(
+        "erp_documents",
+        "document_id",
+        ["document_number", "status"],
+        "p_original_document_id",
+        "Original document",
+        { p_limit: 100 },
+      ),
+      {
+        kind: "combo",
+        name: "p_reason_code",
+        label: "Reason code",
+        required: true,
+        options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
+      },
+      reason("p_reason", "Reason", true),
+      {
+        kind: "choice",
+        name: "p_outcome",
+        label: "Outcome",
+        choices: [
+          { value: "credit", label: "Credit" },
+          { value: "replace", label: "Replace" },
+          { value: "repair", label: "Repair" },
+        ],
+      },
+    ],
+  },
+];
+
 function Sales() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -49,96 +139,57 @@ function Sales() {
 
       <KpiRow kpis={SALES_KPIS} />
 
+      <ProcessFlow
+        flow={{
+          title: "Order to cash, step by step",
+          note: "Each box is a step in the chain and shows what is sitting there now. The button on a box is the verb that moves work to the next one.",
+          stages: [
+            {
+              label: "Quotation",
+              hint: "A price offered, before the customer has committed to anything.",
+              typeCode: "quotation",
+              actionFn: "erp_resolve_price",
+            },
+            {
+              label: "Sales order",
+              hint: "The commitment. Credit and stock availability both decide whether it can proceed.",
+              typeCode: "sales_order",
+              actionFn: "erp_promise_date",
+            },
+            {
+              label: "Pick",
+              hint: "Stock reserved against the line, then picked from the location holding it.",
+              actionFn: "erp_reserve_for_line",
+            },
+            {
+              label: "Delivery",
+              hint: "Goods leaving. Posting a delivery is what takes the stock off the shelf.",
+              typeCode: "delivery",
+              to: "/logistics",
+              toLabel: "Open despatch",
+            },
+            {
+              label: "Invoice",
+              hint: "The bill, raised from a posted delivery so it says what actually went.",
+              typeCode: "sales_invoice",
+              to: "/finance",
+              toLabel: "Open finance",
+            },
+            {
+              label: "Cash",
+              hint: "Money received, applied against the invoices it settles.",
+              to: "/finance",
+              toLabel: "Apply cash",
+            },
+          ],
+        }}
+        actions={SALES_ACTIONS}
+      />
+
       <ActionBar
         title="Pricing, promise, credit and returns"
         note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
-        actions={[
-          {
-            label: "Resolve a price",
-            description: "What would this customer pay for this product today?",
-            permission: "sales.price",
-            fn: "erp_resolve_price",
-            fields: [
-              pickItem(),
-              pickParty("customer"),
-              { kind: "number", name: "p_quantity", label: "Quantity" },
-            ],
-          },
-          {
-            label: "Promise a date",
-            permission: "sales.order",
-            fn: "erp_promise_date",
-            fields: [
-              pickItem(),
-              pickSite(),
-              { kind: "number", name: "p_quantity", label: "Quantity", required: true },
-            ],
-          },
-          {
-            label: "Reserve stock for a line",
-            permission: "sales.order",
-            fn: "erp_reserve_for_line",
-            fields: [
-              pickLine("sales_order", "p_document_line_id", "Order line"),
-              {
-                kind: "text",
-                name: "p_policy_code",
-                label: "Policy code",
-                placeholder: "FEFO",
-                hint: "Optional. Leave empty to use the product's usual rule.",
-              },
-            ],
-          },
-          {
-            label: "Release a credit hold",
-            permission: "sales.credit_release",
-            fn: "erp_release_credit_hold",
-            fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "status"],
-                "p_document_id",
-                "Document",
-                { p_limit: 100 },
-              ),
-              reason("p_reason", "Reason", true),
-            ],
-          },
-          {
-            label: "Raise a customer return",
-            permission: "sales.order",
-            fn: "erp_raise_customer_return",
-            fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "status"],
-                "p_original_document_id",
-                "Original document",
-                { p_limit: 100 },
-              ),
-              {
-                kind: "combo",
-                name: "p_reason_code",
-                label: "Reason code",
-                required: true,
-                options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
-              },
-              reason("p_reason", "Reason", true),
-              {
-                kind: "choice",
-                name: "p_outcome",
-                label: "Outcome",
-                choices: [
-                  { value: "credit", label: "Credit" },
-                  { value: "replace", label: "Replace" },
-                  { value: "repair", label: "Repair" },
-                ],
-              },
-            ],
-          },
-        ]}
+        actions={SALES_ACTIONS}
       />
 
       <ActionBar

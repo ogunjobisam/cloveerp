@@ -8,6 +8,7 @@ import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
 import { RefreshButton, TOUCH } from "./page";
+import { ProcessFlow } from "./process-flow";
 
 /**
  * The object page every module shares.
@@ -114,6 +115,8 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           </div>
         </div>
       </header>
+
+      {def.flow ? <ProcessFlow flow={def.flow} actions={def.actions ?? []} /> : null}
 
       {tab === "dashboard" ? (
         <div className="flex min-w-0 flex-col gap-4">
