@@ -198,7 +198,14 @@ const day = (iso: string | null) =>
       })
     : "—";
 
+/** How much delivery history the measured lead time rests on. */
+const measuredOver = (r: ForecastRow) =>
+  r.measured_deliveries > 0
+    ? `${qty(r.measured_lead_time_days, 1)}d · ${r.measured_deliveries}`
+    : "—";
+
 const tone = (state: string) =>
+
   state === "out of stock" || state === "order now"
     ? "bad"
     : state === "below safety"
