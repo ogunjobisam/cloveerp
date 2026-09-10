@@ -327,6 +327,7 @@ function Procurement() {
               fedBy: "Requisitions appear here once somebody raises one.",
 
               typeCode: "requisition",
+              partyRole: "provider",
               recordArg: "p_document_id",
             },
             {
@@ -336,6 +337,7 @@ function Procurement() {
                 "Orders appear here once a requisition is turned into one, or a planned order is firmed.",
 
               typeCode: "purchase_order",
+              partyRole: "provider",
               recordArg: "p_document_id",
               actionFn: "erp_set_order_behaviour",
             },
@@ -345,6 +347,7 @@ function Procurement() {
               fedBy: "Receipts appear here once goods are received against a purchase order.",
 
               typeCode: "goods_receipt",
+              partyRole: "provider",
               recordArg: "p_receipt_id",
               actionFn: "erp_receive_against",
               actionFns: ["erp_bill_from_receipt"],
@@ -355,6 +358,7 @@ function Procurement() {
               fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
               typeCode: "purchase_invoice",
+              partyRole: "provider",
               recordArg: "p_invoice_id",
               actionFn: "erp_invoice_against",
               createFn: "erp_bill_from_receipt",

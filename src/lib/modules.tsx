@@ -279,6 +279,7 @@ export const INVENTORY: ModuleDef = {
         fedBy: "Receipts appear here once a purchase order is received and posted.",
 
         typeCode: "goods_receipt",
+        partyRole: "provider",
         createFn: "erp_raise_putaway_tasks",
       },
       {
@@ -1033,6 +1034,7 @@ export const FINANCE: ModuleDef = {
         fedBy: "Invoices appear here once a delivery has been despatched and invoiced.",
 
         typeCode: "sales_invoice",
+        partyRole: "customer",
         recordArg: "p_invoice_id",
         createFn: "erp_invoice_from_delivery",
       },
@@ -2933,6 +2935,7 @@ export const LOGISTICS: ModuleDef = {
         fedBy: "Deliveries appear here once a sales order has been picked and a delivery raised.",
 
         typeCode: "delivery",
+        partyRole: "customer",
         recordArg: "p_delivery_id",
         actionFn: "erp_confirm_delivery",
         createFn: "erp_plan_shipment",
@@ -2959,6 +2962,7 @@ export const LOGISTICS: ModuleDef = {
         label: "Confirm",
         hint: "Delivered, or failed with a reason. Both are facts the customer will ask about.",
         typeCode: "delivery",
+        partyRole: "customer",
         recordArg: "p_delivery_id",
         actionFn: "erp_confirm_delivery",
       },
