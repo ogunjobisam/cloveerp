@@ -512,6 +512,7 @@ export function ActionDialog({
   fields,
   mapArgs,
   prefill,
+  context,
   invalidates,
   submitLabel = "Save",
   onDone,
