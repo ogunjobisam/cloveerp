@@ -135,6 +135,9 @@ function ScopeSelect({
 
 export type Scope = { entityId: string; siteId: string };
 
+/** The page's own column, beside the rail. */
+const MAIN_AREA = "mx-auto min-w-0 max-w-[100rem] px-4 py-6 outline-none md:px-6";
+
 /**
  * The switch between the two areas. Offered only when the account can open
  * something in both; an operative with no settings at all sees no switch and
@@ -535,11 +538,7 @@ export function Shell({
             </SheetContent>
           </Sheet>
 
-          <main
-            id="main"
-            tabIndex={-1}
-            className="mx-auto min-w-0 max-w-[100rem] px-4 py-6 outline-none md:px-6"
-          >
+          <main id="main" tabIndex={-1} className={MAIN_AREA}>
             <Breadcrumbs />
             {children}
           </main>
