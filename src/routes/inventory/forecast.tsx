@@ -248,6 +248,10 @@ function StockForecast() {
                 <td className="py-2 pr-4">
                   <Pill tone={tone(r.state)}>{ui(r.state)}</Pill>
                 </td>
+                <td className="py-2 pr-4">
+                  <OrderAction row={r} type={poType} />
+                </td>
+
               </tr>
             ))}
           </Table>
