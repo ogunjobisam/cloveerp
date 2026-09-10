@@ -217,15 +217,34 @@ export type Field =
   /** A list of records, added a row at a time. Sent as an array of objects. */
   | ({
       kind: "rows";
-      columns: {
-        name: string;
-        label: string;
-        kind: "text" | "number" | "date";
-        placeholder?: string;
-      }[];
+      columns: RowColumn[];
       /** Values that should be sent as numbers rather than text. */
       addLabel?: string;
+      /**
+       * A running total across the rows, so a document adds up while it is
+       * being typed rather than after it has been saved.
+       */
+      total?: { quantity: string; price: string; currency: string };
     } & FieldBase);
+
+/**
+ * One column of a row editor.
+ *
+ * A line on a document names a product, and a product is chosen, never typed —
+ * the same rule the rest of the form obeys. `money` is entered in major units
+ * and sent in minor, exactly as the standalone money field does.
+ */
+export type RowColumn = {
+  name: string;
+  label: string;
+  kind: "text" | "number" | "date" | "money" | "select";
+  placeholder?: string;
+  /** For `select`. */
+  options?: OptionSource;
+  /** For `money`. */
+  currency?: string;
+};
+
 
 /** The label a picker shows for one row of its source. */
 function optionLabel(row: Record<string, unknown>, keys: string[]): string {
