@@ -17,7 +17,44 @@ import {
   reason,
   type ActionSpec,
 } from "../components/erp/actions-bar";
-import type { FlowSpec } from "../components/erp/process-flow";
+import type { FlowSpec, StageList } from "../components/erp/process-flow";
+
+/** Works orders, listed the same way at every step of making. */
+const WORKS_ORDER_LIST: StageList = {
+  fn: "erp_works_orders",
+  args: { p_limit: 200 },
+  id: "works_order_id",
+  title: ["order_number"],
+  subtitle: ["item", "site", "quantity"],
+  status: "status",
+  noun: "works order",
+  nounPlural: "works orders",
+};
+
+/** Quality events, listed the same way at every step of quality. */
+const QUALITY_EVENT_LIST: StageList = {
+  fn: "erp_quality_events",
+  args: { p_limit: 200 },
+  id: "quality_event_id",
+  title: ["reference"],
+  subtitle: ["title", "kind", "severity"],
+  status: "status",
+  noun: "event",
+  nounPlural: "events",
+};
+
+/** Shipments, listed the same way at every step of despatch. */
+const SHIPMENT_LIST: StageList = {
+  fn: "erp_shipments",
+  args: { p_limit: 200 },
+  id: "shipment_id",
+  title: ["reference"],
+  subtitle: ["destination", "carrier"],
+  status: "status",
+  noun: "shipment",
+  nounPlural: "shipments",
+};
+
 
 /**
  * One description of every module, used by every surface that talks about it.
