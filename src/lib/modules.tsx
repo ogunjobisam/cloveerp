@@ -2510,28 +2510,34 @@ export const QUALITY: ModuleDef = {
       {
         label: "Event",
         hint: "A complaint, a deviation, an excursion — anything that needs answering.",
-        actionFn: "erp_raise_quality_event",
+        list: QUALITY_EVENT_LIST,
+        createFn: "erp_raise_quality_event",
       },
       {
         label: "Inspect",
         hint: "The result against the specification, recorded against the batch.",
-        actionFn: "erp_record_inspection_result",
+        list: QUALITY_EVENT_LIST,
+        createFn: "erp_record_inspection_result",
       },
       {
         label: "Disposition",
         hint: "Release, reject, rework or scrap. This is the decision the audit reads.",
-        actionFn: "erp_disposition_inspection",
+        list: QUALITY_EVENT_LIST,
+        createFn: "erp_disposition_inspection",
       },
       {
         label: "Close",
         hint: "An event closes when the disposition is made and the actions are logged.",
+        list: QUALITY_EVENT_LIST,
+        recordArg: "p_event_id",
         actionFn: "erp_close_quality_event",
       },
       {
         label: "Recall",
         hint: "Affected stock has shipped: raise a recall and log every action against the clock.",
-        actionFn: "erp_raise_recall",
+        createFn: "erp_raise_recall",
       },
+
     ],
   },
   inquiries: [
