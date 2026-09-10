@@ -215,7 +215,9 @@ function StockForecast() {
               ui("Order quantity"),
               ui("Supplier"),
               ui("State"),
+              ui("Order"),
             ]}
+
           >
             {rows.map((r) => (
               <tr
