@@ -319,30 +319,36 @@ function Procurement() {
       <ProcessFlow
         flow={{
           title: "Purchase to pay, step by step",
-          note: "Each box is a step in the chain and shows what is sitting there now. The button on a box is the verb that moves work to the next one.",
+          note: "Press a step to see the records sitting there, choose one on the left, and the buttons act on that record.",
           stages: [
             {
               label: "Requisition",
               hint: "Somebody asking for something, before anyone has committed to buying it.",
               typeCode: "requisition",
+              recordArg: "p_document_id",
             },
             {
               label: "Purchase order",
               hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
               typeCode: "purchase_order",
+              recordArg: "p_document_id",
               actionFn: "erp_set_order_behaviour",
             },
             {
               label: "Goods receipt",
               hint: "What arrived. Posting a receipt is what puts stock on the shelf and raises the accrual.",
               typeCode: "goods_receipt",
+              recordArg: "p_receipt_id",
               actionFn: "erp_receive_against",
+              actionFns: ["erp_bill_from_receipt"],
             },
             {
               label: "Supplier bill",
               hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
               typeCode: "purchase_invoice",
-              actionFn: "erp_bill_from_receipt",
+              recordArg: "p_invoice_id",
+              actionFn: "erp_invoice_against",
+              createFn: "erp_bill_from_receipt",
             },
             {
               label: "Payment",

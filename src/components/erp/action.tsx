@@ -483,6 +483,7 @@ export function ActionDialog({
   fn,
   fields,
   mapArgs,
+  prefill,
   invalidates,
   submitLabel = "Save",
   onDone,
@@ -499,6 +500,14 @@ export function ActionDialog({
     values: Record<string, string>,
     picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
   ) => Record<string, unknown>;
+  /**
+   * Arguments the surrounding screen has already answered.
+   *
+   * A record chosen in a list is not a question worth asking again inside the
+   * dialog, so a field of the same name is not rendered and the value is sent
+   * regardless of what the form built.
+   */
+  prefill?: Record<string, unknown>;
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
@@ -528,8 +537,9 @@ export function ActionDialog({
   });
 
   function buildArgs(): Record<string, unknown> {
-    if (mapArgs) return mapArgs(values, { lists, rows });
+    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}) };
     const args: Record<string, unknown> = {};
+
     for (const f of fields) {
       if (f.kind === "multi") {
         const chosen = lists[f.name] ?? [];
@@ -560,7 +570,7 @@ export function ActionDialog({
       else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
     }
-    return args;
+    return { ...args, ...(prefill ?? {}) };
   }
 
   // Not offered rather than offered-and-disabled. The database still decides.
@@ -588,86 +598,91 @@ export function ActionDialog({
             action.mutate();
           }}
         >
-          {fields.map((f) => {
-            // A group of checkboxes or a row editor holds labels of its own, and
-            // a label inside a label is neither valid nor navigable.
-            const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
-            return (
-              <Wrap key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {ui(f.label)}
-                  {f.kind === "money" ? ` (${f.currency})` : ""}
-                </span>
+          {fields
+            .filter((f) => !(prefill && f.name in prefill))
+            .map((f) => {
+              // A group of checkboxes or a row editor holds labels of its own, and
+              // a label inside a label is neither valid nor navigable.
+              const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
+              return (
+                <Wrap key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {ui(f.label)}
+                    {f.kind === "money" ? ` (${f.currency})` : ""}
+                  </span>
 
-                {f.kind === "select" ? (
-                  <SelectField
-                    field={f}
-                    value={values[f.name] ?? ""}
-                    onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
-                  />
-                ) : f.kind === "combo" ? (
-                  <ComboField
-                    field={f}
-                    value={values[f.name] ?? ""}
-                    onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
-                  />
-                ) : f.kind === "multi" ? (
-                  <MultiField
-                    field={f}
-                    value={lists[f.name] ?? []}
-                    onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
-                  />
-                ) : f.kind === "rows" ? (
-                  <RowsField
-                    field={f}
-                    value={rows[f.name] ?? []}
-                    onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
-                  />
-                ) : f.kind === "choice" || f.kind === "site" ? (
-                  <select
-                    aria-label={ui(f.label)}
-                    required={f.required ?? false}
-                    value={values[f.name] ?? ""}
-                    onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
-                    className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                  >
-                    <option value="">Choose…</option>
-                    {(f.kind === "site"
-                      ? session.sites.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))
-                      : f.choices
-                    ).map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {/* Through ui() like the field's own label. InquiryBoard
+                  {f.kind === "select" ? (
+                    <SelectField
+                      field={f}
+                      value={values[f.name] ?? ""}
+                      onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                    />
+                  ) : f.kind === "combo" ? (
+                    <ComboField
+                      field={f}
+                      value={values[f.name] ?? ""}
+                      onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                    />
+                  ) : f.kind === "multi" ? (
+                    <MultiField
+                      field={f}
+                      value={lists[f.name] ?? []}
+                      onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
+                    />
+                  ) : f.kind === "rows" ? (
+                    <RowsField
+                      field={f}
+                      value={rows[f.name] ?? []}
+                      onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
+                    />
+                  ) : f.kind === "choice" || f.kind === "site" ? (
+                    <select
+                      aria-label={ui(f.label)}
+                      required={f.required ?? false}
+                      value={values[f.name] ?? ""}
+                      onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                    >
+                      <option value="">Choose…</option>
+                      {(f.kind === "site"
+                        ? session.sites.map((s) => ({
+                            value: s.id,
+                            label: `${s.code} — ${s.name}`,
+                          }))
+                        : f.choices
+                      ).map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {/* Through ui() like the field's own label. InquiryBoard
                           has always done this for its choices; this one did
                           not, so a form could offer a renameable "Kind of
                           site" above a fixed "Warehouse". A site kind built
                           from the session carries a code and a name and has no
                           row, which ui() handles by returning what it was
                           given. */}
-                        {ui(c.label)}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    aria-label={ui(f.label)}
-                    type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}
-                    inputMode={f.kind === "money" || f.kind === "number" ? "decimal" : undefined}
-                    step={f.kind === "money" ? "any" : undefined}
-                    required={f.required ?? false}
-                    placeholder={f.placeholder ?? ""}
-                    value={values[f.name] ?? ""}
-                    onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
-                    className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                  />
-                )}
+                          {ui(c.label)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      aria-label={ui(f.label)}
+                      type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}
+                      inputMode={f.kind === "money" || f.kind === "number" ? "decimal" : undefined}
+                      step={f.kind === "money" ? "any" : undefined}
+                      required={f.required ?? false}
+                      placeholder={f.placeholder ?? ""}
+                      value={values[f.name] ?? ""}
+                      onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                    />
+                  )}
 
-                {f.hint ? (
-                  <span className="text-xs text-muted-foreground">{ui(f.hint)}</span>
-                ) : null}
-              </Wrap>
-            );
-          })}
+                  {f.hint ? (
+                    <span className="text-xs text-muted-foreground">{ui(f.hint)}</span>
+                  ) : null}
+                </Wrap>
+              );
+            })}
 
           <ErrorNote error={action.error} />
           {/* minorUnitsOf falls back to two places when it does not know the
