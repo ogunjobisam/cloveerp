@@ -125,10 +125,12 @@ function StageAction({
   action,
   prefill,
   permitted,
+  context,
 }: {
   action: ActionSpec;
   prefill: Record<string, unknown>;
   permitted: boolean;
+  context?: string;
 }) {
   const { ui } = useT();
 
@@ -149,6 +151,7 @@ function StageAction({
       fields={action.fields ?? []}
       {...(action.mapArgs ? { mapArgs: action.mapArgs } : {})}
       prefill={prefill}
+      {...(context ? { context } : {})}
       invalidates={action.invalidates ?? []}
       submitLabel={action.submitLabel ?? action.label}
     />
@@ -310,6 +313,10 @@ function StageRecord({
   const id = row && source ? String(row[source.id] ?? "") : "";
   const prefill: Record<string, unknown> =
     stage.recordArg && id ? { [stage.recordArg]: id } : ({} as Record<string, unknown>);
+  const summary =
+    row && source
+      ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
+      : undefined;
 
   return (
     <div className="min-w-0 px-4 py-4 sm:px-5">
@@ -345,11 +352,22 @@ function StageRecord({
       <div className="mt-4 flex flex-wrap gap-2">
         {row
           ? recordActions.map((a) => (
-              <StageAction key={a.fn} action={a} prefill={prefill} permitted={permitted(a)} />
+              <StageAction
+                key={a.fn}
+                action={a}
+                prefill={prefill}
+                permitted={permitted(a)}
+                {...(summary ? { context: summary } : {})}
+              />
             ))
           : null}
         {createAction ? (
-          <StageAction action={createAction} prefill={{}} permitted={permitted(createAction)} />
+          <StageAction
+            action={createAction}
+            prefill={{}}
+            permitted={permitted(createAction)}
+            context={`${ui(stage.label)} — ${ui(stage.hint)}`}
+          />
         ) : null}
         {stage.to ? (
           <Link

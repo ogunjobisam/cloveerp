@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import {
   Dialog,
@@ -476,6 +477,33 @@ function initialValues(fields: Field[]): Record<string, string> {
   return out;
 }
 
+/**
+ * What just happened, in a sentence.
+ *
+ * Several of these routines answer with a count of the rows they raised, and a
+ * count of nought is the commonest confusion in the product: the form closes,
+ * nothing appears in the next step, and it looks broken when in fact there was
+ * nothing standing there to move. So say so.
+ */
+export function outcomeOf(label: string, result: unknown): string {
+  const count =
+    typeof result === "number"
+      ? result
+      : Array.isArray(result)
+        ? result.length
+        : typeof result === "object" &&
+            result !== null &&
+            typeof (result as Record<string, unknown>)["created"] === "number"
+          ? ((result as Record<string, unknown>)["created"] as number)
+          : null;
+
+  if (count === 0)
+    return `${label}: nothing was raised — there was no work waiting to be moved on. Check the step, the site and the dates you chose.`;
+  if (count !== null && count > 0)
+    return `${label}: ${count} ${count === 1 ? "record" : "records"} created.`;
+  return `${label} — done.`;
+}
+
 export function ActionDialog({
   trigger,
   title,
@@ -485,6 +513,7 @@ export function ActionDialog({
   fields,
   mapArgs,
   prefill,
+  context,
   invalidates,
   submitLabel = "Save",
   onDone,
@@ -509,6 +538,13 @@ export function ActionDialog({
    * regardless of what the form built.
    */
   prefill?: Record<string, unknown>;
+  /**
+   * What this form is acting on, in words.
+   *
+   * A prefilled record is not asked for again, which leaves a form with no
+   * sign of which record it will change. This line puts it back.
+   */
+  context?: string;
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
@@ -543,6 +579,7 @@ export function ActionDialog({
       setLists({});
       setRows({});
       setOpen(false);
+      toast(outcomeOf(ui(title), result), context ? { description: context } : undefined);
       onDone?.(result);
     },
   });
@@ -606,6 +643,15 @@ export function ActionDialog({
         action.mutate();
       }}
     >
+      {context ? (
+        <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
+          <span className="font-medium uppercase tracking-wide text-muted-foreground">
+            {ui("Acting on")}
+          </span>
+          <span className="mt-0.5 block font-mono text-sm">{context}</span>
+        </div>
+      ) : null}
+
       {fields
         .filter((f) => !(prefill && f.name in prefill))
         .map((f) => {
