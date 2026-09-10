@@ -331,8 +331,15 @@ function StockForecast() {
                 <td className="py-2 pr-4 tabular-nums">{`${r.usage_days}d`}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.usage_per_day, 3)}</td>
                 <td className="py-2 pr-4 tabular-nums">
-                  {r.lead_time_days ? `${r.lead_time_days}d` : "—"}
+                  <LeadTime row={r} />
                 </td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {row_measured(r)}
+                </td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {r.planned_lead_time_days ? `${r.planned_lead_time_days}d` : "—"}
+                </td>
+
                 <td className="py-2 pr-4 tabular-nums">{qty(r.lead_time_demand)}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.safety_stock)}</td>
                 <td className="py-2 pr-4 tabular-nums">{qty(r.order_up_to)}</td>
