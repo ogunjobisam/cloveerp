@@ -574,6 +574,14 @@ export function ActionDialog({
    * sign of which record it will change. This line puts it back.
    */
   context?: string;
+  /**
+   * What this routine looks for, when it finds none of it.
+   *
+   * Declared alongside the action where the answer is particular; otherwise
+   * EMPTY_BY_FN carries the sentence for the function being called.
+   */
+  emptyNote?: string;
+
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
