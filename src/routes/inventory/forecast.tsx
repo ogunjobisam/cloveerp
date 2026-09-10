@@ -60,6 +60,11 @@ type ForecastRow = {
   usage_per_day: number;
   lead_time_days: number;
   lead_time_demand: number;
+  planned_lead_time_days: number;
+  measured_lead_time_days: number | null;
+  measured_deliveries: number;
+  lead_time_source: string;
+
   safety_stock: number | null;
   reorder_point: number | null;
   order_up_to: number | null;
