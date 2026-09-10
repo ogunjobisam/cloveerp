@@ -663,6 +663,13 @@ export function ActionDialog({
 
   invalidates: string[];
   submitLabel?: string;
+  /**
+   * A second way to finish.
+   *
+   * "Create" leaves a draft; "Create and send" does the same work and moves the
+   * document on. Two buttons on one form beat one button and a second visit.
+   */
+  alsoSubmit?: { label: string; args: Record<string, unknown> };
   onDone?: (result: unknown) => void;
 }) {
   const { session } = useErpSession();
@@ -683,12 +690,15 @@ export function ActionDialog({
         Object.values(rows).some((r) => r.length > 0)),
   );
 
-  // Only fetched when something on this form takes a price.
-  const takesMoney = fields.some((f) => f.kind === "money");
+  // Only fetched when something on this form takes a price — on the form
+  // itself, or in a column of a line editor.
+  const takesMoney = fields.some(
+    (f) => f.kind === "money" || (f.kind === "rows" && f.columns.some((c) => c.kind === "money")),
+  );
   const { currencies, error: currencyError } = useCurrencies(takesMoney);
 
   const action = useMutation({
-    mutationFn: () => callErp<unknown>(fn, buildArgs()),
+    mutationFn: (extra: Record<string, unknown> = {}) => callErp<unknown>(fn, buildArgs(extra)),
     onSuccess: (result) => {
       invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
       setValues(initialValues(fields));
@@ -704,8 +714,8 @@ export function ActionDialog({
     },
   });
 
-  function buildArgs(): Record<string, unknown> {
-    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}) };
+  function buildArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}), ...extra };
     const args: Record<string, unknown> = {};
 
     for (const f of fields) {
@@ -722,12 +732,18 @@ export function ActionDialog({
             for (const c of declared) {
               const raw = row[c.name] ?? "";
               if (raw === "") continue;
-              out[c.name] = c.kind === "number" ? Number(raw) : raw;
+              out[c.name] =
+                c.kind === "number"
+                  ? Number(raw)
+                  : c.kind === "money"
+                    ? toMinor(raw, minorUnitsOf(currencies, c.currency ?? "GBP"))
+                    : raw;
             }
             return out;
           })
           .filter((row) => Object.keys(row).length > 0);
         if (filled.length > 0) args[f.name] = filled;
+
         continue;
       }
       const raw = values[f.name] ?? "";
