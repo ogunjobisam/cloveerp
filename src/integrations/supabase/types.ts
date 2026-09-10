@@ -2221,6 +2221,10 @@ export type Database = {
         Args: { p_location_id?: string; p_site_id?: string }
         Returns: Json
       }
+      erp_stock_forecast: {
+        Args: { p_days?: number; p_site_id?: string }
+        Returns: Json
+      }
       erp_stock_health: { Args: never; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
       erp_stock_valuation: { Args: never; Returns: Json }
