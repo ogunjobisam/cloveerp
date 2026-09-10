@@ -55,7 +55,14 @@ function Governance() {
             permission: "master_data.write",
             fn: "erp_apply_mass_change",
             fields: [
-              { kind: "text", name: "p_mass_change_id", label: "Mass change id", required: true },
+              {
+                kind: "text",
+                name: "p_mass_change_id",
+                label: "Mass change id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy the id from the mass change listed on this page.",
+              },
             ],
             invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
           },
@@ -65,7 +72,14 @@ function Governance() {
             permission: "master_data.write",
             fn: "erp_reverse_mass_change",
             fields: [
-              { kind: "text", name: "p_mass_change_id", label: "Mass change id", required: true },
+              {
+                kind: "text",
+                name: "p_mass_change_id",
+                label: "Mass change id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy the id from the mass change listed on this page.",
+              },
             ],
             invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
           },
@@ -84,7 +98,14 @@ function Governance() {
                   { value: "party", label: "Business partner" },
                 ],
               },
-              { kind: "text", name: "p_object_id", label: "Record id", required: true },
+              {
+                kind: "text",
+                name: "p_object_id",
+                label: "Record id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "The id of the product or business partner being changed — copy it from Master data.",
+              },
               {
                 kind: "text",
                 name: "p_proposed",

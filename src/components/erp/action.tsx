@@ -157,49 +157,125 @@ export function PermissionNote({ code }: { code: string }) {
  * `erp_items`, `erp_document_types`. That indirection is the reason those
  * functions exist: it keys the query as `[fn, args]`, the same shape
  * `DataPanel` uses, so the page's single Refresh reaches pickers too.
+ *
+ * Four rules hold for every field declared anywhere in this product, because
+ * the forms were the single worst thing about using it:
+ *
+ *   - Nothing that names an existing record is typed. It is chosen.
+ *   - A code being *created* may be typed, but the box shows the house style
+ *     and offers the codes already in use (`combo`).
+ *   - Anything still typed says what it expects, in a hint, with an example.
+ *   - No JSON. A list of values is `multi`; a list of records is `rows`.
  */
+
+/** What every field carries, whatever it asks for. */
+type FieldBase = {
+  name: string;
+  label: string;
+  required?: boolean;
+  hint?: string;
+  /** Shown in the empty box. An example, not an instruction. */
+  placeholder?: string;
+  /** What the box arrives holding. */
+  default?: string;
+};
+
+/** Where a picker gets its list. */
+export type OptionSource = {
+  fn: string;
+  args?: Record<string, unknown>;
+  value: string;
+  label: string[];
+};
+
 export type Field =
-  | { kind: "text"; name: string; label: string; required?: boolean; hint?: string }
-  | { kind: "number"; name: string; label: string; required?: boolean; hint?: string }
-  | { kind: "date"; name: string; label: string; required?: boolean; hint?: string }
-  | {
-      /** Entered in major units, sent in minor. */
-      kind: "money";
-      name: string;
-      label: string;
-      currency: string;
-      required?: boolean;
-      hint?: string;
-    }
-  | {
-      /** A fixed list — a database enum, or yes/no. Sent verbatim as text. */
+  | ({ kind: "text" } & FieldBase)
+  | ({ kind: "number" } & FieldBase)
+  | ({ kind: "date" } & FieldBase)
+  /** Entered in major units, sent in minor. */
+  | ({ kind: "money"; currency: string } & FieldBase)
+  /** A fixed list — a database enum, or yes/no. Sent verbatim as text. */
+  | ({
       kind: "choice";
-      name: string;
-      label: string;
-      required?: boolean;
-      hint?: string;
       choices: { value: string; label: string }[];
       /** Send `true`/`false` rather than the string. */
       boolean?: boolean;
-    }
-  | {
-      /** The sites this session can see, from the session itself. */
-      kind: "site";
-      name: string;
-      label: string;
-      required?: boolean;
-      hint?: string;
-    }
-  | {
-      kind: "select";
-      name: string;
-      label: string;
-      required?: boolean;
-      hint?: string;
-      options: { fn: string; args?: Record<string, unknown>; value: string; label: string[] };
-    };
+    } & FieldBase)
+  /** The sites this session can see, from the session itself. */
+  | ({ kind: "site" } & FieldBase)
+  | ({ kind: "select"; options: OptionSource } & FieldBase)
+  /** Pick an existing value or type a new one. For codes, which are both. */
+  | ({ kind: "combo"; options: OptionSource } & FieldBase)
+  /** Several of a thing. Sent as an array. Either a list read or a fixed set. */
+  | ({
+      kind: "multi";
+      options?: OptionSource;
+      choices?: { value: string; label: string }[];
+    } & FieldBase)
+  /** A list of records, added a row at a time. Sent as an array of objects. */
+  | ({
+      kind: "rows";
+      columns: {
+        name: string;
+        label: string;
+        kind: "text" | "number" | "date";
+        placeholder?: string;
+      }[];
+      /** Values that should be sent as numbers rather than text. */
+      addLabel?: string;
+    } & FieldBase);
 
-function SelectField({
+/** The label a picker shows for one row of its source. */
+function optionLabel(row: Record<string, unknown>, keys: string[]): string {
+  return keys
+    .map((k) => row[k])
+    .filter((x) => x !== null && x !== undefined && x !== "")
+    .join(" — ");
+}
+
+function useOptions(source: OptionSource | undefined) {
+  const { data, isPending, error } = useQuery({
+    queryKey: [source?.fn ?? "none", source?.args ?? {}],
+    queryFn: () =>
+      source
+        ? callErp<Record<string, unknown>[]>(source.fn, source.args ?? {})
+        : Promise.resolve([] as Record<string, unknown>[]),
+    enabled: Boolean(source),
+  });
+
+  const rows = source
+    ? (Array.isArray(data) ? data : []).map((row) => ({
+        value: String(row[source.value] ?? ""),
+        label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
+      }))
+    : [];
+
+  return { rows, isPending: Boolean(source) && isPending, error };
+}
+
+/** Said once, because four controls need to say it. */
+function PickerNote({
+  isPending,
+  error,
+  empty,
+}: {
+  isPending: boolean;
+  error: unknown;
+  empty: boolean;
+}) {
+  if (error) return <span className="text-xs text-destructive">{friendlyError(error).title}</span>;
+  // An empty picker is a fact worth stating: it usually means the master data
+  // does not exist yet, not that the screen is broken.
+  if (!isPending && empty)
+    return (
+      <span className="text-xs text-muted-foreground">
+        Nothing to choose from yet — this list is empty for this organisation.
+      </span>
+    );
+  return null;
+}
+
+export function SelectField({
   field,
   value,
   onChange,
@@ -208,13 +284,26 @@ function SelectField({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const { data, isPending, error } = useQuery({
-    queryKey: [field.options.fn, field.options.args ?? {}],
-    queryFn: () => callErp<Record<string, unknown>[]>(field.options.fn, field.options.args ?? {}),
-  });
+  const { rows, isPending, error } = useOptions(field.options);
+  const [filter, setFilter] = useState("");
+
+  // A hundred products in a dropdown is a list you scroll, not one you use.
+  const filterable = rows.length > 12;
+  const shown = filter
+    ? rows.filter((r) => r.label.toLowerCase().includes(filter.toLowerCase()))
+    : rows;
 
   return (
     <>
+      {filterable ? (
+        <input
+          type="search"
+          value={filter}
+          placeholder={`Search ${rows.length} options…`}
+          onChange={(e) => setFilter(e.target.value)}
+          className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+        />
+      ) : null}
       <select
         aria-label={field.label}
         required={field.required ?? false}
@@ -224,30 +313,149 @@ function SelectField({
         className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60`}
       >
         <option value="">{isPending ? "Loading…" : "Choose…"}</option>
-        {(data ?? []).map((row) => {
-          const v = String(row[field.options.value] ?? "");
-          const label = field.options.label
-            .map((k) => row[k])
-            .filter((x) => x !== null && x !== undefined && x !== "")
-            .join(" — ");
-          return (
-            <option key={v} value={v}>
-              {label || v}
-            </option>
-          );
-        })}
+        {shown.map((r) => (
+          <option key={r.value} value={r.value}>
+            {r.label}
+          </option>
+        ))}
       </select>
-      {/* An empty picker is a fact worth stating: it usually means the master
-          data does not exist yet, not that the screen is broken. */}
-      {!isPending && !error && (data ?? []).length === 0 ? (
-        <span className="text-xs text-muted-foreground">
-          Nothing to choose from yet — this list is empty for this organisation.
-        </span>
-      ) : null}
+      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} />
+    </>
+  );
+}
+
+/**
+ * A code, which may already exist or may be about to.
+ *
+ * The reason this is not a select: half these fields name something being
+ * created. The reason it is not a plain box: the other half name something
+ * that exists, and nobody remembers codes.
+ */
+export function ComboField({
+  field,
+  value,
+  onChange,
+}: {
+  field: Extract<Field, { kind: "combo" }>;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { rows, isPending, error } = useOptions(field.options);
+  const listId = `combo-${field.name}`;
+
+  return (
+    <>
+      <input
+        type="text"
+        list={listId}
+        aria-label={field.label}
+        required={field.required ?? false}
+        value={value}
+        placeholder={field.placeholder ?? (isPending ? "Loading…" : "Choose one or type a new one")}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+      />
+      <datalist id={listId}>
+        {rows.map((r) => (
+          <option key={r.value} value={r.value}>
+            {r.label}
+          </option>
+        ))}
+      </datalist>
       {error ? (
         <span className="text-xs text-destructive">{friendlyError(error).title}</span>
       ) : null}
     </>
+  );
+}
+
+/** Several of a thing, ticked rather than pasted as JSON. */
+export function MultiField({
+  field,
+  value,
+  onChange,
+}: {
+  field: Extract<Field, { kind: "multi" }>;
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const fetched = useOptions(field.options);
+  const rows = field.choices ?? fetched.rows;
+  const { isPending, error } = fetched;
+
+  return (
+    <>
+      <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2">
+        {isPending ? <span className="text-xs text-muted-foreground">Loading…</span> : null}
+        {rows.map((r) => (
+          <label key={r.value} className="flex items-start gap-2 py-1 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={value.includes(r.value)}
+              onChange={(e) =>
+                onChange(
+                  e.target.checked
+                    ? [...value, r.value]
+                    : value.filter((existing) => existing !== r.value),
+                )
+              }
+            />
+            <span className="min-w-0 break-words">{r.label}</span>
+          </label>
+        ))}
+      </div>
+      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} />
+    </>
+  );
+}
+
+/** A list of records, one row at a time. The alternative was typing JSON. */
+function RowsField({
+  field,
+  value,
+  onChange,
+}: {
+  field: Extract<Field, { kind: "rows" }>;
+  value: Record<string, string>[];
+  onChange: (v: Record<string, string>[]) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {value.map((row, index) => (
+        <div key={index} className="flex flex-wrap items-end gap-2">
+          {field.columns.map((c) => (
+            <label key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {c.label}
+              </span>
+              <input
+                type={c.kind === "number" ? "number" : c.kind === "date" ? "date" : "text"}
+                value={row[c.name] ?? ""}
+                placeholder={c.placeholder ?? ""}
+                onChange={(e) =>
+                  onChange(
+                    value.map((r, i) => (i === index ? { ...r, [c.name]: e.target.value } : r)),
+                  )
+                }
+                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+              />
+            </label>
+          ))}
+          <ActionButton
+            variant="secondary"
+            onClick={() => onChange(value.filter((_, i) => i !== index))}
+          >
+            Remove
+          </ActionButton>
+        </div>
+      ))}
+      <div>
+        <ActionButton variant="secondary" onClick={() => onChange([...value, {}])}>
+          {field.addLabel ?? "Add a line"}
+        </ActionButton>
+      </div>
+    </div>
   );
 }
 
@@ -259,6 +467,13 @@ function SelectField({
  * that is `create_permission` from `erp_document_types`, which is why that
  * read returns it.
  */
+/** What a form arrives holding: whatever each field declared as its default. */
+function initialValues(fields: Field[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of fields) if (f.default) out[f.name] = f.default;
+  return out;
+}
+
 export function ActionDialog({
   trigger,
   title,
@@ -277,7 +492,12 @@ export function ActionDialog({
   permission?: string | null;
   fn: string;
   fields: Field[];
-  mapArgs?: (values: Record<string, string>) => Record<string, unknown>;
+  /** For arguments the form cannot express directly. Ticked lists and row
+      editors arrive in the second argument, keyed by field name. */
+  mapArgs?: (
+    values: Record<string, string>,
+    picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
+  ) => Record<string, unknown>;
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
@@ -286,7 +506,9 @@ export function ActionDialog({
   const { ui } = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>(() => initialValues(fields));
+  const [lists, setLists] = useState<Record<string, string[]>>({});
+  const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
 
   // Only fetched when something on this form takes a price.
   const takesMoney = fields.some((f) => f.kind === "money");
@@ -296,16 +518,39 @@ export function ActionDialog({
     mutationFn: () => callErp<unknown>(fn, buildArgs()),
     onSuccess: (result) => {
       invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
-      setValues({});
+      setValues(initialValues(fields));
+      setLists({});
+      setRows({});
       setOpen(false);
       onDone?.(result);
     },
   });
 
   function buildArgs(): Record<string, unknown> {
-    if (mapArgs) return mapArgs(values);
+    if (mapArgs) return mapArgs(values, { lists, rows });
     const args: Record<string, unknown> = {};
     for (const f of fields) {
+      if (f.kind === "multi") {
+        const chosen = lists[f.name] ?? [];
+        if (chosen.length > 0) args[f.name] = chosen;
+        continue;
+      }
+      if (f.kind === "rows") {
+        const declared = f.columns;
+        const filled = (rows[f.name] ?? [])
+          .map((row) => {
+            const out: Record<string, unknown> = {};
+            for (const c of declared) {
+              const raw = row[c.name] ?? "";
+              if (raw === "") continue;
+              out[c.name] = c.kind === "number" ? Number(raw) : raw;
+            }
+            return out;
+          })
+          .filter((row) => Object.keys(row).length > 0);
+        if (filled.length > 0) args[f.name] = filled;
+        continue;
+      }
       const raw = values[f.name] ?? "";
       if (raw === "") continue;
       if (f.kind === "number") args[f.name] = Number(raw);
@@ -342,8 +587,12 @@ export function ActionDialog({
             action.mutate();
           }}
         >
-          {fields.map((f) => (
-            <label key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
+          {fields.map((f) => {
+            // A group of checkboxes or a row editor holds labels of its own, and
+            // a label inside a label is neither valid nor navigable.
+            const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
+            return (
+            <Wrap key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {ui(f.label)}
                 {f.kind === "money" ? ` (${f.currency})` : ""}
@@ -354,6 +603,24 @@ export function ActionDialog({
                   field={f}
                   value={values[f.name] ?? ""}
                   onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "combo" ? (
+                <ComboField
+                  field={f}
+                  value={values[f.name] ?? ""}
+                  onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "multi" ? (
+                <MultiField
+                  field={f}
+                  value={lists[f.name] ?? []}
+                  onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "rows" ? (
+                <RowsField
+                  field={f}
+                  value={rows[f.name] ?? []}
+                  onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
                 />
               ) : f.kind === "choice" || f.kind === "site" ? (
                 <select
@@ -385,6 +652,7 @@ export function ActionDialog({
                   inputMode={f.kind === "money" || f.kind === "number" ? "decimal" : undefined}
                   step={f.kind === "money" ? "any" : undefined}
                   required={f.required ?? false}
+                  placeholder={f.placeholder ?? ""}
                   value={values[f.name] ?? ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
                   className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
@@ -392,8 +660,9 @@ export function ActionDialog({
               )}
 
               {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
-            </label>
-          ))}
+            </Wrap>
+            );
+          })}
 
           <ErrorNote error={action.error} />
           {/* minorUnitsOf falls back to two places when it does not know the
