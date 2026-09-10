@@ -345,6 +345,7 @@ function Procurement() {
               typeCode: "requisition",
               partyRole: "provider",
               recordArg: "p_document_id",
+              actionFn: "erp_convert_document",
             },
             {
               label: "Purchase order",
