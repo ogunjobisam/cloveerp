@@ -41,6 +41,7 @@ import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensio
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as InventoryAuditRouteImport } from './routes/inventory/audit'
+import { Route as InventoryForecastRouteImport } from './routes/inventory/forecast'
 import { Route as InventoryWarehouseRouteImport } from './routes/inventory/warehouse'
 import { Route as LogisticsIndexRouteImport } from './routes/logistics/index'
 import { Route as LogisticsReleaseAreasRouteImport } from './routes/logistics/release-areas'
@@ -232,6 +233,11 @@ const InventoryAuditRoute = InventoryAuditRouteImport.update({
   path: '/inventory/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InventoryForecastRoute = InventoryForecastRouteImport.update({
+  id: '/inventory/forecast',
+  path: '/inventory/forecast',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InventoryWarehouseRoute = InventoryWarehouseRouteImport.update({
   id: '/inventory/warehouse',
   path: '/inventory/warehouse',
@@ -375,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/inventory/audit': typeof InventoryAuditRoute
+  '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/warehouse': typeof InventoryWarehouseRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/classification': typeof MasterDataClassificationRoute
@@ -431,6 +438,7 @@ export interface FileRoutesByTo {
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/inventory/audit': typeof InventoryAuditRoute
+  '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/warehouse': typeof InventoryWarehouseRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/classification': typeof MasterDataClassificationRoute
@@ -488,6 +496,7 @@ export interface FileRoutesById {
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/inventory/audit': typeof InventoryAuditRoute
+  '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/warehouse': typeof InventoryWarehouseRoute
   '/logistics/release-areas': typeof LogisticsReleaseAreasRoute
   '/master-data/classification': typeof MasterDataClassificationRoute
@@ -546,6 +555,7 @@ export interface FileRouteTypes {
     | '/finance/account-determination'
     | '/finance/dimensions'
     | '/inventory/audit'
+    | '/inventory/forecast'
     | '/inventory/warehouse'
     | '/logistics/release-areas'
     | '/master-data/classification'
@@ -602,6 +612,7 @@ export interface FileRouteTypes {
     | '/finance/account-determination'
     | '/finance/dimensions'
     | '/inventory/audit'
+    | '/inventory/forecast'
     | '/inventory/warehouse'
     | '/logistics/release-areas'
     | '/master-data/classification'
@@ -658,6 +669,7 @@ export interface FileRouteTypes {
     | '/finance/account-determination'
     | '/finance/dimensions'
     | '/inventory/audit'
+    | '/inventory/forecast'
     | '/inventory/warehouse'
     | '/logistics/release-areas'
     | '/master-data/classification'
@@ -715,6 +727,7 @@ export interface RootRouteChildren {
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
   FinanceDimensionsRoute: typeof FinanceDimensionsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
+  InventoryForecastRoute: typeof InventoryForecastRoute
   InventoryWarehouseRoute: typeof InventoryWarehouseRoute
   LogisticsReleaseAreasRoute: typeof LogisticsReleaseAreasRoute
   MasterDataClassificationRoute: typeof MasterDataClassificationRoute
@@ -968,6 +981,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inventory/forecast': {
+      id: '/inventory/forecast'
+      path: '/inventory/forecast'
+      fullPath: '/inventory/forecast'
+      preLoaderRoute: typeof InventoryForecastRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inventory/warehouse': {
       id: '/inventory/warehouse'
       path: '/inventory/warehouse'
@@ -1155,6 +1175,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
   FinanceDimensionsRoute: FinanceDimensionsRoute,
   InventoryAuditRoute: InventoryAuditRoute,
+  InventoryForecastRoute: InventoryForecastRoute,
   InventoryWarehouseRoute: InventoryWarehouseRoute,
   LogisticsReleaseAreasRoute: LogisticsReleaseAreasRoute,
   MasterDataClassificationRoute: MasterDataClassificationRoute,

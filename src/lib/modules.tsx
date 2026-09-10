@@ -3757,6 +3757,15 @@ export const EXTRA_TILES: TileDef[] = [
     permission: "inventory.read",
     group: "assure",
   },
+  {
+    path: "/inventory/forecast",
+    titleKey: "nav.inventory_forecast",
+    title: "Stock forecast",
+    blurb:
+      "Usage per day, lead time and reorder point for each product, with days of cover, the date to order by and how much to buy.",
+    permission: "inventory.read",
+    group: "plan",
+  },
 
   {
     path: "/finance/account-determination",
