@@ -159,8 +159,10 @@ function StageAction({
       fn={action.fn}
       fields={action.fields ?? []}
       {...(action.mapArgs ? { mapArgs: action.mapArgs } : {})}
+      {...(action.emptyNote ? { emptyNote: action.emptyNote } : {})}
       prefill={prefill}
       {...(context ? { context } : {})}
+
       invalidates={action.invalidates ?? []}
       submitLabel={action.submitLabel ?? action.label}
     />
