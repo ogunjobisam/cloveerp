@@ -239,6 +239,10 @@ export type Database = {
         Returns: Json
       }
       erp_blanket_position: { Args: { p_blanket_id: string }; Returns: Json }
+      erp_block_location: {
+        Args: { p_location_id: string; p_reason_code?: string }
+        Returns: string
+      }
       erp_book_operation_time: {
         Args: {
           p_completed?: number
@@ -513,9 +517,14 @@ export type Database = {
       }
       erp_create_location: {
         Args: {
+          p_capacity_quantity?: number
+          p_capacity_uom?: string
           p_code: string
+          p_count_class?: string
+          p_is_pickable?: boolean
           p_location_type?: string
           p_name?: string
+          p_parent_location_id?: string
           p_site_id: string
         }
         Returns: string
@@ -554,6 +563,18 @@ export type Database = {
           p_timezone?: string
         }
         Returns: Json
+      }
+      erp_create_storage_rule: {
+        Args: {
+          p_item_class?: string
+          p_item_id?: string
+          p_location_id: string
+          p_max_quantity?: number
+          p_priority?: number
+          p_rule_kind?: string
+          p_site_id: string
+        }
+        Returns: string
       }
       erp_create_uom: {
         Args: {
@@ -1738,6 +1759,10 @@ export type Database = {
         Args: { p_pack_code: string; p_report_code: string }
         Returns: undefined
       }
+      erp_remove_storage_rule: {
+        Args: { p_storage_rule_id: string }
+        Returns: string
+      }
       erp_render_label: {
         Args: {
           p_document_id?: string
@@ -2173,6 +2198,10 @@ export type Database = {
       erp_stock_health: { Args: never; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
       erp_stock_valuation: { Args: never; Returns: Json }
+      erp_storage_rules: {
+        Args: { p_rule_kind?: string; p_site_id?: string }
+        Returns: Json
+      }
       erp_submit_change_request: {
         Args: { p_request_id: string }
         Returns: Json
@@ -2233,6 +2262,7 @@ export type Database = {
         Args: { p_job_code: string; p_reason?: string }
         Returns: Json
       }
+      erp_unblock_location: { Args: { p_location_id: string }; Returns: string }
       erp_untranslated: {
         Args: { p_locale?: string }
         Returns: {
@@ -2243,6 +2273,19 @@ export type Database = {
         }[]
       }
       erp_uoms: { Args: never; Returns: Json }
+      erp_update_location: {
+        Args: {
+          p_capacity_quantity?: number
+          p_capacity_uom?: string
+          p_count_class?: string
+          p_is_pickable?: boolean
+          p_location_id: string
+          p_location_type?: string
+          p_name?: string
+          p_parent_location_id?: string
+        }
+        Returns: string
+      }
       erp_update_my_profile: {
         Args: {
           p_display_name?: string
