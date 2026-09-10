@@ -805,10 +805,11 @@ export const INVENTORY: ModuleDef = {
     },
     {
       label: "Raise putaway tasks",
-      description: "Ask the warehouse to move what is standing in goods-in.",
+      description:
+        "Ask the warehouse to move what is standing in goods-in. A task is raised for each pallet sitting in a receiving location at that site; if nothing is standing there, nothing is raised.",
       permission: "inventory.adjust",
-      fn: "erp_raise_putaway_tasks",
       fields: [pickSite()],
+      fn: "erp_raise_putaway_tasks",
       invalidates: ["erp_warehouse_tasks"],
     },
     {
