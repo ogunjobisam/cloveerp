@@ -2986,22 +2986,27 @@ export const LOGISTICS: ModuleDef = {
       fields: [
         pickSite(),
         {
-          kind: "text",
+          // Nothing that names an existing record is typed. Deliveries are
+          // ticked from the list of deliveries, not copied in as identifiers.
+          kind: "multi",
           name: "p_delivery_ids",
-          label: "Delivery ids",
+          label: "Deliveries",
           required: true,
-          hint: "Comma separated.",
+          hint: "Tick every delivery travelling on this shipment.",
+          options: {
+            fn: "erp_documents",
+            args: { p_type_code: "delivery", p_limit: 200 },
+            value: "document_id",
+            label: ["document_number", "document_date", "party"],
+          },
         },
         { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: true },
       ],
       invalidates: ["erp_shipments"],
-      mapArgs: (v) => ({
+      mapArgs: (v, picked) => ({
         p_site_id: v["p_site_id"],
         p_planned_despatch: v["p_planned_despatch"],
-        p_delivery_ids: String(v["p_delivery_ids"] ?? "")
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        p_delivery_ids: picked?.lists["p_delivery_ids"] ?? [],
       }),
     },
     {
