@@ -1064,6 +1064,14 @@ export type Database = {
       erp_payment_proposals: { Args: { p_limit?: number }; Returns: Json }
       erp_permissions_directory: { Args: never; Returns: Json }
       erp_personal_data_register: { Args: never; Returns: Json }
+      erp_pick_document: {
+        Args: {
+          p_batch_id?: string
+          p_document_id: string
+          p_location_id?: string
+        }
+        Returns: Json
+      }
       erp_plan_shipment: {
         Args: {
           p_delivery_ids: string[]
