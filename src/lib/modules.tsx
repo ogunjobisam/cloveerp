@@ -2148,33 +2148,45 @@ export const PRODUCTION: ModuleDef = {
       {
         label: "Works order",
         hint: "What is to be made, how much, and by when.",
-        actionFn: "erp_raise_works_order",
+        list: WORKS_ORDER_LIST,
+        createFn: "erp_raise_works_order",
       },
       {
         label: "Release",
         hint: "Releasing an order is what makes it work the floor can start.",
+        list: WORKS_ORDER_LIST,
+        recordArg: "p_works_order_id",
         actionFn: "erp_release_works_order",
       },
       {
         label: "Issue components",
         hint: "Stock leaves the store and joins the order's cost.",
+        list: WORKS_ORDER_LIST,
+        recordArg: "p_works_order_id",
         actionFn: "erp_issue_to_works_order",
       },
       {
         label: "Book time",
         hint: "Operation time against the route, so the variance means something.",
+        list: WORKS_ORDER_LIST,
+        recordArg: "p_works_order_id",
         actionFn: "erp_book_operation_time",
       },
       {
         label: "Receive output",
         hint: "Finished quantity, and scrap, back into stock.",
+        list: WORKS_ORDER_LIST,
+        recordArg: "p_works_order_id",
         actionFn: "erp_receive_works_order_output",
       },
       {
         label: "Close",
         hint: "Closing an order settles its variance and stops further booking.",
+        list: WORKS_ORDER_LIST,
+        recordArg: "p_works_order_id",
         actionFn: "erp_close_works_order",
       },
+
     ],
   },
   inquiries: [
