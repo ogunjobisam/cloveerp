@@ -578,6 +578,7 @@ export function ActionDialog({
       setLists({});
       setRows({});
       setOpen(false);
+      toast(outcomeOf(ui(title), result), context ? { description: context } : undefined);
       onDone?.(result);
     },
   });
