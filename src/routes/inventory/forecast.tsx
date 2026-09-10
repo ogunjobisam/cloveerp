@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 
+import { ActionButton, ActionDialog } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/inventory/forecast")({
@@ -63,11 +66,85 @@ type ForecastRow = {
   min_order_quantity: number | null;
   order_multiple: number | null;
   supplier: string | null;
+  supplier_party_id: string | null;
   days_cover: number | null;
   reorder_by: string | null;
   suggest_quantity: number;
   state: string;
 };
+
+/** The configured purchase-order type, and the permission it really needs. */
+type DocType = {
+  document_type_id: string;
+  code: string;
+  name: string;
+  base_type_code: string;
+  create_permission: string;
+};
+
+/**
+ * The order, raised from the line that says it is needed.
+ *
+ * The forecast already knows the product, the site, the supplier and how much
+ * to buy. Sending the buyer to Purchasing to retype all four is the step this
+ * removes: one press, the quantity already filled in, and the order exists.
+ */
+function OrderAction({ row, type }: { row: ForecastRow; type: DocType | undefined }) {
+  const { ui } = useT();
+
+  if (!type) return null;
+  if (!row.supplier_party_id)
+    return (
+      <span
+        className="text-xs text-muted-foreground"
+        title={ui("No supplier is set up for this product")}
+      >
+        {ui("No supplier")}
+      </span>
+    );
+
+  return (
+    <ActionDialog
+      trigger={<ActionButton variant="secondary">{ui("Order")}</ActionButton>}
+      title={ui("Raise a purchase order")}
+      description={ui(
+        "The supplier, the site and the product come from this line. Only the quantity and the date you need it by are left to confirm.",
+      )}
+      context={`${row.item_code} → ${row.supplier ?? ""} (${row.site_code})`}
+      permission={type.create_permission}
+      fn="erp_create_document_full"
+      fields={[
+        {
+          kind: "number",
+          name: "quantity",
+          label: ui("Quantity"),
+          required: true,
+          default: String(row.suggest_quantity > 0 ? row.suggest_quantity : ""),
+          hint: ui(
+            "Suggested from the reorder point, what is already on order and the order multiple.",
+          ),
+        },
+        { kind: "date", name: "required_date", label: ui("Required date") },
+      ]}
+      mapArgs={(v) => ({
+        p_type_code: type.code,
+        p_party_id: row.supplier_party_id,
+        p_site_id: row.site_id,
+        p_required_date: v["required_date"] || null,
+        p_lines: [
+          {
+            item_id: row.item_id,
+            quantity: Number(v["quantity"] ?? 0),
+            description: row.item_name ?? null,
+          },
+        ],
+      })}
+      alsoSubmit={{ label: ui("Create and send"), args: { p_transition: "auto" } }}
+      invalidates={["erp_documents", "erp_document", "erp_stock_forecast"]}
+      submitLabel={ui("Create")}
+    />
+  );
+}
 
 const qty = (n: number | null | undefined, dp = 2) =>
   n === null || n === undefined
@@ -94,6 +171,14 @@ const tone = (state: string) =>
 
 function StockForecast() {
   const { ui } = useT();
+
+  // The tenant's own purchase-order type: its code, and the permission the
+  // database will actually check before letting the button raise one.
+  const { data: types } = useQuery({
+    queryKey: ["erp_document_types", { p_base_type_code: "purchase_order" }],
+    queryFn: () => callErp<DocType[]>("erp_document_types", { p_base_type_code: "purchase_order" }),
+  });
+  const poType = types?.[0];
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -130,6 +215,7 @@ function StockForecast() {
               ui("Order quantity"),
               ui("Supplier"),
               ui("State"),
+              ui("Order"),
             ]}
           >
             {rows.map((r) => (
@@ -160,6 +246,9 @@ function StockForecast() {
                 <td className="py-2 pr-4">{r.supplier ?? "—"}</td>
                 <td className="py-2 pr-4">
                   <Pill tone={tone(r.state)}>{ui(r.state)}</Pill>
+                </td>
+                <td className="py-2 pr-4">
+                  <OrderAction row={r} type={poType} />
                 </td>
               </tr>
             ))}
