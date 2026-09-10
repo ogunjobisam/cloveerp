@@ -115,10 +115,10 @@ export function DocumentPanel({
           <ActionDialog
             trigger={<ActionButton>New</ActionButton>}
             title={`New ${type.name.toLowerCase()}`}
-            description="Numbering, lifecycle and approvals come from the type this organisation configured."
+            description="Partner, dates and every line on one form. It is saved as a whole: if a line is wrong, nothing is created."
             // The permission the database checks, not one this screen guessed.
             permission={type.create_permission}
-            fn="erp_create_document"
+            fn="erp_create_document_full"
             fields={[
               {
                 kind: "select",
@@ -146,8 +146,33 @@ export function DocumentPanel({
                 hint: "Their own order or invoice number, so both sides can find it.",
               },
               { kind: "date", name: "p_required_date", label: "Required date" },
+              {
+                kind: "rows",
+                name: "p_lines",
+                label: "Lines",
+                addLabel: "Add a line",
+                hint: "Everything this document is for. A line left without a price takes the agreed price for that partner and product, where there is one.",
+                total: { quantity: "quantity", price: "unit_price_minor", currency: "GBP" },
+                columns: [
+                  {
+                    name: "item_id",
+                    label: "Product",
+                    kind: "select",
+                    options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+                  },
+                  { name: "quantity", label: "Quantity", kind: "number", placeholder: "100" },
+                  {
+                    name: "unit_price_minor",
+                    label: "Unit price",
+                    kind: "money",
+                    currency: "GBP",
+                    placeholder: "1.85",
+                  },
+                  { name: "description", label: "Description", kind: "text" },
+                ],
+              },
             ]}
-            mapArgs={(v) => ({
+            mapArgs={(v, picked) => ({
               p_type_code: type.code,
               p_party_id: v["p_party_id"] || null,
               // The shell's scope selector usually already asked which site; a
@@ -155,10 +180,24 @@ export function DocumentPanel({
               p_site_id: v["p_site_id"] || scope.siteId || session.sites[0]?.id || null,
               p_their_ref: v["p_their_ref"] || null,
               p_required_date: v["p_required_date"] || null,
+              p_lines: (picked?.rows["p_lines"] ?? [])
+                .filter((row) => (row["item_id"] ?? "") !== "")
+                .map((row) => ({
+                  item_id: row["item_id"],
+                  quantity: Number(row["quantity"] ?? 0),
+                  unit_price_minor: toMinor(
+                    row["unit_price_minor"] ?? "",
+                    minorUnitsOf(currencies, "GBP"),
+                  ),
+                  description: row["description"] ?? null,
+                })),
             })}
-            invalidates={["erp_documents"]}
+            // One press for the straightforward case: raise it and move it on.
+            alsoSubmit={{ label: "Create and move on", args: { p_transition: "auto" } }}
+            invalidates={["erp_documents", "erp_document", "erp_document_lines"]}
             submitLabel="Create"
           />
+
         ) : null}
       </header>
 
