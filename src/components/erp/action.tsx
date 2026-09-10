@@ -624,7 +624,9 @@ export function ActionDialog({
 
   invalidates,
   submitLabel = "Save",
+  alsoSubmit,
   onDone,
+
 }: {
   trigger: ReactNode;
   title: string;
