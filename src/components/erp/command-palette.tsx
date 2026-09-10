@@ -158,14 +158,20 @@ export function CommandPalette() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={ui("Search screens")}
-        // Borderless: this sits inside the header's one bordered control group
-        // beside the menu and the help, and a border of its own made three
-        // buttons where there is one object. The shortcut stays visible at lg —
-        // it is the cheapest thing on the row and the only place anyone learns
-        // the palette has a shortcut at all.
-        className={`${TOUCH} inline-flex shrink-0 items-center gap-1.5 rounded-l-md px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground`}
+        // Two shapes, one control. In the header it reads as a search field,
+        // which is what people look for; anywhere else it stays the compact
+        // icon it always was. The shortcut is the only place anyone learns the
+        // palette has one at all.
+        className={
+          variant === "field"
+            ? `${TOUCH} flex w-full items-center gap-2 rounded-lg border border-border bg-soft px-3 text-sm text-muted-foreground transition-colors hover:border-input`
+            : `${TOUCH} inline-flex shrink-0 items-center gap-1.5 rounded-l-md px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground`
+        }
       >
-        <Search className="size-4" aria-hidden="true" />
+        <Search className="size-4 shrink-0" aria-hidden="true" />
+        {variant === "field" ? (
+          <span className="min-w-0 flex-1 truncate text-left">{ui("Search Clove ERP…")}</span>
+        ) : null}
         <kbd className="hidden rounded border border-border px-1 font-mono text-[10px] lg:inline">
           ⌘K
         </kbd>

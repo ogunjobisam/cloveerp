@@ -149,6 +149,15 @@
   }
 }
 
+/* One step of a process strip: an arrow pointing at the next one. */
+@utility step-chevron {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%);
+}
+
+@utility step-chevron-first {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+}
+
 /* A card that reads as paper rather than as an outline. */
 @utility surface-card {
   background-color: var(--card-surface);
