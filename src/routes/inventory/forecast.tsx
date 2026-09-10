@@ -170,6 +170,16 @@ const tone = (state: string) =>
 function StockForecast() {
   const { ui } = useT();
 
+  // The tenant's own purchase-order type: its code, and the permission the
+  // database will actually check before letting the button raise one.
+  const { data: types } = useQuery({
+    queryKey: ["erp_document_types", { p_base_type_code: "purchase_order" }],
+    queryFn: () =>
+      callErp<DocType[]>("erp_document_types", { p_base_type_code: "purchase_order" }),
+  });
+  const poType = types?.[0];
+
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={ui("Stock forecast")}>
