@@ -247,9 +247,22 @@ function Output() {
             permission: "administration.read",
             fn: "erp_route_print",
             fields: [
-              { kind: "text", name: "p_render_id", label: "Render id", required: true },
+              {
+                kind: "text",
+                name: "p_render_id",
+                label: "Render id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy it from the render listed in Recent output on this page.",
+              },
               { kind: "site", name: "p_site_id", label: "Site", required: false },
-              { kind: "text", name: "p_workstation", label: "Workstation" },
+              {
+                kind: "text",
+                name: "p_workstation",
+                label: "Workstation",
+                placeholder: "GOODS-IN-1",
+                hint: "The name of the terminal printing. Leave blank for any.",
+              },
             ],
             invalidates: ["erp_output_requests", "erp_print_queue_health"],
           },
@@ -258,7 +271,11 @@ function Output() {
             permission: "administration.configure",
             fn: "erp_upsert_print_route",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
+              codeField("p_code", "Code", "GOODS-IN-LABELS", {
+                fn: "erp_print_routes",
+                value: "code",
+                label: ["code"],
+              }),
               {
                 kind: "choice",
                 name: "p_output_kind",
@@ -277,7 +294,13 @@ function Output() {
                 hint: "Leave empty for any template of the kind.",
               },
               { kind: "site", name: "p_site_id", label: "Site", required: false },
-              { kind: "text", name: "p_workstation", label: "Workstation" },
+              {
+                kind: "text",
+                name: "p_workstation",
+                label: "Workstation",
+                placeholder: "GOODS-IN-1",
+                hint: "The name of the terminal printing. Leave blank for any.",
+              },
               {
                 kind: "number",
                 name: "p_priority",
@@ -314,7 +337,14 @@ function Output() {
             permission: "inventory.read",
             fn: "erp_reprint_output",
             fields: [
-              { kind: "text", name: "p_render_id", label: "Render id", required: true },
+              {
+                kind: "text",
+                name: "p_render_id",
+                label: "Render id",
+                required: true,
+                placeholder: "0f9c1a2e-…",
+                hint: "Copy it from the render listed in Recent output on this page.",
+              },
               pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
             ],
             invalidates: ["erp_output_requests", "erp_print_queue_health", "erp_output_health"],
@@ -324,7 +354,14 @@ function Output() {
             permission: "administration.integrate",
             fn: "erp_upsert_sender_identity",
             fields: [
-              { kind: "text", name: "p_domain", label: "Domain", required: true },
+              {
+                kind: "text",
+                name: "p_domain",
+                label: "Domain",
+                required: true,
+                placeholder: "northwindfoods.co.uk",
+                hint: "The domain your documents are sent from.",
+              },
               {
                 kind: "choice",
                 name: "p_category",
@@ -341,7 +378,13 @@ function Output() {
                 label: "From (local part)",
                 hint: "e.g. invoices",
               },
-              { kind: "text", name: "p_reply_to", label: "Reply-to" },
+              {
+                kind: "text",
+                name: "p_reply_to",
+                label: "Reply-to",
+                placeholder: "accounts@northwindfoods.co.uk",
+                hint: "Where replies should go, if not the sending address.",
+              },
             ],
             invalidates: ["erp_sender_identities"],
           },
@@ -350,7 +393,14 @@ function Output() {
             permission: "administration.integrate",
             fn: "erp_record_sender_verification",
             fields: [
-              { kind: "text", name: "p_domain", label: "Domain", required: true },
+              {
+                kind: "text",
+                name: "p_domain",
+                label: "Domain",
+                required: true,
+                placeholder: "northwindfoods.co.uk",
+                hint: "The domain the DNS records were published for.",
+              },
               {
                 kind: "choice",
                 name: "p_spf",
@@ -392,9 +442,19 @@ function Output() {
             permission: "administration.configure",
             fn: "erp_upsert_printer",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
+              codeField("p_code", "Code", "PRN-GOODSIN", {
+                fn: "erp_printers",
+                value: "code",
+                label: ["code", "name"],
+              }),
               { kind: "site", name: "p_site_id", label: "Site", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Goods-in label printer",
+              },
               {
                 kind: "choice",
                 name: "p_printer_type",
@@ -415,7 +475,13 @@ function Output() {
                 label: "Resolution",
                 hint: "Dots per inch, e.g. 203 or 300. Required for a label printer.",
               },
-              { kind: "text", name: "p_physical_location", label: "Where it stands" },
+              {
+                kind: "text",
+                name: "p_physical_location",
+                label: "Where it stands",
+                placeholder: "Goods-in desk, Leeds",
+                hint: "So somebody can find the printer when it jams.",
+              },
               {
                 kind: "text",
                 name: "p_default_stock",
