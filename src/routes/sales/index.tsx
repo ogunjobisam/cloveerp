@@ -185,8 +185,8 @@ function Sales() {
             },
             {
               label: "Pick",
-              hint: "Stock reserved against the line, then picked from the location holding it.",
-              createFn: "erp_reserve_for_line",
+              hint: "Reserving and picking in one press: Pick the order takes what it needs and tells you what it could not cover.",
+              createFn: "erp_pick_document",
             },
             {
               label: "Delivery",
