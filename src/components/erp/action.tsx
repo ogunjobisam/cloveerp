@@ -588,132 +588,130 @@ export function ActionDialog({
   const asPage = shown.length > 2;
 
   const body = (
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            action.mutate();
-          }}
-        >
-          {fields
-            .filter((f) => !(prefill && f.name in prefill))
-            .map((f) => {
-              // A group of checkboxes or a row editor holds labels of its own, and
-              // a label inside a label is neither valid nor navigable.
-              const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
-              return (
-                <Wrap key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {ui(f.label)}
-                    {f.kind === "money" ? ` (${f.currency})` : ""}
-                  </span>
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        action.mutate();
+      }}
+    >
+      {fields
+        .filter((f) => !(prefill && f.name in prefill))
+        .map((f) => {
+          // A group of checkboxes or a row editor holds labels of its own, and
+          // a label inside a label is neither valid nor navigable.
+          const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
+          return (
+            <Wrap key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {ui(f.label)}
+                {f.kind === "money" ? ` (${f.currency})` : ""}
+              </span>
 
-                  {f.kind === "select" ? (
-                    <SelectField
-                      field={f}
-                      value={values[f.name] ?? ""}
-                      onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
-                    />
-                  ) : f.kind === "combo" ? (
-                    <ComboField
-                      field={f}
-                      value={values[f.name] ?? ""}
-                      onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
-                    />
-                  ) : f.kind === "multi" ? (
-                    <MultiField
-                      field={f}
-                      value={lists[f.name] ?? []}
-                      onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
-                    />
-                  ) : f.kind === "rows" ? (
-                    <RowsField
-                      field={f}
-                      value={rows[f.name] ?? []}
-                      onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
-                    />
-                  ) : f.kind === "choice" || f.kind === "site" ? (
-                    <select
-                      aria-label={ui(f.label)}
-                      required={f.required ?? false}
-                      value={values[f.name] ?? ""}
-                      onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
-                      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                    >
-                      <option value="">Choose…</option>
-                      {(f.kind === "site"
-                        ? session.sites.map((s) => ({
-                            value: s.id,
-                            label: `${s.code} — ${s.name}`,
-                          }))
-                        : f.choices
-                      ).map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {/* Through ui() like the field's own label. InquiryBoard
+              {f.kind === "select" ? (
+                <SelectField
+                  field={f}
+                  value={values[f.name] ?? ""}
+                  onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "combo" ? (
+                <ComboField
+                  field={f}
+                  value={values[f.name] ?? ""}
+                  onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "multi" ? (
+                <MultiField
+                  field={f}
+                  value={lists[f.name] ?? []}
+                  onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "rows" ? (
+                <RowsField
+                  field={f}
+                  value={rows[f.name] ?? []}
+                  onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
+                />
+              ) : f.kind === "choice" || f.kind === "site" ? (
+                <select
+                  aria-label={ui(f.label)}
+                  required={f.required ?? false}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                >
+                  <option value="">Choose…</option>
+                  {(f.kind === "site"
+                    ? session.sites.map((s) => ({
+                        value: s.id,
+                        label: `${s.code} — ${s.name}`,
+                      }))
+                    : f.choices
+                  ).map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {/* Through ui() like the field's own label. InquiryBoard
                           has always done this for its choices; this one did
                           not, so a form could offer a renameable "Kind of
                           site" above a fixed "Warehouse". A site kind built
                           from the session carries a code and a name and has no
                           row, which ui() handles by returning what it was
                           given. */}
-                          {ui(c.label)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      aria-label={ui(f.label)}
-                      type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}
-                      inputMode={f.kind === "money" || f.kind === "number" ? "decimal" : undefined}
-                      step={f.kind === "money" ? "any" : undefined}
-                      required={f.required ?? false}
-                      placeholder={f.placeholder ?? ""}
-                      value={values[f.name] ?? ""}
-                      onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
-                      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                    />
-                  )}
+                      {ui(c.label)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  aria-label={ui(f.label)}
+                  type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}
+                  inputMode={f.kind === "money" || f.kind === "number" ? "decimal" : undefined}
+                  step={f.kind === "money" ? "any" : undefined}
+                  required={f.required ?? false}
+                  placeholder={f.placeholder ?? ""}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                />
+              )}
 
-                  {f.hint ? (
-                    <span className="text-xs text-muted-foreground">{ui(f.hint)}</span>
-                  ) : null}
-                </Wrap>
-              );
-            })}
+              {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
+            </Wrap>
+          );
+        })}
 
-          <ErrorNote error={action.error} />
-          {/* minorUnitsOf falls back to two places when it does not know the
+      <ErrorNote error={action.error} />
+      {/* minorUnitsOf falls back to two places when it does not know the
               currency, which is right when the currency is unknown and wrong
               when the *table* is missing: for a nil-decimal currency it would
               multiply the typed amount by a hundred on its way to the ledger.
               So a failed lookup blocks pricing instead of guessing. */}
-          {currencyError ? (
-            <p className="text-xs text-destructive">
-              {ui(
-                "The currency list could not be loaded, so an amount cannot be converted safely. Nothing has been submitted.",
-              )}
-            </p>
-          ) : null}
+      {currencyError ? (
+        <p className="text-xs text-destructive">
+          {ui(
+            "The currency list could not be loaded, so an amount cannot be converted safely. Nothing has been submitted.",
+          )}
+        </p>
+      ) : null}
 
-          <div className="mt-2 flex flex-wrap justify-end gap-2">
-            <ActionButton
-              variant="secondary"
-              onClick={() => {
-                setOpen(false);
-                action.reset();
-              }}
-            >
-              {ui("Cancel")}
-            </ActionButton>
-            <ActionButton
-              type="submit"
-              busy={action.isPending}
-              disabled={takesMoney && Boolean(currencyError)}
-            >
-              {action.isPending ? ui("Working…") : ui(submitLabel)}
-            </ActionButton>
-          </div>
-        </form>
+      <div className="mt-2 flex flex-wrap justify-end gap-2">
+        <ActionButton
+          variant="secondary"
+          onClick={() => {
+            setOpen(false);
+            action.reset();
+          }}
+        >
+          {ui("Cancel")}
+        </ActionButton>
+        <ActionButton
+          type="submit"
+          busy={action.isPending}
+          disabled={takesMoney && Boolean(currencyError)}
+        >
+          {action.isPending ? ui("Working…") : ui(submitLabel)}
+        </ActionButton>
+      </div>
+    </form>
   );
 
   if (asPage)
