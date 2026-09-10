@@ -119,6 +119,14 @@ const REFUSAL_MESSAGES: Record<string, { title: string; body: string }> = {
     title: "That accounting period is closed.",
     body: "Reopen the period, or post the entry into an open one.",
   },
+  CLOVEERP_NO_PRICE_TO_POST: {
+    title: "This document has no price on any line.",
+    body: "Add a unit price to each line and post it again. A despatch raised from an order takes the order's price, so a missing price usually means the line was added by hand.",
+  },
+  CLOVEERP_ALREADY_RESERVED: {
+    title: "That line already holds stock.",
+    body: "The reservation is in place; pick the order rather than reserving it again.",
+  },
 };
 
 /** This map is ours, so it is keyed once and the retired spelling is folded in. */
