@@ -26,6 +26,8 @@ import { MainMenu } from "./menu";
 import { ServiceBanner } from "./service-banner";
 import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
+import { Breadcrumbs } from "./breadcrumbs";
+import { UnsavedChangesProvider } from "./unsaved";
 import { TOUCH } from "./page";
 import { UserMenu } from "./user-menu";
 
@@ -382,45 +384,46 @@ export function Shell({
     // overflow-x-hidden is the backstop, not the fix: everything inside is
     // meant to fit, and this only stops one mistake becoming a page that
     // scrolls sideways.
-    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
-      {/* The first thing a keyboard reaches. Invisible until focused, so it
+    <UnsavedChangesProvider>
+      <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+        {/* The first thing a keyboard reaches. Invisible until focused, so it
           costs sighted mouse users nothing and saves a keyboard user the
           twenty-odd rail links on every page (WCAG 2.4.1). */}
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-[var(--shadow-card)]"
-      >
-        Skip to content
-      </a>
-      <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:gap-4">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Open menu"
-            aria-expanded={drawerOpen}
-            className={`${TOUCH} -ml-2 inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden`}
-          >
-            <Menu className="size-5" />
-          </button>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-[var(--shadow-card)]"
+        >
+          Skip to content
+        </a>
+        <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
+          <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:gap-4">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              className={`${TOUCH} -ml-2 inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden`}
+            >
+              <Menu className="size-5" />
+            </button>
 
-          {/* The wordmark waits for lg. At md the mark alone says whose product
+            {/* The wordmark waits for lg. At md the mark alone says whose product
               this is, and the width is better spent on whose data it is. */}
-          <Link to={AREA_HOME[area]} className={`${TOUCH} flex shrink-0 items-center gap-2`}>
-            <BrandMark size={28} />
-            <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] lg:inline">
-              <span style={{ color: brand.ink }}>{brand.prefix}</span>
-              <span style={{ color: brand.total }}>{brand.suffix}</span>
+            <Link to={AREA_HOME[area]} className={`${TOUCH} flex shrink-0 items-center gap-2`}>
+              <BrandMark size={28} />
+              <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] lg:inline">
+                <span style={{ color: brand.ink }}>{brand.prefix}</span>
+                <span style={{ color: brand.total }}>{brand.suffix}</span>
+              </span>
+            </Link>
+
+            <span className="min-w-0 flex-1 truncate text-sm font-medium md:flex-none">
+              {session.tenant?.name ?? "No tenant"}
             </span>
-          </Link>
 
-          <span className="min-w-0 flex-1 truncate text-sm font-medium md:flex-none">
-            {session.tenant?.name ?? "No tenant"}
-          </span>
+            <AreaSwitch area={area} counts={counts} className="hidden md:block" />
 
-          <AreaSwitch area={area} counts={counts} className="hidden md:block" />
-
-          {/*
+            {/*
             Search, the whole-product menu and screen help, as one object.
             They were three loose buttons with the same weight as everything
             else in the row, which is most of why this header read as busy:
@@ -429,72 +432,77 @@ export function Shell({
             what exists, tell me what this screen is for — so they are grouped
             and unlabelled. The words were only carried at lg anyway.
           */}
-          <div className="ml-auto flex shrink-0 items-center rounded-md border border-input">
-            <CommandPalette />
-            <MainMenu />
-            <ContextHelp />
-          </div>
+            <div className="ml-auto flex shrink-0 items-center rounded-md border border-input">
+              <CommandPalette />
+              <MainMenu />
+              <ContextHelp />
+            </div>
 
-          <ScopeControl
-            session={session}
-            scope={scope}
-            onScopeChange={onScopeChange}
-            sites={sites}
-          />
-
-          <div className="hidden shrink-0 md:block">
-            <UserMenu session={session} onSignOut={onSignOut} />
-          </div>
-        </div>
-      </header>
-      {session.tenant_id ? <ServiceBanner /> : null}
-
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="left" className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto">
-          <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
-
-          <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
-
-          <nav aria-label="Sections">
-            <NavList
-              items={visible}
-              area={area}
-              pathname={pathname}
-              hidden={hidden}
-              onNavigate={() => setDrawerOpen(false)}
+            <ScopeControl
+              session={session}
+              scope={scope}
+              onScopeChange={onScopeChange}
+              sites={sites}
             />
-          </nav>
 
-          {/* The scope selects used to be down here too, which meant changing
+            <div className="hidden shrink-0 md:block">
+              <UserMenu session={session} onSignOut={onSignOut} />
+            </div>
+          </div>
+        </header>
+        {session.tenant_id ? <ServiceBanner /> : null}
+
+        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <SheetContent
+            side="left"
+            className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto"
+          >
+            <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
+
+            <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
+
+            <nav aria-label="Sections">
+              <NavList
+                items={visible}
+                area={area}
+                pathname={pathname}
+                hidden={hidden}
+                onNavigate={() => setDrawerOpen(false)}
+              />
+            </nav>
+
+            {/* The scope selects used to be down here too, which meant changing
               where you were working started by opening the navigation. They are
               in the header's own control now, at every width, so this drawer is
               navigation and nothing else. */}
 
-          <div className="mt-auto border-t border-border pt-4">
-            <UserMenu
-              session={session}
-              onSignOut={onSignOut}
-              onNavigate={() => setDrawerOpen(false)}
-              className="w-full justify-start"
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+            <div className="mt-auto border-t border-border pt-4">
+              <UserMenu
+                session={session}
+                onSignOut={onSignOut}
+                onNavigate={() => setDrawerOpen(false)}
+                className="w-full justify-start"
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
 
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-        {/* The rail exists from md up. Below it, the drawer is the navigation
+        <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
+          {/* The rail exists from md up. Below it, the drawer is the navigation
             and the content takes the full width. */}
-        <nav
-          className="sticky top-[4.5rem] hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto pr-1 md:block"
-          aria-label="Sections"
-        >
-          <NavList items={visible} area={area} pathname={pathname} hidden={hidden} />
-        </nav>
+          <nav
+            className="sticky top-[4.5rem] hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto pr-1 md:block"
+            aria-label="Sections"
+          >
+            <NavList items={visible} area={area} pathname={pathname} hidden={hidden} />
+          </nav>
 
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">
-          {children}
-        </main>
+          <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+            <Breadcrumbs />
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </UnsavedChangesProvider>
   );
 }

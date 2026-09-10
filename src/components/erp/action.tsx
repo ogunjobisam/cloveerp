@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import {
   Dialog,
@@ -18,6 +18,7 @@ import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "./currencies";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
+import { useUnsavedGuard } from "./unsaved";
 
 /**
  * The write surface.
@@ -519,6 +520,16 @@ export function ActionDialog({
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(fields));
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
+
+  // An open form with something typed into it is work in progress, and
+  // leaving the screen must ask before it is thrown away.
+  const untouched = useMemo(() => JSON.stringify(initialValues(fields)), [fields]);
+  useUnsavedGuard(
+    open &&
+      (JSON.stringify(values) !== untouched ||
+        Object.values(lists).some((l) => l.length > 0) ||
+        Object.values(rows).some((r) => r.length > 0)),
+  );
 
   // Only fetched when something on this form takes a price.
   const takesMoney = fields.some((f) => f.kind === "money");

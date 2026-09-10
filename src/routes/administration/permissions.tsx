@@ -10,6 +10,7 @@ import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
+import { useUnsavedGuard } from "../../components/erp/unsaved";
 
 export const Route = createFileRoute("/administration/permissions")({
   head: () => ({
@@ -208,6 +209,9 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
 
   const ticked = pending ?? heldCodes;
 
+  // Ticks that have not been saved are work in progress.
+  useUnsavedGuard(pending !== null);
+
   const save = useMutation({
     mutationFn: (codes: string[]) =>
       callErp("erp_set_user_roles", {
@@ -376,6 +380,8 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
   });
 
   const activeRoles = directory.roles.filter((r) => r.status === "active");
+
+  useUnsavedGuard(Boolean(appUserId || roleId || validFrom || validTo || reason));
 
   return (
     <section className="rounded-xl border border-border bg-card">
