@@ -95,9 +95,11 @@ export function ActionBar({
             fn={a.fn}
             fields={a.fields ?? []}
             {...(a.mapArgs ? { mapArgs: a.mapArgs } : {})}
+            {...(a.emptyNote ? { emptyNote: a.emptyNote } : {})}
             invalidates={a.invalidates ?? []}
             submitLabel={a.submitLabel ?? a.label}
           />
+
         ))}
       </div>
     </section>

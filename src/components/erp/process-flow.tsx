@@ -56,6 +56,15 @@ export type Stage = {
   actionFns?: string[];
   /** A verb that needs no record — raising a new one, mostly. */
   createFn?: string;
+  /**
+   * Which step puts work here, said when the step is empty.
+   *
+   * An empty step that only says "none yet" reads as a fault. Naming the step
+   * before it — "work appears here once goods are received into goods-in" —
+   * keeps the chain readable when a link of it is bare.
+   */
+  fedBy?: string;
+
   /** Where the stage lives, when it lives on another screen. */
   to?: string;
   toLabel?: string;
