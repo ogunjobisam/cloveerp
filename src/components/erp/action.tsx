@@ -432,37 +432,89 @@ export function MultiField({
   );
 }
 
-/** A list of records, one row at a time. The alternative was typing JSON. */
+/** One cell of a row editor: a picker where the value names a record. */
+function RowCell({
+  column,
+  value,
+  onChange,
+}: {
+  column: RowColumn;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  if (column.kind === "select" && column.options)
+    return (
+      <SelectField
+        field={{
+          kind: "select",
+          name: column.name,
+          label: column.label,
+          options: column.options,
+        }}
+        value={value}
+        onChange={onChange}
+      />
+    );
+
+  return (
+    <input
+      aria-label={column.label}
+      type={column.kind === "text" || column.kind === "select" ? "text" : column.kind === "date" ? "date" : "number"}
+      inputMode={column.kind === "money" || column.kind === "number" ? "decimal" : undefined}
+      step={column.kind === "money" ? "any" : undefined}
+      value={value}
+      placeholder={column.placeholder ?? ""}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+    />
+  );
+}
+
+/**
+ * A list of records, one row at a time. The alternative was typing JSON.
+ *
+ * This is where a whole document gets written: the lines live on the same form
+ * as the header, so raising an order is one press rather than one press and
+ * then a visit to the document to price each line.
+ */
 function RowsField({
   field,
   value,
   onChange,
+  currencies,
 }: {
   field: Extract<Field, { kind: "rows" }>;
   value: Record<string, string>[];
   onChange: (v: Record<string, string>[]) => void;
+  currencies: Currency[] | undefined;
 }) {
+  const total = field.total;
+  const sum = total
+    ? value.reduce(
+        (acc, row) =>
+          acc + (Number(row[total.quantity] ?? 0) || 0) * (Number(row[total.price] ?? 0) || 0),
+        0,
+      )
+    : 0;
+
   return (
     <div className="flex flex-col gap-2">
       {value.map((row, index) => (
-        <div key={index} className="flex flex-wrap items-end gap-2">
+        <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2">
           {field.columns.map((c) => (
-            <label key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
+            <div key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {c.label}
+                {c.kind === "money" && c.currency ? ` (${c.currency})` : ""}
               </span>
-              <input
-                type={c.kind === "number" ? "number" : c.kind === "date" ? "date" : "text"}
+              <RowCell
+                column={c}
                 value={row[c.name] ?? ""}
-                placeholder={c.placeholder ?? ""}
-                onChange={(e) =>
-                  onChange(
-                    value.map((r, i) => (i === index ? { ...r, [c.name]: e.target.value } : r)),
-                  )
+                onChange={(v) =>
+                  onChange(value.map((r, i) => (i === index ? { ...r, [c.name]: v } : r)))
                 }
-                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
               />
-            </label>
+            </div>
           ))}
           <ActionButton
             variant="secondary"
@@ -472,14 +524,23 @@ function RowsField({
           </ActionButton>
         </div>
       ))}
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <ActionButton variant="secondary" onClick={() => onChange([...value, {}])}>
           {field.addLabel ?? "Add a line"}
         </ActionButton>
+        {total && value.length > 0 ? (
+          <span className="text-sm">
+            <span className="text-muted-foreground">Total </span>
+            <span className="font-medium tabular-nums">
+              {total.currency} {sum.toFixed(minorUnitsOf(currencies, total.currency) === 0 ? 0 : 2)}
+            </span>
+          </span>
+        ) : null}
       </div>
     </div>
   );
 }
+
 
 /**
  * An action behind a dialog.
