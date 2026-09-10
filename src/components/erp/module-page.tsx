@@ -8,6 +8,7 @@ import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
 import { RefreshButton, TOUCH } from "./page";
+import { ProcessFlow } from "./process-flow";
 
 /**
  * The object page every module shares.

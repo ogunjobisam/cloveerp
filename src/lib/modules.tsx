@@ -17,6 +17,7 @@ import {
   reason,
   type ActionSpec,
 } from "../components/erp/actions-bar";
+import type { FlowSpec } from "../components/erp/process-flow";
 
 /**
  * One description of every module, used by every surface that talks about it.
