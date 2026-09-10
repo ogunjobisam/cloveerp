@@ -11,11 +11,13 @@ import {
   pickParty,
   pickSite,
   reason,
+  type ActionSpec,
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
+import { ProcessFlow } from "../../components/erp/process-flow";
 import { SALES_KPIS } from "../../lib/modules";
 
 export const Route = createFileRoute("/sales/")({
@@ -39,20 +41,7 @@ export const Route = createFileRoute("/sales/")({
  * numbering, its lifecycle, the permission to raise one — comes from the
  * database.
  */
-function Sales() {
-  return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Sales">
-        Quote to order to delivery, on the same document spine purchasing uses in the opposite
-        direction.
-      </PageHeader>
-
-      <KpiRow kpis={SALES_KPIS} />
-
-      <ActionBar
-        title="Pricing, promise, credit and returns"
-        note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
-        actions={[
+const SALES_ACTIONS: ActionSpec[] = [
           {
             label: "Resolve a price",
             description: "What would this customer pay for this product today?",
@@ -138,7 +127,69 @@ function Sales() {
               },
             ],
           },
-        ]}
+];
+
+function Sales() {
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title="Sales">
+        Quote to order to delivery, on the same document spine purchasing uses in the opposite
+        direction.
+      </PageHeader>
+
+      <KpiRow kpis={SALES_KPIS} />
+
+      <ProcessFlow
+        flow={{
+          title: "Order to cash, step by step",
+          note: "Each box is a step in the chain and shows what is sitting there now. The button on a box is the verb that moves work to the next one.",
+          stages: [
+            {
+              label: "Quotation",
+              hint: "A price offered, before the customer has committed to anything.",
+              typeCode: "quotation",
+              actionFn: "erp_resolve_price",
+            },
+            {
+              label: "Sales order",
+              hint: "The commitment. Credit and stock availability both decide whether it can proceed.",
+              typeCode: "sales_order",
+              actionFn: "erp_promise_date",
+            },
+            {
+              label: "Pick",
+              hint: "Stock reserved against the line, then picked from the location holding it.",
+              actionFn: "erp_reserve_for_line",
+            },
+            {
+              label: "Delivery",
+              hint: "Goods leaving. Posting a delivery is what takes the stock off the shelf.",
+              typeCode: "delivery",
+              to: "/logistics",
+              toLabel: "Open despatch",
+            },
+            {
+              label: "Invoice",
+              hint: "The bill, raised from a posted delivery so it says what actually went.",
+              typeCode: "sales_invoice",
+              to: "/finance",
+              toLabel: "Open finance",
+            },
+            {
+              label: "Cash",
+              hint: "Money received, applied against the invoices it settles.",
+              to: "/finance",
+              toLabel: "Apply cash",
+            },
+          ],
+        }}
+        actions={SALES_ACTIONS}
+      />
+
+      <ActionBar
+        title="Pricing, promise, credit and returns"
+        note="The verbs that sit between the documents: pricing, stock promise, credit and returns."
+        actions={SALES_ACTIONS}
       />
 
       <ActionBar
