@@ -142,29 +142,32 @@ function Sales() {
       <ProcessFlow
         flow={{
           title: "Order to cash, step by step",
-          note: "Each box is a step in the chain and shows what is sitting there now. The button on a box is the verb that moves work to the next one.",
+          note: "Press a step to see the records sitting there, choose one on the left, and the buttons act on that record.",
           stages: [
             {
               label: "Quotation",
               hint: "A price offered, before the customer has committed to anything.",
               typeCode: "quotation",
-              actionFn: "erp_resolve_price",
+              recordArg: "p_document_id",
+              createFn: "erp_resolve_price",
             },
             {
               label: "Sales order",
               hint: "The commitment. Credit and stock availability both decide whether it can proceed.",
               typeCode: "sales_order",
-              actionFn: "erp_promise_date",
+              recordArg: "p_document_id",
+              createFn: "erp_promise_date",
             },
             {
               label: "Pick",
               hint: "Stock reserved against the line, then picked from the location holding it.",
-              actionFn: "erp_reserve_for_line",
+              createFn: "erp_reserve_for_line",
             },
             {
               label: "Delivery",
               hint: "Goods leaving. Posting a delivery is what takes the stock off the shelf.",
               typeCode: "delivery",
+              recordArg: "p_delivery_id",
               to: "/logistics",
               toLabel: "Open despatch",
             },
@@ -172,6 +175,7 @@ function Sales() {
               label: "Invoice",
               hint: "The bill, raised from a posted delivery so it says what actually went.",
               typeCode: "sales_invoice",
+              recordArg: "p_invoice_id",
               to: "/finance",
               toLabel: "Open finance",
             },
@@ -182,6 +186,7 @@ function Sales() {
               toLabel: "Apply cash",
             },
           ],
+
         }}
         actions={SALES_ACTIONS}
       />
