@@ -696,7 +696,13 @@ export function ActionDialog({
           ) : null}
 
           <div className="mt-2 flex flex-wrap justify-end gap-2">
-            <ActionButton variant="secondary" onClick={() => setOpen(false)}>
+            <ActionButton
+              variant="secondary"
+              onClick={() => {
+                setOpen(false);
+                action.reset();
+              }}
+            >
               {ui("Cancel")}
             </ActionButton>
             <ActionButton
@@ -708,6 +714,66 @@ export function ActionDialog({
             </ActionButton>
           </div>
         </form>
+  );
+
+  if (asPage)
+    return (
+      <>
+        <span
+          className="contents"
+          onClick={() => {
+            setOpen(true);
+          }}
+        >
+          {trigger}
+        </span>
+        {open ? (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={ui(title)}
+            className="fixed inset-0 z-50 overflow-y-auto bg-background"
+          >
+            <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+              <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-4 py-3 sm:px-6">
+                <ActionButton
+                  variant="secondary"
+                  onClick={() => {
+                    setOpen(false);
+                    action.reset();
+                  }}
+                >
+                  {ui("Back")}
+                </ActionButton>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold">{ui(title)}</h2>
+                  {description ? (
+                    <p className="truncate text-xs text-muted-foreground">{ui(description)}</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">{body}</div>
+          </div>
+        ) : null}
+      </>
+    );
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) action.reset();
+      }}
+    >
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-h-[85vh] w-[92vw] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{ui(title)}</DialogTitle>
+          {description ? <DialogDescription>{ui(description)}</DialogDescription> : null}
+        </DialogHeader>
+        {body}
       </DialogContent>
     </Dialog>
   );
