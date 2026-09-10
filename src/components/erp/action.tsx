@@ -491,8 +491,9 @@ export function outcomeOf(label: string, result: unknown): string {
       ? result
       : Array.isArray(result)
         ? result.length
-        : typeof result === "object" && result !== null && typeof
-              (result as Record<string, unknown>)["created"] === "number"
+        : typeof result === "object" &&
+            result !== null &&
+            typeof (result as Record<string, unknown>)["created"] === "number"
           ? ((result as Record<string, unknown>)["created"] as number)
           : null;
 
