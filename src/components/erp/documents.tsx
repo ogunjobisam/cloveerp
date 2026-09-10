@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
 import { callErp } from "../../lib/erp";
-import { formatMinor, minorUnitsOf, type Currency } from "../../lib/money";
+import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import { useErpSession } from "./session-context";
