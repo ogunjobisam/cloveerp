@@ -23,7 +23,7 @@ import warehouseImg from "../assets/landing-warehouse.jpg";
 import financeImg from "../assets/landing-finance.jpg";
 import shotFinance from "../assets/product-finance.png";
 import shotWarehouse from "../assets/product-warehouse.png";
-import shotEncryption from "../assets/product-encryption.png";
+import shotForecast from "../assets/product-forecast.png";
 import { Logo, Wordmark } from "../components/erp/logo";
 
 export const Route = createFileRoute("/product")({
@@ -175,12 +175,12 @@ const JOURNEY: Feature[] = [
   {
     icon: TrendingUp,
     title: "Plan",
-    body: "Forecasts, demand and supply planning, and release sequencing — with scenario comparison before you commit.",
+    body: "Stock forecasts built on real usage and measured supplier lead times, with reorder points that raise the order for you.",
   },
   {
     icon: FileText,
     title: "Source",
-    body: "Requisitions, RFQs, purchase orders and supplier price resolution, with three-way match baked into receiving.",
+    body: "Requisitions approved and converted straight into purchase orders, with three-way match and delivery tolerances on receipt.",
   },
   {
     icon: Factory,
@@ -190,7 +190,7 @@ const JOURNEY: Feature[] = [
   {
     icon: Boxes,
     title: "Store",
-    body: "Bins, batches, putaway tasks and cycle counts — perpetual inventory valued to the penny.",
+    body: "Aisles, shelves and bins with storage rules, so put away and picking always land in the right place. Counted, valued to the penny.",
   },
   {
     icon: Truck,
@@ -205,7 +205,7 @@ const JOURNEY: Feature[] = [
   {
     icon: PoundSterling,
     title: "Settle",
-    body: "Sterling-native ledgers, invoicing from despatch, cash application, VAT-ready postings and bank reconciliation.",
+    body: "Supplier bills matched to goods received, payment runs, customer invoicing, cash application and VAT-ready postings.",
   },
 ];
 
@@ -342,19 +342,19 @@ const SHOTS: Shot[] = [
   },
   {
     src: shotWarehouse,
-    alt: "Clove ERP Inventory and warehouse dashboard with stock value, cover KPIs and open count tasks",
+    alt: "Clove ERP warehouse workbench showing goods in, put away, move and count with a searchable receipt list",
     icon: Boxes,
-    label: "Warehouse",
+    label: "Warehouse workbench",
     caption:
-      "Stock health, valuation and count tasks, all derived from the perpetual inventory ledger.",
+      "Pick a step, pick a record: goods in, put away, move and count, with batch and expiry on every line.",
   },
   {
-    src: shotEncryption,
-    alt: "Clove ERP encryption keys panel showing the per-tenant key register with rotation and destruction controls",
-    icon: Vault,
-    label: "Encryption keys",
+    src: shotForecast,
+    alt: "Clove ERP stock forecast listing usage per day, lead time, reorder point and days of cover with an order button per product",
+    icon: TrendingUp,
+    label: "Stock forecast",
     caption:
-      "Each company holds its own key in the platform vault — rotated or destroyed on your word alone.",
+      "Usage, measured supplier lead times and reorder points — with a purchase order one click away.",
   },
 ];
 
