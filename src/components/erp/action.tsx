@@ -754,7 +754,7 @@ export function ActionDialog({
       else if (f.kind === "choice" && f.boolean) args[f.name] = raw === "true";
       else args[f.name] = raw;
     }
-    return { ...args, ...(prefill ?? {}) };
+    return { ...args, ...(prefill ?? {}), ...extra };
   }
 
   // Not offered rather than offered-and-disabled. The database still decides.
@@ -769,15 +769,16 @@ export function ActionDialog({
    * because taking over the screen to ask one thing is worse, not better.
    */
   const shown = fields.filter((f) => !(prefill && f.name in prefill));
-  const asPage = shown.length > 2;
+  const asPage = shown.length > 2 || shown.some((f) => f.kind === "rows");
 
   const body = (
     <form
       className="flex flex-col gap-3"
       onSubmit={(e) => {
         e.preventDefault();
-        action.mutate();
+        action.mutate({});
       }}
+
     >
       {context ? (
         <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
