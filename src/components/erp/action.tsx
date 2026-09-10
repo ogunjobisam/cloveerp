@@ -600,7 +600,10 @@ export function ActionDialog({
             action.mutate();
           }}
         >
-          {fields.map((f) => {
+          {fields
+            .filter((f) => !(prefill && f.name in prefill))
+            .map((f) => {
+
             // A group of checkboxes or a row editor holds labels of its own, and
             // a label inside a label is neither valid nor navigable.
             const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
