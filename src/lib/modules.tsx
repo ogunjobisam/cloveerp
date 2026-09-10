@@ -276,12 +276,16 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Goods in",
         hint: "Receipts posted against a purchase order. Stock lands in goods-in before it has a home.",
+        fedBy: "Receipts appear here once a purchase order is received and posted.",
+
         typeCode: "goods_receipt",
         createFn: "erp_raise_putaway_tasks",
       },
       {
         label: "Put away",
         hint: "A task per pallet, from goods-in to the location it belongs in.",
+        fedBy: "Work appears here once goods are received into goods-in and put-away tasks are raised.",
+
         list: {
           fn: "erp_warehouse_tasks",
           args: { p_limit: 200 },
@@ -298,6 +302,8 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Count",
         hint: "Counting a location, recording what was found, and posting the difference.",
+        fedBy: "Counts appear here once count tasks are raised for a site.",
+
         list: {
           fn: "erp_count_tasks",
           args: { p_limit: 200 },
@@ -1023,6 +1029,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Invoice",
         hint: "The customer's bill, raised from a posted delivery so the quantities are what left.",
+        fedBy: "Invoices appear here once a delivery has been despatched and invoiced.",
+
         typeCode: "sales_invoice",
         recordArg: "p_invoice_id",
         createFn: "erp_invoice_from_delivery",
@@ -1035,6 +1043,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Payment run",
         hint: "What is due to suppliers, gathered into one proposal.",
+        fedBy: "A run appears here once supplier bills are approved and a payment run is proposed.",
+
         list: {
           fn: "erp_payment_proposals",
           args: { p_limit: 200 },
@@ -1051,6 +1061,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Approve",
         hint: "A second pair of eyes. The proposer cannot approve their own run.",
+        fedBy: "Runs appear here once one has been proposed at the payment run step.",
+
         list: {
           fn: "erp_payment_proposals",
           args: { p_limit: 200 },
@@ -1067,6 +1079,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Pay",
         hint: "Paying an approved run clears the payable and credits the bank.",
+        fedBy: "Runs appear here once a second approver has approved them.",
+
         list: {
           fn: "erp_payment_proposals",
           args: { p_limit: 200 },
