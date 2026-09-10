@@ -145,15 +145,18 @@ function AreaSwitch({
   counts,
   onNavigate,
   className = "",
+  tone = "light",
 }: {
   area: Area;
   counts: Record<Area, number>;
   onNavigate?: () => void;
   className?: string;
+  tone?: "light" | "dark";
 }) {
   const { t } = useT();
   if (counts.settings === 0 || counts.work === 0) return null;
 
+  const dark = tone === "dark";
   const items: { area: Area; labelKey: string; label: string; icon: typeof Briefcase }[] = [
     { area: "work", labelKey: "nav.work", label: "Work", icon: Briefcase },
     { area: "settings", labelKey: "nav.settings", label: "Settings", icon: Settings2 },
@@ -161,24 +164,30 @@ function AreaSwitch({
 
   return (
     <nav aria-label="Areas" className={className}>
-      <ul className="inline-flex rounded-lg border border-border bg-muted/50 p-0.5">
+      <ul
+        className={`flex rounded-lg p-0.5 ${dark ? "bg-sidebar-active/70" : "border border-border bg-muted/50"}`}
+      >
         {items.map((item) => {
           const active = item.area === area;
           const Icon = item.icon;
           return (
-            <li key={item.area}>
+            <li key={item.area} className="flex-1">
               <Link
                 to={AREA_HOME[item.area]}
                 onClick={onNavigate}
                 aria-current={active ? "location" : undefined}
                 className={[
-                  "inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                  "inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
                   active
-                    ? "bg-card text-foreground shadow-[var(--shadow-card)]"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? dark
+                      ? "bg-sidebar-foreground/15 text-sidebar-foreground"
+                      : "bg-card text-foreground shadow-[var(--shadow-card)]"
+                    : dark
+                      ? "text-sidebar-muted hover:text-sidebar-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                <Icon className="size-4" />
+                <Icon className="size-4" aria-hidden="true" />
                 {t(item.labelKey, item.label)}
               </Link>
             </li>
