@@ -477,6 +477,32 @@ function initialValues(fields: Field[]): Record<string, string> {
   return out;
 }
 
+/**
+ * What just happened, in a sentence.
+ *
+ * Several of these routines answer with a count of the rows they raised, and a
+ * count of nought is the commonest confusion in the product: the form closes,
+ * nothing appears in the next step, and it looks broken when in fact there was
+ * nothing standing there to move. So say so.
+ */
+export function outcomeOf(label: string, result: unknown): string {
+  const count =
+    typeof result === "number"
+      ? result
+      : Array.isArray(result)
+        ? result.length
+        : typeof result === "object" && result !== null && typeof
+              (result as Record<string, unknown>)["created"] === "number"
+          ? ((result as Record<string, unknown>)["created"] as number)
+          : null;
+
+  if (count === 0)
+    return `${label}: nothing was raised — there was no work waiting to be moved on. Check the step, the site and the dates you chose.`;
+  if (count !== null && count > 0)
+    return `${label}: ${count} ${count === 1 ? "record" : "records"} created.`;
+  return `${label} — done.`;
+}
+
 export function ActionDialog({
   trigger,
   title,
