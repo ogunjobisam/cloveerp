@@ -446,6 +446,16 @@ export type Database = {
       }
       erp_container_identity_policies: { Args: never; Returns: Json }
       erp_content_packs: { Args: never; Returns: Json }
+      erp_convert_document: {
+        Args: {
+          p_document_id: string
+          p_lines?: Json
+          p_party_id?: string
+          p_site_id?: string
+          p_transition?: string
+        }
+        Returns: Json
+      }
       erp_count_accuracy: { Args: never; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
       erp_create_batch: {
