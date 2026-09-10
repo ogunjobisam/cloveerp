@@ -478,6 +478,30 @@ function initialValues(fields: Field[]): Record<string, string> {
 }
 
 /**
+ * Why a run raised nothing, per routine.
+ *
+ * "Nothing was raised" is true and useless. Each of these routines scans one
+ * definite thing — stock standing in goods-in, pick faces under their top-up
+ * level, bills approved and due — and when it finds none of it, the sentence
+ * should name what it looked for, so the reader knows which step to go and
+ * feed rather than assuming the button is broken.
+ */
+export const EMPTY_BY_FN: Record<string, string> = {
+  erp_raise_putaway_tasks: "nothing is standing in goods-in at that site.",
+  erp_raise_replenishment_tasks: "no pick face at that site is below its top-up level.",
+  erp_raise_count_tasks: "nothing at that site is due to be counted.",
+  erp_generate_count_tasks: "nothing at that site is due to be counted.",
+  erp_plan_shipment: "none of those deliveries are ready to leave.",
+  erp_run_planning: "the plan suggested no new orders.",
+  erp_firm_planned_order: "there was no planned order left to firm.",
+  erp_propose_payment_run: "no supplier bill is approved and due on that date.",
+  erp_generate_invoice_schedules: "no order is due to be billed.",
+  erp_generate_invoice_schedule: "no order is due to be billed.",
+  erp_raise_inspection: "nothing received is waiting to be inspected.",
+  erp_suggest_redistribution: "no site is short of stock another site can spare.",
+};
+
+/**
  * What just happened, in a sentence.
  *
  * Several of these routines answer with a count of the rows they raised, and a
@@ -485,7 +509,7 @@ function initialValues(fields: Field[]): Record<string, string> {
  * nothing appears in the next step, and it looks broken when in fact there was
  * nothing standing there to move. So say so.
  */
-export function outcomeOf(label: string, result: unknown): string {
+export function outcomeOf(label: string, result: unknown, emptyNote?: string): string {
   const count =
     typeof result === "number"
       ? result
@@ -498,7 +522,9 @@ export function outcomeOf(label: string, result: unknown): string {
           : null;
 
   if (count === 0)
-    return `${label}: nothing was raised — there was no work waiting to be moved on. Check the step, the site and the dates you chose.`;
+    return emptyNote
+      ? `${label}: nothing was raised — ${emptyNote} Change the site or the dates and try again.`
+      : `${label}: nothing was raised — there was no work waiting to be moved on. Check the step, the site and the dates you chose.`;
   if (count !== null && count > 0)
     return `${label}: ${count} ${count === 1 ? "record" : "records"} created.`;
   return `${label} — done.`;
@@ -514,6 +540,8 @@ export function ActionDialog({
   mapArgs,
   prefill,
   context,
+  emptyNote,
+
   invalidates,
   submitLabel = "Save",
   onDone,
@@ -545,6 +573,14 @@ export function ActionDialog({
    * sign of which record it will change. This line puts it back.
    */
   context?: string;
+  /**
+   * What this routine looks for, when it finds none of it.
+   *
+   * Declared alongside the action where the answer is particular; otherwise
+   * EMPTY_BY_FN carries the sentence for the function being called.
+   */
+  emptyNote?: string;
+
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
@@ -579,7 +615,11 @@ export function ActionDialog({
       setLists({});
       setRows({});
       setOpen(false);
-      toast(outcomeOf(ui(title), result), context ? { description: context } : undefined);
+      toast(
+        outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn]),
+        context ? { description: context } : undefined,
+      );
+
       onDone?.(result);
     },
   });

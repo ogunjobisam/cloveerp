@@ -26,6 +26,15 @@ export type ActionSpec = {
   fields?: Field[];
   /** Query keys — the `fn` names of the reads this action makes stale. */
   invalidates?: string[];
+  /**
+   * What this action looks for, said when it finds none of it.
+   *
+   * A run that raises nothing is the commonest false alarm in the product.
+   * Naming the thing it scanned for — "nothing is standing in goods-in at that
+   * site" — turns a silent close into a readable answer.
+   */
+  emptyNote?: string;
+
   /** For arguments the form cannot express directly — arrays, mostly. */
   mapArgs?: (
     values: Record<string, string>,
@@ -86,6 +95,7 @@ export function ActionBar({
             fn={a.fn}
             fields={a.fields ?? []}
             {...(a.mapArgs ? { mapArgs: a.mapArgs } : {})}
+            {...(a.emptyNote ? { emptyNote: a.emptyNote } : {})}
             invalidates={a.invalidates ?? []}
             submitLabel={a.submitLabel ?? a.label}
           />

@@ -56,6 +56,15 @@ export type Stage = {
   actionFns?: string[];
   /** A verb that needs no record — raising a new one, mostly. */
   createFn?: string;
+  /**
+   * Which step puts work here, said when the step is empty.
+   *
+   * An empty step that only says "none yet" reads as a fault. Naming the step
+   * before it — "work appears here once goods are received into goods-in" —
+   * keeps the chain readable when a link of it is bare.
+   */
+  fedBy?: string;
+
   /** Where the stage lives, when it lives on another screen. */
   to?: string;
   toLabel?: string;
@@ -150,8 +159,10 @@ function StageAction({
       fn={action.fn}
       fields={action.fields ?? []}
       {...(action.mapArgs ? { mapArgs: action.mapArgs } : {})}
+      {...(action.emptyNote ? { emptyNote: action.emptyNote } : {})}
       prefill={prefill}
       {...(context ? { context } : {})}
+
       invalidates={action.invalidates ?? []}
       submitLabel={action.submitLabel ?? action.label}
     />
@@ -222,7 +233,9 @@ function StageList({
         ) : shown.length === 0 ? (
           <p className="px-4 py-4 text-sm text-muted-foreground sm:px-5">
             {rows.length === 0
-              ? `No ${source.nounPlural} at ${stage.label.toLowerCase()} yet.`
+              ? `No ${source.nounPlural} at ${stage.label.toLowerCase()} yet.${
+                  stage.fedBy ? ` ${stage.fedBy}` : ""
+                }`
               : `No ${source.nounPlural} match that search.`}
           </p>
         ) : (

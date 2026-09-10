@@ -276,12 +276,17 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Goods in",
         hint: "Receipts posted against a purchase order. Stock lands in goods-in before it has a home.",
+        fedBy: "Receipts appear here once a purchase order is received and posted.",
+
         typeCode: "goods_receipt",
         createFn: "erp_raise_putaway_tasks",
       },
       {
         label: "Put away",
         hint: "A task per pallet, from goods-in to the location it belongs in.",
+        fedBy:
+          "Work appears here once goods are received into goods-in and put-away tasks are raised.",
+
         list: {
           fn: "erp_warehouse_tasks",
           args: { p_limit: 200 },
@@ -298,6 +303,8 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Count",
         hint: "Counting a location, recording what was found, and posting the difference.",
+        fedBy: "Counts appear here once count tasks are raised for a site.",
+
         list: {
           fn: "erp_count_tasks",
           args: { p_limit: 200 },
@@ -1023,6 +1030,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Invoice",
         hint: "The customer's bill, raised from a posted delivery so the quantities are what left.",
+        fedBy: "Invoices appear here once a delivery has been despatched and invoiced.",
+
         typeCode: "sales_invoice",
         recordArg: "p_invoice_id",
         createFn: "erp_invoice_from_delivery",
@@ -1035,6 +1044,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Payment run",
         hint: "What is due to suppliers, gathered into one proposal.",
+        fedBy: "A run appears here once supplier bills are approved and a payment run is proposed.",
+
         list: {
           fn: "erp_payment_proposals",
           args: { p_limit: 200 },
@@ -1051,6 +1062,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Approve",
         hint: "A second pair of eyes. The proposer cannot approve their own run.",
+        fedBy: "Runs appear here once one has been proposed at the payment run step.",
+
         list: {
           fn: "erp_payment_proposals",
           args: { p_limit: 200 },
@@ -1067,6 +1080,8 @@ export const FINANCE: ModuleDef = {
       {
         label: "Pay",
         hint: "Paying an approved run clears the payable and credits the bank.",
+        fedBy: "Runs appear here once a second approver has approved them.",
+
         list: {
           fn: "erp_payment_proposals",
           args: { p_limit: 200 },
@@ -1755,6 +1770,8 @@ export const PLANNING: ModuleDef = {
       {
         label: "Forecast",
         hint: "Demand per period, from history and from what you know that history does not.",
+        fedBy: "Forecasts appear here once one has been run for a period.",
+
         list: {
           fn: "erp_forecast_versions",
           args: { p_limit: 200 },
@@ -1770,6 +1787,8 @@ export const PLANNING: ModuleDef = {
       {
         label: "Sign off",
         hint: "A forecast nobody has agreed to is a spreadsheet. Signing it off is what plans use it.",
+        fedBy: "Forecasts appear here once one has been run at the forecast step.",
+
         list: {
           fn: "erp_forecast_versions",
           args: { p_limit: 200 },
@@ -1791,6 +1810,8 @@ export const PLANNING: ModuleDef = {
       {
         label: "Planned order",
         hint: "What the run says to buy or make, before anyone has committed to it.",
+        fedBy: "Orders appear here once a requirements run has been made.",
+
         list: {
           fn: "erp_planned_orders",
           args: { p_limit: 200 },
@@ -2183,12 +2204,17 @@ export const PRODUCTION: ModuleDef = {
       {
         label: "Works order",
         hint: "What is to be made, how much, and by when.",
+        fedBy:
+          "Orders appear here once one is raised, or once a planned order is firmed in planning.",
+
         list: WORKS_ORDER_LIST,
         createFn: "erp_raise_works_order",
       },
       {
         label: "Release",
         hint: "Releasing an order is what makes it work the floor can start.",
+        fedBy: "Orders appear here once one has been raised at the works order step.",
+
         list: WORKS_ORDER_LIST,
         recordArg: "p_works_order_id",
         actionFn: "erp_release_works_order",
@@ -2507,12 +2533,16 @@ export const QUALITY: ModuleDef = {
       {
         label: "Event",
         hint: "A complaint, a deviation, an excursion — anything that needs answering.",
+        fedBy: "Events appear here once one is raised, here or from the floor.",
+
         list: QUALITY_EVENT_LIST,
         createFn: "erp_raise_quality_event",
       },
       {
         label: "Inspect",
         hint: "The result against the specification, recorded against the batch.",
+        fedBy: "Inspections appear here once an event is raised or a receipt requires inspection.",
+
         list: QUALITY_EVENT_LIST,
         createFn: "erp_record_inspection_result",
       },
@@ -2900,6 +2930,8 @@ export const LOGISTICS: ModuleDef = {
       {
         label: "Delivery",
         hint: "Picked goods waiting to leave. A delivery is what a shipment carries.",
+        fedBy: "Deliveries appear here once a sales order has been picked and a delivery raised.",
+
         typeCode: "delivery",
         recordArg: "p_delivery_id",
         actionFn: "erp_confirm_delivery",
@@ -2908,6 +2940,8 @@ export const LOGISTICS: ModuleDef = {
       {
         label: "Carrier",
         hint: "Who is taking it, at what rate, against which service.",
+        fedBy: "Shipments appear here once deliveries are gathered into one at the delivery step.",
+
         list: SHIPMENT_LIST,
         recordArg: "p_shipment_id",
         actionFn: "erp_select_carrier",
@@ -2915,6 +2949,8 @@ export const LOGISTICS: ModuleDef = {
       {
         label: "Book",
         hint: "Booking a shipment is the commitment the carrier sees.",
+        fedBy: "Shipments appear here once a carrier has been chosen.",
+
         list: SHIPMENT_LIST,
         recordArg: "p_shipment_id",
         actionFn: "erp_book_shipment",

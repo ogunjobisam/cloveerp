@@ -324,12 +324,17 @@ function Procurement() {
             {
               label: "Requisition",
               hint: "Somebody asking for something, before anyone has committed to buying it.",
+              fedBy: "Requisitions appear here once somebody raises one.",
+
               typeCode: "requisition",
               recordArg: "p_document_id",
             },
             {
               label: "Purchase order",
               hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
+              fedBy:
+                "Orders appear here once a requisition is turned into one, or a planned order is firmed.",
+
               typeCode: "purchase_order",
               recordArg: "p_document_id",
               actionFn: "erp_set_order_behaviour",
@@ -337,6 +342,8 @@ function Procurement() {
             {
               label: "Goods receipt",
               hint: "What arrived. Posting a receipt is what puts stock on the shelf and raises the accrual.",
+              fedBy: "Receipts appear here once goods are received against a purchase order.",
+
               typeCode: "goods_receipt",
               recordArg: "p_receipt_id",
               actionFn: "erp_receive_against",
@@ -345,6 +352,8 @@ function Procurement() {
             {
               label: "Supplier bill",
               hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
+              fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
+
               typeCode: "purchase_invoice",
               recordArg: "p_invoice_id",
               actionFn: "erp_invoice_against",

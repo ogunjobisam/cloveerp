@@ -147,6 +147,8 @@ function Sales() {
             {
               label: "Quotation",
               hint: "A price offered, before the customer has committed to anything.",
+              fedBy: "Quotations appear here once one is raised for a customer.",
+
               typeCode: "quotation",
               recordArg: "p_document_id",
               createFn: "erp_resolve_price",
@@ -154,6 +156,9 @@ function Sales() {
             {
               label: "Sales order",
               hint: "The commitment. Credit and stock availability both decide whether it can proceed.",
+              fedBy:
+                "Orders appear here once a quotation is accepted, or an order is raised directly.",
+
               typeCode: "sales_order",
               recordArg: "p_document_id",
               createFn: "erp_promise_date",
@@ -166,6 +171,9 @@ function Sales() {
             {
               label: "Delivery",
               hint: "Goods leaving. Posting a delivery is what takes the stock off the shelf.",
+              fedBy:
+                "Deliveries appear here once stock has been reserved and picked against an order.",
+
               typeCode: "delivery",
               recordArg: "p_delivery_id",
               to: "/logistics",
@@ -174,6 +182,8 @@ function Sales() {
             {
               label: "Invoice",
               hint: "The bill, raised from a posted delivery so it says what actually went.",
+              fedBy: "Invoices appear here once a delivery is confirmed and invoiced.",
+
               typeCode: "sales_invoice",
               recordArg: "p_invoice_id",
               to: "/finance",
