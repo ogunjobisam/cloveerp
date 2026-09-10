@@ -95,9 +95,7 @@ function LeadTime({ row }: { row: ForecastRow }) {
       title={
         measured
           ? `${ui("Measured over")} ${row.measured_deliveries} ${ui("deliveries")}${
-              row.planned_lead_time_days
-                ? ` · ${ui("planned")} ${row.planned_lead_time_days}d`
-                : ""
+              row.planned_lead_time_days ? ` · ${ui("planned")} ${row.planned_lead_time_days}d` : ""
             }`
           : ui("No deliveries received yet, so the planned lead time is used")
       }
@@ -205,7 +203,6 @@ const measuredOver = (r: ForecastRow) =>
     : "—";
 
 const tone = (state: string) =>
-
   state === "out of stock" || state === "order now"
     ? "bad"
     : state === "below safety"
@@ -343,9 +340,7 @@ function StockForecast() {
                 <td className="py-2 pr-4 tabular-nums">
                   <LeadTime row={r} />
                 </td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {row_measured(r)}
-                </td>
+                <td className="py-2 pr-4 tabular-nums">{measuredOver(r)}</td>
                 <td className="py-2 pr-4 tabular-nums">
                   {r.planned_lead_time_days ? `${r.planned_lead_time_days}d` : "—"}
                 </td>
