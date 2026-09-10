@@ -113,8 +113,6 @@ export function DocumentPanel({
           </p>
         ) : type ? (
           <NewDocumentAction type={type} partyRole={partyRole} />
-
-
         ) : null}
       </header>
 
@@ -270,7 +268,10 @@ export function NewDocumentAction({
           .map((row) => ({
             item_id: row["item_id"],
             quantity: Number(row["quantity"] ?? 0),
-            unit_price_minor: toMinor(row["unit_price_minor"] ?? "", minorUnitsOf(currencies, "GBP")),
+            unit_price_minor: toMinor(
+              row["unit_price_minor"] ?? "",
+              minorUnitsOf(currencies, "GBP"),
+            ),
             description: row["description"] ?? null,
           })),
       })}

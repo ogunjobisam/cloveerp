@@ -245,7 +245,6 @@ export type RowColumn = {
   currency?: string;
 };
 
-
 /** The label a picker shows for one row of its source. */
 function optionLabel(row: Record<string, unknown>, keys: string[]): string {
   return keys
@@ -459,7 +458,13 @@ function RowCell({
   return (
     <input
       aria-label={column.label}
-      type={column.kind === "text" || column.kind === "select" ? "text" : column.kind === "date" ? "date" : "number"}
+      type={
+        column.kind === "text" || column.kind === "select"
+          ? "text"
+          : column.kind === "date"
+            ? "date"
+            : "number"
+      }
       inputMode={column.kind === "money" || column.kind === "number" ? "decimal" : undefined}
       step={column.kind === "money" ? "any" : undefined}
       value={value}
@@ -500,7 +505,10 @@ function RowsField({
   return (
     <div className="flex flex-col gap-2">
       {value.map((row, index) => (
-        <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2">
+        <div
+          key={index}
+          className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2"
+        >
           {field.columns.map((c) => (
             <div key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -540,7 +548,6 @@ function RowsField({
     </div>
   );
 }
-
 
 /**
  * An action behind a dialog.
@@ -626,7 +633,6 @@ export function ActionDialog({
   submitLabel = "Save",
   alsoSubmit,
   onDone,
-
 }: {
   trigger: ReactNode;
   title: string;
@@ -780,7 +786,6 @@ export function ActionDialog({
         e.preventDefault();
         action.mutate({});
       }}
-
     >
       {context ? (
         <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
@@ -829,7 +834,6 @@ export function ActionDialog({
                   onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
                   currencies={currencies}
                 />
-
               ) : f.kind === "choice" || f.kind === "site" ? (
                 <select
                   aria-label={ui(f.label)}
@@ -918,7 +922,6 @@ export function ActionDialog({
         >
           {action.isPending ? ui("Working…") : ui(submitLabel)}
         </ActionButton>
-
       </div>
     </form>
   );
