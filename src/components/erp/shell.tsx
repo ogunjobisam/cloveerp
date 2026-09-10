@@ -26,6 +26,8 @@ import { MainMenu } from "./menu";
 import { ServiceBanner } from "./service-banner";
 import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
+import { Breadcrumbs } from "./breadcrumbs";
+import { UnsavedChangesProvider } from "./unsaved";
 import { TOUCH } from "./page";
 import { UserMenu } from "./user-menu";
 
