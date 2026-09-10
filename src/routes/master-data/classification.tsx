@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickItem } from "../../components/erp/actions-bar";
+import { ActionBar, codeField, pickFrom, pickItem } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
@@ -177,8 +177,18 @@ function Classification() {
             permission: "master_data.write",
             fn: "erp_upsert_classification_axis",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              codeField("p_code", "Code", "FAMILY", {
+                fn: "erp_classification_axes",
+                value: "code",
+                label: ["code", "name"],
+              }),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Product family",
+              },
               {
                 kind: "choice",
                 name: "p_is_mandatory",
@@ -193,6 +203,7 @@ function Classification() {
                 kind: "text",
                 name: "p_item_classes",
                 label: "Only for product classes",
+                placeholder: "finished, raw",
                 hint: "Comma separated. Leave empty to apply to every product.",
               },
               { kind: "number", name: "p_seq", label: "Order" },
@@ -205,8 +216,14 @@ function Classification() {
             fn: "erp_upsert_classification_value",
             fields: [
               pickAxis(),
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              codeField("p_code", "Code", "WIDGET"),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Widgets",
+              },
               {
                 kind: "text",
                 name: "p_abbreviation",
@@ -254,8 +271,18 @@ function Classification() {
             permission: "master_data.write",
             fn: "erp_upsert_code_template",
             fields: [
-              { kind: "text", name: "p_code", label: "Code", required: true },
-              { kind: "text", name: "p_name", label: "Name", required: true },
+              codeField("p_code", "Code", "ITEM-STD", {
+                fn: "erp_code_templates",
+                value: "code",
+                label: ["code", "name"],
+              }),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Standard product code",
+              },
               {
                 kind: "text",
                 name: "p_segments",
@@ -263,7 +290,13 @@ function Classification() {
                 required: true,
                 hint: 'For example [{"kind":"axis","axis":"FAMILY","length":3},{"kind":"literal","text":"-"},{"kind":"sequence","length":4},{"kind":"check"}]',
               },
-              { kind: "text", name: "p_item_classes", label: "Only for product classes" },
+              {
+                kind: "text",
+                name: "p_item_classes",
+                label: "Only for product classes",
+                placeholder: "finished, raw",
+                hint: "Comma separated. Leave empty to apply to every product.",
+              },
               {
                 kind: "choice",
                 name: "p_casing",
@@ -281,16 +314,41 @@ function Classification() {
             label: "Create a classified product",
             permission: "master_data.write",
             fn: "erp_create_classified_item",
+            mapArgs: (values, picked) => ({
+              ...values,
+              p_classification: Object.fromEntries(
+                (picked?.rows["p_classification"] ?? [])
+                  .filter((row) => row["axis"] && row["value"])
+                  .map((row) => [row["axis"], row["value"]]),
+              ),
+            }),
             fields: [
               { ...pickTemplate(), required: true },
-              { kind: "text", name: "p_name", label: "Product name", required: true },
-              { kind: "text", name: "p_item_class", label: "Product class", required: true },
               {
                 kind: "text",
-                name: "p_classification",
-                label: "Classification (JSON)",
+                name: "p_name",
+                label: "Product name",
                 required: true,
-                hint: 'Axis code to value code, for example {"FAMILY":"WIDGET","GRADE":"A"}',
+                placeholder: "Oat milk 1L",
+              },
+              {
+                kind: "text",
+                name: "p_item_class",
+                label: "Product class",
+                required: true,
+                placeholder: "finished",
+                hint: "For example finished, raw, packaging or service.",
+              },
+              {
+                kind: "rows",
+                name: "p_classification",
+                label: "Classification",
+                addLabel: "Add an answer",
+                hint: "One row per axis: the axis code and the value code chosen for it.",
+                columns: [
+                  { name: "axis", label: "Axis code", kind: "text", placeholder: "FAMILY" },
+                  { name: "value", label: "Value code", kind: "text", placeholder: "WIDGET" },
+                ],
               },
               {
                 kind: "choice",
@@ -513,6 +571,8 @@ function Classification() {
                 name: "p_classification",
                 label: "Classification (JSON)",
                 required: true,
+                placeholder: '{"FAMILY":"WIDGET","GRADE":"A"}',
+                hint: "Axis code to value code.",
               },
             ],
           },
