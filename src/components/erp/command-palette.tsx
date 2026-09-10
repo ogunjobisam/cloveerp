@@ -51,7 +51,7 @@ function score(text: string, q: string): number {
   return t.includes(q) ? 1 : 0;
 }
 
-export function CommandPalette() {
+export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field" }) {
   const { session } = useErpSession();
   const { t, ui } = useT();
   const navigate = useNavigate();

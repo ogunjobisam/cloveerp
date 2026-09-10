@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Boxes, Clock, FileText, Gauge, PoundSterling } from "lucide-react";
 
 import { callErp } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
@@ -24,6 +25,22 @@ const TONE = {
   bad: "text-destructive",
 } as const;
 
+/**
+ * Which mark sits in the tile's amber disc.
+ *
+ * A figure reads faster with something to recognise beside it, and the label is
+ * the only thing the tile knows about itself, so the mark is chosen from the
+ * words: money, stock, time, documents, everything else.
+ */
+function markFor(label: string) {
+  const l = label.toLowerCase();
+  if (/(value|cost|cash|bank|payment|invoice|balance|price|£)/.test(l)) return PoundSterling;
+  if (/(stock|item|quantity|batch|bin|location)/.test(l)) return Boxes;
+  if (/(overdue|due|late|age|day)/.test(l)) return Clock;
+  if (/(order|document|receipt|note|request)/.test(l)) return FileText;
+  return Gauge;
+}
+
 export function KpiTile({ kpi }: { kpi: Kpi }) {
   const { ui } = useT();
   const { data, isPending, error } = useQuery({
@@ -33,35 +50,40 @@ export function KpiTile({ kpi }: { kpi: Kpi }) {
   });
 
   const result = data ? kpi.compute(data) : null;
+  const label = ui(kpi.label);
+  const Mark = markFor(label);
 
   return (
-    <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
-      <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {ui(kpi.label)}
-      </p>
+    <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 shadow-[var(--shadow-card)]">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+          <Mark className="size-4.5" aria-hidden="true" />
+        </span>
+        <p className="truncate text-sm font-medium">{label}</p>
+      </div>
 
       {isPending ? (
-        <div className="mt-2 h-7 w-16 animate-pulse rounded bg-muted" />
+        <div className="mt-3 h-8 w-24 animate-pulse rounded bg-muted" />
       ) : error ? (
         <>
-          <p className="mt-1 text-2xl font-semibold text-muted-foreground">—</p>
-          <p className="mt-0.5 truncate text-xs text-destructive">{friendlyError(error).title}</p>
+          <p className="mt-2 text-3xl font-semibold text-muted-foreground">—</p>
+          <p className="mt-1 truncate text-xs text-destructive">{friendlyError(error).title}</p>
         </>
       ) : result ? (
         <>
           <p
-            className={`mt-1 text-2xl font-semibold tabular-nums ${result.tone ? TONE[result.tone] : ""}`}
+            className={`mt-2 font-display text-3xl font-semibold tabular-nums ${result.tone ? TONE[result.tone] : ""}`}
           >
             {result.value}
           </p>
           {result.hint ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{ui(result.hint)}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{ui(result.hint)}</p>
           ) : null}
         </>
       ) : (
         <>
-          <p className="mt-1 text-2xl font-semibold text-muted-foreground">—</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Nothing recorded yet.</p>
+          <p className="mt-2 text-3xl font-semibold text-muted-foreground">—</p>
+          <p className="mt-1 text-xs text-muted-foreground">Nothing recorded yet.</p>
         </>
       )}
     </div>
