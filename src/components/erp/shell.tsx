@@ -135,6 +135,9 @@ function ScopeSelect({
 
 export type Scope = { entityId: string; siteId: string };
 
+/** The page's own column, beside the rail. */
+const MAIN_AREA = "mx-auto min-w-0 max-w-[100rem] px-4 py-6 outline-none md:px-6";
+
 /**
  * The switch between the two areas. Offered only when the account can open
  * something in both; an operative with no settings at all sees no switch and
@@ -145,15 +148,18 @@ function AreaSwitch({
   counts,
   onNavigate,
   className = "",
+  tone = "light",
 }: {
   area: Area;
   counts: Record<Area, number>;
   onNavigate?: () => void;
   className?: string;
+  tone?: "light" | "dark";
 }) {
   const { t } = useT();
   if (counts.settings === 0 || counts.work === 0) return null;
 
+  const dark = tone === "dark";
   const items: { area: Area; labelKey: string; label: string; icon: typeof Briefcase }[] = [
     { area: "work", labelKey: "nav.work", label: "Work", icon: Briefcase },
     { area: "settings", labelKey: "nav.settings", label: "Settings", icon: Settings2 },
@@ -161,24 +167,30 @@ function AreaSwitch({
 
   return (
     <nav aria-label="Areas" className={className}>
-      <ul className="inline-flex rounded-lg border border-border bg-muted/50 p-0.5">
+      <ul
+        className={`flex rounded-lg p-0.5 ${dark ? "bg-sidebar-active/70" : "border border-border bg-muted/50"}`}
+      >
         {items.map((item) => {
           const active = item.area === area;
           const Icon = item.icon;
           return (
-            <li key={item.area}>
+            <li key={item.area} className="flex-1">
               <Link
                 to={AREA_HOME[item.area]}
                 onClick={onNavigate}
                 aria-current={active ? "location" : undefined}
                 className={[
-                  "inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                  "inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
                   active
-                    ? "bg-card text-foreground shadow-[var(--shadow-card)]"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? dark
+                      ? "bg-sidebar-foreground/15 text-sidebar-foreground"
+                      : "bg-card text-foreground shadow-[var(--shadow-card)]"
+                    : dark
+                      ? "text-sidebar-muted hover:text-sidebar-foreground"
+                      : "text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                <Icon className="size-4" />
+                <Icon className="size-4" aria-hidden="true" />
                 {t(item.labelKey, item.label)}
               </Link>
             </li>
@@ -189,20 +201,31 @@ function AreaSwitch({
   );
 }
 
+/**
+ * The section list, in either of the two places it appears: the dark rail on a
+ * wide screen and the light drawer on a narrow one. Same list, same order, two
+ * palettes — `tone` is the only difference between them.
+ */
 function NavList({
   items,
   area,
   pathname,
   hidden,
   onNavigate,
+  tone = "light",
 }: {
   items: NavItem[];
   area: Area;
   pathname: string;
   hidden: number;
   onNavigate?: () => void;
+  tone?: "light" | "dark";
 }) {
   const { t, ui } = useT();
+  const dark = tone === "dark";
+
+  const groupLabel = dark ? "text-sidebar-muted/80" : "text-muted-foreground";
+  const quiet = dark ? "text-sidebar-muted" : "text-muted-foreground";
 
   return (
     <>
@@ -212,11 +235,13 @@ function NavList({
         return (
           <div key={group} className="mb-4 last:mb-0">
             {group === "home" ? null : (
-              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p
+                className={`mb-1 px-3 text-[11px] font-medium uppercase tracking-wide ${groupLabel}`}
+              >
                 {ui(GROUP_LABELS[group])}
               </p>
             )}
-            <ul className="flex flex-col gap-1">
+            <ul className="flex flex-col gap-0.5">
               {inGroup.map((item) => {
                 const active =
                   item.group === "home"
@@ -233,12 +258,17 @@ function NavList({
                         TOUCH,
                         "flex items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
                         active
-                          ? "bg-accent/10 font-medium text-foreground shadow-[inset_2px_0_0_var(--accent)]"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          ? dark
+                            ? "bg-sidebar-active font-medium text-sidebar-foreground shadow-[inset_3px_0_0_var(--accent)]"
+                            : "bg-accent/10 font-medium text-foreground shadow-[inset_3px_0_0_var(--accent)]"
+                          : dark
+                            ? "text-sidebar-muted hover:bg-sidebar-active/60 hover:text-sidebar-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       ].join(" ")}
                     >
                       <Icon
-                        className={`size-4 shrink-0 ${active ? "text-accent" : "text-muted-foreground"}`}
+                        className={`size-4 shrink-0 ${active ? "text-accent" : quiet}`}
+                        aria-hidden="true"
                       />
                       <span className="truncate">{t(item.labelKey, item.label)}</span>
                     </Link>
@@ -251,7 +281,7 @@ function NavList({
       })}
 
       {hidden > 0 ? (
-        <p className="mt-4 px-3 text-xs text-muted-foreground">
+        <p className={`mt-4 px-3 text-xs ${quiet}`}>
           {ui(
             "Some sections are not shown because this account does not hold the permissions they require.",
           )}
@@ -395,109 +425,120 @@ export function Shell({
         >
           Skip to content
         </a>
-        <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
-          <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:gap-4">
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Open menu"
-              aria-expanded={drawerOpen}
-              className={`${TOUCH} -ml-2 inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden`}
-            >
-              <Menu className="size-5" />
-            </button>
-
-            {/* The wordmark waits for lg. At md the mark alone says whose product
-              this is, and the width is better spent on whose data it is. */}
-            <Link to={AREA_HOME[area]} className={`${TOUCH} flex shrink-0 items-center gap-2`}>
-              <BrandMark size={28} />
-              <span className="hidden font-serif text-base font-semibold tracking-[-0.02em] lg:inline">
-                <span style={{ color: brand.ink }}>{brand.prefix}</span>
-                <span style={{ color: brand.total }}>{brand.suffix}</span>
-              </span>
-            </Link>
-
-            <span className="min-w-0 flex-1 truncate text-sm font-medium md:flex-none">
-              {session.tenant?.name ?? "No tenant"}
+        {/*
+          The rail is a dark slate panel running the full height of the window
+          from md up: the product's identity at the top, the sections it can
+          open in the middle, the area switch at the foot. Everything to do with
+          *this* account and *this* moment — search, scope, help, the person —
+          stays in the light bar across the top, so the two never compete.
+        */}
+        <aside
+          className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar text-sidebar-foreground md:flex"
+          aria-label="Product navigation"
+        >
+          <Link
+            to={AREA_HOME[area]}
+            className={`${TOUCH} flex shrink-0 items-center gap-2.5 px-5 py-4`}
+          >
+            <BrandMark size={28} />
+            <span className="truncate font-display text-lg font-semibold tracking-[-0.02em]">
+              <span className="text-sidebar-foreground">{brand.prefix}</span>
+              <span style={{ color: brand.total }}>{brand.suffix}</span>
             </span>
+          </Link>
 
-            <AreaSwitch area={area} counts={counts} className="hidden md:block" />
-
-            {/*
-            Search, the whole-product menu and screen help, as one object.
-            They were three loose buttons with the same weight as everything
-            else in the row, which is most of why this header read as busy:
-            nothing said which controls belonged together. They answer three
-            versions of one question — take me to a screen I can name, show me
-            what exists, tell me what this screen is for — so they are grouped
-            and unlabelled. The words were only carried at lg anyway.
-          */}
-            <div className="ml-auto flex shrink-0 items-center rounded-md border border-input">
-              <CommandPalette />
-              <MainMenu />
-              <ContextHelp />
-            </div>
-
-            <ScopeControl
-              session={session}
-              scope={scope}
-              onScopeChange={onScopeChange}
-              sites={sites}
-            />
-
-            <div className="hidden shrink-0 md:block">
-              <UserMenu session={session} onSignOut={onSignOut} />
-            </div>
-          </div>
-        </header>
-        {session.tenant_id ? <ServiceBanner /> : null}
-
-        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <SheetContent
-            side="left"
-            className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto"
-          >
-            <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
-
-            <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
-
-            <nav aria-label="Sections">
-              <NavList
-                items={visible}
-                area={area}
-                pathname={pathname}
-                hidden={hidden}
-                onNavigate={() => setDrawerOpen(false)}
-              />
-            </nav>
-
-            {/* The scope selects used to be down here too, which meant changing
-              where you were working started by opening the navigation. They are
-              in the header's own control now, at every width, so this drawer is
-              navigation and nothing else. */}
-
-            <div className="mt-auto border-t border-border pt-4">
-              <UserMenu
-                session={session}
-                onSignOut={onSignOut}
-                onNavigate={() => setDrawerOpen(false)}
-                className="w-full justify-start"
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-          {/* The rail exists from md up. Below it, the drawer is the navigation
-            and the content takes the full width. */}
-          <nav
-            className="sticky top-[4.5rem] hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 overflow-y-auto pr-1 md:block"
-            aria-label="Sections"
-          >
-            <NavList items={visible} area={area} pathname={pathname} hidden={hidden} />
+          <nav aria-label="Sections" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            <NavList items={visible} area={area} pathname={pathname} hidden={hidden} tone="dark" />
           </nav>
 
-          <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          <div className="shrink-0 px-3 py-3">
+            <AreaSwitch area={area} counts={counts} tone="dark" />
+          </div>
+        </aside>
+
+        <div className="md:pl-60">
+          <header className="sticky top-0 z-30 border-b border-border bg-card">
+            <div className="flex items-center gap-3 px-4 py-2.5 md:px-6 md:gap-4">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open menu"
+                aria-expanded={drawerOpen}
+                className={`${TOUCH} -ml-2 inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden`}
+              >
+                <Menu className="size-5" />
+              </button>
+
+              {/* On a narrow screen the rail is gone, so the mark comes back. */}
+              <Link to={AREA_HOME[area]} className="flex shrink-0 items-center md:hidden">
+                <BrandMark size={26} />
+              </Link>
+
+              {/* Search reads as a field here, which is what people look for. */}
+              <div className="hidden min-w-0 max-w-md flex-1 md:block">
+                <CommandPalette variant="field" />
+              </div>
+
+              <span className="min-w-0 flex-1 truncate text-sm font-medium md:hidden">
+                {session.tenant?.name ?? "No tenant"}
+              </span>
+
+              <div className="ml-auto flex shrink-0 items-center rounded-md border border-input md:hidden">
+                <CommandPalette />
+                <MainMenu />
+                <ContextHelp />
+              </div>
+
+              <div className="ml-auto hidden shrink-0 items-center rounded-md border border-input md:flex">
+                <MainMenu />
+                <ContextHelp />
+              </div>
+
+              <ScopeControl
+                session={session}
+                scope={scope}
+                onScopeChange={onScopeChange}
+                sites={sites}
+              />
+
+              <div className="hidden shrink-0 md:block">
+                <UserMenu session={session} onSignOut={onSignOut} />
+              </div>
+            </div>
+          </header>
+          {session.tenant_id ? <ServiceBanner /> : null}
+
+          <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <SheetContent
+              side="left"
+              className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto"
+            >
+              <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
+
+              <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
+
+              <nav aria-label="Sections">
+                <NavList
+                  items={visible}
+                  area={area}
+                  pathname={pathname}
+                  hidden={hidden}
+                  onNavigate={() => setDrawerOpen(false)}
+                />
+              </nav>
+
+              <div className="mt-auto border-t border-border pt-4">
+                <UserMenu
+                  session={session}
+                  onSignOut={onSignOut}
+                  onNavigate={() => setDrawerOpen(false)}
+                  className="w-full justify-start"
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <main id="main" tabIndex={-1} className={MAIN_AREA}>
             <Breadcrumbs />
             {children}
           </main>

@@ -51,6 +51,12 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
 
+  /* The side navigation: a dark slate panel, its own small palette. */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-ink);
+  --color-sidebar-muted: var(--sidebar-ink-muted);
+  --color-sidebar-active: var(--sidebar-active);
+
   --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -70,14 +76,19 @@
    * the amber accent at L 0.625 was 3.6:1 as text; and the input border
    * shared the hairline token at 1.4:1, so a field's edge was decoration.
    */
-  --surface: oklch(0.968 0.006 85);
-  --card-surface: oklch(0.993 0.003 85);
-  --soft: oklch(0.925 0.011 85);
-  --line: oklch(0.881 0.013 82);
-  --input-line: oklch(0.62 0.013 82);
-  --ink: oklch(0.355 0.011 70);
-  --ink-muted: oklch(0.5 0.011 70);
-  --brand: oklch(0.315 0.012 70);
+  --surface: oklch(0.968 0.005 250);
+  --card-surface: oklch(1 0 0);
+  --soft: oklch(0.94 0.008 250);
+  --line: oklch(0.895 0.009 250);
+  --input-line: oklch(0.62 0.013 250);
+  --ink: oklch(0.355 0.011 255);
+  --ink-muted: oklch(0.5 0.011 255);
+  --brand: oklch(0.29 0.02 255);
+
+  --sidebar: oklch(0.265 0.021 258);
+  --sidebar-ink: oklch(0.975 0.004 258);
+  --sidebar-ink-muted: oklch(0.78 0.012 258);
+  --sidebar-active: oklch(0.335 0.024 258);
   --accent: oklch(0.54 0.118 55);
   --accent-soft: oklch(0.54 0.118 55 / 0.12);
   --ok: oklch(0.52 0.09 155);
@@ -125,11 +136,6 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    /* A quiet paper wash: two amber/graphite blooms over the base surface. */
-    background-image:
-      radial-gradient(60rem 40rem at 8% -10%, var(--accent-soft), transparent 60%),
-      radial-gradient(50rem 32rem at 100% 0%, oklch(0.881 0.013 82 / 0.55), transparent 60%);
-    background-attachment: fixed;
   }
 
   h1,
@@ -141,6 +147,15 @@
     font-family: var(--font-display);
     letter-spacing: -0.015em;
   }
+}
+
+/* One step of a process strip: an arrow pointing at the next one. */
+@utility step-chevron {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%);
+}
+
+@utility step-chevron-first {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
 }
 
 /* A card that reads as paper rather than as an outline. */
