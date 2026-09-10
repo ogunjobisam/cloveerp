@@ -143,6 +143,8 @@ export type ModuleDef = {
   reports: Panel[];
   /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
   actions?: ActionSpec[];
+  /** The chain of steps this module moves work along, drawn across the top. */
+  flow?: FlowSpec;
   /** Reads that take arguments, so they cannot be a standing panel. */
   inquiries?: InquirySpec[];
 };
@@ -230,6 +232,38 @@ const zeroIsGood = (n: number, label: string) => ({
 });
 
 export const INVENTORY: ModuleDef = {
+  flow: {
+    title: "Stock, step by step",
+    note: "Goods arrive, are put away, are counted, and are corrected or handed on. Each box is where work waits; the button is what moves it.",
+    stages: [
+      {
+        label: "Goods in",
+        hint: "Receipts posted against a purchase order. Stock lands in goods-in before it has a home.",
+        typeCode: "goods_receipt",
+        actionFn: "erp_raise_putaway_tasks",
+      },
+      {
+        label: "Put away",
+        hint: "A task per pallet, from goods-in to the location it belongs in.",
+        actionFn: "erp_complete_warehouse_task",
+      },
+      {
+        label: "Count",
+        hint: "Counting a location, recording what was found, and posting the difference.",
+        actionFn: "erp_record_count",
+      },
+      {
+        label: "Correct",
+        hint: "What the count found, or damage: a write-off leaves a movement and a reason.",
+        actionFn: "erp_write_off_stock",
+      },
+      {
+        label: "Hand on",
+        hint: "Stock that leaves your custody without being sold — a keeper, a contract manufacturer.",
+        actionFn: "erp_hand_over_custody",
+      },
+    ],
+  },
   inquiries: [
     {
       label: "Stock policies",
@@ -921,6 +955,43 @@ export const INVENTORY: ModuleDef = {
 };
 
 export const FINANCE: ModuleDef = {
+  flow: {
+    title: "Money, step by step",
+    note: "Bill what was delivered, take the cash in, pay what is owed out, then close the period.",
+    stages: [
+      {
+        label: "Invoice",
+        hint: "The customer's bill, raised from a posted delivery so the quantities are what left.",
+        typeCode: "sales_invoice",
+        actionFn: "erp_invoice_from_delivery",
+      },
+      {
+        label: "Cash in",
+        hint: "Money received, applied against the invoices it settles.",
+        actionFn: "erp_apply_cash",
+      },
+      {
+        label: "Payment run",
+        hint: "What is due to suppliers, gathered into one proposal.",
+        actionFn: "erp_propose_payment_run",
+      },
+      {
+        label: "Approve",
+        hint: "A second pair of eyes. The proposer cannot approve their own run.",
+        actionFn: "erp_approve_payment_run",
+      },
+      {
+        label: "Pay",
+        hint: "Paying an approved run clears the payable and credits the bank.",
+        actionFn: "erp_pay_payment_run",
+      },
+      {
+        label: "Close",
+        hint: "Period close: the task list, then the close itself.",
+        actionFn: "erp_close_period",
+      },
+    ],
+  },
   inquiries: [
     {
       label: "Consolidated trial balance",
@@ -1582,6 +1653,38 @@ export const FINANCE: ModuleDef = {
 };
 
 export const PLANNING: ModuleDef = {
+  flow: {
+    title: "Plan, step by step",
+    note: "Forecast the demand, sign it off, run the requirements, then firm what the run suggests.",
+    stages: [
+      {
+        label: "Forecast",
+        hint: "Demand per period, from history and from what you know that history does not.",
+        actionFn: "erp_run_forecast",
+      },
+      {
+        label: "Sign off",
+        hint: "A forecast nobody has agreed to is a spreadsheet. Signing it off is what plans use it.",
+        actionFn: "erp_sign_off_forecast",
+      },
+      {
+        label: "Requirements run",
+        hint: "Demand against supply, netted, exploded through the bills of material.",
+        actionFn: "erp_run_planning",
+      },
+      {
+        label: "Planned order",
+        hint: "What the run says to buy or make, before anyone has committed to it.",
+        actionFn: "erp_firm_planned_order",
+      },
+      {
+        label: "Firm",
+        hint: "A firmed order becomes a purchase order or a works order and leaves planning.",
+        to: "/procurement",
+        toLabel: "Open purchasing",
+      },
+    ],
+  },
   inquiries: [
     {
       label: "Supply and demand",
@@ -1945,6 +2048,42 @@ export const PLANNING: ModuleDef = {
 };
 
 export const PRODUCTION: ModuleDef = {
+  flow: {
+    title: "Making, step by step",
+    note: "Raise the order, release it to the floor, issue the components, book the time, receive the output and close it.",
+    stages: [
+      {
+        label: "Works order",
+        hint: "What is to be made, how much, and by when.",
+        actionFn: "erp_raise_works_order",
+      },
+      {
+        label: "Release",
+        hint: "Releasing an order is what makes it work the floor can start.",
+        actionFn: "erp_release_works_order",
+      },
+      {
+        label: "Issue components",
+        hint: "Stock leaves the store and joins the order's cost.",
+        actionFn: "erp_issue_to_works_order",
+      },
+      {
+        label: "Book time",
+        hint: "Operation time against the route, so the variance means something.",
+        actionFn: "erp_book_operation_time",
+      },
+      {
+        label: "Receive output",
+        hint: "Finished quantity, and scrap, back into stock.",
+        actionFn: "erp_receive_works_order_output",
+      },
+      {
+        label: "Close",
+        hint: "Closing an order settles its variance and stops further booking.",
+        actionFn: "erp_close_works_order",
+      },
+    ],
+  },
   inquiries: [
     {
       label: "Component availability",
@@ -2222,6 +2361,37 @@ export const PRODUCTION: ModuleDef = {
 };
 
 export const QUALITY: ModuleDef = {
+  flow: {
+    title: "Quality, step by step",
+    note: "Something is found, it is inspected, it is dispositioned, and if it has left the building there is a recall.",
+    stages: [
+      {
+        label: "Event",
+        hint: "A complaint, a deviation, an excursion — anything that needs answering.",
+        actionFn: "erp_raise_quality_event",
+      },
+      {
+        label: "Inspect",
+        hint: "The result against the specification, recorded against the batch.",
+        actionFn: "erp_record_inspection_result",
+      },
+      {
+        label: "Disposition",
+        hint: "Release, reject, rework or scrap. This is the decision the audit reads.",
+        actionFn: "erp_disposition_inspection",
+      },
+      {
+        label: "Close",
+        hint: "An event closes when the disposition is made and the actions are logged.",
+        actionFn: "erp_close_quality_event",
+      },
+      {
+        label: "Recall",
+        hint: "Affected stock has shipped: raise a recall and log every action against the clock.",
+        actionFn: "erp_raise_recall",
+      },
+    ],
+  },
   inquiries: [
     {
       label: "Recall readiness",
@@ -2579,6 +2749,38 @@ export const QUALITY: ModuleDef = {
 };
 
 export const LOGISTICS: ModuleDef = {
+  flow: {
+    title: "Despatch, step by step",
+    note: "Plan the shipment, choose the carrier, book it, then confirm what arrived.",
+    stages: [
+      {
+        label: "Delivery",
+        hint: "Picked goods waiting to leave. A delivery is what a shipment carries.",
+        typeCode: "delivery",
+        actionFn: "erp_plan_shipment",
+      },
+      {
+        label: "Carrier",
+        hint: "Who is taking it, at what rate, against which service.",
+        actionFn: "erp_select_carrier",
+      },
+      {
+        label: "Book",
+        hint: "Booking a shipment is the commitment the carrier sees.",
+        actionFn: "erp_book_shipment",
+      },
+      {
+        label: "Confirm",
+        hint: "Delivered, or failed with a reason. Both are facts the customer will ask about.",
+        actionFn: "erp_confirm_delivery",
+      },
+      {
+        label: "Proof",
+        hint: "The signature or the photograph, attached to the shipment.",
+        actionFn: "erp_record_proof_of_delivery",
+      },
+    ],
+  },
   key: "logistics",
   path: "/logistics",
   titleKey: "module.logistics",
