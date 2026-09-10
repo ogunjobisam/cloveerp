@@ -616,7 +616,11 @@ export function ActionDialog({
       setLists({});
       setRows({});
       setOpen(false);
-      toast(outcomeOf(ui(title), result), context ? { description: context } : undefined);
+      toast(
+        outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn]),
+        context ? { description: context } : undefined,
+      );
+
       onDone?.(result);
     },
   });
