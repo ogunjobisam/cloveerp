@@ -384,6 +384,7 @@ export function Shell({
     // overflow-x-hidden is the backstop, not the fix: everything inside is
     // meant to fit, and this only stops one mistake becoming a page that
     // scrolls sideways.
+    <UnsavedChangesProvider>
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       {/* The first thing a keyboard reaches. Invisible until focused, so it
           costs sighted mouse users nothing and saves a keyboard user the
