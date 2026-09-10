@@ -116,6 +116,8 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
         </div>
       </header>
 
+      {def.flow ? <ProcessFlow flow={def.flow} actions={def.actions ?? []} /> : null}
+
       {tab === "dashboard" ? (
         <div className="flex min-w-0 flex-col gap-4">
           <KpiRow kpis={def.kpis} />
