@@ -193,7 +193,7 @@ export function NewDocumentAction({
   label,
 }: {
   type: DocType;
-  partyRole: string;
+  partyRole?: string;
   label?: string;
 }) {
   const { session, scope } = useErpSession();
@@ -215,7 +215,7 @@ export function NewDocumentAction({
           required: type.requires_party,
           options: {
             fn: "erp_parties",
-            args: { p_role_kind: partyRole },
+            args: { p_role_kind: partyRole ?? null },
             value: "party_id",
             label: ["code", "name"],
           },
@@ -294,7 +294,7 @@ export function NewDocumentForType({
   label,
 }: {
   typeCode: string;
-  partyRole: string;
+  partyRole?: string;
   label?: string;
 }) {
   const { data: types } = useQuery({
@@ -306,7 +306,7 @@ export function NewDocumentForType({
   return (
     <NewDocumentAction
       type={type}
-      partyRole={partyRole}
+      {...(partyRole ? { partyRole } : {})}
       {...(label ? { label } : {})}
     />
   );
