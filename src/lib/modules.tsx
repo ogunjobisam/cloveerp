@@ -3749,6 +3749,16 @@ export const EXTRA_TILES: TileDef[] = [
     group: "configure",
   },
   {
+    path: "/inventory/audit",
+    titleKey: "nav.inventory_audit",
+    title: "Stock audit",
+    blurb:
+      "Every location with its quantity and value, the last count against it, and the variance between the two.",
+    permission: "inventory.read",
+    group: "assure",
+  },
+
+  {
     path: "/finance/account-determination",
     titleKey: "nav.finance_account_determination",
     title: "Account determination",
