@@ -3736,6 +3736,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "configure",
   },
   {
+    path: "/inventory/warehouse",
+    titleKey: "nav.inventory_warehouse",
+    title: "Warehouse layout",
+    blurb:
+      "Zones, aisles and bins, what each holds, and the storage rules put-away, replenishment and picking read.",
+    permission: "inventory.adjust",
+    group: "configure",
+  },
+  {
     path: "/finance/account-determination",
     titleKey: "nav.finance_account_determination",
     title: "Account determination",
