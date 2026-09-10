@@ -538,8 +538,9 @@ export function ActionDialog({
   });
 
   function buildArgs(): Record<string, unknown> {
-    if (mapArgs) return mapArgs(values, { lists, rows });
+    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}) };
     const args: Record<string, unknown> = {};
+
     for (const f of fields) {
       if (f.kind === "multi") {
         const chosen = lists[f.name] ?? [];
