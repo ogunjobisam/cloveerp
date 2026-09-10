@@ -2531,12 +2531,16 @@ export const QUALITY: ModuleDef = {
       {
         label: "Event",
         hint: "A complaint, a deviation, an excursion — anything that needs answering.",
+        fedBy: "Events appear here once one is raised, here or from the floor.",
+
         list: QUALITY_EVENT_LIST,
         createFn: "erp_raise_quality_event",
       },
       {
         label: "Inspect",
         hint: "The result against the specification, recorded against the batch.",
+        fedBy: "Inspections appear here once an event is raised or a receipt requires inspection.",
+
         list: QUALITY_EVENT_LIST,
         createFn: "erp_record_inspection_result",
       },
@@ -2924,6 +2928,8 @@ export const LOGISTICS: ModuleDef = {
       {
         label: "Delivery",
         hint: "Picked goods waiting to leave. A delivery is what a shipment carries.",
+        fedBy: "Deliveries appear here once a sales order has been picked and a delivery raised.",
+
         typeCode: "delivery",
         recordArg: "p_delivery_id",
         actionFn: "erp_confirm_delivery",
@@ -2932,6 +2938,8 @@ export const LOGISTICS: ModuleDef = {
       {
         label: "Carrier",
         hint: "Who is taking it, at what rate, against which service.",
+        fedBy: "Shipments appear here once deliveries are gathered into one at the delivery step.",
+
         list: SHIPMENT_LIST,
         recordArg: "p_shipment_id",
         actionFn: "erp_select_carrier",
@@ -2939,6 +2947,8 @@ export const LOGISTICS: ModuleDef = {
       {
         label: "Book",
         hint: "Booking a shipment is the commitment the carrier sees.",
+        fedBy: "Shipments appear here once a carrier has been chosen.",
+
         list: SHIPMENT_LIST,
         recordArg: "p_shipment_id",
         actionFn: "erp_book_shipment",
