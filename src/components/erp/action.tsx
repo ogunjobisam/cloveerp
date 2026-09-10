@@ -825,7 +825,9 @@ export function ActionDialog({
                   field={f}
                   value={rows[f.name] ?? []}
                   onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
+                  currencies={currencies}
                 />
+
               ) : f.kind === "choice" || f.kind === "site" ? (
                 <select
                   aria-label={ui(f.label)}
