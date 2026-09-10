@@ -483,6 +483,7 @@ export function ActionDialog({
   fn,
   fields,
   mapArgs,
+  prefill,
   invalidates,
   submitLabel = "Save",
   onDone,
@@ -499,10 +500,19 @@ export function ActionDialog({
     values: Record<string, string>,
     picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
   ) => Record<string, unknown>;
+  /**
+   * Arguments the surrounding screen has already answered.
+   *
+   * A record chosen in a list is not a question worth asking again inside the
+   * dialog, so a field of the same name is not rendered and the value is sent
+   * regardless of what the form built.
+   */
+  prefill?: Record<string, unknown>;
   invalidates: string[];
   submitLabel?: string;
   onDone?: (result: unknown) => void;
 }) {
+
   const { session } = useErpSession();
   const { ui } = useT();
   const queryClient = useQueryClient();
