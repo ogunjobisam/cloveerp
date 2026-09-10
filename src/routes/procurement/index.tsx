@@ -58,6 +58,22 @@ export const Route = createFileRoute("/procurement/")({
  */
 const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
+    label: "Convert to a purchase order",
+    title: "Turn this requisition into a purchase order",
+    description:
+      "An approved requisition becomes an order to a supplier. Every line still outstanding is carried across, and the order remembers the requisition it came from — so a part order can be finished later.",
+    permission: "procurement.order",
+    fn: "erp_convert_document",
+    fields: [
+      pickParty("provider", "p_party_id", "Supplier", true),
+      pickSite("p_site_id", "Site the goods are for", false),
+    ],
+    emptyNote:
+      "Only an approved requisition converts. Submit it and have it approved at this step first.",
+    invalidates: ["erp_documents", "erp_commitments"],
+    submitLabel: "Create the purchase order",
+  },
+  {
     label: "Bill a receipt",
     description:
       "The supplier's bill, raised from a posted goods receipt: the quantities and the prices are what arrived, not what somebody typed.",
