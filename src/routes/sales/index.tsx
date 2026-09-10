@@ -42,91 +42,91 @@ export const Route = createFileRoute("/sales/")({
  * database.
  */
 const SALES_ACTIONS: ActionSpec[] = [
-          {
-            label: "Resolve a price",
-            description: "What would this customer pay for this product today?",
-            permission: "sales.price",
-            fn: "erp_resolve_price",
-            fields: [
-              pickItem(),
-              pickParty("customer"),
-              { kind: "number", name: "p_quantity", label: "Quantity" },
-            ],
-          },
-          {
-            label: "Promise a date",
-            permission: "sales.order",
-            fn: "erp_promise_date",
-            fields: [
-              pickItem(),
-              pickSite(),
-              { kind: "number", name: "p_quantity", label: "Quantity", required: true },
-            ],
-          },
-          {
-            label: "Reserve stock for a line",
-            permission: "sales.order",
-            fn: "erp_reserve_for_line",
-            fields: [
-              pickLine("sales_order", "p_document_line_id", "Order line"),
-              {
-                kind: "text",
-                name: "p_policy_code",
-                label: "Policy code",
-                placeholder: "FEFO",
-                hint: "Optional. Leave empty to use the product's usual rule.",
-              },
-            ],
-          },
-          {
-            label: "Release a credit hold",
-            permission: "sales.credit_release",
-            fn: "erp_release_credit_hold",
-            fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "status"],
-                "p_document_id",
-                "Document",
-                { p_limit: 100 },
-              ),
-              reason("p_reason", "Reason", true),
-            ],
-          },
-          {
-            label: "Raise a customer return",
-            permission: "sales.order",
-            fn: "erp_raise_customer_return",
-            fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "status"],
-                "p_original_document_id",
-                "Original document",
-                { p_limit: 100 },
-              ),
-              {
-                kind: "combo",
-                name: "p_reason_code",
-                label: "Reason code",
-                required: true,
-                options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
-              },
-              reason("p_reason", "Reason", true),
-              {
-                kind: "choice",
-                name: "p_outcome",
-                label: "Outcome",
-                choices: [
-                  { value: "credit", label: "Credit" },
-                  { value: "replace", label: "Replace" },
-                  { value: "repair", label: "Repair" },
-                ],
-              },
-            ],
-          },
+  {
+    label: "Resolve a price",
+    description: "What would this customer pay for this product today?",
+    permission: "sales.price",
+    fn: "erp_resolve_price",
+    fields: [
+      pickItem(),
+      pickParty("customer"),
+      { kind: "number", name: "p_quantity", label: "Quantity" },
+    ],
+  },
+  {
+    label: "Promise a date",
+    permission: "sales.order",
+    fn: "erp_promise_date",
+    fields: [
+      pickItem(),
+      pickSite(),
+      { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+    ],
+  },
+  {
+    label: "Reserve stock for a line",
+    permission: "sales.order",
+    fn: "erp_reserve_for_line",
+    fields: [
+      pickLine("sales_order", "p_document_line_id", "Order line"),
+      {
+        kind: "text",
+        name: "p_policy_code",
+        label: "Policy code",
+        placeholder: "FEFO",
+        hint: "Optional. Leave empty to use the product's usual rule.",
+      },
+    ],
+  },
+  {
+    label: "Release a credit hold",
+    permission: "sales.credit_release",
+    fn: "erp_release_credit_hold",
+    fields: [
+      pickFrom(
+        "erp_documents",
+        "document_id",
+        ["document_number", "status"],
+        "p_document_id",
+        "Document",
+        { p_limit: 100 },
+      ),
+      reason("p_reason", "Reason", true),
+    ],
+  },
+  {
+    label: "Raise a customer return",
+    permission: "sales.order",
+    fn: "erp_raise_customer_return",
+    fields: [
+      pickFrom(
+        "erp_documents",
+        "document_id",
+        ["document_number", "status"],
+        "p_original_document_id",
+        "Original document",
+        { p_limit: 100 },
+      ),
+      {
+        kind: "combo",
+        name: "p_reason_code",
+        label: "Reason code",
+        required: true,
+        options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
+      },
+      reason("p_reason", "Reason", true),
+      {
+        kind: "choice",
+        name: "p_outcome",
+        label: "Outcome",
+        choices: [
+          { value: "credit", label: "Credit" },
+          { value: "replace", label: "Replace" },
+          { value: "repair", label: "Repair" },
+        ],
+      },
+    ],
+  },
 ];
 
 function Sales() {

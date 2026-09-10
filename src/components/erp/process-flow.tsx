@@ -56,9 +56,7 @@ function useStageCount(stage: Stage) {
   const { data, error } = useQuery({
     queryKey: [source?.fn ?? "no-count", source?.args ?? {}],
     queryFn: () =>
-      source
-        ? callErp<unknown[]>(source.fn, source.args ?? {})
-        : Promise.resolve([] as unknown[]),
+      source ? callErp<unknown[]>(source.fn, source.args ?? {}) : Promise.resolve([] as unknown[]),
     enabled: Boolean(source),
     refetchInterval: (q) => (q.state.error ? false : 60_000),
   });
