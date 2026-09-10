@@ -18,6 +18,7 @@ import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "./currencies";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
+import { useUnsavedGuard } from "./unsaved";
 
 /**
  * The write surface.
