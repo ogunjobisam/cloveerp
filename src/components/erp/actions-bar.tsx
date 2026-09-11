@@ -23,7 +23,16 @@ export type ActionSpec = {
   description?: string;
   permission?: string;
   fn: string;
+  /**
+   * How a stage names this verb, when the function name is not unique.
+   *
+   * Submit, approve and reject are all `erp_transition_document` with a
+   * different transition code, so the function name cannot identify which of
+   * them a step carries. A code does.
+   */
+  code?: string;
   fields?: Field[];
+
   /** Query keys — the `fn` names of the reads this action makes stale. */
   invalidates?: string[];
   /**
