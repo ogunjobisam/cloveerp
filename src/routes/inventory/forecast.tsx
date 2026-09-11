@@ -331,60 +331,95 @@ function StockForecast() {
         )}
       >
         {(rows) => (
-          <Table
-            columns={[
-              ui("Site"),
-              ui("Product"),
-              ui("On hand"),
-              ui("On order"),
-              ui("Ordered by customers"),
-              ui("Used per day"),
-              ui("Lead time"),
-              ui("Reorder point"),
-              ui("Days of cover"),
-              ui("Order by"),
-              ui("Order quantity"),
-              ui("Supplier"),
-              ui("State"),
-              ui("Order"),
-            ]}
-          >
-            {rows.map((r) => (
-              <tr
-                key={`${r.site_id}:${r.item_id}`}
-                className="border-b border-border/60 last:border-0"
-              >
-                <td className="py-2 pr-4 font-mono text-xs">{r.site_code}</td>
-                <td className="py-2 pr-4">
-                  <span className="font-mono text-xs">{r.item_code}</span>
-                  {r.item_name ? (
-                    <span className="ml-2 text-muted-foreground">{r.item_name}</span>
-                  ) : null}
-                </td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.on_hand)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.on_order)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.demand)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.usage_per_day, 3)}</td>
-                <td className="py-2 pr-4 tabular-nums">
-                  <LeadTime row={r} />
-                </td>
+          <>
+            <StateSummary rows={rows} />
+            <Table
+              columns={[
+                ui("Site"),
+                ui("Product"),
+                ui("On hand"),
+                ui("On order"),
+                ui("Demand"),
+                ui("Used / day"),
+                ui("Lead time"),
+                ui("Reorder pt"),
+                ui("Cover"),
+                ui("Order by"),
+                ui("Order qty"),
+                ui("Supplier"),
+                ui("State"),
+                "",
+              ]}
+            >
+              {rows.map((r) => (
+                <tr
+                  key={`${r.site_id}:${r.item_id}`}
+                  className="border-b border-border/60 last:border-0"
+                >
+                  <td
+                    className={`whitespace-nowrap border-l-4 py-2 pl-3 pr-4 font-mono text-xs ${rowAccent(r.state)}`}
+                  >
+                    {r.site_code}
+                  </td>
+                  <td className="max-w-[18rem] whitespace-nowrap py-2 pr-4">
+                    <span className="font-mono text-xs">{r.item_code}</span>
+                    {r.item_name ? (
+                      <span className="ml-2 inline-block max-w-[12rem] truncate align-bottom text-muted-foreground">
+                        {r.item_name}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className={`whitespace-nowrap py-2 pr-4 tabular-nums ${onHandCls(r)}`}>
+                    {qty(r.on_hand)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-sky-700 dark:text-sky-400">
+                    {qty(r.on_order)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-violet-700 dark:text-violet-400">
+                    {qty(r.demand)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                    {qty(r.usage_per_day, 3)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                    <LeadTime row={r} />
+                  </td>
 
-                <td className="py-2 pr-4 tabular-nums">{qty(r.reorder_point)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.days_cover, 1)}</td>
-                <td className="py-2 pr-4">{day(r.reorder_by)}</td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {r.suggest_quantity > 0 ? qty(r.suggest_quantity) : "—"}
-                </td>
-                <td className="py-2 pr-4">{r.supplier ?? "—"}</td>
-                <td className="py-2 pr-4">
-                  <Pill tone={tone(r.state)}>{ui(r.state)}</Pill>
-                </td>
-                <td className="py-2 pr-4">
-                  <OrderAction row={r} type={poType} />
-                </td>
-              </tr>
-            ))}
-          </Table>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                    {qty(r.reorder_point)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs ${coverCls(r.days_cover)}`}
+                    >
+                      {r.days_cover === null ? "—" : `${qty(r.days_cover, 1)}d`}
+                    </span>
+                  </td>
+                  <td className={`whitespace-nowrap py-2 pr-4 ${orderByCls(r.reorder_by)}`}>
+                    {day(r.reorder_by)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                    {r.suggest_quantity > 0 ? (
+                      <span className="font-semibold text-primary">
+                        {qty(r.suggest_quantity)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="max-w-[12rem] truncate whitespace-nowrap py-2 pr-4">
+                    {r.supplier ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4">
+                    <Pill tone={tone(r.state)}>{ui(r.state)}</Pill>
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4">
+                    <OrderAction row={r} type={poType} />
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </>
         )}
       </DataPanel>
 
