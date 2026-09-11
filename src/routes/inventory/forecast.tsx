@@ -211,6 +211,95 @@ const tone = (state: string) =>
         ? "ok"
         : "muted";
 
+/**
+ * The urgency of a row, painted down its left edge.
+ *
+ * A buyer scans the screen top to bottom; the stripe lets the eye find the
+ * lines that are already late before a single figure has been read.
+ */
+const rowAccent = (state: string) =>
+  state === "out of stock" || state === "order now"
+    ? "border-l-rose-500"
+    : state === "below safety"
+      ? "border-l-amber-500"
+      : state === "covered"
+        ? "border-l-emerald-500"
+        : "border-l-border";
+
+/** The balance, coloured by whether there is anything to count. */
+const onHandCls = (r: ForecastRow) =>
+  r.on_hand <= 0
+    ? "font-semibold text-rose-600 dark:text-rose-400"
+    : r.state === "below safety"
+      ? "font-semibold text-amber-600 dark:text-amber-400"
+      : "font-semibold text-emerald-600 dark:text-emerald-400";
+
+/** Days of cover as a coloured scale: a week is red, a month amber, beyond it green. */
+const coverCls = (days: number | null) =>
+  days === null
+    ? "bg-muted text-muted-foreground"
+    : days < 7
+      ? "bg-rose-500/10 font-semibold text-rose-700 dark:text-rose-400"
+      : days < 30
+        ? "bg-amber-500/10 font-semibold text-amber-700 dark:text-amber-400"
+        : "bg-emerald-500/10 font-semibold text-emerald-700 dark:text-emerald-400";
+
+/** A reorder date that has already passed is late, and says so in red. */
+const orderByCls = (iso: string | null) =>
+  iso && new Date(iso) < new Date()
+    ? "font-semibold text-rose-600 dark:text-rose-400"
+    : "text-foreground";
+
+/**
+ * The headline counts, one coloured tile per state.
+ *
+ * The table answers "which product"; the strip above it answers "how much
+ * trouble am I in" before a row has been read.
+ */
+function StateSummary({ rows }: { rows: ForecastRow[] }) {
+  const { ui } = useT();
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.state, (counts.get(r.state) ?? 0) + 1);
+  const order = ["out of stock", "order now", "below safety", "covered"];
+  const states = [...order.filter((s) => counts.has(s)), ...[...counts.keys()].filter((s) => !order.includes(s))];
+  if (!states.length) return null;
+  return (
+    <div className="mb-4 flex flex-wrap gap-2">
+      {states.map((s) => (
+        <div
+          key={s}
+          className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 ${
+            s === "out of stock" || s === "order now"
+              ? "bg-rose-500/10"
+              : s === "below safety"
+                ? "bg-amber-500/10"
+                : s === "covered"
+                  ? "bg-emerald-500/10"
+                  : "bg-muted/60"
+          }`}
+        >
+          <span
+            className={`text-xl font-bold tabular-nums ${
+              s === "out of stock" || s === "order now"
+                ? "text-rose-600 dark:text-rose-400"
+                : s === "below safety"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : s === "covered"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground"
+            }`}
+          >
+            {counts.get(s)}
+          </span>
+          <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+            {ui(s)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StockForecast() {
   const { ui } = useT();
 
