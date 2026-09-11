@@ -448,6 +448,7 @@ function StageRecord({
                 action={a}
                 prefill={prefill}
                 permitted={permitted(a)}
+                settled={settled}
                 {...(summary ? { context: summary } : {})}
               />
             ))
