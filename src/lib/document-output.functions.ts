@@ -23,7 +23,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { renderSalesInvoicePdf, sha256Hex, type InvoiceContract } from "./pdf/invoice-pdf";
+import {
+  renderSalesInvoicePdf,
+  sha256Blob,
+  sha256Hex,
+  type InvoiceContract,
+} from "./pdf/invoice-pdf";
 
 const BUCKET = "document-output";
 const SIGNED_URL_SECONDS = 300;
@@ -178,14 +183,24 @@ export const documentOutput = createServerFn({ method: "POST" })
       // the stored object before it will accept the number as issued.
       const stored = await archive.download(path);
       if (stored.error || !stored.data) refuse("The stored file could not be read back.");
-      const storedHash = await sha256Hex(new Uint8Array(await stored.data.arrayBuffer()));
+      const storedHash = await sha256Blob(stored.data);
 
       const completed = await rpc("erp_complete_document_issue", {
         p_document_issue_id: issueId,
         p_storage_path: path,
         p_content_checksum: storedHash,
       });
-      if (completed.error) refuse(completed.error.message);
+      if (completed.error) {
+        await archive.remove([path]);
+        const failed = await rpc("erp_fail_document_issue", {
+          p_document_issue_id: issueId,
+          p_reason: `Rendering completed but archive verification failed: ${completed.error.message}`,
+        });
+        if (failed.error) {
+          refuse(`${completed.error.message}; the spent number could not be marked void: ${failed.error.message}`);
+        }
+        refuse(completed.error.message);
+      }
 
       const signed = await archive.createSignedUrl(path, SIGNED_URL_SECONDS);
       return {
@@ -219,7 +234,7 @@ export const documentOutput = createServerFn({ method: "POST" })
         "CLOVEERP_DOCUMENT_OBJECT_MISSING: the issued file is not in the archive, so it cannot be reprinted.",
       );
     }
-    const hash = await sha256Hex(new Uint8Array(await stored.data.arrayBuffer()));
+    const hash = await sha256Blob(stored.data);
     if (hash !== reprint.data?.content_checksum) {
       refuse(
         "CLOVEERP_DOCUMENT_CHECKSUM_MISMATCH: the archived file no longer matches the document that was issued.",

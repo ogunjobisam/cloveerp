@@ -5,7 +5,13 @@
  */
 import { expect, test } from "bun:test";
 import { PDFDocument } from "pdf-lib";
-import { renderSalesInvoicePdf, sha256Hex, type InvoiceContract } from "./invoice-pdf.ts";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import {
+  renderSalesInvoicePdf,
+  sha256Blob,
+  sha256Hex,
+  type InvoiceContract,
+} from "./invoice-pdf.ts";
 
 function contract(lineCount: number, customerName: string): InvoiceContract {
   const lines = Array.from({ length: lineCount }, (_, i) => ({
@@ -51,9 +57,17 @@ function contract(lineCount: number, customerName: string): InvoiceContract {
   };
 }
 
-async function pageTexts(bytes: Uint8Array): Promise<number> {
-  const doc = await PDFDocument.load(bytes as unknown as ArrayBuffer);
-  return doc.getPageCount();
+async function pageTexts(bytes: Uint8Array): Promise<string[]> {
+  const task = getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false });
+  const doc = await task.promise;
+  const pages: string[] = [];
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item) => ("str" in item ? item.str : "")).join(" "));
+  }
+  await doc.destroy();
+  return pages;
 }
 
 test("a two hundred line invoice paginates and closes with its summary and totals", async () => {
@@ -61,27 +75,32 @@ test("a two hundred line invoice paginates and closes with its summary and total
   const pages = await pageTexts(bytes);
   // 200 lines cannot fit one page, and the reserved closing block means the
   // last page carries the summary and the totals together.
-  expect(pages).toBeGreaterThan(3);
-  const raw = Buffer.from(bytes).toString("latin1");
-  expect(raw.startsWith("%PDF-")).toBe(true);
-  expect(bytes.byteLength).toBeGreaterThan(20_000);
+  expect(pages.length).toBeGreaterThan(3);
+  expect(pages.at(-1)).toContain("VAT summary");
+  expect(pages.at(-1)).toContain("VAT total in sterling");
+  expect(pages.at(-1)).toContain("Total");
+  expect(pages.slice(0, -1).join(" ")).not.toContain("VAT summary");
 });
 
 test("the sterling sign and a non-ASCII customer name embed without loss", async () => {
   // pdf-lib's standard faces throw on these code points; an embedded subset
   // Noto Sans through fontkit is what makes this pass.
   const bytes = await renderSalesInvoicePdf(contract(3, "Sociéte Générale Ünïcode Ø Ltd"));
-  expect(bytes.byteLength).toBeGreaterThan(5_000);
+  const extracted = (await pageTexts(bytes)).join(" ");
+  expect(extracted).toContain("Sociéte Générale Ünïcode Ø Ltd");
+  expect(extracted).toContain("£12.50");
 });
 
 test("page N of M is written once the final count is known", async () => {
   const one = await renderSalesInvoicePdf(contract(2, "Buyer Ltd"));
   const many = await renderSalesInvoicePdf(contract(200, "Buyer Ltd"));
-  expect(await pageTexts(one)).toBe(1);
-  expect(await pageTexts(many)).toBeGreaterThan(3);
-  // Rendering is deterministic apart from the document id pdf-lib stamps, so
-  // the checksum of a render is the checksum of its bytes and nothing else.
-  expect((await sha256Hex(one)).length).toBe(64);
+  const onePages = await pageTexts(one);
+  const manyPages = await pageTexts(many);
+  expect(onePages).toHaveLength(1);
+  expect(onePages[0]).toContain("Page 1 of 1");
+  expect(manyPages.length).toBeGreaterThan(3);
+  expect(manyPages[0]).toContain(`Page 1 of ${manyPages.length}`);
+  expect(manyPages.at(-1)).toContain(`Page ${manyPages.length} of ${manyPages.length}`);
 });
 
 test("a preview carries a watermark and differs from the issued bytes", async () => {
@@ -89,4 +108,10 @@ test("a preview carries a watermark and differs from the issued bytes", async ()
   const preview = await renderSalesInvoicePdf(c, { watermark: "PREVIEW" });
   const issued = await renderSalesInvoicePdf(c, { issuedNumber: "SI-000123" });
   expect(await sha256Hex(preview)).not.toBe(await sha256Hex(issued));
+});
+
+test("downloaded PDF bytes round-trip through Blob hashing unchanged", async () => {
+  const bytes = await renderSalesInvoicePdf(contract(4, "Buyer Ltd"));
+  const downloaded = new Blob([bytes], { type: "application/pdf" });
+  expect(await sha256Blob(downloaded)).toBe(await sha256Hex(bytes));
 });

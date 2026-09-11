@@ -48,6 +48,7 @@ async function main() {
           report.emailClaimed +
           report.webhooksClaimed +
           report.tenantsPurged +
+          report.previewsPurged +
           report.reclaimed.commands +
           report.reclaimed.runs +
           report.reclaimed.messages +

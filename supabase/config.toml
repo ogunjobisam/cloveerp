@@ -1,5 +1,12 @@
 project_id = "xpzffnnhnhcqyjqcueja"
 
+# Private exact-byte archive for issued documents and short-lived previews.
+# Browser roles have no object policy; server-side code mints five-minute URLs.
+[storage.buckets.document-output]
+public = false
+file_size_limit = "20MiB"
+allowed_mime_types = ["application/pdf"]
+
 # The dispatch worker's cron entrypoint.
 #
 # It exists in the repository either way; what this block changes is that it is
