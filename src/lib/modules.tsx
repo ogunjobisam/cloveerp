@@ -2484,6 +2484,23 @@ export const PRODUCTION: ModuleDef = {
   },
   worklists: [
     {
+      title: "Bills of materials",
+      description: "What each made product is made of, version by version.",
+      fn: "erp_boms",
+      empty:
+        "No bills of materials yet. Define one with the action above before raising a works order for a made product.",
+      rowKey: (r, i) => String(r["bom_id"] ?? i),
+      columns: [
+        { header: "Bill", cell: "code" },
+        { header: "Product", cell: "item" },
+        { header: "Site", cell: "site" },
+        { header: "Components", cell: "components" },
+        { header: "Makes", cell: "output_quantity", numeric: true },
+        date("Effective", "effective_from"),
+        pill("status"),
+      ],
+    },
+    {
       title: "Works orders",
       description: "Everything raised, with progress against the ordered quantity.",
       fn: "erp_works_orders",
