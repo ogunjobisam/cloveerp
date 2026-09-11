@@ -343,7 +343,14 @@ function Statements() {
             </p>
           ) : (
             <Table
-              columns={[ui("Account"), ui("Name"), ui("Type"), ui("Debit"), ui("Credit"), ui("Balance")]}
+              columns={[
+                ui("Account"),
+                ui("Name"),
+                ui("Type"),
+                ui("Debit"),
+                ui("Credit"),
+                ui("Balance"),
+              ]}
             >
               {(trial.data ?? []).map((r) => (
                 <tr key={r.account} className="border-b border-border/60 last:border-0">
