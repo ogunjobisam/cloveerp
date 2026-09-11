@@ -101,7 +101,13 @@ function LeadTime({ row }: { row: ForecastRow }) {
       }
     >
       {row.lead_time_days}d
-      <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <span
+        className={`ml-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+          measured
+            ? "bg-sky-500/10 text-sky-700 dark:text-sky-400"
+            : "bg-muted text-muted-foreground"
+        }`}
+      >
         {measured ? ui("actual") : ui("planned")}
       </span>
     </span>
