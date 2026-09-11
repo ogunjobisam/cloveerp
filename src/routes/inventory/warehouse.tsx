@@ -2,10 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   ActionBar,
+  pickCountClass,
   pickFrom,
   pickItem,
+  pickItemClass,
   pickLocation,
   pickSite,
+  pickUom,
   codeField,
 } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
@@ -164,19 +167,10 @@ function WarehouseLayout() {
                 hint: "Optional. Put-away skips a place that is already full.",
               },
               {
-                kind: "text",
-                name: "p_capacity_uom",
-                label: "Capacity unit",
-                placeholder: "EA",
+                ...pickUom("p_capacity_uom", "Capacity unit", false),
                 hint: "Optional. What the capacity above is counted in.",
               },
-              {
-                kind: "text",
-                name: "p_count_class",
-                label: "Count class",
-                placeholder: "A",
-                hint: "Optional. How often this place is cycle counted.",
-              },
+              pickCountClass(),
             ],
             invalidates,
           },
@@ -209,19 +203,10 @@ function WarehouseLayout() {
               },
               { kind: "number", name: "p_capacity_quantity", label: "Holds at most" },
               {
-                kind: "text",
-                name: "p_capacity_uom",
-                label: "Capacity unit",
-                placeholder: "EA",
+                ...pickUom("p_capacity_uom", "Capacity unit", false),
                 hint: "What the amount above is counted in.",
               },
-              {
-                kind: "text",
-                name: "p_count_class",
-                label: "Count class",
-                placeholder: "A",
-                hint: "How often this place is cycle counted.",
-              },
+              pickCountClass(),
             ],
             invalidates,
           },
