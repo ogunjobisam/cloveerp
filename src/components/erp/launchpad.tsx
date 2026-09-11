@@ -19,7 +19,7 @@ import { useErpSession } from "./session-context";
  * The two launchpads.
  *
  * Work lists the operating flow — plan, source, make, move, sell, settle —
- * and the records it runs on. Settings lists the four sections that shape the
+ * and the records it runs on. Settings lists the sections that shape the
  * organisation rather than run it. Neither shows the other's tiles: a person
  * opening Work to receive a delivery is not offered the audit log on the way,
  * and the one link between the areas is a single, clearly labelled card.
@@ -163,7 +163,7 @@ export function Launchpad() {
             <span className="block text-sm font-semibold">{ui("Settings")}</span>
             <span className="block text-xs text-muted-foreground">
               {ui(
-                "Organisation, configuration, operations and assurance live in their own area, out of the way of the work.",
+                "People, system setup, products and places, finance setup, connections and compliance — in their own area, out of the way of the work.",
               )}
             </span>
           </span>
@@ -174,7 +174,7 @@ export function Launchpad() {
   );
 }
 
-/** The Settings launchpad: four sections, every tile with its blurb. */
+/** The Settings launchpad: each section, every tile with its blurb. */
 export function SettingsLaunchpad() {
   const { inGroup } = useTiles();
   const groups = SETTINGS_GROUPS.filter((g) => inGroup(g).length > 0);
