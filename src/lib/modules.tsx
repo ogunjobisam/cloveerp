@@ -2352,13 +2352,7 @@ export const PRODUCTION: ModuleDef = {
       permission: "production.order",
       fn: "erp_withdraw_bom",
       fields: [
-        pickFrom(
-          "erp_boms",
-          "bom_id",
-          ["code", "item", "status"],
-          "p_bom_id",
-          "Bill of materials",
-        ),
+        pickFrom("erp_boms", "bom_id", ["code", "item", "status"], "p_bom_id", "Bill of materials"),
       ],
       invalidates: ["erp_boms"],
     },
