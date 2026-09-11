@@ -744,7 +744,7 @@ export function ActionDialog({
     for (const f of fields) {
       if (f.kind === "multi") {
         const chosen = lists[f.name] ?? [];
-        if (chosen.length > 0) args[f.name] = chosen;
+        if (chosen.length > 0) args[f.name] = f.join ? chosen.join(f.join) : chosen;
         continue;
       }
       if (f.kind === "rows") {
