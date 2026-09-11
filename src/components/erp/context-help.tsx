@@ -53,7 +53,8 @@ function routineLabel(fn: string): string {
   if (!routineLabels) {
     const index = new Map<string, string>();
     for (const mod of MODULES) {
-      for (const action of mod.actions ?? []) if (!index.has(action.fn)) index.set(action.fn, action.label);
+      for (const action of mod.actions ?? [])
+        if (!index.has(action.fn)) index.set(action.fn, action.label);
       for (const inquiry of mod.inquiries ?? [])
         if (!index.has(inquiry.fn)) index.set(inquiry.fn, inquiry.label);
     }
