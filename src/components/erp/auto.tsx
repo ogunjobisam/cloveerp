@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
 
