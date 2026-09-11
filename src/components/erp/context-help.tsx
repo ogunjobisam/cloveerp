@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { friendlyError } from "@/lib/errors";
 
 import { callErp } from "../../lib/erp";
+import { routineLabel } from "../../lib/friendly";
 import { allTiles } from "../../lib/modules";
 import { TOUCH } from "./page";
 
