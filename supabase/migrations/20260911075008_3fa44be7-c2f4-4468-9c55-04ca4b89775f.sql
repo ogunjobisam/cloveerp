@@ -1,31 +1,5 @@
 set lock_timeout = '30s';
 
--- =============================================================================
--- Exposure, not new behaviour: API keys over the doors that already exist, and
--- outbound webhooks over the events that already happen.
---
--- Three rules this migration keeps, because they are the ones an exposure layer
--- usually breaks:
---
---   1. There is no parallel permission model. A key's scopes are permission
---      codes from erp_ref.permission, and a scope is only ever effective while
---      the service principal behind the key still holds that permission by
---      grant. Revoke the grant and the key narrows in the same instant.
---
---   2. Tenant scope is decided here, from the key, never from the caller. A key
---      resolves to exactly one organisation and one principal.
---
---   3. A write is replayable. The idempotency key and a checksum of the request
---      are stored with the response that was actually returned, so a retry
---      returns the original result and a different body under the same key is
---      refused rather than silently applied twice.
---
--- Managing keys, subscriptions and deliveries is gated on the permission that
--- already owns this ground: administration.integrate.
--- =============================================================================
-
--- ── The key ──────────────────────────────────────────────────────────────────
-
 create table if not exists erp.api_key (
   id              uuid primary key default gen_random_uuid(),
   tenant_id       uuid not null references erp.tenant (id) on delete cascade,
@@ -63,8 +37,6 @@ comment on table erp.api_key is
 create index if not exists api_key_live_idx
   on erp.api_key (tenant_id, app_user_id) where revoked_at is null;
 
--- ── The replay ledger ────────────────────────────────────────────────────────
-
 create table if not exists erp.api_request (
   id                uuid primary key default gen_random_uuid(),
   tenant_id         uuid not null references erp.tenant (id) on delete cascade,
@@ -96,8 +68,6 @@ comment on table erp.api_request is
   'returned is kept with the checksum of the request that produced it, so a '
   'retry returns the original and a changed body under the same idempotency '
   'key is refused.';
-
--- ── The subscription ─────────────────────────────────────────────────────────
 
 create table if not exists erp.webhook_subscription (
   id              uuid primary key default gen_random_uuid(),
@@ -177,8 +147,6 @@ select erp_meta.register_table('erp', 'webhook_subscription', 'tenant_scoped',
 select erp_meta.register_table('erp', 'webhook_delivery', 'tenant_scoped',
   'Evidence of every webhook attempt, retry and replay.');
 
--- ── Scopes never exceed grants ───────────────────────────────────────────────
-
 create or replace function erp.api_key_effective_scopes(p_api_key_id uuid)
 returns text[]
 language sql
@@ -202,8 +170,6 @@ $$;
 comment on function erp.api_key_effective_scopes is
   'What a key can actually do right now: its own scopes, narrowed to the '
   'permissions its service principal still holds by grant.';
-
--- ── Issuing and revoking ─────────────────────────────────────────────────────
 
 create or replace function erp.issue_api_key(
   p_app_user_id uuid,
@@ -272,7 +238,6 @@ begin
           p_expires_at)
   returning id into v_id;
 
-  -- The only time the secret exists outside the caller's hands.
   return jsonb_build_object(
     'api_key_id', v_id,
     'prefix', v_prefix,
@@ -314,8 +279,6 @@ end $$;
 comment on function erp.revoke_api_key is
   'Ends a key. Revocation is immediate and permanent; a replacement is a new '
   'key with a new secret.';
-
--- ── Authenticating a call ────────────────────────────────────────────────────
 
 create or replace function erp.authenticate_api_key(p_presented text)
 returns jsonb
@@ -363,8 +326,6 @@ values ('erp', 'authenticate_api_key',
   'hide the single row it exists to find. Matches one prefix and one digest, '
   'stamps last used, and returns identity and live scopes only.')
 on conflict (schema_name, function_name) do update set rationale = excluded.rationale;
-
--- ── Idempotent writes ────────────────────────────────────────────────────────
 
 create or replace function erp.api_replay_lookup(
   p_api_key_id uuid, p_idempotency_key text, p_request_checksum text)
@@ -445,8 +406,6 @@ insert into erp_meta.security_definer_allowance (schema_name, function_name, rat
   ('erp', 'api_replay_complete',
    'Closes the replay ledger row it was handed, writing nothing else.')
 on conflict (schema_name, function_name) do update set rationale = excluded.rationale;
-
--- ── Subscriptions ────────────────────────────────────────────────────────────
 
 create or replace function erp.create_webhook_subscription(
   p_name text, p_event_pattern text, p_target_url text)
@@ -563,8 +522,6 @@ end $$;
 comment on function erp.replay_webhook_delivery is
   'Sends the same frozen payload again as a new attempt that names the one it '
   'repeats. Nothing about the original is altered.';
-
--- ── The public doors ─────────────────────────────────────────────────────────
 
 create or replace function public.erp_api_keys()
 returns jsonb
@@ -749,8 +706,6 @@ insert into erp_meta.public_write_allowance (function_name, gate, rationale) val
 on conflict (function_name) do update set
   gate = excluded.gate, rationale = excluded.rationale;
 
--- ── The assertion ────────────────────────────────────────────────────────────
-
 create or replace function erp.assert_api_exposure_sound()
 returns text
 language plpgsql
@@ -758,7 +713,6 @@ set search_path = ''
 as $$
 declare v_bad text;
 begin
-  -- 1. Scopes come from the one permission catalogue.
   select string_agg(distinct s, ', ') into v_bad
     from erp.api_key k cross join lateral unnest(k.scopes) s
    where not exists (select 1 from erp_ref.permission p where p.code = s);
@@ -766,7 +720,6 @@ begin
     raise exception 'ERPWARE_API_SCOPE_UNKNOWN: %', v_bad using errcode = 'P0001';
   end if;
 
-  -- 2. No effective scope exceeds what the principal is granted.
   select string_agg(format('%s:%s', k.key_prefix, s), ', ') into v_bad
     from erp.api_key k
     cross join lateral unnest(erp.api_key_effective_scopes(k.id)) s
@@ -777,7 +730,6 @@ begin
     raise exception 'ERPWARE_API_SCOPE_EXCEEDS_GRANT: %', v_bad using errcode = 'P0001';
   end if;
 
-  -- 3. A key, its principal and its ledger stay inside one organisation.
   if exists (
     select 1 from erp.api_key k
       join erp.app_user u on u.id = k.app_user_id
@@ -794,7 +746,6 @@ begin
       using errcode = 'P0001';
   end if;
 
-  -- 4. Row security is on for all four tables.
   select string_agg(c.relname, ', ') into v_bad
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'erp'
@@ -804,7 +755,6 @@ begin
     raise exception 'ERPWARE_API_RLS_MISSING: %', v_bad using errcode = 'P0001';
   end if;
 
-  -- 5. No public door returns secret material or a digest.
   select string_agg(p.proname, ', ') into v_bad
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
@@ -814,7 +764,6 @@ begin
     raise exception 'ERPWARE_API_SECRET_EXPOSED: %', v_bad using errcode = 'P0001';
   end if;
 
-  -- 6. A write cannot be replayed into two results.
   if not exists (
     select 1 from pg_constraint
      where conname = 'api_request_idempotent'
@@ -823,7 +772,6 @@ begin
       using errcode = 'P0001';
   end if;
 
-  -- 7. Every subscription is an https address, and a delivery keeps its payload.
   if exists (select 1 from erp.webhook_subscription where target_url !~ '^https://')
   or exists (select 1 from erp.webhook_delivery where payload is null) then
     raise exception 'ERPWARE_WEBHOOK_UNSAFE: a subscription is not https, or a delivery lost its payload'
