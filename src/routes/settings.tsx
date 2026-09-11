@@ -34,7 +34,7 @@ function Settings() {
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader title={t("nav.settings", "Settings")}>
         {ui(
-          "How this organisation is set up, in the order it is set up: the people and their permissions, the configuration the modules run on, the plumbing underneath, and the evidence that all of it holds.",
+          "How this organisation is set up, in the order you would set it up. Start at the top and work down; nothing here is needed to get the day's work done.",
         )}{" "}
         {session.tenant?.name ?? ""}
       </PageHeader>
