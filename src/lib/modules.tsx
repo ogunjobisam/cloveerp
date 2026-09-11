@@ -2307,6 +2307,62 @@ export const PRODUCTION: ModuleDef = {
   group: "make",
   actions: [
     {
+      label: "Define a bill of materials",
+      permission: "production.order",
+      fn: "erp_create_bom",
+      fields: [
+        pickItem(),
+        pickSite("p_site_id", "Site — leave blank for every site", false),
+        {
+          kind: "text",
+          name: "p_name",
+          label: "Name",
+          placeholder: "Standard recipe",
+          hint: "Optional. Useful when a product has more than one way of being made.",
+        },
+        {
+          kind: "number",
+          name: "p_output_quantity",
+          label: "One run makes",
+          hint: "The quantity of the product one run of this bill produces. Usually 1.",
+        },
+        { kind: "date", name: "p_effective_from", label: "Effective from" },
+        {
+          kind: "rows",
+          name: "p_lines",
+          label: "Components",
+          addLabel: "Add a component",
+          hint: "Everything one run is made of, with the quantity of each it uses.",
+          columns: [
+            {
+              name: "component_item_id",
+              label: "Component",
+              kind: "select",
+              options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+            },
+            { name: "quantity", label: "Quantity", kind: "number", placeholder: "2" },
+            { name: "scrap_factor", label: "Scrap factor", kind: "number", placeholder: "0" },
+          ],
+        },
+      ],
+      invalidates: ["erp_boms", "erp_works_orders"],
+    },
+    {
+      label: "Withdraw a bill of materials",
+      permission: "production.order",
+      fn: "erp_withdraw_bom",
+      fields: [
+        pickFrom(
+          "erp_boms",
+          "bom_id",
+          ["code", "item", "status"],
+          "p_bom_id",
+          "Bill of materials",
+        ),
+      ],
+      invalidates: ["erp_boms"],
+    },
+    {
       label: "Raise a works order",
       permission: "production.order",
       fn: "erp_raise_works_order",
