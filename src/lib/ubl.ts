@@ -1,7 +1,6 @@
 export const PEPPOL_BILLING_CUSTOMIZATION_ID =
   "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
-export const PEPPOL_BILLING_PROFILE_ID =
-  "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
+export const PEPPOL_BILLING_PROFILE_ID = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
 
 export type ElectronicAddress = {
   value: string;
@@ -135,7 +134,10 @@ function validateParty(role: "seller" | "buyer", party: UblParty): UblValidation
 }
 
 export function validateBillingContract(contract: BillingContract): UblValidationFailure[] {
-  const failures = [...validateParty("seller", contract.seller), ...validateParty("buyer", contract.buyer)];
+  const failures = [
+    ...validateParty("seller", contract.seller),
+    ...validateParty("buyer", contract.buyer),
+  ];
   if (contract.lines.length === 0) {
     failures.push({
       code: "CLOVEERP_PEPPOL_NO_LINES",
@@ -147,7 +149,8 @@ export function validateBillingContract(contract: BillingContract): UblValidatio
   if (!contract.buyerReference?.trim() && !contract.orderReference?.trim()) {
     failures.push({
       code: "CLOVEERP_PEPPOL_BUYER_REFERENCE_REQUIRED",
-      message: "Add a buyer reference or purchase order reference before issuing this electronic document.",
+      message:
+        "Add a buyer reference or purchase order reference before issuing this electronic document.",
       field: "buyerReference",
       fixPath: "/documents",
     });
@@ -204,7 +207,8 @@ function party(name: "AccountingSupplierParty" | "AccountingCustomerParty", valu
 
 export function serializeBillingContract(contract: BillingContract): string {
   const failures = validateBillingContract(contract);
-  if (failures.length > 0) throw new Error(failures[0]?.message ?? "Electronic document validation failed.");
+  if (failures.length > 0)
+    throw new Error(failures[0]?.message ?? "Electronic document validation failed.");
   const credit = contract.kind === "credit_note";
   const root = credit ? "CreditNote" : "Invoice";
   const namespace = `urn:oasis:names:specification:ubl:schema:xsd:${root}-2`;
@@ -219,10 +223,16 @@ export function serializeBillingContract(contract: BillingContract): string {
     ? `<cac:PaymentMeans>${element("cbc:PaymentMeansCode", contract.payment.meansCode)}<cac:PayeeFinancialAccount>${element("cbc:ID", contract.payment.accountId)}${element("cbc:Name", contract.payment.accountName)}${element("cbc:FinancialInstitutionBranch", contract.payment.providerId)}</cac:PayeeFinancialAccount></cac:PaymentMeans>${element("cbc:Note", contract.payment.terms)}`
     : "";
   const taxes = contract.taxes
-    .map((tax) => `<cac:TaxSubtotal>${element("cbc:TaxableAmount", tax.taxableAmount, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:TaxAmount", tax.taxAmount, ` currencyID="${xml(contract.currency)}"`)}<cac:TaxCategory>${element("cbc:ID", tax.categoryCode)}${element("cbc:Percent", tax.rate)}${element("cbc:TaxExemptionReason", tax.exemptionReason)}<cac:TaxScheme>${element("cbc:ID", "VAT")}</cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal>`)
+    .map(
+      (tax) =>
+        `<cac:TaxSubtotal>${element("cbc:TaxableAmount", tax.taxableAmount, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:TaxAmount", tax.taxAmount, ` currencyID="${xml(contract.currency)}"`)}<cac:TaxCategory>${element("cbc:ID", tax.categoryCode)}${element("cbc:Percent", tax.rate)}${element("cbc:TaxExemptionReason", tax.exemptionReason)}<cac:TaxScheme>${element("cbc:ID", "VAT")}</cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal>`,
+    )
     .join("");
   const lines = contract.lines
-    .map((line) => `<${lineElement}>${element("cbc:ID", line.id)}${element(quantityElement, line.quantity, ` unitCode="${xml(line.unitCode)}"`)}${element("cbc:LineExtensionAmount", line.netAmount, ` currencyID="${xml(contract.currency)}"`)}<cac:Item>${element("cbc:Description", line.description)}${element("cbc:Name", line.name)}${line.itemId ? `<cac:StandardItemIdentification>${element("cbc:ID", line.itemId, line.itemSchemeId ? ` schemeID="${xml(line.itemSchemeId)}"` : "")}</cac:StandardItemIdentification>` : ""}<cac:ClassifiedTaxCategory>${element("cbc:ID", line.taxCategoryCode)}${element("cbc:Percent", line.taxRate)}<cac:TaxScheme>${element("cbc:ID", "VAT")}</cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item><cac:Price>${element("cbc:PriceAmount", line.price, ` currencyID="${xml(contract.currency)}"`)}</cac:Price></${lineElement}>`)
+    .map(
+      (line) =>
+        `<${lineElement}>${element("cbc:ID", line.id)}${element(quantityElement, line.quantity, ` unitCode="${xml(line.unitCode)}"`)}${element("cbc:LineExtensionAmount", line.netAmount, ` currencyID="${xml(contract.currency)}"`)}<cac:Item>${element("cbc:Description", line.description)}${element("cbc:Name", line.name)}${line.itemId ? `<cac:StandardItemIdentification>${element("cbc:ID", line.itemId, line.itemSchemeId ? ` schemeID="${xml(line.itemSchemeId)}"` : "")}</cac:StandardItemIdentification>` : ""}<cac:ClassifiedTaxCategory>${element("cbc:ID", line.taxCategoryCode)}${element("cbc:Percent", line.taxRate)}<cac:TaxScheme>${element("cbc:ID", "VAT")}</cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item><cac:Price>${element("cbc:PriceAmount", line.price, ` currencyID="${xml(contract.currency)}"`)}</cac:Price></${lineElement}>`,
+    )
     .join("");
   return `<?xml version="1.0" encoding="UTF-8"?><${root} xmlns="${namespace}" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">${element("cbc:CustomizationID", PEPPOL_BILLING_CUSTOMIZATION_ID)}${element("cbc:ProfileID", PEPPOL_BILLING_PROFILE_ID)}${element("cbc:ID", contract.number)}${element("cbc:IssueDate", contract.issueDate)}${element("cbc:DueDate", contract.dueDate)}${element(typeElement, typeCode)}${element("cbc:DocumentCurrencyCode", contract.currency)}${element("cbc:BuyerReference", contract.buyerReference)}${contract.orderReference ? `<cac:OrderReference>${element("cbc:ID", contract.orderReference)}</cac:OrderReference>` : ""}${preceding}${party("AccountingSupplierParty", contract.seller)}${party("AccountingCustomerParty", contract.buyer)}${payment}<cac:TaxTotal>${element("cbc:TaxAmount", contract.taxes.reduce((sum, tax) => sum + Number(tax.taxAmount), 0).toFixed(2), ` currencyID="${xml(contract.currency)}"`)}${taxes}</cac:TaxTotal><cac:LegalMonetaryTotal>${element("cbc:LineExtensionAmount", contract.totals.lineExtension, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:TaxExclusiveAmount", contract.totals.taxExclusive, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:TaxInclusiveAmount", contract.totals.taxInclusive, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:AllowanceTotalAmount", contract.totals.allowanceTotal, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:ChargeTotalAmount", contract.totals.chargeTotal, ` currencyID="${xml(contract.currency)}"`)}${element("cbc:PayableAmount", contract.totals.payable, ` currencyID="${xml(contract.currency)}"`)}</cac:LegalMonetaryTotal>${lines}</${root}>`;
 }
