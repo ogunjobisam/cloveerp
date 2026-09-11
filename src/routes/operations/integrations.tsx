@@ -108,11 +108,14 @@ function Integrations() {
             Webhooks are signed and keep a complete retry history.
           </p>
           <p className="mt-4 text-xs text-muted-foreground">
-            Key and subscription controls appear here after the corresponding database release is
-            deployed.
+            Keys, subscriptions and the delivery log are managed further down this page.
           </p>
         </div>
       </section>
+
+      <section className="min-w-0">
+        <ApiAccess />
+
 
       <ActionBar
         title="Replaying a message"
