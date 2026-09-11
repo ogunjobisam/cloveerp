@@ -56,7 +56,155 @@ export const Route = createFileRoute("/procurement/")({
  * opposite party role — which is either evidence for the thesis or a very
  * short file, depending on how generous you are feeling.
  */
+const pickRequisition = (): ReturnType<typeof pickFrom> =>
+  pickFrom(
+    "erp_documents",
+    "document_id",
+    ["document_number", "state_name", "party"],
+    "p_document_id",
+    "Requisition",
+    { p_type_code: "requisition", p_limit: 200 },
+  );
+
 const PROCUREMENT_ACTIONS: ActionSpec[] = [
+  {
+    code: "requisition_submit",
+    label: "Submit for approval",
+    title: "Send this requisition for approval",
+    description:
+      "A draft requisition goes to whoever approves at its value. Nothing is committed to a supplier until it comes back approved.",
+    permission: "procurement.requisition",
+    fn: "erp_transition_document",
+    fields: [pickRequisition()],
+    mapArgs: (v) => ({ p_document_id: v["p_document_id"], p_transition_code: "submit" }),
+    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    submitLabel: "Submit for approval",
+  },
+  {
+    label: "Work out who approves",
+    title: "Route this requisition for approval",
+    description:
+      "Stamps the chain the value and the department resolve to, and raises the approval tasks that go with it.",
+    permission: "procurement.requisition",
+    fn: "erp_stamp_document_approval",
+    fields: [pickRequisition()],
+    invalidates: ["erp_document_approval_chain", "erp_my_approvals", "erp_approval_routing_stamps"],
+    submitLabel: "Route it",
+  },
+  {
+    code: "requisition_approve",
+    label: "Approve",
+    title: "Approve this requisition",
+    description:
+      "An approved requisition is the one thing that converts into a purchase order. Approving does not order anything by itself.",
+    permission: "procurement.approve",
+    fn: "erp_transition_document",
+    fields: [
+      pickRequisition(),
+      {
+        kind: "text",
+        name: "p_reason",
+        label: "Note",
+        placeholder: "Within budget for the quarter",
+        hint: "Optional. Kept on the approval record.",
+      },
+    ],
+    mapArgs: (v) => ({
+      p_document_id: v["p_document_id"],
+      p_transition_code: "approve",
+      ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
+    }),
+    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    submitLabel: "Approve it",
+  },
+  {
+    code: "requisition_reject",
+    label: "Send back",
+    title: "Send this requisition back",
+    description: "The requisition returns to draft, with the reason on the record.",
+    permission: "procurement.approve",
+    fn: "erp_transition_document",
+    fields: [
+      pickRequisition(),
+      {
+        kind: "text",
+        name: "p_reason",
+        label: "Reason",
+        required: true,
+        placeholder: "Three quotes needed at this value",
+        hint: "What the requester has to change before submitting again.",
+      },
+    ],
+    mapArgs: (v) => ({
+      p_document_id: v["p_document_id"],
+      p_transition_code: "reject",
+      p_reason: v["p_reason"],
+    }),
+    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    submitLabel: "Send it back",
+  },
+  {
+    label: "Decide an approval waiting on me",
+    description: "The approval tasks assigned to you or to a role you hold, decided one at a time.",
+    permission: "procurement.approve",
+    fn: "erp_decide_approval",
+    fields: [
+      pickFrom(
+        "erp_my_approvals",
+        "task_id",
+        ["object_type", "requested_by", "requested_at"],
+        "p_task_id",
+        "Approval waiting on me",
+      ),
+      {
+        kind: "choice",
+        name: "p_approve",
+        label: "Decision",
+        required: true,
+        choices: [
+          { value: "true", label: "Approve" },
+          { value: "false", label: "Refuse" },
+        ],
+      },
+      { kind: "text", name: "p_comment", label: "Comment", placeholder: "Agreed at this value" },
+    ],
+    mapArgs: (v) => ({
+      p_task_id: v["p_task_id"],
+      p_approve: v["p_approve"] === "true",
+      ...(v["p_comment"] ? { p_comment: v["p_comment"] } : {}),
+    }),
+    invalidates: ["erp_my_approvals", "erp_documents", "erp_document_approval_chain"],
+    submitLabel: "Record the decision",
+  },
+  {
+    label: "Raise putaway tasks",
+    description:
+      "Ask the warehouse to move what is standing in goods-in. A task is raised for each pallet in a receiving location at that site, sending it to the place the storage rules say the product belongs.",
+    permission: "inventory.adjust",
+    fn: "erp_raise_putaway_tasks",
+    fields: [pickSite()],
+    invalidates: ["erp_warehouse_tasks", "erp_goods_in"],
+    submitLabel: "Raise the tasks",
+  },
+  {
+    label: "Complete a putaway",
+    description: "The pallet has been moved. Completing the task is what moves the stock.",
+    permission: "inventory.adjust",
+    fn: "erp_complete_warehouse_task",
+    fields: [
+      pickFrom(
+        "erp_warehouse_tasks",
+        "task_id",
+        ["kind", "item", "from_location", "to_location"],
+        "p_task_id",
+        "Task",
+      ),
+      { kind: "number", name: "p_quantity", label: "Quantity", hint: "Blank means all of it." },
+    ],
+    invalidates: ["erp_warehouse_tasks", "erp_goods_in", "erp_stock_health"],
+    submitLabel: "Complete the task",
+  },
+
   {
     label: "Convert to a purchase order",
     title: "Turn this requisition into a purchase order",
@@ -339,19 +487,41 @@ function Procurement() {
           stages: [
             {
               label: "Requisition",
-              hint: "Somebody asking for something, before anyone has committed to buying it.",
+              hint: "Somebody asking for something, before anyone has committed to buying it. Submitting it starts the approval.",
               fedBy: "Requisitions appear here once somebody raises one.",
 
               typeCode: "requisition",
               partyRole: "provider",
               recordArg: "p_document_id",
-              actionFn: "erp_convert_document",
+              actionFn: "requisition_submit",
+              actionFns: ["erp_stamp_document_approval"],
+            },
+            {
+              label: "Approval",
+              hint: "Who has to agree, at this value. An approved requisition — and only an approved one — becomes a purchase order.",
+              fedBy:
+                "Requisitions appear here once they are raised; submit one at the step before to send it for approval.",
+
+              list: {
+                fn: "erp_documents",
+                args: { p_type_code: "requisition", p_limit: 200 },
+                id: "document_id",
+                title: ["document_number"],
+                subtitle: ["document_date", "party"],
+                status: "state_name",
+                noun: "requisition",
+                nounPlural: "requisitions",
+              },
+              recordArg: "p_document_id",
+              actionFn: "requisition_approve",
+              actionFns: ["requisition_reject", "erp_convert_document"],
+              createFn: "erp_decide_approval",
             },
             {
               label: "Purchase order",
               hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
               fedBy:
-                "Orders appear here once a requisition is turned into one, or a planned order is firmed.",
+                "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
 
               typeCode: "purchase_order",
               partyRole: "provider",
@@ -360,7 +530,7 @@ function Procurement() {
             },
             {
               label: "Goods receipt",
-              hint: "What arrived. Posting a receipt is what puts stock on the shelf and raises the accrual.",
+              hint: "What arrived. Posting a receipt is what puts stock into goods-in and raises the accrual.",
               fedBy: "Receipts appear here once goods are received against a purchase order.",
 
               typeCode: "goods_receipt",
@@ -369,6 +539,44 @@ function Procurement() {
               actionFn: "erp_receive_against",
               actionFns: ["erp_bill_from_receipt"],
             },
+            {
+              label: "Goods in",
+              hint: "What is standing in the receiving area, with the place each product belongs. Nothing here is on a shelf yet.",
+              fedBy:
+                "Stock appears here once a goods receipt is posted, because a receipt lands in the site's receiving area.",
+
+              list: {
+                fn: "erp_goods_in",
+                args: {},
+                id: "line_key",
+                title: ["item_code", "item"],
+                subtitle: ["location", "quantity", "suggested_location"],
+                status: "putaway_task",
+                noun: "pallet",
+                nounPlural: "pallets",
+              },
+              createFn: "erp_raise_putaway_tasks",
+            },
+            {
+              label: "Put away",
+              hint: "A task per pallet, from goods-in to the location the storage rules chose. Completing it is what moves the stock.",
+              fedBy:
+                "Tasks appear here once put-away is raised for a site at the goods-in step before this one.",
+
+              list: {
+                fn: "erp_warehouse_tasks",
+                args: { p_kind: "putaway", p_limit: 200 },
+                id: "task_id",
+                title: ["item", "kind"],
+                subtitle: ["from_location", "to_location", "quantity"],
+                status: "status",
+                noun: "task",
+                nounPlural: "tasks",
+              },
+              recordArg: "p_task_id",
+              actionFn: "erp_complete_warehouse_task",
+            },
+
             {
               label: "Supplier bill",
               hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",

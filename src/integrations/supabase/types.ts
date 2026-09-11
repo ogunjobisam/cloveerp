@@ -790,6 +790,7 @@ export type Database = {
       erp_forecast_versions: { Args: { p_limit?: number }; Returns: Json }
       erp_glossary: { Args: never; Returns: Json }
       erp_go_live: { Args: never; Returns: Json }
+      erp_goods_in: { Args: { p_site_id?: string }; Returns: Json }
       erp_grant_role: {
         Args: {
           p_app_user_id: string

@@ -373,7 +373,7 @@ function StageRecord({
         {row
           ? recordActions.map((a) => (
               <StageAction
-                key={a.fn}
+                key={a.code ?? a.fn}
                 action={a}
                 prefill={prefill}
                 permitted={permitted(a)}
@@ -414,13 +414,13 @@ function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[
   const { source, rows, isPending, error } = useStageRows(stage);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const byFn = new Map(actions.map((a) => [a.fn, a]));
+  const byFn = new Map(actions.map((a) => [a.code ?? a.fn, a]));
   const names = [...(stage.actionFn ? [stage.actionFn] : []), ...(stage.actionFns ?? [])];
   const recordActions = names
     .map((fn) => byFn.get(fn))
     .filter((a): a is ActionSpec => Boolean(a))
     // A verb that needs no record is not a verb for the record on the right.
-    .filter((a) => a.fn !== stage.createFn);
+    .filter((a) => (a.code ?? a.fn) !== stage.createFn);
   const createAction = stage.createFn ? byFn.get(stage.createFn) : undefined;
 
   const row = source ? (rows.find((r) => String(r[source.id] ?? "") === selectedId) ?? null) : null;
