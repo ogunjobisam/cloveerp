@@ -781,18 +781,18 @@ export function ActionDialog({
 
   const body = (
     <form
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
         action.mutate({});
       }}
     >
       {context ? (
-        <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
-          <span className="font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-lg border border-border border-l-2 border-l-accent bg-accent-soft/40 px-3.5 py-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {ui("Acting on")}
           </span>
-          <span className="mt-0.5 block font-mono text-sm">{context}</span>
+          <span className="mt-0.5 block text-sm leading-snug text-foreground">{context}</span>
         </div>
       ) : null}
 
