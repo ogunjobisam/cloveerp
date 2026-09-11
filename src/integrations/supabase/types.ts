@@ -117,6 +117,7 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_api_keys: { Args: never; Returns: Json }
       erp_apply_calculated_policy: {
         Args: { p_item_id: string; p_site_id: string }
         Returns: undefined
@@ -632,6 +633,10 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_create_webhook_subscription: {
+        Args: { p_event_pattern: string; p_name: string; p_target_url: string }
+        Returns: Json
+      }
       erp_credit_position: { Args: { p_party_id: string }; Returns: Json }
       erp_currencies: { Args: never; Returns: Json }
       erp_cut_over_domain: {
@@ -880,6 +885,15 @@ export type Database = {
           p_expires_at?: string
           p_label: string
           p_view_codes?: string[]
+        }
+        Returns: Json
+      }
+      erp_issue_api_key: {
+        Args: {
+          p_app_user_id: string
+          p_expires_at?: string
+          p_label: string
+          p_scopes: string[]
         }
         Returns: Json
       }
@@ -1851,6 +1865,10 @@ export type Database = {
         Args: { p_message_id: number; p_reason: string }
         Returns: number
       }
+      erp_replay_webhook_delivery: {
+        Args: { p_delivery_id: string }
+        Returns: Json
+      }
       erp_report_extract_content: { Args: { p_run_id: string }; Returns: Json }
       erp_report_extracts: { Args: never; Returns: Json }
       erp_report_packs: { Args: never; Returns: Json }
@@ -1946,6 +1964,10 @@ export type Database = {
         Args: { p_credential_id: string; p_reason: string }
         Returns: undefined
       }
+      erp_revoke_api_key: {
+        Args: { p_api_key_id: string; p_reason: string }
+        Returns: Json
+      }
       erp_revoke_role: { Args: { p_user_role_id: string }; Returns: Json }
       erp_roles: { Args: never; Returns: Json }
       erp_rollback_import: { Args: { p_batch_id: string }; Returns: Json }
@@ -1955,6 +1977,10 @@ export type Database = {
       }
       erp_rotate_tenant_key: {
         Args: { p_purpose?: string; p_reason?: string }
+        Returns: Json
+      }
+      erp_rotate_webhook_secret: {
+        Args: { p_subscription_id: string }
         Returns: Json
       }
       erp_route_print: {
@@ -2202,6 +2228,10 @@ export type Database = {
           p_reason?: string
           p_role_codes: string[]
         }
+        Returns: Json
+      }
+      erp_set_webhook_subscription_status: {
+        Args: { p_status: string; p_subscription_id: string }
         Returns: Json
       }
       erp_settlement_statement: {
@@ -2699,6 +2729,11 @@ export type Database = {
         Returns: Json
       }
       erp_wave_print_readiness: { Args: { p_wave_id: string }; Returns: Json }
+      erp_webhook_deliveries: {
+        Args: { p_limit?: number; p_subscription_id?: string }
+        Returns: Json
+      }
+      erp_webhook_subscriptions: { Args: never; Returns: Json }
       erp_withdraw_bom: { Args: { p_bom_id: string }; Returns: string }
       erp_works_order_availability: {
         Args: { p_works_order_id: string }
