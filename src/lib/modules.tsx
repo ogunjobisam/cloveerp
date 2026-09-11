@@ -159,7 +159,22 @@ export const WORK_GROUPS: TileGroup[] = [
   "settle",
   "records",
 ];
-export const SETTINGS_GROUPS: TileGroup[] = ["organisation", "configure", "operate", "assure"];
+/**
+ * Settings, in the order somebody sets an organisation up: the people first,
+ * then the system they work in, then the things they work on, then the money
+ * it posts to, then what it is joined to, and finally the evidence over all of
+ * it. Six short sections rather than four long ones — "Configure", "Operate"
+ * and "Assure" were true but told nobody which of them held the screen they
+ * wanted, and one of them had ten items under it.
+ */
+export const SETTINGS_GROUPS: TileGroup[] = [
+  "people",
+  "system",
+  "catalogue",
+  "money",
+  "operate",
+  "assure",
+];
 
 export function areaOf(group: TileGroup): Area {
   return SETTINGS_GROUPS.includes(group) ? "settings" : "work";
@@ -3909,10 +3924,12 @@ export const GROUP_LABELS: Record<TileGroup, string> = {
   sell: "Sell",
   settle: "Settle",
   records: "Records",
-  organisation: "Organisation",
-  configure: "Configure",
-  operate: "Operate",
-  assure: "Assure",
+  people: "People and organisation",
+  system: "System setup",
+  catalogue: "Products and places",
+  money: "Finance setup",
+  operate: "Connections and automation",
+  assure: "Records and compliance",
 };
 
 /** The order the two areas read in: the journey and its records, then the four settings sections. */
