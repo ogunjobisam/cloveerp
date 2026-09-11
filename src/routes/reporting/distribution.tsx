@@ -9,7 +9,12 @@ import {
   GoTo,
   useErpAction,
 } from "../../components/erp/action";
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  pickFrom,
+  pickRoleCode,
+  pickTimezone,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, TOUCH } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -248,12 +253,7 @@ function Distribution() {
                   { value: "role", label: "Everyone holding a role" },
                 ],
               },
-              {
-                kind: "text",
-                name: "p_role_code",
-                label: "Role code",
-                hint: "Only for a role subscription.",
-              },
+              pickRoleCode("p_role_code", "Role", false, "Only for a role subscription."),
               {
                 kind: "choice",
                 name: "p_cadence",

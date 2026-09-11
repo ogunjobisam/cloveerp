@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { ActionButton, ErrorNote, useErpAction } from "../components/erp/action";
-import { ActionBar, codeField } from "../components/erp/actions-bar";
+import { ActionBar, codeField, pickRoleCode } from "../components/erp/actions-bar";
 import { Gate } from "../components/erp/gate";
 import { PageHeader, TOUCH } from "../components/erp/page";
 import { DataPanel, Pill, Table } from "../components/erp/panel";
@@ -228,13 +228,12 @@ function Notifications() {
                       { value: "object_owner", label: "Whoever owns the affected object" },
                     ],
                   },
-                  {
-                    kind: "text",
-                    name: "p_role_code",
-                    label: "Role code",
-                    placeholder: "finance-approver",
-                    hint: "Only when the audience is a role. Codes are listed on the Permissions page.",
-                  },
+                  pickRoleCode(
+                    "p_role_code",
+                    "Role",
+                    false,
+                    "Only when the audience is a role.",
+                  ),
                   {
                     kind: "combo",
                     name: "p_department_code",
