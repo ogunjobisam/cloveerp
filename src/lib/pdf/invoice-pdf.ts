@@ -101,8 +101,7 @@ function draw(
 ) {
   const width = opts?.width;
   const shown = width ? clip(font, value, size, width) : value;
-  const offset =
-    opts?.align === "right" && width ? width - font.widthOfTextAtSize(shown, size) : 0;
+  const offset = opts?.align === "right" && width ? width - font.widthOfTextAtSize(shown, size) : 0;
   page.drawText(shown, { x: x + offset, y, size, font });
 }
 
@@ -135,13 +134,29 @@ export async function renderSalesInvoicePdf(
 
     if (first) {
       draw(page, bold, title, MARGIN, y, 20);
-      draw(page, bold, text(options.issuedNumber ?? header["document_number"]), MARGIN + 340, y, 14, {
-        width: A4[0] - MARGIN * 2 - 340,
-        align: "right",
-      });
+      draw(
+        page,
+        bold,
+        text(options.issuedNumber ?? header["document_number"]),
+        MARGIN + 340,
+        y,
+        14,
+        {
+          width: A4[0] - MARGIN * 2 - 340,
+          align: "right",
+        },
+      );
       y -= 26;
       draw(page, bold, text(company["legal_name"]), MARGIN, y, 10);
-      draw(page, regular, `${text(term["document.date"] ?? "Date")}: ${text(header["document_date"])}`, MARGIN + 340, y, 9, { width: 211, align: "right" });
+      draw(
+        page,
+        regular,
+        `${text(term["document.date"] ?? "Date")}: ${text(header["document_date"])}`,
+        MARGIN + 340,
+        y,
+        9,
+        { width: 211, align: "right" },
+      );
       y -= 13;
       const office = (company["registered_office"] ?? {}) as Record<string, unknown>;
       const officeLines = Array.isArray(office["lines"]) ? (office["lines"] as string[]) : [];
@@ -150,7 +165,14 @@ export async function renderSalesInvoicePdf(
         draw(page, regular, l, MARGIN, y, 9, { width: 240 });
         y -= 11;
       }
-      draw(page, regular, `Company number ${text(company["company_registration_number"])}`, MARGIN, y, 9);
+      draw(
+        page,
+        regular,
+        `Company number ${text(company["company_registration_number"])}`,
+        MARGIN,
+        y,
+        9,
+      );
       y -= 11;
       if (company["vat_registration_number"]) {
         draw(page, regular, `VAT number ${text(company["vat_registration_number"])}`, MARGIN, y, 9);
@@ -167,7 +189,14 @@ export async function renderSalesInvoicePdf(
         y -= 11;
       }
       y -= 10;
-      draw(page, regular, `${text(term["document.tax_point"] ?? "Tax point")}: ${text(header["tax_point"])}`, MARGIN, y, 9);
+      draw(
+        page,
+        regular,
+        `${text(term["document.tax_point"] ?? "Tax point")}: ${text(header["tax_point"])}`,
+        MARGIN,
+        y,
+        9,
+      );
       y -= 18;
     }
 
@@ -227,9 +256,23 @@ export async function renderSalesInvoicePdf(
   draw(page, bold, text(term["document.tax_summary"] ?? "VAT summary"), MARGIN, y, 9);
   y -= 14;
   for (const row of taxSummary) {
-    draw(page, regular, `${text(row["tax_code"] ?? "")} ${text(row["tax_rate_pct"])}%`, MARGIN, y, 8.5, { width: 120 });
-    draw(page, regular, formatMinor(row["net_minor"], currency), MARGIN + 300, y, 8.5, { width: 90, align: "right" });
-    draw(page, regular, formatMinor(row["tax_minor"], currency), MARGIN + 400, y, 8.5, { width: 108, align: "right" });
+    draw(
+      page,
+      regular,
+      `${text(row["tax_code"] ?? "")} ${text(row["tax_rate_pct"])}%`,
+      MARGIN,
+      y,
+      8.5,
+      { width: 120 },
+    );
+    draw(page, regular, formatMinor(row["net_minor"], currency), MARGIN + 300, y, 8.5, {
+      width: 90,
+      align: "right",
+    });
+    draw(page, regular, formatMinor(row["tax_minor"], currency), MARGIN + 400, y, 8.5, {
+      width: 108,
+      align: "right",
+    });
     y -= 13;
   }
 

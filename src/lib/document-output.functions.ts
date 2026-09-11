@@ -62,10 +62,12 @@ export const documentOutput = createServerFn({ method: "POST" })
     const archive = supabaseAdmin.storage.from(BUCKET);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rpc = (name: string, args?: Record<string, unknown>) =>
-      (supabase.rpc as unknown as (n: string, a?: Record<string, unknown>) => Promise<{ data: any; error: { message: string } | null }>)(
-        name,
-        args,
-      );
+      (
+        supabase.rpc as unknown as (
+          n: string,
+          a?: Record<string, unknown>,
+        ) => Promise<{ data: any; error: { message: string } | null }>
+      )(name, args);
 
     // Abandoned previews are swept on every request, so a screen nobody came
     // back to does not leave a file for somebody to find later.
@@ -146,7 +148,9 @@ export const documentOutput = createServerFn({ method: "POST" })
       );
       if (!row?.["contract_snapshot"]) refuse("The frozen contract could not be read back.");
 
-      const bytes = await renderSalesInvoicePdf(row["contract_snapshot"] as never, { issuedNumber });
+      const bytes = await renderSalesInvoicePdf(row["contract_snapshot"] as never, {
+        issuedNumber,
+      });
       const path = `${tenant}/${issuedNumber}.pdf`;
       const checksum = await sha256Hex(bytes);
 

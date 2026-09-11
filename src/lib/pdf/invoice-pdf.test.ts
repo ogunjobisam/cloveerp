@@ -37,7 +37,9 @@ function contract(lineCount: number, customerName: string): InvoiceContract {
       invoice_address: { lines: ["2 Buyer Street"], locality: "York", postcode: "YO1 1AA" },
     },
     lines,
-    tax_summary: [{ tax_code: "S", tax_rate_pct: 20, net_minor: 3750 * lineCount, tax_minor: 750 * lineCount }],
+    tax_summary: [
+      { tax_code: "S", tax_rate_pct: 20, net_minor: 3750 * lineCount, tax_minor: 750 * lineCount },
+    ],
     totals: {
       currency: "GBP",
       net_minor: 3750 * lineCount,
