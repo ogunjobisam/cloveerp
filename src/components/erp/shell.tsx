@@ -227,21 +227,53 @@ function NavList({
   const groupLabel = dark ? "text-sidebar-muted/80" : "text-muted-foreground";
   const quiet = dark ? "text-sidebar-muted" : "text-muted-foreground";
 
+  /*
+   * Settings folds; work does not.
+   *
+   * Twenty-six settings screens listed at once is a wall, and it is a wall in
+   * front of somebody who came here to do one thing. So each settings section
+   * is a heading you open, and the one holding the screen you are on is the
+   * one already open. The work rail is left alone: those sections are the job
+   * itself, and a person doing the job wants to see the whole of it.
+   */
+  const holding = (group: NavItem["group"]) =>
+    items.some(
+      (i) =>
+        i.group === group && (pathname === i.to || pathname.startsWith(`${i.to}/`)) && i.to !== "/",
+    );
+  const [opened, setOpened] = useState<Record<string, boolean>>({});
+
   return (
     <>
       {AREA_GROUPS[area].map((group) => {
         const inGroup = items.filter((i) => i.area === area && i.group === group);
         if (inGroup.length === 0) return null;
+        const foldable = area === "settings" && group !== "home";
+        const shown = !foldable || (opened[group] ?? holding(group));
         return (
           <div key={group} className="mb-4 last:mb-0">
-            {group === "home" ? null : (
+            {group === "home" ? null : foldable ? (
+              <button
+                type="button"
+                aria-expanded={shown}
+                onClick={() => setOpened((prev) => ({ ...prev, [group]: !shown }))}
+                className={`mb-1 flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide transition-colors hover:text-foreground ${groupLabel} ${dark ? "hover:text-sidebar-foreground" : ""}`}
+              >
+                <ChevronDown
+                  className={`size-3 shrink-0 transition-transform ${shown ? "" : "-rotate-90"}`}
+                  aria-hidden="true"
+                />
+                <span className="truncate">{ui(GROUP_LABELS[group])}</span>
+                <span className="ml-auto font-mono text-[10px] opacity-70">{inGroup.length}</span>
+              </button>
+            ) : (
               <p
                 className={`mb-1 px-3 text-[11px] font-medium uppercase tracking-wide ${groupLabel}`}
               >
                 {ui(GROUP_LABELS[group])}
               </p>
             )}
-            <ul className="flex flex-col gap-0.5">
+            <ul className={`flex flex-col gap-0.5 ${shown ? "" : "hidden"}`}>
               {inGroup.map((item) => {
                 const active =
                   item.group === "home"
