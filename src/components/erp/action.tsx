@@ -189,7 +189,14 @@ export type OptionSource = {
   args?: Record<string, unknown>;
   value: string;
   label: string[];
+  /**
+   * The key holding the list, when the door answers with an object of several
+   * lists rather than one list. `erp_permissions_directory` is the case: one
+   * read carries principals, roles and the permission catalogue.
+   */
+  path?: string;
 };
+
 
 export type Field =
   | ({ kind: "text" } & FieldBase)
