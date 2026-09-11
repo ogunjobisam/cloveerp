@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, codeField, pickFrom, pickItem } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  codeField,
+  pickFrom,
+  pickItem,
+  pickItemClass,
+  pickItemClasses,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
@@ -199,13 +206,11 @@ function Classification() {
                   { value: "false", label: "No" },
                 ],
               },
-              {
-                kind: "text",
-                name: "p_item_classes",
-                label: "Only for product classes",
-                placeholder: "finished, raw",
-                hint: "Comma separated. Leave empty to apply to every product.",
-              },
+              pickItemClasses(
+                "p_item_classes",
+                "Only for product classes",
+                "Tick every class this applies to. None ticked applies to every product.",
+              ),
               { kind: "number", name: "p_seq", label: "Order" },
             ],
             invalidates,
