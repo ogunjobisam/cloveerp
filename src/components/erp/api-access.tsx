@@ -206,7 +206,9 @@ export function ApiAccess() {
                       {(row.scopes ?? []).length} permission
                       {(row.scopes ?? []).length === 1 ? "" : "s"}
                     </td>
-                    <td className="whitespace-nowrap py-2 pr-4 text-sm">{when(row.last_used_at)}</td>
+                    <td className="whitespace-nowrap py-2 pr-4 text-sm">
+                      {when(row.last_used_at)}
+                    </td>
                     <td className="py-2">
                       {row.revoked_at ? (
                         <Pill tone="bad">Revoked</Pill>
@@ -399,9 +401,7 @@ export function ApiAccess() {
             empty="Nothing has been delivered yet. Attempts appear here as soon as a matching event happens."
           >
             {(rows) => (
-              <Table
-                columns={["Event", "Subscription", "Attempt", "Answer", "When", "State"]}
-              >
+              <Table columns={["Event", "Subscription", "Attempt", "Answer", "When", "State"]}>
                 {rows.map((row) => (
                   <tr key={row.delivery_id} className="border-b border-border/50 last:border-0">
                     <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs">

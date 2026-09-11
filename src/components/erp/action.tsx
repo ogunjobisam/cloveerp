@@ -197,7 +197,6 @@ export type OptionSource = {
   path?: string;
 };
 
-
 export type Field =
   | ({ kind: "text" } & FieldBase)
   | ({ kind: "number" } & FieldBase)
@@ -296,7 +295,6 @@ function useOptions(source: OptionSource | undefined) {
             },
       )
     : [];
-
 
   return { rows, isPending: Boolean(source) && isPending, error };
 }
