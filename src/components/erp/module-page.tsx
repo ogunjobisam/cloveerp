@@ -120,42 +120,33 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
       {tab === "dashboard" ? (
         <div className="flex min-w-0 flex-col gap-4">
           <KpiRow kpis={def.kpis} />
-          {def.chart ? <MiniBars chart={def.chart} /> : null}
-          {def.worklists.slice(0, 1).map(panelOf)}
-          {def.worklists.length > 1 ? (
-            <button
-              type="button"
-              onClick={() => setTab("work")}
-              className={`${TOUCH} self-start rounded-md border border-input px-4 text-sm font-medium`}
-            >
-              See all {def.worklists.length} worklists
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {tab === "work" ? (
-        <div className="flex min-w-0 flex-col gap-4">
-          {def.actions && def.actions.length > 0 ? (
+          {!def.flow && def.actions && def.actions.length > 0 ? (
             <ActionBar
               actions={def.actions}
               title="What you can do here"
               note="The database authorises every one of these; you only see the ones you hold."
             />
           ) : null}
-          {def.worklists.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              This module has no worklist of its own. Its reports are under Reports.
-            </p>
-          ) : (
-            def.worklists.map(panelOf)
-          )}
+          {def.worklists.map(panelOf)}
         </div>
       ) : null}
 
       {tab === "reports" ? (
-        <div className="flex min-w-0 flex-col gap-4">
-          {def.reports.map(panelOf)}
+        <div className="flex min-w-0 flex-col gap-5">
+          {def.chart ? <MiniBars chart={def.chart} /> : null}
+          {def.reports.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {ui("This module has no reports of its own yet.")}
+            </p>
+          ) : (
+            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+              {def.reports.map((r) => (
+                <div key={`${r.fn}-${r.title}`} className="min-w-0">
+                  {panelOf(r)}
+                </div>
+              ))}
+            </div>
+          )}
           <InquiryBoard inquiries={def.inquiries ?? []} />
         </div>
       ) : null}
