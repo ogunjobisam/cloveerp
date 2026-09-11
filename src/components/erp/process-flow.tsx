@@ -136,23 +136,86 @@ function haystack(row: Row): string {
     .join(" ");
 }
 
+/**
+ * A record that has already been worked.
+ *
+ * A task marked done, a document posted or cancelled, is finished: offering the
+ * verb that finished it again is an invitation to an error the database will
+ * refuse anyway. The verb is greyed instead, and says why.
+ */
+const SETTLED = new Set([
+  "done",
+  "complete",
+  "completed",
+  "posted",
+  "closed",
+  "cancelled",
+  "canceled",
+  "rejected",
+  "delivered",
+  "despatched",
+  "dispatched",
+  "received",
+  "paid",
+  "withdrawn",
+  "superseded",
+  "archived",
+]);
+
+/** Verbs that stay open on a finished record — reading, correcting, reversing. */
+const STILL_ALLOWED =
+  /edit|amend|correct|update|change|view|open|print|note|comment|reopen|revers/i;
+
+function statusOf(row: Row, source: StageList | undefined): string | null {
+  const keys = [source?.status, "status", "state_name", "state", "task_status", "document_state"];
+  for (const key of keys) {
+    if (!key) continue;
+    const value = row[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim().toLowerCase();
+  }
+  return null;
+}
+
+function isSettled(row: Row | null, source: StageList | undefined): string | null {
+  if (!row) return null;
+  const status = statusOf(row, source);
+  return status && SETTLED.has(status) ? status : null;
+}
+
+function actionStaysOpen(action: ActionSpec): boolean {
+  return STILL_ALLOWED.test(`${action.code ?? ""} ${action.fn} ${action.label}`);
+}
+
 /** One stage's verb, with the chosen record already answered. */
 function StageAction({
   action,
   prefill,
   permitted,
   context,
+  settled,
 }: {
   action: ActionSpec;
   prefill: Record<string, unknown>;
   permitted: boolean;
   context?: string;
+  settled?: string | null;
 }) {
   const { ui } = useT();
 
   if (!permitted)
     return (
       <ActionButton variant="secondary" disabled title="You do not hold the permission for this.">
+        {ui(action.label)}
+      </ActionButton>
+    );
+
+  if (settled && !actionStaysOpen(action))
+    return (
+      <ActionButton
+        variant="secondary"
+        disabled
+        title={`This record is already ${settled}, so this cannot be done again.`}
+      >
         {ui(action.label)}
       </ActionButton>
     );
@@ -337,6 +400,7 @@ function StageRecord({
     row && source
       ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
       : undefined;
+  const settled = isSettled(row, source);
 
   return (
     <div className="min-w-0 px-4 py-4 sm:px-5">
@@ -345,7 +409,14 @@ function StageRecord({
 
       {row && source ? (
         <>
-          <p className="mt-3 font-mono text-sm">{join(row, source.title)}</p>
+          <p className="mt-3 flex items-center gap-2 font-mono text-sm">
+            <span className="truncate">{join(row, source.title)}</span>
+            {settled ? (
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-sans text-[11px] font-medium text-muted-foreground">
+                Already {settled}
+              </span>
+            ) : null}
+          </p>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
             {Object.entries(row)
               .filter(([k, v]) => k !== source.id && !k.endsWith("_id") && typeof v !== "object")
@@ -377,6 +448,7 @@ function StageRecord({
                 action={a}
                 prefill={prefill}
                 permitted={permitted(a)}
+                settled={settled}
                 {...(summary ? { context: summary } : {})}
               />
             ))
