@@ -436,6 +436,8 @@ export const pickItemClasses = (
   name,
   label,
   hint,
+  // The doors that take several classes take them as one comma-separated line.
+  join: ", ",
   options: { fn: "erp_item_classes", value: "item_class", label: ["item_class"] },
 });
 
