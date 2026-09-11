@@ -1,6 +1,7 @@
 import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { resolveCredential } from "./config.ts";
 import { asPrincipal, type Sql } from "./db.ts";
+import { createHmac } from "node:crypto";
 
 /**
  * The half of webhook delivery a database cannot do.
@@ -33,6 +34,10 @@ export type WebhookRow = {
   severity: string | null;
 };
 
+export function webhookSignature(secret: string, timestamp: string, body: string): string {
+  return `v1=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
+}
+
 /** The counterpart answered, and said no. */
 export class WebhookRefused extends Error {
   constructor(
@@ -61,6 +66,8 @@ export async function deliverWebhook(
     throw new WebhookRefused(`channel ${row.channel_code ?? "?"} has no URL configured`, 0);
   }
 
+  const body = JSON.stringify(row.payload);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
   let response: Response;
   try {
     response = await fetch(row.url, {
@@ -68,11 +75,17 @@ export async function deliverWebhook(
       headers: {
         "content-type": "application/json",
         ...(credential ? { authorization: `Bearer ${credential}` } : {}),
+        ...(credential
+          ? {
+              "clove-webhook-timestamp": timestamp,
+              "clove-webhook-signature": webhookSignature(credential, timestamp, body),
+            }
+          : {}),
         // The message's own id is its key on the wire, so a receiver can tell
         // a retry of this message from a second message that looks alike.
         "idempotency-key": `clove-notification-${row.id}`,
       },
-      body: JSON.stringify(row.payload),
+      body,
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {

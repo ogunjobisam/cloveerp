@@ -6,6 +6,7 @@ import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { SeedDemoAction } from "../../components/erp/seed";
+import { publicApiOperations } from "../../lib/public-api-catalogue";
 
 export const Route = createFileRoute("/operations/integrations")({
   head: () => ({
@@ -60,9 +61,58 @@ function Integrations() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Integrations">
-        Every outbound write goes through the gateway. Nothing here can send anything — it reports
-        what the gateway is doing and what needs a person.
+        Manage connected systems, review delivery health and use the versioned public API.
       </PageHeader>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
+        <div className="min-w-0 border border-border bg-card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">REST API · v1</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                A controlled API over the same permissions and business rules as the desk.
+              </p>
+            </div>
+            <a
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+              href="/api/public/v1/openapi.json"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open API reference
+            </a>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <Table columns={["Method", "Path", "Purpose", "Permission"]}>
+              {publicApiOperations.map((operation) => (
+                <tr key={operation.operationId} className="border-b border-border/50 last:border-0">
+                  <td className="py-2 pr-4">
+                    <Pill tone={operation.write ? "warn" : "ok"}>{operation.method}</Pill>
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs">
+                    /v1{operation.path}
+                  </td>
+                  <td className="py-2 pr-4 text-sm">{operation.summary}</td>
+                  <td className="whitespace-nowrap py-2 font-mono text-xs text-muted-foreground">
+                    {operation.permission}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </div>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <h2 className="text-base font-semibold">API keys and webhooks</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Keys belong to service accounts. Their scopes can only narrow existing role permissions.
+            Webhooks are signed and keep a complete retry history.
+          </p>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Key and subscription controls appear here after the corresponding database release is
+            deployed.
+          </p>
+        </div>
+      </section>
 
       <ActionBar
         title="Replaying a message"
