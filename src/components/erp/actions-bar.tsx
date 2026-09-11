@@ -478,3 +478,20 @@ export const pickDocumentType = (
     label: ["code", "name"],
   },
 });
+
+/**
+ * A time of day, on the half hour.
+ *
+ * The doors take "HH:MM" and reject anything else, so the form should not be
+ * a box somebody types "6am" into.
+ */
+export const pickTimeOfDay = (name = "p_at_time", label = "At", required = false): Field => ({
+  kind: "choice",
+  name,
+  label,
+  required,
+  choices: Array.from({ length: 48 }, (_, i) => {
+    const value = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`;
+    return { value, label: value };
+  }),
+});
