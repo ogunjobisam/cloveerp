@@ -226,6 +226,10 @@ export type Database = {
         Args: { p_document_id: string }
         Returns: Json
       }
+      erp_balance_sheet: {
+        Args: { p_as_at?: string; p_cost_centre?: string; p_ledger?: string }
+        Returns: Json
+      }
       erp_batch_audit: { Args: { p_batch_id: string }; Returns: Json }
       erp_batch_record: { Args: { p_works_order_id: string }; Returns: Json }
       erp_batches: { Args: { p_limit?: number }; Returns: Json }
@@ -1521,6 +1525,15 @@ export type Database = {
       erp_print_release_wave: { Args: { p_wave_id: string }; Returns: Json }
       erp_print_routes: { Args: never; Returns: Json }
       erp_printers: { Args: never; Returns: Json }
+      erp_profit_and_loss: {
+        Args: {
+          p_cost_centre?: string
+          p_from?: string
+          p_ledger?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       erp_promise_date: {
         Args: { p_item_id: string; p_quantity: number; p_site_id: string }
         Returns: string
@@ -2320,7 +2333,15 @@ export type Database = {
         }
         Returns: Json
       }
-      erp_trial_balance: { Args: never; Returns: Json }
+      erp_trial_balance: {
+        Args: {
+          p_cost_centre?: string
+          p_from?: string
+          p_ledger?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       erp_trigger_job: {
         Args: { p_job_code: string; p_reason?: string }
         Returns: Json
