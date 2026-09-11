@@ -34,6 +34,8 @@ export type WorkerConfig = {
    * drain for every other organisation this process serves.
    */
   resendApiKey: string | null;
+  supabaseUrl: string | null;
+  supabaseServiceRoleKey: string | null;
 };
 
 function required(name: string): string {
@@ -102,6 +104,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       leaseSeconds,
       httpTimeoutMs,
       resendApiKey: env["RESEND_API_KEY"]?.trim() || null,
+      supabaseUrl: env["SUPABASE_URL"]?.trim() || null,
+      supabaseServiceRoleKey: env["SUPABASE_SERVICE_ROLE_KEY"]?.trim() || null,
     };
   } finally {
     (process as { env: Record<string, string | undefined> }).env = saved;

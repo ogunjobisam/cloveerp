@@ -27,6 +27,7 @@ export type DrainReport = {
   webhooksSent: number;
   webhooksFailed: number;
   tenantsPurged: number;
+  previewsPurged: number;
   /** What erp.reclaim_stranded_work() returned to the queues before this pass claimed anything. */
   reclaimed: {
     commands: number;
@@ -56,6 +57,7 @@ const empty = (): DrainReport => ({
   webhooksSent: 0,
   webhooksFailed: 0,
   tenantsPurged: 0,
+  previewsPurged: 0,
   reclaimed: { commands: 0, runs: 0, messages: 0, email: 0, webhook: 0 },
 });
 
@@ -458,12 +460,46 @@ async function reclaimStranded(sql: Sql, b: TenantBinding, out: DrainReport) {
   out.reclaimed.webhook += Number(r["webhook"] ?? 0);
 }
 
+async function sweepExpiredDocumentPreviews(
+  sql: Sql,
+  b: TenantBinding,
+  cfg: WorkerConfig,
+  out: DrainReport,
+) {
+  if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) return;
+  const [row] = await asPrincipal(
+    sql,
+    b,
+    (tx) => tx`select erp.purge_expired_document_previews() as result`,
+  );
+  const result = (row?.["result"] ?? {}) as { storage_paths?: unknown };
+  const paths = Array.isArray(result.storage_paths)
+    ? result.storage_paths.filter((path): path is string => typeof path === "string")
+    : [];
+  if (paths.length === 0) return;
+
+  const response = await fetch(`${cfg.supabaseUrl}/storage/v1/object/document-output`, {
+    method: "DELETE",
+    headers: {
+      apikey: cfg.supabaseServiceRoleKey,
+      Authorization: `Bearer ${cfg.supabaseServiceRoleKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ prefixes: paths }),
+  });
+  if (!response.ok) {
+    throw new Error(`expired document previews could not be removed from storage (${response.status})`);
+  }
+  out.previewsPurged += paths.length;
+}
+
 export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainReport> {
   const out = empty();
   const startedAt = new Date();
   await sweepDeletedTenants(sql, out);
   for (const binding of cfg.bindings) {
     await reclaimStranded(sql, binding, out);
+    await sweepExpiredDocumentPreviews(sql, binding, cfg, out);
     await drainJobs(sql, binding, cfg, out);
     await drainOutbox(sql, binding, cfg, out);
     await drainCommands(sql, binding, cfg, out);

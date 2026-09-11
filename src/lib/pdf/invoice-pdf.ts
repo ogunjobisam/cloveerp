@@ -5,7 +5,7 @@
  * JavaScript with no native binary, no headless browser and no filesystem
  * dependency, so the same module runs in the Edge Function, in the test runner
  * and in the Worker. Three things had to be true before a template format was
- * written around it, and each is proved by an executed fixture in
+ * written around it, and each is proved by extracting text from an executed fixture in
  * invoice-pdf.test.ts:
  *
  *   1. a two-hundred line invoice paginates without clipping, and the tax
@@ -44,6 +44,10 @@ export interface InvoiceContract {
   tax_summary?: Array<Record<string, unknown>>;
   totals?: Record<string, unknown>;
   terminology?: Record<string, string>;
+  brand?: {
+    logo_url?: string | null;
+    logo_source?: string | null;
+  };
 }
 
 export interface RenderOptions {
@@ -59,6 +63,7 @@ const LINE_HEIGHT = 15;
 /** Height reserved so the tax summary and totals never split across pages. */
 const CLOSING_BLOCK = 150;
 const FOOTER_Y = 30;
+const MAX_LOGO_BYTES = 2_000_000;
 
 const COLUMNS = [
   { key: "line", x: MARGIN, width: 26, align: "left" as const },
@@ -105,6 +110,35 @@ function draw(
   page.drawText(shown, { x: x + offset, y, size, font });
 }
 
+async function embedOrganisationLogo(pdf: PDFDocument, contract: InvoiceContract) {
+  const raw = contract.brand?.logo_url;
+  if (!raw) return null;
+
+  const url = new URL(raw);
+  if (url.protocol !== "https:") return null;
+  const host = url.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  ) {
+    return null;
+  }
+
+  const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+  if (!response.ok) return null;
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
+  if (contentType !== "image/png" && contentType !== "image/jpeg") return null;
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_LOGO_BYTES) return null;
+  return contentType === "image/png" ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
+}
+
 /** Renders the frozen contract and returns the exact bytes to be stored. */
 export async function renderSalesInvoicePdf(
   contract: InvoiceContract,
@@ -114,6 +148,7 @@ export async function renderSalesInvoicePdf(
   pdf.registerFontkit(fontkit);
   const regular = await pdf.embedFont(fontBytes(NOTO_SANS_REGULAR_BASE64), { subset: true });
   const bold = await pdf.embedFont(fontBytes(NOTO_SANS_BOLD_BASE64), { subset: true });
+  const logo = await embedOrganisationLogo(pdf, contract);
 
   const header = contract.header ?? {};
   const company = contract.company ?? {};
@@ -133,6 +168,15 @@ export async function renderSalesInvoicePdf(
     y = A4[1] - MARGIN;
 
     if (first) {
+      if (logo) {
+        const scaled = logo.scaleToFit(112, 42);
+        page.drawImage(logo, {
+          x: A4[0] - MARGIN - scaled.width,
+          y: y - scaled.height + 6,
+          width: scaled.width,
+          height: scaled.height,
+        });
+      }
       draw(page, bold, title, MARGIN, y, 20);
       draw(
         page,
@@ -328,4 +372,9 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+/** Hashes the Blob returned by a private Storage download, byte for byte. */
+export async function sha256Blob(blob: Blob): Promise<string> {
+  return sha256Hex(new Uint8Array(await blob.arrayBuffer()));
 }

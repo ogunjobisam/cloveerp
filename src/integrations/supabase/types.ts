@@ -819,6 +819,10 @@ export type Database = {
         Args: { p_delivery_id: string; p_reason: string }
         Returns: undefined
       }
+      erp_fail_document_issue: {
+        Args: { p_document_issue_id: string; p_reason: string }
+        Returns: Json
+      }
       erp_firm_planned_order: {
         Args: { p_document_type_code?: string; p_planned_order_id: string }
         Returns: string
