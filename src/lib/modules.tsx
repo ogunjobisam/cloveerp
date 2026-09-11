@@ -444,13 +444,12 @@ export const INVENTORY: ModuleDef = {
           required: true,
           placeholder: "Pallets identified by licence plate",
         },
-        {
-          kind: "text",
-          name: "p_item_class",
-          label: "Product class",
-          placeholder: "Leave blank for all products",
-          hint: "Limits the policy to one class of product. Blank applies it to all.",
-        },
+        pickItemClass(
+          "p_item_class",
+          "Product class",
+          false,
+          "Limits the policy to one class of product. Blank applies it to all.",
+        ),
         {
           kind: "select",
           name: "p_site_code",
