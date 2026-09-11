@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
 
@@ -100,7 +101,8 @@ export function StatusPill({ value }: { value: unknown }) {
       : warn.some((x) => s.includes(x))
         ? "warn"
         : "muted";
-  return <Pill tone={tone}>{String(value ?? "—")}</Pill>;
+  const shown = s === "" ? "—" : prettifyField(s);
+  return <Pill tone={tone}>{shown}</Pill>;
 }
 
 /** A date, shown short, never invented when absent. */
