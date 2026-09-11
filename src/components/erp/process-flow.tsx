@@ -373,7 +373,7 @@ function StageRecord({
         {row
           ? recordActions.map((a) => (
               <StageAction
-                key={a.fn}
+                key={a.code ?? a.fn}
                 action={a}
                 prefill={prefill}
                 permitted={permitted(a)}
