@@ -100,7 +100,8 @@ export function StatusPill({ value }: { value: unknown }) {
       : warn.some((x) => s.includes(x))
         ? "warn"
         : "muted";
-  return <Pill tone={tone}>{String(value ?? "—")}</Pill>;
+  const shown = s === "" ? "—" : prettifyField(s);
+  return <Pill tone={tone}>{shown}</Pill>;
 }
 
 /** A date, shown short, never invented when absent. */
