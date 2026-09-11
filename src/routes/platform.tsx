@@ -373,17 +373,12 @@ function PlatformConsole() {
           {currentView === "deployment" ? <Deployment /> : null}
           {currentView === "incidents" ? <Incidents /> : null}
           {currentView === "staff" ? <Staff role={role} /> : null}
-          {currentView === "activity" ? (
-            <>
-              <Activity />
-              <SupportActionLog />
-            </>
-          ) : null}
+          {currentView === "activity" ? <Activity /> : null}
           {currentView === "decisions" ? <Decisions /> : null}
-          {currentView === "product" ? <ProductDecisions /> : null}
           {currentView === "plans" ? <Plans /> : null}
           {currentView === "contracts" ? <Contracts role={role} /> : null}
           {currentView === "revenue" ? <Revenue role={role} /> : null}
+          {currentView === "enquiries" ? <Enquiries role={role} /> : null}
         </div>
       </div>
     </Frame>
