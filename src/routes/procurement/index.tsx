@@ -145,8 +145,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   },
   {
     label: "Decide an approval waiting on me",
-    description:
-      "The approval tasks assigned to you or to a role you hold, decided one at a time.",
+    description: "The approval tasks assigned to you or to a role you hold, decided one at a time.",
     permission: "procurement.approve",
     fn: "erp_decide_approval",
     fields: [
