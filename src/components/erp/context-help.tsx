@@ -39,6 +39,29 @@ type HelpTopic = {
   local_key: string;
 } | null;
 
+/**
+ * What a routine is called on the screens that drive it.
+ *
+ * The help sheet used to list the database's own names. A person reading
+ * "erp_commit_allocation" learns nothing they could not learn from the button
+ * that says "Commit an allocation", so the button's wording is used, and the
+ * stored name is kept on hover for anyone who wants it.
+ */
+let routineLabels: Map<string, string> | null = null;
+
+function routineLabel(fn: string): string {
+  if (!routineLabels) {
+    const index = new Map<string, string>();
+    for (const mod of MODULES) {
+      for (const action of mod.actions ?? []) if (!index.has(action.fn)) index.set(action.fn, action.label);
+      for (const inquiry of mod.inquiries ?? [])
+        if (!index.has(inquiry.fn)) index.set(inquiry.fn, inquiry.label);
+    }
+    routineLabels = index;
+  }
+  return routineLabels.get(fn) ?? prettifyRoutine(fn);
+}
+
 /** The topic for a path: the tile whose path is the longest prefix, or home. */
 function helpPathFor(pathname: string): string {
   if (pathname === "/" || pathname === "/settings") return pathname;
