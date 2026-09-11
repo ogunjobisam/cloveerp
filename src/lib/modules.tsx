@@ -141,8 +141,10 @@ export type TileGroup =
   | "sell"
   | "settle"
   | "records"
-  | "organisation"
-  | "configure"
+  | "people"
+  | "system"
+  | "catalogue"
+  | "money"
   | "operate"
   | "assure";
 
