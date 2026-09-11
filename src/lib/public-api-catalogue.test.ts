@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "bun:test";
 
 import { createPublicApiSpec, publicApiOperations } from "./public-api-catalogue";
 
@@ -14,9 +14,9 @@ describe("public API catalogue", () => {
   test("requires idempotency keys on every write", () => {
     const spec = createPublicApiSpec();
     for (const entry of publicApiOperations.filter((operation) => operation.write)) {
-      const operation = spec.paths[`/api/public/v1${entry.path}`]?.[
-        entry.method.toLowerCase()
-      ] as { parameters?: Array<{ name?: string; required?: boolean }> };
+      const operation = spec.paths[`/api/public/v1${entry.path}`]?.[entry.method.toLowerCase()] as {
+        parameters?: Array<{ name?: string; required?: boolean }>;
+      };
       expect(operation.parameters).toContainEqual(
         expect.objectContaining({ name: "Idempotency-Key", required: true }),
       );
