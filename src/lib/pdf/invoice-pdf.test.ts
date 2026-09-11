@@ -112,6 +112,6 @@ test("a preview carries a watermark and differs from the issued bytes", async ()
 
 test("downloaded PDF bytes round-trip through Blob hashing unchanged", async () => {
   const bytes = await renderSalesInvoicePdf(contract(4, "Buyer Ltd"));
-  const downloaded = new Blob([bytes], { type: "application/pdf" });
+  const downloaded = new Blob([bytes.slice().buffer], { type: "application/pdf" });
   expect(await sha256Blob(downloaded)).toBe(await sha256Hex(bytes));
 });

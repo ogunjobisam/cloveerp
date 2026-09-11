@@ -197,7 +197,9 @@ export const documentOutput = createServerFn({ method: "POST" })
           p_reason: `Rendering completed but archive verification failed: ${completed.error.message}`,
         });
         if (failed.error) {
-          refuse(`${completed.error.message}; the spent number could not be marked void: ${failed.error.message}`);
+          refuse(
+            `${completed.error.message}; the spent number could not be marked void: ${failed.error.message}`,
+          );
         }
         refuse(completed.error.message);
       }
