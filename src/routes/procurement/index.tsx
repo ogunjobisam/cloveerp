@@ -56,7 +56,156 @@ export const Route = createFileRoute("/procurement/")({
  * opposite party role — which is either evidence for the thesis or a very
  * short file, depending on how generous you are feeling.
  */
+const pickRequisition = (): ReturnType<typeof pickFrom> =>
+  pickFrom(
+    "erp_documents",
+    "document_id",
+    ["document_number", "state_name", "party"],
+    "p_document_id",
+    "Requisition",
+    { p_type_code: "requisition", p_limit: 200 },
+  );
+
 const PROCUREMENT_ACTIONS: ActionSpec[] = [
+  {
+    code: "requisition_submit",
+    label: "Submit for approval",
+    title: "Send this requisition for approval",
+    description:
+      "A draft requisition goes to whoever approves at its value. Nothing is committed to a supplier until it comes back approved.",
+    permission: "procurement.requisition",
+    fn: "erp_transition_document",
+    fields: [pickRequisition()],
+    mapArgs: (v) => ({ p_document_id: v["p_document_id"], p_transition_code: "submit" }),
+    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    submitLabel: "Submit for approval",
+  },
+  {
+    label: "Work out who approves",
+    title: "Route this requisition for approval",
+    description:
+      "Stamps the chain the value and the department resolve to, and raises the approval tasks that go with it.",
+    permission: "procurement.requisition",
+    fn: "erp_stamp_document_approval",
+    fields: [pickRequisition()],
+    invalidates: ["erp_document_approval_chain", "erp_my_approvals", "erp_approval_routing_stamps"],
+    submitLabel: "Route it",
+  },
+  {
+    code: "requisition_approve",
+    label: "Approve",
+    title: "Approve this requisition",
+    description:
+      "An approved requisition is the one thing that converts into a purchase order. Approving does not order anything by itself.",
+    permission: "procurement.approve",
+    fn: "erp_transition_document",
+    fields: [
+      pickRequisition(),
+      {
+        kind: "text",
+        name: "p_reason",
+        label: "Note",
+        placeholder: "Within budget for the quarter",
+        hint: "Optional. Kept on the approval record.",
+      },
+    ],
+    mapArgs: (v) => ({
+      p_document_id: v["p_document_id"],
+      p_transition_code: "approve",
+      ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
+    }),
+    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    submitLabel: "Approve it",
+  },
+  {
+    code: "requisition_reject",
+    label: "Send back",
+    title: "Send this requisition back",
+    description: "The requisition returns to draft, with the reason on the record.",
+    permission: "procurement.approve",
+    fn: "erp_transition_document",
+    fields: [
+      pickRequisition(),
+      {
+        kind: "text",
+        name: "p_reason",
+        label: "Reason",
+        required: true,
+        placeholder: "Three quotes needed at this value",
+        hint: "What the requester has to change before submitting again.",
+      },
+    ],
+    mapArgs: (v) => ({
+      p_document_id: v["p_document_id"],
+      p_transition_code: "reject",
+      p_reason: v["p_reason"],
+    }),
+    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    submitLabel: "Send it back",
+  },
+  {
+    label: "Decide an approval waiting on me",
+    description:
+      "The approval tasks assigned to you or to a role you hold, decided one at a time.",
+    permission: "procurement.approve",
+    fn: "erp_decide_approval",
+    fields: [
+      pickFrom(
+        "erp_my_approvals",
+        "task_id",
+        ["object_type", "requested_by", "requested_at"],
+        "p_task_id",
+        "Approval waiting on me",
+      ),
+      {
+        kind: "choice",
+        name: "p_approve",
+        label: "Decision",
+        required: true,
+        choices: [
+          { value: "true", label: "Approve" },
+          { value: "false", label: "Refuse" },
+        ],
+      },
+      { kind: "text", name: "p_comment", label: "Comment", placeholder: "Agreed at this value" },
+    ],
+    mapArgs: (v) => ({
+      p_task_id: v["p_task_id"],
+      p_approve: v["p_approve"] === "true",
+      ...(v["p_comment"] ? { p_comment: v["p_comment"] } : {}),
+    }),
+    invalidates: ["erp_my_approvals", "erp_documents", "erp_document_approval_chain"],
+    submitLabel: "Record the decision",
+  },
+  {
+    label: "Raise putaway tasks",
+    description:
+      "Ask the warehouse to move what is standing in goods-in. A task is raised for each pallet in a receiving location at that site, sending it to the place the storage rules say the product belongs.",
+    permission: "inventory.adjust",
+    fn: "erp_raise_putaway_tasks",
+    fields: [pickSite()],
+    invalidates: ["erp_warehouse_tasks", "erp_goods_in"],
+    submitLabel: "Raise the tasks",
+  },
+  {
+    label: "Complete a putaway",
+    description: "The pallet has been moved. Completing the task is what moves the stock.",
+    permission: "inventory.adjust",
+    fn: "erp_complete_warehouse_task",
+    fields: [
+      pickFrom(
+        "erp_warehouse_tasks",
+        "task_id",
+        ["kind", "item", "from_location", "to_location"],
+        "p_task_id",
+        "Task",
+      ),
+      { kind: "number", name: "p_quantity", label: "Quantity", hint: "Blank means all of it." },
+    ],
+    invalidates: ["erp_warehouse_tasks", "erp_goods_in", "erp_stock_health"],
+    submitLabel: "Complete the task",
+  },
+
   {
     label: "Convert to a purchase order",
     title: "Turn this requisition into a purchase order",
