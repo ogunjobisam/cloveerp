@@ -3631,7 +3631,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Every report version, the governed view it reads, and each run with the parameters it used — so what was shown can be shown again.",
     permission: "reporting.read",
-    group: "assure",
+    group: "records",
   },
   {
     path: "/operations/jobs",
@@ -3735,7 +3735,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "The plan this organisation is on, what it entitles, how much of each limit is used, and the meters behind the figures.",
     permission: "administration.read",
-    group: "organisation",
+    group: "people",
   },
   {
     path: "/administration/configuration",
@@ -3743,7 +3743,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Configuration",
     blurb: "Install modules and promote the change sets that put them in force.",
     permission: "administration.configure",
-    group: "configure",
+    group: "system",
   },
   {
     path: "/administration/packs",
@@ -3752,7 +3752,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Switch product features on and off, apply starter content packs, and see what this organisation cannot yet do.",
     permission: "administration.configure",
-    group: "configure",
+    group: "system",
   },
   {
     path: "/administration/onboarding",
@@ -3764,7 +3764,7 @@ export const EXTRA_TILES: TileDef[] = [
       // words off the surface.
       "Questions about how this organisation works, turned into a proposed change for each configuration surface.",
     permission: "administration.configure",
-    group: "organisation",
+    group: "people",
   },
   {
     path: "/administration/organisation",
@@ -3772,7 +3772,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Organisation and approval routing",
     blurb: "Departments, membership, value bands and named approvers — who approves what, and why.",
     permission: "administration.configure",
-    group: "organisation",
+    group: "people",
   },
   {
     path: "/master-data/classification",
@@ -3781,7 +3781,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Classification axes and values, code templates composed from them, completeness gaps and divergences.",
     permission: "master_data.write",
-    group: "configure",
+    group: "catalogue",
   },
   {
     path: "/master-data/item-supply",
@@ -3789,7 +3789,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Product-suppliers",
     blurb: "Default suppliers, preference ranks, sourcing splits and approved-for-use status.",
     permission: "master_data.write",
-    group: "configure",
+    group: "catalogue",
   },
   {
     path: "/logistics/release-areas",
@@ -3798,7 +3798,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Allocated stock scopes, pull and push replenishment, ageing back to bulk, and print gating.",
     permission: "logistics.plan",
-    group: "configure",
+    group: "catalogue",
   },
   {
     path: "/inventory/warehouse",
@@ -3807,7 +3807,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Zones, aisles and bins, what each holds, and the storage rules put-away, replenishment and picking read.",
     permission: "inventory.adjust",
-    group: "configure",
+    group: "catalogue",
   },
   {
     path: "/inventory/audit",
@@ -3816,7 +3816,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Every location with its quantity and value, the last count against it, and the variance between the two.",
     permission: "inventory.read",
-    group: "assure",
+    group: "move",
   },
   {
     path: "/inventory/forecast",
@@ -3835,7 +3835,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Accounting codes and the matrix that decides the nominal account and analysis — with a gap report and no suspense fallback.",
     permission: "finance.configure",
-    group: "configure",
+    group: "money",
   },
   {
     path: "/finance/dimensions",
@@ -3844,7 +3844,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "Cost centres, projects and the like: their values, how a posting derives them, and which combinations are allowed.",
     permission: "finance.read",
-    group: "configure",
+    group: "money",
   },
   {
     path: "/finance/statements",
@@ -3853,7 +3853,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "What the period made and what the company is worth, read from the journals purchases, stock and invoices already posted.",
     permission: "finance.read",
-    group: "assure",
+    group: "settle",
   },
   {
     path: "/finance/cost-centres",
@@ -3862,7 +3862,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "The cost centres postings are analysed by, derived from the document's cost centre, department or site.",
     permission: "finance.read",
-    group: "configure",
+    group: "money",
   },
   {
     path: "/administration/permissions",
@@ -3870,7 +3870,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Users and authorisations",
     blurb: "Principals, roles, and the grants between them.",
     permission: "administration.roles",
-    group: "organisation",
+    group: "people",
   },
   {
     path: "/administration/terminology",
@@ -3878,7 +3878,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Terminology",
     blurb: "The wording of every label, per organisation.",
     permission: "administration.configure",
-    group: "configure",
+    group: "system",
   },
   {
     path: "/administration/audit",
@@ -3895,7 +3895,7 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Organisation lifecycle",
     blurb: "Go-live, export and portability, and deletion that deletes.",
     permission: "administration.configure",
-    group: "organisation",
+    group: "people",
   },
 ];
 
