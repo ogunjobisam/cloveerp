@@ -27,7 +27,7 @@ import { ProcessFlow } from "./process-flow";
  *   Reports   — what do I need to read?
  */
 
-type Tab = "dashboard" | "work" | "reports";
+type Tab = "dashboard" | "reports";
 
 function panelOf(p: Panel) {
   return (
