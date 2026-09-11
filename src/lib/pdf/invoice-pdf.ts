@@ -22,7 +22,7 @@
  */
 import { PDFDocument, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import { NOTO_SANS_BOLD_BASE64, NOTO_SANS_REGULAR_BASE64, fontBytes } from "./fonts";
+import { NOTO_SANS_BOLD_BASE64, NOTO_SANS_REGULAR_BASE64, fontBytes } from "./fonts.ts";
 
 export interface InvoiceContractLine {
   line_no?: number | null;

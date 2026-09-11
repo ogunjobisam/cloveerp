@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { PDFDocument } from "pdf-lib";
-import { renderSalesInvoicePdf, sha256Hex, type InvoiceContract } from "./invoice-pdf";
+import { renderSalesInvoicePdf, sha256Hex, type InvoiceContract } from "./invoice-pdf.ts";
 
 function contract(lineCount: number, customerName: string): InvoiceContract {
   const lines = Array.from({ length: lineCount }, (_, i) => ({
