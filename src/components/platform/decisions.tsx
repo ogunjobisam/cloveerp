@@ -52,7 +52,15 @@ type ProductDecision = {
 
 type Scope = "product" | "policy";
 
-function Count({ tone, label, n }: { tone: "ok" | "warn" | "bad" | "muted"; label: string; n: number }) {
+function Count({
+  tone,
+  label,
+  n,
+}: {
+  tone: "ok" | "warn" | "bad" | "muted";
+  label: string;
+  n: number;
+}) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
       <Pill tone={tone}>{n}</Pill>
@@ -256,7 +264,9 @@ export function Decisions() {
             {policyRows.map((d) => (
               <li key={d.code} className="py-4 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Pill tone={d.status === "open" ? "warn" : d.status === "accepted" ? "ok" : "muted"}>
+                  <Pill
+                    tone={d.status === "open" ? "warn" : d.status === "accepted" ? "ok" : "muted"}
+                  >
                     {d.status === "open"
                       ? "Open question"
                       : d.status === "accepted"

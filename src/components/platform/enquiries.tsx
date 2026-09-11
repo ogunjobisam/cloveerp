@@ -95,9 +95,7 @@ export function Enquiries({ role }: { role: PlatformRole }) {
                 ) : null}
               </td>
               <td className="py-3 pr-4 text-xs">
-                <Pill
-                  tone={e.notified_at ? "ok" : e.failure_reason ? "bad" : "warn"}
-                >
+                <Pill tone={e.notified_at ? "ok" : e.failure_reason ? "bad" : "warn"}>
                   {e.notified_at ? "Sent" : e.failure_reason ? "Failed" : e.status}
                 </Pill>
                 {e.failure_reason ? (
