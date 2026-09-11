@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createPublicApiSpec } from "../../../../../lib/public-api-catalogue";
+import { createPublicApiSpec } from "../../../../lib/public-api-catalogue";
 
 export const Route = createFileRoute("/api/public/v1/openapi.json")({
   server: {
