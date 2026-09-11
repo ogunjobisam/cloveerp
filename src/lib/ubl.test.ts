@@ -48,7 +48,8 @@ describe("Peppol BIS Billing UBL", () => {
   });
 
   test("uses the credit-note root and requires the original invoice", () => {
-    const credit: BillingContract = { ...contract, kind: "credit_note", number: "CRN-000001", payment: undefined };
+    const { payment: _payment, ...withoutPayment } = contract;
+    const credit: BillingContract = { ...withoutPayment, kind: "credit_note", number: "CRN-000001" };
     expect(validateBillingContract(credit).map((failure) => failure.code)).toContain(
       "CLOVEERP_PEPPOL_PRECEDING_INVOICE_REQUIRED",
     );
