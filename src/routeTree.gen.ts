@@ -37,7 +37,9 @@ import { Route as CommercialQuotesRouteImport } from './routes/commercial/quotes
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
+import { Route as FinanceCostCentresRouteImport } from './routes/finance/cost-centres'
 import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensions'
+import { Route as FinanceStatementsRouteImport } from './routes/finance/statements'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as InventoryAuditRouteImport } from './routes/inventory/audit'
@@ -213,9 +215,19 @@ const FinanceAccountDeterminationRoute =
     path: '/finance/account-determination',
     getParentRoute: () => rootRouteImport,
   } as any)
+const FinanceCostCentresRoute = FinanceCostCentresRouteImport.update({
+  id: '/finance/cost-centres',
+  path: '/finance/cost-centres',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceDimensionsRoute = FinanceDimensionsRouteImport.update({
   id: '/finance/dimensions',
   path: '/finance/dimensions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceStatementsRoute = FinanceStatementsRouteImport.update({
+  id: '/finance/statements',
+  path: '/finance/statements',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
@@ -379,7 +391,9 @@ export interface FileRoutesByFullPath {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
+  '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/warehouse': typeof InventoryWarehouseRoute
@@ -436,7 +450,9 @@ export interface FileRoutesByTo {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
+  '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/warehouse': typeof InventoryWarehouseRoute
@@ -494,7 +510,9 @@ export interface FileRoutesById {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
+  '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/warehouse': typeof InventoryWarehouseRoute
@@ -553,7 +571,9 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/cost-centres'
     | '/finance/dimensions'
+    | '/finance/statements'
     | '/inventory/audit'
     | '/inventory/forecast'
     | '/inventory/warehouse'
@@ -610,7 +630,9 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/cost-centres'
     | '/finance/dimensions'
+    | '/finance/statements'
     | '/inventory/audit'
     | '/inventory/forecast'
     | '/inventory/warehouse'
@@ -667,7 +689,9 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/cost-centres'
     | '/finance/dimensions'
+    | '/finance/statements'
     | '/inventory/audit'
     | '/inventory/forecast'
     | '/inventory/warehouse'
@@ -725,7 +749,9 @@ export interface RootRouteChildren {
   CommercialQuotesRoute: typeof CommercialQuotesRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
+  FinanceCostCentresRoute: typeof FinanceCostCentresRoute
   FinanceDimensionsRoute: typeof FinanceDimensionsRoute
+  FinanceStatementsRoute: typeof FinanceStatementsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
   InventoryForecastRoute: typeof InventoryForecastRoute
   InventoryWarehouseRoute: typeof InventoryWarehouseRoute
@@ -953,11 +979,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceAccountDeterminationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/cost-centres': {
+      id: '/finance/cost-centres'
+      path: '/finance/cost-centres'
+      fullPath: '/finance/cost-centres'
+      preLoaderRoute: typeof FinanceCostCentresRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/finance/dimensions': {
       id: '/finance/dimensions'
       path: '/finance/dimensions'
       fullPath: '/finance/dimensions'
       preLoaderRoute: typeof FinanceDimensionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finance/statements': {
+      id: '/finance/statements'
+      path: '/finance/statements'
+      fullPath: '/finance/statements'
+      preLoaderRoute: typeof FinanceStatementsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/governance/': {
@@ -1173,7 +1213,9 @@ const rootRouteChildren: RootRouteChildren = {
   CommercialQuotesRoute: CommercialQuotesRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
+  FinanceCostCentresRoute: FinanceCostCentresRoute,
   FinanceDimensionsRoute: FinanceDimensionsRoute,
+  FinanceStatementsRoute: FinanceStatementsRoute,
   InventoryAuditRoute: InventoryAuditRoute,
   InventoryForecastRoute: InventoryForecastRoute,
   InventoryWarehouseRoute: InventoryWarehouseRoute,

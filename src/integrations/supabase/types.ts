@@ -226,6 +226,10 @@ export type Database = {
         Args: { p_document_id: string }
         Returns: Json
       }
+      erp_balance_sheet: {
+        Args: { p_as_at?: string; p_cost_centre?: string; p_ledger?: string }
+        Returns: Json
+      }
       erp_batch_audit: { Args: { p_batch_id: string }; Returns: Json }
       erp_batch_record: { Args: { p_works_order_id: string }; Returns: Json }
       erp_batches: { Args: { p_limit?: number }; Returns: Json }
@@ -460,6 +464,7 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_cost_centres: { Args: never; Returns: Json }
       erp_count_accuracy: { Args: never; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
       erp_countries: { Args: never; Returns: Json }
@@ -1520,6 +1525,15 @@ export type Database = {
       erp_print_release_wave: { Args: { p_wave_id: string }; Returns: Json }
       erp_print_routes: { Args: never; Returns: Json }
       erp_printers: { Args: never; Returns: Json }
+      erp_profit_and_loss: {
+        Args: {
+          p_cost_centre?: string
+          p_from?: string
+          p_ledger?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       erp_promise_date: {
         Args: { p_item_id: string; p_quantity: number; p_site_id: string }
         Returns: string
@@ -2319,7 +2333,15 @@ export type Database = {
         }
         Returns: Json
       }
-      erp_trial_balance: { Args: never; Returns: Json }
+      erp_trial_balance: {
+        Args: {
+          p_cost_centre?: string
+          p_from?: string
+          p_ledger?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       erp_trigger_job: {
         Args: { p_job_code: string; p_reason?: string }
         Returns: Json
@@ -2430,6 +2452,17 @@ export type Database = {
           p_item_classes?: string
           p_name: string
           p_segments: Json
+        }
+        Returns: Json
+      }
+      erp_upsert_cost_centre: {
+        Args: {
+          p_code: string
+          p_name: string
+          p_parent_code?: string
+          p_status?: string
+          p_valid_from?: string
+          p_valid_to?: string
         }
         Returns: Json
       }

@@ -3847,6 +3847,24 @@ export const EXTRA_TILES: TileDef[] = [
     group: "configure",
   },
   {
+    path: "/finance/statements",
+    titleKey: "nav.finance_statements",
+    title: "Profit and balance sheet",
+    blurb:
+      "What the period made and what the company is worth, read from the journals purchases, stock and invoices already posted.",
+    permission: "finance.read",
+    group: "assure",
+  },
+  {
+    path: "/finance/cost-centres",
+    titleKey: "nav.finance_cost_centres",
+    title: "Cost centres",
+    blurb:
+      "The cost centres postings are analysed by, derived from the document's cost centre, department or site.",
+    permission: "finance.read",
+    group: "configure",
+  },
+  {
     path: "/administration/permissions",
     titleKey: "nav.administration_permissions",
     title: "Users and authorisations",
