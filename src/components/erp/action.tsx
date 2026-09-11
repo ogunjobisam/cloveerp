@@ -284,7 +284,6 @@ function useOptions(source: OptionSource | undefined) {
       )
     : [];
 
-
   return { rows, isPending: Boolean(source) && isPending, error };
 }
 

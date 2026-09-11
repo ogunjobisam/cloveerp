@@ -228,12 +228,7 @@ function Notifications() {
                       { value: "object_owner", label: "Whoever owns the affected object" },
                     ],
                   },
-                  pickRoleCode(
-                    "p_role_code",
-                    "Role",
-                    false,
-                    "Only when the audience is a role.",
-                  ),
+                  pickRoleCode("p_role_code", "Role", false, "Only when the audience is a role."),
                   {
                     kind: "combo",
                     name: "p_department_code",

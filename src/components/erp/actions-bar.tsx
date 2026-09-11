@@ -459,7 +459,6 @@ export const pickCountClass = (
   ],
 });
 
-
 /** A document type, optionally of one base type. */
 export const pickDocumentType = (
   baseTypeCode?: string,
