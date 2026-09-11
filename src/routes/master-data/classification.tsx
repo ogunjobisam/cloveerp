@@ -295,13 +295,11 @@ function Classification() {
                 required: true,
                 hint: 'For example [{"kind":"axis","axis":"FAMILY","length":3},{"kind":"literal","text":"-"},{"kind":"sequence","length":4},{"kind":"check"}]',
               },
-              {
-                kind: "text",
-                name: "p_item_classes",
-                label: "Only for product classes",
-                placeholder: "finished, raw",
-                hint: "Comma separated. Leave empty to apply to every product.",
-              },
+              pickItemClasses(
+                "p_item_classes",
+                "Only for product classes",
+                "Tick every class this applies to. None ticked applies to every product.",
+              ),
               {
                 kind: "choice",
                 name: "p_casing",

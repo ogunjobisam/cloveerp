@@ -4,6 +4,7 @@ import { type Field } from "../../components/erp/action";
 import {
   ActionBar,
   codeField,
+  pickCountry,
   pickCurrency,
   pickFrom,
   pickSite,
@@ -270,13 +271,7 @@ function Organisation() {
                 ...pickCurrency("p_base_currency", "Currency"),
                 hint: "The books are kept in this.",
               },
-              {
-                kind: "text",
-                name: "p_country_code",
-                label: "Country",
-                required: true,
-                hint: "Two-letter code.",
-              },
+              pickCountry("p_country_code", "Country", true),
               {
                 kind: "text",
                 name: "p_reporting_locale",

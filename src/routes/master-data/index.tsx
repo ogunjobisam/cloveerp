@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
-import { ActionBar, codeField, reason } from "../../components/erp/actions-bar";
+import { ActionBar, codeField, pickCountry, reason } from "../../components/erp/actions-bar";
 import { AutoPanel } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
@@ -158,13 +158,7 @@ function MasterData() {
                 hint: "Tick every role this partner plays.",
                 choices: ROLES.map((r) => ({ value: r, label: r })),
               },
-              {
-                kind: "text",
-                name: "p_country_code",
-                label: "Country",
-                placeholder: "GB",
-                hint: "Two-letter country code.",
-              },
+              pickCountry("p_country_code", "Country", false),
               {
                 kind: "text",
                 name: "p_legal_name",
@@ -665,12 +659,7 @@ function NewParty() {
           choices: ROLES.map((r) => ({ value: r, label: r })),
           hint: "More roles can be added afterwards.",
         },
-        {
-          kind: "text",
-          name: "p_country_code",
-          label: "Country",
-          hint: "Two-letter code, e.g. GB.",
-        },
+        pickCountry("p_country_code", "Country", false),
       ]}
       mapArgs={(v) => ({
         p_code: v["p_code"],
