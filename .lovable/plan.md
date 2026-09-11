@@ -29,10 +29,11 @@ Add structured organisation and customer settings only where the existing model 
 
 - Generate canonical UTF-8 XML server-side from the frozen contract with deterministic element ordering and XML escaping. Never generate XML in the browser.
 - Validate before committing the issue against:
-  1. the UBL 2.1 Invoice or CreditNote XSD;
-  2. the official Peppol BIS Billing 3.0 Schematron rules for the pinned ruleset release;
-  3. Clove's contract-to-UBL completeness checks before rendering.
-- Bundle and version the official validation artefacts used by the server-side runtime. Record their version on each issue so validation remains explainable after rules are upgraded.
+  1. Clove's typed UBL 2.1 structure and cardinality checks before serialization;
+  2. the official EN 16931 Schematron rules;
+  3. the official Peppol BIS Billing 3.0 Schematron rules for the pinned release.
+- Use `saxon-js` to execute build-time-compiled Schematron SEF packages in the edge runtime. Pin and bundle the official CEN and OpenPeppol artefacts; do not fetch changing rules at issue time. Record the exact ruleset versions on each issue so validation remains explainable after upgrades.
+- Treat official Schematron errors as blocking and warnings as visible non-blocking findings. The controlled serializer provides only the UBL structures it declares; validation is not delegated to an external service.
 - Translate validation findings into stable Clove refusal codes and plain-language messages naming the field, affected invoice line when relevant, and the existing screen that fixes it. Keep rule IDs and XML paths behind the existing technical-detail disclosure.
 - Do not consume or finalize an issue number when preflight validation fails. If archive completion fails after reservation, retain the number as failed/void according to the existing no-reuse rule.
 
@@ -51,7 +52,7 @@ Add structured organisation and customer settings only where the existing model 
 - Assert required Peppol failures are refused before completion and surfaced through registered plain-language resources.
 - Assert XML checksum immutability, tenant isolation, exact-byte retrieval and audit events.
 - Add representative valid invoice and credit-note fixtures plus failures for missing endpoint schemes, VAT identifiers, address/country data, line units, tax categories, payment data and preceding-invoice reference.
-- Run the pinned XSD/Schematron validator fixtures, schema assertion catalogue, typecheck, lint, tests and build.
+- Run the pinned EN 16931/Peppol Schematron fixtures, typed UBL serializer fixtures, schema assertion catalogue, typecheck, lint, tests and build.
 
 ## Delivery order
 
