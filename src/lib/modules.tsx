@@ -1372,7 +1372,7 @@ export const FINANCE: ModuleDef = {
       fn: "erp_propose_payment_run",
       fields: [
         { kind: "date", name: "p_payment_date", label: "Payment date" },
-        { kind: "text", name: "p_currency", label: "Currency", hint: "Three-letter code." },
+        pickCurrency("p_currency", "Currency", false),
       ],
       invalidates: ["erp_payment_proposals"],
     },
