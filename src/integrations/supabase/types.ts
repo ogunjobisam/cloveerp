@@ -1618,6 +1618,7 @@ export type Database = {
         Returns: string
       }
       erp_protected_values: { Args: never; Returns: Json }
+      erp_purge_expired_document_previews: { Args: never; Returns: Json }
       erp_put_protected_value: {
         Args: { p_code: string; p_value: string }
         Returns: Json
@@ -1759,6 +1760,16 @@ export type Database = {
           p_keyed_reason?: string
           p_payload?: Json
           p_task_code: string
+        }
+        Returns: Json
+      }
+      erp_record_document_preview: {
+        Args: {
+          p_content_checksum?: string
+          p_document_id: string
+          p_minutes?: number
+          p_storage_path?: string
+          p_template_version_id?: string
         }
         Returns: Json
       }
