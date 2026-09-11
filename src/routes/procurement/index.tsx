@@ -488,19 +488,41 @@ function Procurement() {
           stages: [
             {
               label: "Requisition",
-              hint: "Somebody asking for something, before anyone has committed to buying it.",
+              hint: "Somebody asking for something, before anyone has committed to buying it. Submitting it starts the approval.",
               fedBy: "Requisitions appear here once somebody raises one.",
 
               typeCode: "requisition",
               partyRole: "provider",
               recordArg: "p_document_id",
-              actionFn: "erp_convert_document",
+              actionFn: "requisition_submit",
+              actionFns: ["erp_stamp_document_approval"],
+            },
+            {
+              label: "Approval",
+              hint: "Who has to agree, at this value. An approved requisition — and only an approved one — becomes a purchase order.",
+              fedBy:
+                "Requisitions appear here once they are raised; submit one at the step before to send it for approval.",
+
+              list: {
+                fn: "erp_documents",
+                args: { p_type_code: "requisition", p_limit: 200 },
+                id: "document_id",
+                title: ["document_number"],
+                subtitle: ["document_date", "party"],
+                status: "state_name",
+                noun: "requisition",
+                nounPlural: "requisitions",
+              },
+              recordArg: "p_document_id",
+              actionFn: "requisition_approve",
+              actionFns: ["requisition_reject", "erp_convert_document"],
+              createFn: "erp_decide_approval",
             },
             {
               label: "Purchase order",
               hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
               fedBy:
-                "Orders appear here once a requisition is turned into one, or a planned order is firmed.",
+                "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
 
               typeCode: "purchase_order",
               partyRole: "provider",
@@ -509,7 +531,7 @@ function Procurement() {
             },
             {
               label: "Goods receipt",
-              hint: "What arrived. Posting a receipt is what puts stock on the shelf and raises the accrual.",
+              hint: "What arrived. Posting a receipt is what puts stock into goods-in and raises the accrual.",
               fedBy: "Receipts appear here once goods are received against a purchase order.",
 
               typeCode: "goods_receipt",
@@ -518,6 +540,44 @@ function Procurement() {
               actionFn: "erp_receive_against",
               actionFns: ["erp_bill_from_receipt"],
             },
+            {
+              label: "Goods in",
+              hint: "What is standing in the receiving area, with the place each product belongs. Nothing here is on a shelf yet.",
+              fedBy:
+                "Stock appears here once a goods receipt is posted, because a receipt lands in the site's receiving area.",
+
+              list: {
+                fn: "erp_goods_in",
+                args: {},
+                id: "line_key",
+                title: ["item_code", "item"],
+                subtitle: ["location", "quantity", "suggested_location"],
+                status: "putaway_task",
+                noun: "pallet",
+                nounPlural: "pallets",
+              },
+              createFn: "erp_raise_putaway_tasks",
+            },
+            {
+              label: "Put away",
+              hint: "A task per pallet, from goods-in to the location the storage rules chose. Completing it is what moves the stock.",
+              fedBy:
+                "Tasks appear here once put-away is raised for a site at the goods-in step before this one.",
+
+              list: {
+                fn: "erp_warehouse_tasks",
+                args: { p_kind: "putaway", p_limit: 200 },
+                id: "task_id",
+                title: ["item", "kind"],
+                subtitle: ["from_location", "to_location", "quantity"],
+                status: "status",
+                noun: "task",
+                nounPlural: "tasks",
+              },
+              recordArg: "p_task_id",
+              actionFn: "erp_complete_warehouse_task",
+            },
+
             {
               label: "Supplier bill",
               hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
