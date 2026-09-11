@@ -127,6 +127,10 @@ const REFUSAL_MESSAGES: Record<string, { title: string; body: string }> = {
     title: "That line already holds stock.",
     body: "The reservation is in place; pick the order rather than reserving it again.",
   },
+  CLOVEERP_NO_BILL_OF_MATERIALS: {
+    title: "This product has no bill of materials.",
+    body: "Nothing says what it is made of, so a works order cannot be raised for it. Open Manufacturing and use “Define a bill of materials” to list its components, then raise the order again.",
+  },
 };
 
 /** This map is ours, so it is keyed once and the retired spelling is folded in. */
