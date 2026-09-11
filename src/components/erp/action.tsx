@@ -189,6 +189,12 @@ export type OptionSource = {
   args?: Record<string, unknown>;
   value: string;
   label: string[];
+  /**
+   * The key holding the list, when the door answers with an object of several
+   * lists rather than one list. `erp_permissions_directory` is the case: one
+   * read carries principals, roles and the permission catalogue.
+   */
+  path?: string;
 };
 
 export type Field =
@@ -265,16 +271,22 @@ function useOptions(source: OptionSource | undefined) {
     queryKey: [source?.fn ?? "none", source?.args ?? {}],
     queryFn: () =>
       source
-        ? callErp<Record<string, unknown>[]>(source.fn, source.args ?? {})
+        ? callErp<unknown>(source.fn, source.args ?? {})
         : Promise.resolve([] as Record<string, unknown>[]),
     enabled: Boolean(source),
   });
+
+  // A door that answers with several named lists is asked for one of them.
+  const list =
+    source?.path && data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)[source.path]
+      : data;
 
   // Most reference reads return a row per option. A few — the time zone list
   // is one — return plain strings, which are their own value and their own
   // label.
   const rows = source
-    ? (Array.isArray(data) ? data : []).map((row) =>
+    ? (Array.isArray(list) ? (list as Record<string, unknown>[]) : []).map((row) =>
         typeof row === "string" || typeof row === "number"
           ? { value: String(row), label: String(row) }
           : {

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar } from "../../components/erp/actions-bar";
+import { ApiAccess } from "../../components/erp/api-access";
 import { Gate } from "../../components/erp/gate";
 
 import { PageHeader } from "../../components/erp/page";
@@ -108,10 +109,13 @@ function Integrations() {
             Webhooks are signed and keep a complete retry history.
           </p>
           <p className="mt-4 text-xs text-muted-foreground">
-            Key and subscription controls appear here after the corresponding database release is
-            deployed.
+            Keys, subscriptions and the delivery log are managed further down this page.
           </p>
         </div>
+      </section>
+
+      <section className="min-w-0">
+        <ApiAccess />
       </section>
 
       <ActionBar
