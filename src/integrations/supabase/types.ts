@@ -243,6 +243,10 @@ export type Database = {
         Args: { p_location_id: string; p_reason_code?: string }
         Returns: string
       }
+      erp_boms: {
+        Args: { p_item_id?: string; p_site_id?: string }
+        Returns: Json
+      }
       erp_book_operation_time: {
         Args: {
           p_completed?: number
@@ -465,6 +469,17 @@ export type Database = {
           p_item_id: string
           p_manufactured_on?: string
           p_supplier_party_id?: string
+        }
+        Returns: string
+      }
+      erp_create_bom: {
+        Args: {
+          p_effective_from?: string
+          p_item_id: string
+          p_lines?: Json
+          p_name?: string
+          p_output_quantity?: number
+          p_site_id?: string
         }
         Returns: string
       }
@@ -2644,6 +2659,7 @@ export type Database = {
         Returns: Json
       }
       erp_wave_print_readiness: { Args: { p_wave_id: string }; Returns: Json }
+      erp_withdraw_bom: { Args: { p_bom_id: string }; Returns: string }
       erp_works_order_availability: {
         Args: { p_works_order_id: string }
         Returns: Json
