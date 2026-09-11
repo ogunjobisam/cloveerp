@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 
@@ -51,11 +51,51 @@ function score(text: string, q: string): number {
   return t.includes(q) ? 1 : 0;
 }
 
+/*
+ * One palette, however many buttons open it.
+ *
+ * The shell mounts this twice — as a field in the header on a wide screen and
+ * as an icon on a narrow one — and each instance bound its own Cmd/Ctrl-K
+ * listener and portalled its own dialog. Both are in the DOM at every width,
+ * because the wrappers that hide one of them are CSS on the trigger and the
+ * dialog escapes to the body, so the shortcut opened two modals with the same
+ * accessible name stacked on each other. A screen reader was offered two
+ * "Search screens" dialogs and the browser suite caught it as a strict-mode
+ * violation before a person had to.
+ *
+ * So the open state lives here, once, and only the icon variant draws the
+ * dialog. Both buttons still open it; there is only ever one of it.
+ */
+let paletteOpen = false;
+const paletteListeners = new Set<() => void>();
+
+function subscribePalette(listener: () => void) {
+  paletteListeners.add(listener);
+  return () => {
+    paletteListeners.delete(listener);
+  };
+}
+
+function readPalette() {
+  return paletteOpen;
+}
+
+// The server renders nothing open, and hydration must agree with it.
+function readPaletteOnServer() {
+  return false;
+}
+
+function setPaletteOpen(next: boolean | ((previous: boolean) => boolean)) {
+  paletteOpen = typeof next === "function" ? next(paletteOpen) : next;
+  for (const listener of paletteListeners) listener();
+}
+
 export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field" }) {
   const { session } = useErpSession();
   const { t, ui } = useT();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const open = useSyncExternalStore(subscribePalette, readPalette, readPaletteOnServer);
+  const setOpen = setPaletteOpen;
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -177,7 +217,7 @@ export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field
         </kbd>
       </button>
 
-      {open && typeof document !== "undefined"
+      {open && variant === "icon" && typeof document !== "undefined"
         ? createPortal(
             /*
              * Into the body, for the same reason the main menu is.
