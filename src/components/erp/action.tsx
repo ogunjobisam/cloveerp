@@ -214,7 +214,13 @@ export type Field =
       kind: "multi";
       options?: OptionSource;
       choices?: { value: string; label: string }[];
+      /**
+       * Some doors take the several as one line of text rather than an array.
+       * Ticking boxes is still the right control; this is only how it is sent.
+       */
+      join?: string;
     } & FieldBase)
+
   /** A list of records, added a row at a time. Sent as an array of objects. */
   | ({
       kind: "rows";
