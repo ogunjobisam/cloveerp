@@ -1335,6 +1335,7 @@ export type Database = {
       }
       erp_platform_maintenance_windows: { Args: never; Returns: Json }
       erp_platform_me: { Args: never; Returns: Json }
+      erp_platform_my_support_accesses: { Args: never; Returns: Json }
       erp_platform_my_tenancies: { Args: never; Returns: Json }
       erp_platform_name_affected_organisations: {
         Args: { p_incident_code: string; p_tenant_codes: string[] }
