@@ -942,28 +942,36 @@ export function ActionDialog({
             role="dialog"
             aria-modal="true"
             aria-label={ui(title)}
-            className="fixed inset-0 z-50 overflow-y-auto bg-background"
+            className="fixed inset-0 z-40 overflow-y-auto bg-muted/40 backdrop-blur-[2px] md:left-60"
           >
-            <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+            <div className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur">
               <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-4 py-3 sm:px-6">
-                <ActionButton
-                  variant="secondary"
+                <button
+                  type="button"
+                  aria-label={ui("Back")}
                   onClick={() => {
                     setOpen(false);
                     action.reset();
                   }}
+                  className={`${TOUCH} grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:text-foreground`}
                 >
-                  {ui("Back")}
-                </ActionButton>
+                  <ArrowLeft className="size-4" />
+                </button>
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-semibold">{ui(title)}</h2>
+                  <h2 className="truncate font-display text-base font-semibold tracking-tight">
+                    {ui(title)}
+                  </h2>
                   {description ? (
                     <p className="truncate text-xs text-muted-foreground">{ui(description)}</p>
                   ) : null}
                 </div>
               </div>
             </div>
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">{body}</div>
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+              <div className="rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)] sm:p-6">
+                {body}
+              </div>
+            </div>
           </div>
         ) : null}
       </>
