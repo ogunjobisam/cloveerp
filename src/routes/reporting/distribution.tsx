@@ -265,13 +265,8 @@ function Distribution() {
                   { value: "monthly", label: "Monthly" },
                 ],
               },
-              { kind: "text", name: "p_at_time", label: "At", hint: "A time of day, e.g. 06:00." },
-              {
-                kind: "text",
-                name: "p_timezone",
-                label: "Time zone",
-                hint: "An IANA name, e.g. Europe/London.",
-              },
+              pickTimeOfDay("p_at_time", "At"),
+              pickTimezone("p_timezone", "Time zone", false),
               {
                 kind: "choice",
                 name: "p_destination_kind",

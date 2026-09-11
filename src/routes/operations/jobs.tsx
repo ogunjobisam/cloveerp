@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom, pickTimezone } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -147,7 +147,7 @@ function Jobs() {
                 hint: "Weekly only. ISO numbers, 1 = Monday, comma separated.",
               },
               { kind: "number", name: "p_day_of_month", label: "Day of month" },
-              { kind: "text", name: "p_timezone", label: "Timezone", hint: "Defaults to UTC." },
+              pickTimezone("p_timezone", "Time zone", false),
             ],
             invalidates: ["erp_silent_jobs", "erp_job_health", "erp_job_handlers"],
           },
