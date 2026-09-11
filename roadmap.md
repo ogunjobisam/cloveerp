@@ -1,1 +1,5 @@
-- [x] Fix preview build error: deno check could not resolve 'postgres' for the dispatch Edge Function
+# Roadmap
+
+- [ ] Build record document with screenshots
+- [ ] Set a password on ogunjobisam@gmail.com so sign-in works with either Google or password
+- [ ] Use that account to capture in-app screenshots for the document
