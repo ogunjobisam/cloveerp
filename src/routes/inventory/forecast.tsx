@@ -439,12 +439,12 @@ function StockForecast() {
               ui("Product"),
               ui("Used"),
               ui("Over"),
-              ui("Used per day"),
+              ui("Used / day"),
               ui("Lead time"),
               ui("Measured over"),
-              ui("Planned lead time"),
+              ui("Planned"),
 
-              ui("Demand in the lead time"),
+              ui("Lead-time demand"),
               ui("Safety stock"),
               ui("Order up to"),
               ui("Minimum"),
@@ -456,24 +456,44 @@ function StockForecast() {
                 key={`why:${r.site_id}:${r.item_id}`}
                 className="border-b border-border/60 last:border-0"
               >
-                <td className="py-2 pr-4 font-mono text-xs">{r.site_code}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{r.item_code}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.usage_quantity)}</td>
-                <td className="py-2 pr-4 tabular-nums">{`${r.usage_days}d`}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.usage_per_day, 3)}</td>
-                <td className="py-2 pr-4 tabular-nums">
+                <td
+                  className={`whitespace-nowrap border-l-4 py-2 pl-3 pr-4 font-mono text-xs ${rowAccent(r.state)}`}
+                >
+                  {r.site_code}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs">{r.item_code}</td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                  {qty(r.usage_quantity)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-muted-foreground">{`${r.usage_days}d`}</td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                  {qty(r.usage_per_day, 3)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
                   <LeadTime row={r} />
                 </td>
-                <td className="py-2 pr-4 tabular-nums">{measuredOver(r)}</td>
-                <td className="py-2 pr-4 tabular-nums">
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-sky-700 dark:text-sky-400">
+                  {measuredOver(r)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-muted-foreground">
                   {r.planned_lead_time_days ? `${r.planned_lead_time_days}d` : "—"}
                 </td>
 
-                <td className="py-2 pr-4 tabular-nums">{qty(r.lead_time_demand)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.safety_stock)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.order_up_to)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.min_order_quantity)}</td>
-                <td className="py-2 pr-4 tabular-nums">{qty(r.order_multiple)}</td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-violet-700 dark:text-violet-400">
+                  {qty(r.lead_time_demand)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-amber-700 dark:text-amber-400">
+                  {qty(r.safety_stock)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                  {qty(r.order_up_to)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                  {qty(r.min_order_quantity)}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                  {qty(r.order_multiple)}
+                </td>
               </tr>
             ))}
           </Table>
