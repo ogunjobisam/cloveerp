@@ -113,7 +113,7 @@ export function Table({ columns, children }: { columns: string[]; children: Reac
               <th
                 key={`${c}-${i}`}
                 scope="col"
-                className="pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                className="whitespace-nowrap pb-2 pr-4 text-xs font-medium uppercase tracking-wide text-muted-foreground"
               >
                 {c}
               </th>
