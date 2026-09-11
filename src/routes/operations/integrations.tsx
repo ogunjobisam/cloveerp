@@ -86,10 +86,16 @@ function Integrations() {
             <Table columns={["Method", "Path", "Purpose", "Permission"]}>
               {publicApiOperations.map((operation) => (
                 <tr key={operation.operationId} className="border-b border-border/50 last:border-0">
-                  <td className="py-2 pr-4"><Pill tone={operation.write ? "warn" : "ok"}>{operation.method}</Pill></td>
-                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs">/v1{operation.path}</td>
+                  <td className="py-2 pr-4">
+                    <Pill tone={operation.write ? "warn" : "ok"}>{operation.method}</Pill>
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs">
+                    /v1{operation.path}
+                  </td>
                   <td className="py-2 pr-4 text-sm">{operation.summary}</td>
-                  <td className="whitespace-nowrap py-2 font-mono text-xs text-muted-foreground">{operation.permission}</td>
+                  <td className="whitespace-nowrap py-2 font-mono text-xs text-muted-foreground">
+                    {operation.permission}
+                  </td>
                 </tr>
               ))}
             </Table>
@@ -102,7 +108,8 @@ function Integrations() {
             Webhooks are signed and keep a complete retry history.
           </p>
           <p className="mt-4 text-xs text-muted-foreground">
-            Key and subscription controls appear here after the corresponding database release is deployed.
+            Key and subscription controls appear here after the corresponding database release is
+            deployed.
           </p>
         </div>
       </section>
