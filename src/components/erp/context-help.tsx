@@ -150,9 +150,10 @@ export function ContextHelp() {
                     {topic.data.actions.map((a) => (
                       <li
                         key={a}
-                        className="rounded-full border border-border bg-muted/60 px-2.5 py-1 font-mono text-xs text-muted-foreground"
+                        title={a}
+                        className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
                       >
-                        {a}
+                        {routineLabel(a)}
                       </li>
                     ))}
                   </ul>
