@@ -400,6 +400,7 @@ function StageRecord({
     row && source
       ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
       : undefined;
+  const settled = isSettled(row, source);
 
   return (
     <div className="min-w-0 px-4 py-4 sm:px-5">
