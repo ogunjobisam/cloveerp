@@ -52,7 +52,6 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "dashboard", label: ui("Dashboard") },
-    { id: "work", label: ui("Work"), badge: def.worklists.length },
     { id: "reports", label: ui("Reports"), badge: def.reports.length },
   ];
 
