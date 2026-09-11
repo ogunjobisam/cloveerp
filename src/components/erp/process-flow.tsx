@@ -409,7 +409,14 @@ function StageRecord({
 
       {row && source ? (
         <>
-          <p className="mt-3 font-mono text-sm">{join(row, source.title)}</p>
+          <p className="mt-3 flex items-center gap-2 font-mono text-sm">
+            <span className="truncate">{join(row, source.title)}</span>
+            {settled ? (
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-sans text-[11px] font-medium text-muted-foreground">
+                Already {settled}
+              </span>
+            ) : null}
+          </p>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
             {Object.entries(row)
               .filter(([k, v]) => k !== source.id && !k.endsWith("_id") && typeof v !== "object")
