@@ -267,7 +267,10 @@ function StateSummary({ rows }: { rows: ForecastRow[] }) {
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.state, (counts.get(r.state) ?? 0) + 1);
   const order = ["out of stock", "order now", "below safety", "covered"];
-  const states = [...order.filter((s) => counts.has(s)), ...[...counts.keys()].filter((s) => !order.includes(s))];
+  const states = [
+    ...order.filter((s) => counts.has(s)),
+    ...[...counts.keys()].filter((s) => !order.includes(s)),
+  ];
   if (!states.length) return null;
   return (
     <div className="mb-4 flex flex-wrap gap-2">
@@ -406,9 +409,7 @@ function StockForecast() {
                   </td>
                   <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
                     {r.suggest_quantity > 0 ? (
-                      <span className="font-semibold text-primary">
-                        {qty(r.suggest_quantity)}
-                      </span>
+                      <span className="font-semibold text-primary">{qty(r.suggest_quantity)}</span>
                     ) : (
                       "—"
                     )}
@@ -491,9 +492,7 @@ function StockForecast() {
                 <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-amber-700 dark:text-amber-400">
                   {qty(r.safety_stock)}
                 </td>
-                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
-                  {qty(r.order_up_to)}
-                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">{qty(r.order_up_to)}</td>
                 <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
                   {qty(r.min_order_quantity)}
                 </td>
