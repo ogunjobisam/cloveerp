@@ -264,12 +264,20 @@ function useOptions(source: OptionSource | undefined) {
     enabled: Boolean(source),
   });
 
+  // Most reference reads return a row per option. A few — the time zone list
+  // is one — return plain strings, which are their own value and their own
+  // label.
   const rows = source
-    ? (Array.isArray(data) ? data : []).map((row) => ({
-        value: String(row[source.value] ?? ""),
-        label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
-      }))
+    ? (Array.isArray(data) ? data : []).map((row) =>
+        typeof row === "string" || typeof row === "number"
+          ? { value: String(row), label: String(row) }
+          : {
+              value: String(row[source.value] ?? ""),
+              label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
+            },
+      )
     : [];
+
 
   return { rows, isPending: Boolean(source) && isPending, error };
 }
