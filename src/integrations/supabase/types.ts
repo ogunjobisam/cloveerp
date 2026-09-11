@@ -460,6 +460,7 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_cost_centres: { Args: never; Returns: Json }
       erp_count_accuracy: { Args: never; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
       erp_countries: { Args: never; Returns: Json }
@@ -2430,6 +2431,17 @@ export type Database = {
           p_item_classes?: string
           p_name: string
           p_segments: Json
+        }
+        Returns: Json
+      }
+      erp_upsert_cost_centre: {
+        Args: {
+          p_code: string
+          p_name: string
+          p_parent_code?: string
+          p_status?: string
+          p_valid_from?: string
+          p_valid_to?: string
         }
         Returns: Json
       }
