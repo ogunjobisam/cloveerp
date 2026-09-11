@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar } from "../../components/erp/actions-bar";
+import { ApiAccess } from "../../components/erp/api-access";
 import { Gate } from "../../components/erp/gate";
+
 
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
