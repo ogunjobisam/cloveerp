@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom, pickItemClass } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -203,12 +203,12 @@ function Devices() {
                 required: true,
                 choices: WHEN_ABSENT,
               },
-              {
-                kind: "text",
-                name: "p_item_class",
-                label: "Product class",
-                hint: "Leave empty for the step's default rule.",
-              },
+              pickItemClass(
+                "p_item_class",
+                "Product class",
+                false,
+                "Leave empty for the step's default rule.",
+              ),
             ],
             invalidates: ["erp_scan_rules", "erp_device_operations"],
           },

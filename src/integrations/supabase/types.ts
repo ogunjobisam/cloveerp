@@ -462,6 +462,7 @@ export type Database = {
       }
       erp_count_accuracy: { Args: never; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
+      erp_countries: { Args: never; Returns: Json }
       erp_create_batch: {
         Args: {
           p_batch_number: string
@@ -889,6 +890,7 @@ export type Database = {
         Returns: number
       }
       erp_item_categories: { Args: never; Returns: Json }
+      erp_item_classes: { Args: never; Returns: Json }
       erp_item_classification: { Args: { p_item_id: string }; Returns: Json }
       erp_item_code_assignments: { Args: { p_limit?: number }; Returns: Json }
       erp_item_posting_classes: { Args: { p_limit?: number }; Returns: Json }
@@ -1930,6 +1932,7 @@ export type Database = {
         Returns: undefined
       }
       erp_revoke_role: { Args: { p_user_role_id: string }; Returns: Json }
+      erp_roles: { Args: never; Returns: Json }
       erp_rollback_import: { Args: { p_batch_id: string }; Returns: Json }
       erp_rollback_to_snapshot: {
         Args: { p_reason: string; p_snapshot_id: string }

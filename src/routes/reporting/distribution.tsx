@@ -9,7 +9,13 @@ import {
   GoTo,
   useErpAction,
 } from "../../components/erp/action";
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  pickFrom,
+  pickRoleCode,
+  pickTimeOfDay,
+  pickTimezone,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, TOUCH } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -248,12 +254,7 @@ function Distribution() {
                   { value: "role", label: "Everyone holding a role" },
                 ],
               },
-              {
-                kind: "text",
-                name: "p_role_code",
-                label: "Role code",
-                hint: "Only for a role subscription.",
-              },
+              pickRoleCode("p_role_code", "Role", false, "Only for a role subscription."),
               {
                 kind: "choice",
                 name: "p_cadence",
@@ -265,13 +266,8 @@ function Distribution() {
                   { value: "monthly", label: "Monthly" },
                 ],
               },
-              { kind: "text", name: "p_at_time", label: "At", hint: "A time of day, e.g. 06:00." },
-              {
-                kind: "text",
-                name: "p_timezone",
-                label: "Time zone",
-                hint: "An IANA name, e.g. Europe/London.",
-              },
+              pickTimeOfDay("p_at_time", "At"),
+              pickTimezone("p_timezone", "Time zone", false),
               {
                 kind: "choice",
                 name: "p_destination_kind",

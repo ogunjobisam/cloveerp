@@ -4,6 +4,7 @@ import {
   ActionBar,
   pickFrom,
   pickItem,
+  pickItemClasses,
   pickLocation,
   reason,
 } from "../../components/erp/actions-bar";
@@ -157,12 +158,11 @@ function ReleaseAreas() {
                 placeholder: "sales_order",
                 hint: "Leave empty to serve every order type.",
               },
-              {
-                kind: "text",
-                name: "p_item_classes",
-                label: "Product classes",
-                hint: "Comma separated. Leave empty to serve any product.",
-              },
+              pickItemClasses(
+                "p_item_classes",
+                "Product classes",
+                "Tick every class this serves. None ticked serves any product.",
+              ),
               { kind: "number", name: "p_min_quantity", label: "Minimum" },
               { kind: "number", name: "p_max_quantity", label: "Maximum" },
               { kind: "number", name: "p_ageing_hours", label: "Ageing (hours)" },

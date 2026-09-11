@@ -4,6 +4,7 @@ import { type Field } from "../../components/erp/action";
 import {
   ActionBar,
   codeField,
+  pickCountry,
   pickCurrency,
   pickFrom,
   pickSite,
@@ -270,13 +271,7 @@ function Organisation() {
                 ...pickCurrency("p_base_currency", "Currency"),
                 hint: "The books are kept in this.",
               },
-              {
-                kind: "text",
-                name: "p_country_code",
-                label: "Country",
-                required: true,
-                hint: "Two-letter code.",
-              },
+              pickCountry("p_country_code", "Country", true),
               {
                 kind: "text",
                 name: "p_reporting_locale",
@@ -639,7 +634,7 @@ function Organisation() {
                 undefined,
                 false,
               ),
-              { kind: "text", name: "p_country_code", label: "Country code", hint: "Two letters." },
+              pickCountry("p_country_code", "Country", false),
             ],
             // A new site is given its standard bays in the same call, so the
             // locations list is out of date the moment this returns. Leaving it

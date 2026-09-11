@@ -214,7 +214,13 @@ export type Field =
       kind: "multi";
       options?: OptionSource;
       choices?: { value: string; label: string }[];
+      /**
+       * Some doors take the several as one line of text rather than an array.
+       * Ticking boxes is still the right control; this is only how it is sent.
+       */
+      join?: string;
     } & FieldBase)
+
   /** A list of records, added a row at a time. Sent as an array of objects. */
   | ({
       kind: "rows";
@@ -264,11 +270,18 @@ function useOptions(source: OptionSource | undefined) {
     enabled: Boolean(source),
   });
 
+  // Most reference reads return a row per option. A few — the time zone list
+  // is one — return plain strings, which are their own value and their own
+  // label.
   const rows = source
-    ? (Array.isArray(data) ? data : []).map((row) => ({
-        value: String(row[source.value] ?? ""),
-        label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
-      }))
+    ? (Array.isArray(data) ? data : []).map((row) =>
+        typeof row === "string" || typeof row === "number"
+          ? { value: String(row), label: String(row) }
+          : {
+              value: String(row[source.value] ?? ""),
+              label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
+            },
+      )
     : [];
 
   return { rows, isPending: Boolean(source) && isPending, error };
@@ -730,7 +743,7 @@ export function ActionDialog({
     for (const f of fields) {
       if (f.kind === "multi") {
         const chosen = lists[f.name] ?? [];
-        if (chosen.length > 0) args[f.name] = chosen;
+        if (chosen.length > 0) args[f.name] = f.join ? chosen.join(f.join) : chosen;
         continue;
       }
       if (f.kind === "rows") {

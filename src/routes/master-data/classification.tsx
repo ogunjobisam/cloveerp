@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, codeField, pickFrom, pickItem } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  codeField,
+  pickFrom,
+  pickItem,
+  pickItemClass,
+  pickItemClasses,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
@@ -199,13 +206,11 @@ function Classification() {
                   { value: "false", label: "No" },
                 ],
               },
-              {
-                kind: "text",
-                name: "p_item_classes",
-                label: "Only for product classes",
-                placeholder: "finished, raw",
-                hint: "Comma separated. Leave empty to apply to every product.",
-              },
+              pickItemClasses(
+                "p_item_classes",
+                "Only for product classes",
+                "Tick every class this applies to. None ticked applies to every product.",
+              ),
               { kind: "number", name: "p_seq", label: "Order" },
             ],
             invalidates,
@@ -290,13 +295,11 @@ function Classification() {
                 required: true,
                 hint: 'For example [{"kind":"axis","axis":"FAMILY","length":3},{"kind":"literal","text":"-"},{"kind":"sequence","length":4},{"kind":"check"}]',
               },
-              {
-                kind: "text",
-                name: "p_item_classes",
-                label: "Only for product classes",
-                placeholder: "finished, raw",
-                hint: "Comma separated. Leave empty to apply to every product.",
-              },
+              pickItemClasses(
+                "p_item_classes",
+                "Only for product classes",
+                "Tick every class this applies to. None ticked applies to every product.",
+              ),
               {
                 kind: "choice",
                 name: "p_casing",
@@ -331,14 +334,12 @@ function Classification() {
                 required: true,
                 placeholder: "Oat milk 1L",
               },
-              {
-                kind: "text",
-                name: "p_item_class",
-                label: "Product class",
-                required: true,
-                placeholder: "finished",
-                hint: "For example finished, raw, packaging or service.",
-              },
+              pickItemClass(
+                "p_item_class",
+                "Product class",
+                true,
+                "Pick one already in use, or type a new one.",
+              ),
               {
                 kind: "rows",
                 name: "p_classification",

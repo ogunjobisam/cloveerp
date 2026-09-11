@@ -355,6 +355,110 @@ export const pickCurrency = (name = "p_currency", label = "Currency", required =
   options: { fn: "erp_currencies", value: "code", label: ["code", "name"] },
 });
 
+/** A country, by its ISO code, chosen from the register rather than typed. */
+export const pickCountry = (
+  name = "p_country_code",
+  label = "Country",
+  required = false,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_countries", value: "code", label: ["name", "code"] },
+});
+
+/** A time zone, from the database's own list. */
+export const pickTimezone = (
+  name = "p_timezone",
+  label = "Time zone",
+  required = false,
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_timezones", value: "name", label: ["name"] },
+});
+
+/** A language and region the product carries. */
+export const pickLocale = (name = "p_locale", label = "Locale", required = false): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  options: { fn: "erp_locales", value: "code", label: ["code", "name"] },
+});
+
+/** A role of this organisation, by code. */
+export const pickRoleCode = (
+  name = "p_role_code",
+  label = "Role",
+  required = false,
+  hint = "Only when the audience is a role.",
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required,
+  hint,
+  options: { fn: "erp_roles", value: "code", label: ["code", "name"] },
+});
+
+/**
+ * A product class.
+ *
+ * A combo rather than a select: the list is the classes already in use, and a
+ * rule may well be written for one nothing carries yet.
+ */
+export const pickItemClass = (
+  name = "p_item_class",
+  label = "Product class",
+  required = false,
+  hint = "Pick one already in use, or type a new one. Blank applies to every product.",
+): Field => ({
+  kind: "combo",
+  name,
+  label,
+  required,
+  hint,
+  placeholder: "finished_good",
+  options: { fn: "erp_item_classes", value: "item_class", label: ["item_class"] },
+});
+
+/** Several product classes, ticked rather than typed as a comma-separated line. */
+export const pickItemClasses = (
+  name = "p_item_classes",
+  label = "Product classes",
+  hint = "Tick every class this applies to. None ticked applies to every product.",
+): Field => ({
+  kind: "multi",
+  name,
+  label,
+  hint,
+  // The doors that take several classes take them as one comma-separated line.
+  join: ", ",
+  options: { fn: "erp_item_classes", value: "item_class", label: ["item_class"] },
+});
+
+/** How often a place is cycle counted — the usual ABC classes. */
+export const pickCountClass = (
+  name = "p_count_class",
+  label = "Count class",
+  required = false,
+): Field => ({
+  kind: "choice",
+  name,
+  label,
+  required,
+  hint: "How often this place is cycle counted. A is counted most often.",
+  choices: [
+    { value: "A", label: "A — counted most often" },
+    { value: "B", label: "B — counted periodically" },
+    { value: "C", label: "C — counted rarely" },
+  ],
+});
+
 /** A document type, optionally of one base type. */
 export const pickDocumentType = (
   baseTypeCode?: string,
@@ -372,4 +476,21 @@ export const pickDocumentType = (
     value: "code",
     label: ["code", "name"],
   },
+});
+
+/**
+ * A time of day, on the half hour.
+ *
+ * The doors take "HH:MM" and reject anything else, so the form should not be
+ * a box somebody types "6am" into.
+ */
+export const pickTimeOfDay = (name = "p_at_time", label = "At", required = false): Field => ({
+  kind: "choice",
+  name,
+  label,
+  required,
+  choices: Array.from({ length: 48 }, (_, i) => {
+    const value = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`;
+    return { value, label: value };
+  }),
 });

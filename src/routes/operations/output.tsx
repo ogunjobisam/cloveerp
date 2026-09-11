@@ -3,7 +3,7 @@ import type React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { GoTo } from "../../components/erp/action";
-import { ActionBar, codeField, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, codeField, pickFrom, pickLocale } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -233,9 +233,7 @@ function Output() {
                 { p_limit: 200 },
               ),
               {
-                kind: "text",
-                name: "p_locale",
-                label: "Locale",
+                ...pickLocale("p_locale", "Locale", false),
                 hint: "Left empty, the document's own.",
               },
             ],
