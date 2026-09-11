@@ -22,8 +22,9 @@ import { ROLE_BLURB, usePlatformMe, type PlatformRole } from "../lib/platform";
 import { Card, Fail } from "../components/platform/kit";
 import { Companies } from "../components/platform/organisations";
 import { Staff } from "../components/platform/staff";
-import { Activity, SupportActionLog } from "../components/platform/activity";
-import { Decisions, ProductDecisions } from "../components/platform/decisions";
+import { Activity } from "../components/platform/activity";
+import { Decisions } from "../components/platform/decisions";
+import { Enquiries } from "../components/platform/enquiries";
 import { Plans } from "../components/platform/plans";
 import { Overview } from "../components/platform/overview";
 import { Diagnostics } from "../components/platform/diagnostics";
@@ -119,6 +120,7 @@ const AREAS: {
     views: [
       { key: "contracts", label: "Contracts" },
       { key: "revenue", label: "Revenue and renewals" },
+      { key: "enquiries", label: "Enquiries" },
     ],
   },
   {
@@ -142,7 +144,6 @@ const AREAS: {
       { key: "staff", label: "Staff" },
       { key: "activity", label: "Activity" },
       { key: "decisions", label: "Decisions" },
-      { key: "product", label: "Product decisions" },
     ],
   },
 ];
@@ -372,17 +373,12 @@ function PlatformConsole() {
           {currentView === "deployment" ? <Deployment /> : null}
           {currentView === "incidents" ? <Incidents /> : null}
           {currentView === "staff" ? <Staff role={role} /> : null}
-          {currentView === "activity" ? (
-            <>
-              <Activity />
-              <SupportActionLog />
-            </>
-          ) : null}
+          {currentView === "activity" ? <Activity /> : null}
           {currentView === "decisions" ? <Decisions /> : null}
-          {currentView === "product" ? <ProductDecisions /> : null}
           {currentView === "plans" ? <Plans /> : null}
           {currentView === "contracts" ? <Contracts role={role} /> : null}
           {currentView === "revenue" ? <Revenue role={role} /> : null}
+          {currentView === "enquiries" ? <Enquiries role={role} /> : null}
         </div>
       </div>
     </Frame>
