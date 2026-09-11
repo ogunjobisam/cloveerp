@@ -163,7 +163,8 @@ const SETTLED = new Set([
 ]);
 
 /** Verbs that stay open on a finished record — reading, correcting, reversing. */
-const STILL_ALLOWED = /edit|amend|correct|update|change|view|open|print|note|comment|reopen|revers/i;
+const STILL_ALLOWED =
+  /edit|amend|correct|update|change|view|open|print|note|comment|reopen|revers/i;
 
 function statusOf(row: Row, source: StageList | undefined): string | null {
   const keys = [source?.status, "status", "state_name", "state", "task_status", "document_state"];
@@ -218,7 +219,6 @@ function StageAction({
         {ui(action.label)}
       </ActionButton>
     );
-
 
   return (
     <ActionDialog
