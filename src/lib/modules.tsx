@@ -9,6 +9,7 @@ import {
   pickBatch,
   pickChangeSet,
   pickCurrency,
+  pickItemClass,
   pickFrom,
   pickItem,
   pickLocation,
