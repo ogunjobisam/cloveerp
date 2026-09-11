@@ -11,3 +11,4 @@
 - [ ] Expose an allow-listed v1 REST API over existing public ERP doors with service-principal API keys, scope enforcement, audit attribution and idempotent writes
 - [ ] Add organisation webhook subscriptions, HMAC-signed event delivery, retry history and customer replay controls
 - [ ] Extend Integrations with API key, webhook and delivery management, and publish generated v1 API reference documentation
+- [ ] Push migration 20260911074500_public_api_keys_and_webhooks.sql through .github/workflows/deploy.yml (written, awaiting release)
