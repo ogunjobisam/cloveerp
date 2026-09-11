@@ -495,16 +495,44 @@ function NewItem() {
           placeholder: "Oat milk 1L, case of 12",
         },
         {
-          kind: "text",
+          kind: "choice",
           name: "p_item_class",
           label: "Class",
-          hint: "Free text — finished_good, raw_material, packaging.",
+          choices: [
+            { value: "finished_good", label: "Finished good" },
+            { value: "raw_material", label: "Raw material" },
+            { value: "packaging", label: "Packaging" },
+            { value: "consumable", label: "Consumable" },
+          ],
+          hint: "What kind of thing it is. Drives bills of materials and planning.",
+        },
+        {
+          kind: "combo",
+          name: "p_item_group",
+          label: "Category",
+          options: { fn: "erp_item_categories", value: "group", label: ["group"] },
+          hint: "The group it belongs to — pick one already in use or type a new one.",
+        },
+        {
+          kind: "choice",
+          name: "p_lifecycle",
+          label: "Status",
+          choices: [
+            { value: "draft", label: "Draft" },
+            { value: "active", label: "Active" },
+            { value: "restricted", label: "Restricted" },
+            { value: "discontinued", label: "Discontinued" },
+            { value: "obsolete", label: "Obsolete" },
+          ],
+          hint: "Left blank, a new product starts active.",
         },
       ]}
       mapArgs={(v) => ({
         p_code: v["p_code"],
         p_name: v["p_name"],
         p_item_class: v["p_item_class"] || null,
+        p_item_group: v["p_item_group"] || null,
+        p_lifecycle: v["p_lifecycle"] || null,
         p_is_batch_controlled: false,
       })}
       invalidates={["erp_items"]}

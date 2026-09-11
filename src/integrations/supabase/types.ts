@@ -549,6 +549,8 @@ export type Database = {
           p_code: string
           p_is_batch_controlled?: boolean
           p_item_class?: string
+          p_item_group?: string
+          p_lifecycle?: string
           p_name: string
         }
         Returns: Json
@@ -886,6 +888,7 @@ export type Database = {
         }
         Returns: number
       }
+      erp_item_categories: { Args: never; Returns: Json }
       erp_item_classification: { Args: { p_item_id: string }; Returns: Json }
       erp_item_code_assignments: { Args: { p_limit?: number }; Returns: Json }
       erp_item_posting_classes: { Args: { p_limit?: number }; Returns: Json }
