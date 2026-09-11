@@ -423,7 +423,6 @@ function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[
     .filter((a) => (a.code ?? a.fn) !== stage.createFn);
   const createAction = stage.createFn ? byFn.get(stage.createFn) : undefined;
 
-
   const row = source ? (rows.find((r) => String(r[source.id] ?? "") === selectedId) ?? null) : null;
 
   return (
