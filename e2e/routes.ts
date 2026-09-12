@@ -63,6 +63,8 @@ export const ROUTES: readonly RouteUnderTest[] = [
     file: "finance/account-determination.tsx",
   },
   { path: "/finance/dimensions", kind: "desk", file: "finance/dimensions.tsx" },
+  { path: "/finance/cost-centres", kind: "desk", file: "finance/cost-centres.tsx" },
+  { path: "/finance/statements", kind: "desk", file: "finance/statements.tsx" },
 
   { path: "/governance", kind: "desk", file: "governance/index.tsx" },
   { path: "/inventory", kind: "desk", file: "inventory/index.tsx" },

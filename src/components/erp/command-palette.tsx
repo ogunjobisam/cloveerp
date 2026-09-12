@@ -109,7 +109,18 @@ export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field
     staleTime: 30 * 60_000,
   });
 
+  // Bound by the instance that draws the dialog, and only that one.
+  //
+  // Moving the open state into a module store fixed two dialogs and created a
+  // subtler fault in their place: both instances still bound this listener, so
+  // one Cmd/Ctrl-K toggled the shared state twice — true, then false — and the
+  // palette stopped opening at all. The browser suite caught it as "element(s)
+  // not found" where it had previously said "resolved to 2 elements".
+  //
+  // One owner for the state, one owner for the shortcut. The field variant is
+  // a button that opens it, nothing more.
   useEffect(() => {
+    if (variant !== "icon") return undefined;
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -119,7 +130,7 @@ export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [variant]);
 
   useEffect(() => {
     if (open) {
