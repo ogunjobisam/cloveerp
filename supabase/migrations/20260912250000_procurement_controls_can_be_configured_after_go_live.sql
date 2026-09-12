@@ -163,13 +163,27 @@ $old$, '');
   end if;
   v_def := v_new;
 
-  if position('insert into erp.document_type (' in v_def) = 0 then
-    raise exception 'CLOVEERP_PROCUREMENT_CONTROLS_UNRECOGNISED: the direct document type insert is already gone';
-  end if;
+  v_new := replace(v_def,
+$old$  insert into erp.document_type (
+    tenant_id, code, base_type_code, name, entity_id,
+    state_machine_code, numbering_rule_id, posting_rule_code, create_permission)
+  select v_tenant, 'purchase_invoice', 'invoice_reference', 'Purchase invoice',
+         n.entity_id, 'purchase_invoice', n.id, 'purchase_invoice',
+         -- Base invoice_reference carries sales.invoice, which is right for
+         -- sales_invoice and wrong here: every transition on this lifecycle
+         -- wants procurement.match, so raising one must too. Dropped by two
+         -- whole-function rewrites; see 20260912224000 before dropping it a
+         -- third time.
+         'procurement.match'
+    from erp.numbering_rule n
+   where n.tenant_id = v_tenant and n.code = 'purchase_invoice'
+  on conflict (tenant_id, code) do update
+    set state_machine_code = excluded.state_machine_code,
+        numbering_rule_id = excluded.numbering_rule_id,
+        posting_rule_code = excluded.posting_rule_code,
+        create_permission = excluded.create_permission;
 
-  -- Everything from the document type insert to the end of that statement.
-  v_new := regexp_replace(v_def,
-    E'\\n  insert into erp\\.document_type \\([^;]*;\\n', E'\\n');
+$old$, '');
 
   if v_new = v_def then
     raise exception 'CLOVEERP_PROCUREMENT_CONTROLS_UNRECOGNISED: the direct document type insert could not be removed';
@@ -178,3 +192,5 @@ $old$, '');
   execute v_new;
 end
 $ctrl$;
+
+select erp.apply_execute_grants();
