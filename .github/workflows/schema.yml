@@ -66,6 +66,12 @@ jobs:
       # Any notice is noise; an error must stop the run at the statement that
       # caused it rather than carrying on and failing somewhere less useful.
       PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
+      # And "noise" was not a figure of speech: 87% of the replay step's
+      # 108,887 lines were NOTICEs, nearly all of them a generator saying it had
+      # dropped a trigger that was not there. The one line that mattered — the
+      # assertion that actually failed — was the last of a hundred thousand.
+      # Warnings and errors still come through; this only silences the chatter.
+      PGOPTIONS: -c client_min_messages=warning
 
     steps:
       - uses: actions/checkout@v4
