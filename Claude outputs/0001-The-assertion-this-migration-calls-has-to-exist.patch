@@ -1,0 +1,84 @@
+From 8da72eeffd26975e714289d5378fc8101539524a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 12 Sep 2026 17:15:09 +0000
+Subject: [PATCH] The assertion this migration calls has to exist
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The replay failed at line 290 of the 09:00 file:
+
+    ERROR: function erp.assert_execute_grants_match_reach() does not exist
+
+It never existed. I wrote the name from memory and then checked it with a
+grep that matched the migration doing the asking — the file confirmed
+itself. That is the same shape of mistake this repository already refuses
+elsewhere: a check that proves nothing because it reads the claim rather
+than the catalogue.
+
+The real assertion is erp.assert_invoker_doors_executable(), defined in
+20260906020000, which raises CLOVEERP_EXECUTE_GRANTS_DRIFTED and whose own
+hint names erp.apply_execute_grants() as the fix. Every other assertion
+this file calls was checked for a definition, not a mention.
+
+Replaced rather than edited. The 09:00 file applied nowhere — the replay
+died on it — and a branch that adds a file and removes it again leaves no
+trace in the diff against its base, so neither 'A migration is written
+once' nor the deletion guard has anything to object to, and no history
+that ran anywhere is rewritten.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01W2VdSJb8Tsz44kPmPhDt4M
+---
+ ...r_writes_only_what_is_not_already_there.sql} | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+ rename supabase/migrations/{20260912090000_a_generator_writes_only_what_is_not_already_there.sql => 20260912093000_a_generator_writes_only_what_is_not_already_there.sql} (92%)
+
+diff --git a/supabase/migrations/20260912090000_a_generator_writes_only_what_is_not_already_there.sql b/supabase/migrations/20260912093000_a_generator_writes_only_what_is_not_already_there.sql
+similarity index 92%
+rename from supabase/migrations/20260912090000_a_generator_writes_only_what_is_not_already_there.sql
+rename to supabase/migrations/20260912093000_a_generator_writes_only_what_is_not_already_there.sql
+index 02db3bc..f3e09a6 100644
+--- a/supabase/migrations/20260912090000_a_generator_writes_only_what_is_not_already_there.sql
++++ b/supabase/migrations/20260912093000_a_generator_writes_only_what_is_not_already_there.sql
+@@ -22,7 +22,7 @@
+ -- already held is not re-issued. The end state is identical — which is the
+ -- whole point, and is why this needs no new assertion to be trusted:
+ -- erp.assert_audit_coverage() reads erp.audit_coverage_report() and
+--- erp.assert_execute_grants_match_reach() reads the register, both against the
++-- erp.assert_invoker_doors_executable() reads the catalogue, both against the
+ -- catalogue rather than against what a generator claims it did. A generator
+ -- that skipped something it should not have fails the same build it always did,
+ -- in the same migration.
+@@ -38,6 +38,19 @@
+ -- worse than no number.
+ -- =============================================================================
+ 
++-- Reissued at 09:30 rather than 09:00. The first version of this file called
++-- erp.assert_execute_grants_match_reach(), which does not exist and never did —
++-- the name was written from memory and then "verified" by a grep that matched
++-- the file doing the asking. The replay failed on it at line 290. The real
++-- assertion is erp.assert_invoker_doors_executable(), which raises
++-- CLOVEERP_EXECUTE_GRANTS_DRIFTED and whose own hint names
++-- erp.apply_execute_grants() as the fix.
++--
++-- Replaced rather than edited: the 09:00 file never applied anywhere, and a
++-- branch that adds a file and removes it again leaves no trace in the diff
++-- against its base, so neither "A migration is written once" nor the deletion
++-- guard has anything to object to. Nothing that ran has been rewritten.
++
+ set lock_timeout = '30s';
+ 
+ -- Audit coverage --------------------------------------------------------------
+@@ -287,7 +300,7 @@ select erp.apply_execute_grants();
+ 
+ select erp.assert_isolation();
+ select erp.assert_audit_coverage();
+-select erp.assert_execute_grants_match_reach();
++select erp.assert_invoker_doors_executable();
+ select erp.assert_no_public_execute();
+ select erp.assert_no_caller_reachable_internals();
+ select erp.assert_public_api_safe();
+-- 
+2.43.0
+
