@@ -52,6 +52,31 @@ fi
 MERGE_BASE="$(git merge-base "$BASE" HEAD)"
 FAILED=0
 
+# A migration deleted is a migration that already ran.
+#
+# The loop below only ever sees files that still exist, so deleting a pushed
+# migration passed this check in silence — and that is not hypothetical. On
+# 11 September 20260911074500_public_api_keys_and_webhooks.sql was deleted and
+# re-added under a new name; live had already run it, so its version stayed in
+# supabase_migrations.schema_migrations with no file behind it, and the next
+# deploy dry-run refused with "Remote migration versions not found in local
+# migrations directory".
+#
+# --no-renames on purpose: a rename is exactly this mistake wearing a different
+# hat, and git would otherwise report it as one R and hide the delete.
+#
+# The edited-register cannot exempt this. An exemption names the migration that
+# repairs the edit; there is no file left here to repair.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  echo "✗ $f is deleted by this branch." >&2
+  echo "  It has already run wherever $BASE is deployed. Removing the file does" >&2
+  echo "  not remove the version it recorded, so the deploy stops at a version" >&2
+  echo "  with nothing behind it." >&2
+  echo "  Fix it forward: leave the file where it is and write a NEW migration." >&2
+  FAILED=1
+done < <(git diff --name-only --no-renames --diff-filter=D "$MERGE_BASE..HEAD" -- 'supabase/migrations/*.sql')
+
 # Every migration this branch adds or changes.
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -88,6 +113,7 @@ if [ "$FAILED" -ne 0 ]; then
   echo >&2
   echo "An edit to an applied migration is invisible to a build that starts from" >&2
   echo "an empty database, and reaches no environment that has already run it." >&2
+  echo "A deleted one is worse: the version it recorded outlives the file." >&2
   exit 1
 fi
 
