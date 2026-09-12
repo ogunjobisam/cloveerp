@@ -22,7 +22,7 @@
 -- already held is not re-issued. The end state is identical — which is the
 -- whole point, and is why this needs no new assertion to be trusted:
 -- erp.assert_audit_coverage() reads erp.audit_coverage_report() and
--- erp.assert_execute_grants_match_reach() reads the register, both against the
+-- erp.assert_invoker_doors_executable() reads the catalogue, both against the
 -- catalogue rather than against what a generator claims it did. A generator
 -- that skipped something it should not have fails the same build it always did,
 -- in the same migration.
@@ -37,6 +37,19 @@
 -- issue. A number in the build log that changes depending on what ran last is
 -- worse than no number.
 -- =============================================================================
+
+-- Reissued at 09:30 rather than 09:00. The first version of this file called
+-- erp.assert_execute_grants_match_reach(), which does not exist and never did —
+-- the name was written from memory and then "verified" by a grep that matched
+-- the file doing the asking. The replay failed on it at line 290. The real
+-- assertion is erp.assert_invoker_doors_executable(), which raises
+-- CLOVEERP_EXECUTE_GRANTS_DRIFTED and whose own hint names
+-- erp.apply_execute_grants() as the fix.
+--
+-- Replaced rather than edited: the 09:00 file never applied anywhere, and a
+-- branch that adds a file and removes it again leaves no trace in the diff
+-- against its base, so neither "A migration is written once" nor the deletion
+-- guard has anything to object to. Nothing that ran has been rewritten.
 
 set lock_timeout = '30s';
 
@@ -287,7 +300,7 @@ select erp.apply_execute_grants();
 
 select erp.assert_isolation();
 select erp.assert_audit_coverage();
-select erp.assert_execute_grants_match_reach();
+select erp.assert_invoker_doors_executable();
 select erp.assert_no_public_execute();
 select erp.assert_no_caller_reachable_internals();
 select erp.assert_public_api_safe();
