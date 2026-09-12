@@ -1,0 +1,132 @@
+From 96e55d04988745457740a6d1d1ea87a62c5cb316 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 12 Sep 2026 15:41:51 +0000
+Subject: [PATCH] The host provides storage, and this file has to say so
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+build-and-assert applied every migration and then died on
+erp.assert_document_archive_sound() with:
+
+    ERROR: relation "storage.buckets" does not exist
+
+00_host_bootstrap.sql is the complete list of what the product expects
+its host to provide. The document pipeline grew a dependency on the
+storage surface and the list did not grow with it, so the schema stood
+up on an empty cluster and the first assertion that looked at storage
+failed. That is exactly the drift this file exists to prevent.
+
+Adds the storage schema, the two tables the product reads, and the
+private document-output bucket.
+
+The bucket belongs here rather than in a new migration because a pushed
+migration already asserts it exists, and a migration cannot run before
+one that is already written. On Supabase a bucket is created through the
+Storage API, so it is the host's to provide; config.toml declares the
+same three properties for the CLI.
+
+storage.objects has row security on and no policy, as the platform ships
+it: the service role bypasses, a browser role is answered nothing, and
+erp_test.document_archive_authenticated_suite()'s cross-organisation
+case reads an empty result rather than a permission error — which is
+why select is granted to the browser roles rather than withheld.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01W2VdSJb8Tsz44kPmPhDt4M
+---
+ supabase/ci/00_host_bootstrap.sql | 67 ++++++++++++++++++++++++++++++-
+ 1 file changed, 66 insertions(+), 1 deletion(-)
+
+diff --git a/supabase/ci/00_host_bootstrap.sql b/supabase/ci/00_host_bootstrap.sql
+index 8fe31e1..9da0bd0 100644
+--- a/supabase/ci/00_host_bootstrap.sql
++++ b/supabase/ci/00_host_bootstrap.sql
+@@ -11,7 +11,7 @@
+ -- mean anything. And it is the honest answer to "how much of this is locked to
+ -- Supabase" — the answer is the hundred lines below.
+ --
+--- Four things, in dependency order. The extensions are deliberately NOT here:
++-- Five things, in dependency order. The extensions are deliberately NOT here:
+ -- each migration creates the one it needs (pgcrypto in 0001, pg_jsonschema in
+ -- 0009, btree_gist in 0010), so a migration carries its own dependency rather
+ -- than assuming someone else arranged it. All three must be *available* to the
+@@ -36,6 +36,26 @@
+ --      product reads the subject's email back from the provider.
+ --
+ --      Replacing your identity provider means replacing both.
++--
++--   5. Storage: the `storage` schema, the two tables the product reads, and the
++--      private `document-output` bucket issued documents are archived in.
++--
++--      This was missing, and the build found out the hard way: every migration
++--      applied and then erp.assert_document_archive_sound() raised
++--      `relation "storage.buckets" does not exist`. The product had grown a
++--      dependency on the host's storage surface and this file did not say so,
++--      which is the one thing it exists to prevent.
++--
++--      The bucket belongs here rather than in a migration because a pushed
++--      migration already asserts it exists. On Supabase a bucket is created
++--      through the Storage API, so it is the host's to provide — supabase/
++--      config.toml declares the same three properties for the CLI, and the
++--      assertion refuses a bucket that is public, unlimited, or open to a
++--      browser role.
++--
++--      storage.objects has row security ON and no policy, exactly as the
++--      platform ships it: the service role bypasses it, a browser role sees
++--      nothing, and reaching an object is the signed URL's job, not SQL's.
+ -- =============================================================================
+ 
+ -- 1. The schema the extensions install into ----------------------------------
+@@ -127,3 +147,48 @@ alter default privileges in schema public
+ -- directly: request.jwt.claims is read only by auth.uid(), and the subject it
+ -- yields is resolved against erp.app_user before it means anything. A client
+ -- that forges a claim names a principal that does not exist.
++
++-- 5. Storage ------------------------------------------------------------------
++
++create schema if not exists storage;
++
++create table if not exists storage.buckets (
++  id                 text primary key,
++  name               text not null,
++  public             boolean not null default false,
++  file_size_limit    bigint,
++  allowed_mime_types text[],
++  created_at         timestamptz not null default now()
++);
++
++create table if not exists storage.objects (
++  id            uuid primary key default gen_random_uuid(),
++  bucket_id     text not null references storage.buckets (id) on delete cascade,
++  name          text not null,
++  owner         uuid,
++  metadata      jsonb,
++  user_metadata jsonb,
++  created_at    timestamptz not null default now(),
++  updated_at    timestamptz not null default now(),
++  unique (bucket_id, name)
++);
++
++-- On and unpolicied. A browser role may ask and is answered nothing; the
++-- service role bypasses. erp.document_archive_object() is the only way ERP code
++-- reads an object's metadata, and it is revoked from every browser role.
++alter table storage.objects enable row level security;
++
++grant usage on schema storage to anon, authenticated, service_role;
++grant select on storage.buckets to anon, authenticated, service_role;
++grant select, insert, update, delete on storage.objects
++  to anon, authenticated, service_role;
++
++-- The private archive issued documents are written to. Twenty mebibytes and
++-- PDFs only, matching supabase/config.toml, because the assertion checks the
++-- numbers rather than the bucket's existence alone.
++insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
++values ('document-output', 'document-output', false, 20971520, array['application/pdf'])
++on conflict (id) do update
++   set public             = false,
++       file_size_limit    = 20971520,
++       allowed_mime_types = array['application/pdf']::text[];
+-- 
+2.43.0
+
