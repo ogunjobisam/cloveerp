@@ -106,6 +106,8 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState<"idle" | "sending" | "sent" | "rate-limited">("idle");
+  const emailField = useRef<HTMLInputElement>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,6 +117,34 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
     if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
     else onSignedIn?.();
     setBusy(false);
+  }
+
+  /**
+   * A sign-in link by email, for somebody with no password — everyone who
+   * joined by invitation, until they set one on their profile.
+   *
+   * shouldCreateUser is false, so this signs in an account that exists and
+   * makes none. The screen says the same thing whether the address has an
+   * account or not, because saying otherwise would tell anybody who types an
+   * address whether it is a customer's. The one failure it names is being
+   * asked too often, which says nothing about the address and has a remedy.
+   */
+  async function emailMeASignInLink() {
+    setError(null);
+    // Only the email field has to be valid for this; the password is not used.
+    if (!emailField.current?.reportValidity()) return;
+    setLink("sending");
+    let limited = false;
+    try {
+      const { error } = await supabase!.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
+      });
+      limited = error !== null && isRateLimited(error);
+    } catch {
+      /* the same answer as any other outcome */
+    }
+    setLink(limited ? "rate-limited" : "sent");
   }
 
   async function signInWithGoogle() {
@@ -146,7 +176,11 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setLink("idle");
+            }}
+            ref={emailField}
             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             autoComplete="username"
           />
@@ -172,7 +206,7 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
 
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || link === "sending"}
           className="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
           {busy ? "Signing in…" : "Sign in"}
@@ -194,6 +228,28 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
           Continue with Google
         </button>
 
+        <button
+          type="button"
+          onClick={() => void emailMeASignInLink()}
+          disabled={busy || link === "sending"}
+          className="mt-3 w-full rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+        >
+          {link === "sending" ? "Sending…" : "Email me a sign-in link"}
+        </button>
+        {link === "sent" ? (
+          <p role="status" className="mt-3 text-sm text-muted-foreground">
+            If that address has an account, a sign-in link is on its way.
+          </p>
+        ) : link === "rate-limited" ? (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            Too many sign-in links have been asked for just now. Wait a minute, then try again.
+          </p>
+        ) : (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Joined by invitation and have no password? Enter your email and ask for a link.
+          </p>
+        )}
+
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <Link to="/product" className="underline underline-offset-2">
             About Clove ERP
@@ -201,6 +257,20 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
         </p>
       </form>
     </Centred>
+  );
+}
+
+/** Supabase Auth refusing because it was asked too often — the one failure worth naming. */
+function isRateLimited(error: {
+  status?: number | undefined;
+  code?: string | undefined;
+  message: string;
+}) {
+  return (
+    error.status === 429 ||
+    error.code === "over_email_send_rate_limit" ||
+    error.code === "over_request_rate_limit" ||
+    /rate limit|too many requests/i.test(error.message)
   );
 }
 

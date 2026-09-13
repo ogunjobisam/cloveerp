@@ -219,6 +219,15 @@ describe("the email", () => {
     }
   });
 
+  test("says how to get back in after joining, in both parts and when resent", () => {
+    for (const m of [invitationEmail(base), invitationEmail({ ...base, resent: true })]) {
+      for (const part of [m.text, m.html]) {
+        expect(part).toContain("set a password from your profile");
+        expect(part).toContain("ask for a new sign-in link on the sign-in page");
+      }
+    }
+  });
+
   test("a resent link says so, and names nobody as the inviter", () => {
     const m = invitationEmail({ ...base, inviter: null, resent: true });
     expect(m.subject).toBe("Your sign-in link for Northwind Foods on Clove ERP");

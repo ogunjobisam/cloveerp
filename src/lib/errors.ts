@@ -1,4 +1,4 @@
-import { ErpError } from "./erp";
+import { ErpError, InviteOutcomeUnknown } from "./erp";
 
 /**
  * Plain-language failures.
@@ -142,6 +142,13 @@ function builtInMessage(token: string): { title: string; body: string } | undefi
 /** Turn any thrown value into something worth reading. */
 export function friendlyError(error: unknown): FriendlyError {
   if (!error) return { title: "Something went wrong.", body: null, hint: null, technical: null };
+
+  // Not a refusal and not a network error to retry: the invitation may exist.
+  // Its words are its own, because "check your connection and try again" is
+  // the one piece of advice that could make a second invitation.
+  if (error instanceof InviteOutcomeUnknown) {
+    return { title: error.title, body: error.body, hint: null, technical: error.detail };
+  }
 
   const raw = error instanceof Error ? error.message : String(error);
   const erp = error instanceof ErpError ? error : null;

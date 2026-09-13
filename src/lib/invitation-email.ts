@@ -382,6 +382,11 @@ export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
     "It works once, and only for a short while; if it has expired, the page it opens can " +
     "send you a new one.";
   const lasts = until ? `The invitation itself stays open until ${until}.` : null;
+  // The link is the only way in they have, and it works once. Say how they get
+  // back in afterwards, before they need to.
+  const after =
+    "Once you have joined, you can set a password from your profile, or ask for a new " +
+    "sign-in link on the sign-in page.";
   const unexpected = resent
     ? "If you did not ask for a new link, you can ignore this email."
     : "If you were not expecting this, you can ignore this email. Nobody is added to " +
@@ -396,6 +401,8 @@ export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
     input.link,
     "",
     lasts ? `${how} ${lasts}` : how,
+    "",
+    after,
     "",
     unexpected,
     "",
@@ -430,6 +437,7 @@ export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
       </tr></table>
       ${paragraph(how, 13, MUTED)}
       ${lasts ? paragraph(lasts, 13, MUTED) : ""}
+      ${paragraph(after, 13, MUTED)}
       <p style="margin:0 0 16px;color:${MUTED};font-family:${SANS};font-size:13px;line-height:1.55;">If the button does not work, open this address:<br /><a href="${href}" style="color:${ACCENT};word-break:break-all;">${href}</a></p>
     </td></tr>
     <tr><td style="padding:16px 28px;border-top:1px solid ${SOFT};border-radius:0 0 14px 14px;">

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from "@supabase/supabase-js";
 
-import { ErpError } from "./erp";
+import { ErpError, inviteFailure, InviteNotRun, InviteOutcomeUnknown } from "./erp";
 import { friendlyError, setRefusalResources } from "./errors";
 
 /**
@@ -139,5 +144,69 @@ describe("the retired prefix, for one release", () => {
     // Truncating at the C left "1_SUITE_FAILED: 2 of 40 cases" on the screen.
     expect(f.title).toBe("This is not allowed right now.");
     expect(f.body).toBe("2 of 40 cases");
+  });
+});
+
+/**
+ * An invitation is never made twice by accident.
+ *
+ * A second erp_invite_principal call supersedes the token the first one
+ * emailed, and a second erp_platform_onboard_company call is refused because
+ * the organisation exists. So the desk calls the door itself only when the
+ * invite function certainly did not run, and a failure that could have
+ * happened after it ran says so instead of advising another try.
+ */
+describe("what a failed call to the invite function means", () => {
+  const json = (status: number, body: unknown) =>
+    new FunctionsHttpError(
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+  test("a network or relay failure may have run the function, so the outcome is unknown", async () => {
+    expect(
+      await inviteFailure(new FunctionsFetchError(new TypeError("Failed to fetch"))),
+    ).toBeInstanceOf(InviteOutcomeUnknown);
+    expect(
+      await inviteFailure(new FunctionsRelayError(new Response(null, { status: 502 }))),
+    ).toBeInstanceOf(InviteOutcomeUnknown);
+  });
+
+  test("only the platform's own 404 or 503 proves nothing ran", async () => {
+    expect(
+      await inviteFailure(json(404, { message: "Requested function was not found" })),
+    ).toBeInstanceOf(InviteNotRun);
+    expect(
+      await inviteFailure(
+        new FunctionsHttpError(new Response("Service Unavailable", { status: 503 })),
+      ),
+    ).toBeInstanceOf(InviteNotRun);
+  });
+
+  test("anything the function said is a refusal in its words, never a reason to retry", async () => {
+    const said = await inviteFailure(
+      json(400, { error: "CLOVEERP_TENANT_EXISTS: acme", code: "23505", hint: null }),
+    );
+    expect(said).toBeInstanceOf(ErpError);
+    expect((said as ErpError).erpCode).toBe("CLOVEERP_TENANT_EXISTS");
+    expect(
+      await inviteFailure(json(503, { error: "the invitation could not be sent just now" })),
+    ).toBeInstanceOf(ErpError);
+    expect(
+      await inviteFailure(json(500, { error: "the invitation could not be sent just now" })),
+    ).toBeInstanceOf(ErpError);
+  });
+
+  test("an unknown outcome tells the person to check the list, not to try again", () => {
+    const f = friendlyError(
+      new InviteOutcomeUnknown("Failed to send a request to the Edge Function"),
+    );
+    expect(f.title).toBe("Could not reach the invitation service.");
+    expect(f.body).toBe(
+      "The invitation may already have been created and emailed, so check the list before trying again.",
+    );
+    expect(f.technical).toBe("Failed to send a request to the Edge Function");
   });
 });
