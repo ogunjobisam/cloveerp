@@ -16,8 +16,10 @@ own organisation (`erp.designate_platform_organisation`), register an external
 system on adapter `status_page@1`:
 
 - `base_url`: `https://<worker host>/publish`
-- `credential_ref`: `env://CLOVEERP_STATUS_TOKEN` — the dispatch worker
-  resolves it from its environment and sends it as `Authorization: Bearer`
+- `credential_ref`: `env://CLOVEERP_CREDENTIAL_STATUS_TOKEN` — the dispatch
+  worker resolves it from its environment and sends it as
+  `Authorization: Bearer`. It resolves only for an organisation named in
+  `CLOVEERP_TENANTS`, so the platform's organisation must be named there.
 - enable the operation `status.publish`
 
 Every declaration and every update then becomes one `status.publish` command
@@ -31,7 +33,7 @@ command carried which update to which page; the console shows it.
 ```
 cd infra/status
 wrangler kv namespace create STATUS       # put the id in wrangler.toml
-wrangler secret put STATUS_PUBLISH_TOKEN  # the same value the worker holds as CLOVEERP_STATUS_TOKEN
+wrangler secret put STATUS_PUBLISH_TOKEN  # the same value the worker holds as CLOVEERP_CREDENTIAL_STATUS_TOKEN
 wrangler deploy
 ```
 

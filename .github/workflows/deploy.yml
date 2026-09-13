@@ -501,7 +501,7 @@ jobs:
         # "no dispatch URL has been given" since the day it was written, and
         # every email queued since was queued for nobody.
         #
-        # Two things, both inside the database, neither printed:
+        # Three things, all inside the database, none printed:
         #
         #   the secret  the job signs its request with, created in the vault
         #               when absent, from random bytes the database generates
@@ -509,6 +509,17 @@ jobs:
         #               repository, not in a GitHub secret, not in this log. The
         #               function reads the same vault entry over its own
         #               connection, so there is nothing to copy between them.
+        #   the backlog email and webhooks the minute pass queued while nothing
+        #               drained, retired right before the job can first send
+        #               them: erp.retire_undrained_notifications_everywhere()
+        #               turns what is over an hour old into in-app notices, and
+        #               does nothing once any drain pass has been recorded. The
+        #               migration that retired them ran when it was applied, and
+        #               a run that stopped before this step (a failed replay, a
+        #               function that would not deploy) leaves days of mail for
+        #               the first pass to send. A failure here stops the step
+        #               before anything is scheduled. The summary gets each
+        #               organisation that had any.
         #   the job     rescheduled only when the register, cron.job and this
         #               URL disagree, or the stored command predates the request
         #               timeout 20260913110000 gives it. Rescheduling renumbers
@@ -554,6 +565,33 @@ jobs:
             secret="created in the vault"
           fi
 
+          # Right before the schedule, so nothing queued before this moment can
+          # reach the first pass. One statement, one transaction: the function
+          # sets each organisation's context for that transaction only.
+          if ! retired=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tA -F '|' -c "
+                select r.tenant_code, r.retired
+                  from erp.retire_undrained_notifications_everywhere() r
+                 order by r.tenant_code;"); then
+            echo "::error::erp.retire_undrained_notifications_everywhere() failed, so mail queued while nothing drained could not be retired; nothing was scheduled, so none of it can be sent. The error is above."
+            exit 1
+          fi
+          checked=0
+          retired_total=0
+          retired_lines=""
+          while IFS='|' read -r tenant_code count; do
+            [[ -n "$tenant_code" ]] || continue
+            checked=$((checked + 1))
+            if [[ "$count" =~ ^[0-9]+$ ]] && (( count > 0 )); then
+              retired_total=$((retired_total + count))
+              retired_lines+="  - ${tenant_code}: ${count}"$'\n'
+            fi
+          done <<< "$retired"
+          if [[ "$checked" -eq 0 ]]; then
+            backlog="nothing retired: a drain pass has already been recorded"
+          else
+            backlog="${retired_total} undrained notification(s) retired across ${checked} organisation(s)"
+          fi
+
           agrees=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
             select exists (
               select 1
@@ -572,10 +610,14 @@ jobs:
             result=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.ensure_platform_schedule('${DISPATCH_URL}')::text;")
           fi
           echo "secret: ${secret}"
+          echo "backlog: ${backlog}"
+          [[ -z "$retired_lines" ]] || printf '%s' "$retired_lines"
           echo "schedule: ${result}"
           {
             echo "## Dispatch"
             echo "- secret: ${secret}"
+            echo "- backlog: ${backlog}"
+            [[ -z "$retired_lines" ]] || printf '%s' "$retired_lines"
             echo "- schedule: ${result}"
           } >> "$GITHUB_STEP_SUMMARY"
 

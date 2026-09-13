@@ -59,9 +59,10 @@ Configuration, all from the environment and none of it from the database:
     CLOVEERP_PRINCIPALS     matching service principal ids, same order; both lists or neither.
                             Every other active organisation erp.dispatch_bindings() lists is
                             served too, each pass, with a tenant context and no principal —
-                            its email, webhooks and queues only: no jobs (the minute pass runs
-                            its SQL jobs) and no credential_ref resolved
-    CLOVEERP_SYSTEMS        comma-separated external system codes to drain
+                            its email and webhooks only: no jobs (the minute pass runs its SQL
+                            jobs), no outbox or commands, and no credential_ref resolved
+    CLOVEERP_SYSTEMS        comma-separated external system codes to drain, for the organisations
+                            named in CLOVEERP_TENANTS only
     CLOVEERP_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
     CLOVEERP_WORKER_NAME    the name a claim is recorded under (default clove-erp-worker-<pid>)
     CLOVEERP_LEASE_SECONDS  how long a claim lasts before the reclaimer settles it (default 300)
@@ -89,3 +90,16 @@ nobody decided which credentials are its to use; its webhook with no reference
 still posts.
 
 A credential is read here and used here. It is never written back.
+
+## Mail queued while nothing drained
+
+The first pass of every process (every isolate, for the dispatch function)
+calls `erp.retire_undrained_notifications_everywhere()` before any email or
+webhook is claimed. Until any drain pass has been recorded, it suppresses every
+email and webhook notification still waiting (queued, pending or held) and more
+than an hour old, in every organisation, and leaves an in-app notice in its
+place, so the first drain does not send days-old job failures, approvals and
+incident notices. Once a pass is recorded it does nothing. A
+failure is logged and counted in the pass's `failures`, and the pass carries on.
+The deploy workflow calls the same function just before it schedules the
+dispatch function.

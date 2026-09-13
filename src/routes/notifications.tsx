@@ -379,7 +379,7 @@ function Notifications() {
                     kind: "text",
                     name: "p_credential_ref",
                     label: "Credential reference",
-                    hint: "A pointer into a secret store, such as env://OPS_CHAT_TOKEN. Never the secret.",
+                    hint: "A pointer into a secret store, such as env://CLOVEERP_CREDENTIAL_OPS_CHAT. Never the secret.",
                   },
                   {
                     kind: "choice",

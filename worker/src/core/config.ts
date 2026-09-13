@@ -18,11 +18,14 @@ export type TenantBinding = {
   /**
    * Listed by the database on this pass rather than named in the environment.
    *
-   * Such an organisation has its queues drained and nothing more that an
-   * operator has not chosen to give it: no credential_ref is resolved for it
-   * (resolveCredential) and no job is run for it here (drainOnce), because the
-   * minute pass already runs every active organisation's SQL jobs and a handler
-   * only TypeScript implements is platform work.
+   * Such an organisation has its email and webhooks drained and nothing more
+   * that an operator has not chosen to give it: no credential_ref is resolved
+   * for it (resolveCredential), and no job, outbox message or command is run for
+   * it here (drainOnce). The minute pass already runs every active
+   * organisation's SQL jobs and a handler only TypeScript implements is platform
+   * work; CLOVEERP_SYSTEMS lists the systems an operator set up for the
+   * organisations named beside it, not endpoints any organisation may register
+   * under the same code.
    */
   discovered: boolean;
 };

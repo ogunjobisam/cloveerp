@@ -356,23 +356,9 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
       (tx) =>
         tx`select * from erp.claim_command_batch(${systemCode}, 20, ${cfg.workerName},
                                                make_interval(secs => ${cfg.leaseSeconds}))`,
-    ).catch((err: unknown) => {
-      // CLOVEERP_SYSTEMS is one list for the whole process, and an organisation
-      // the database listed need not have every system on it. claim_message_batch
-      // answers nothing for a system an organisation lacks; claim_command_batch
-      // refuses, which for a named organisation is a mistake worth failing on and
-      // for a listed one is simply not its system.
-      if (
-        b.discovered &&
-        err instanceof Error &&
-        /^(?:CLOVEERP|ERPWARE)_UNKNOWN_EXTERNAL_SYSTEM\b/.test(err.message)
-      ) {
-        return null;
-      }
-      throw err;
-    });
+    );
 
-    if (claimed === null || claimed.length === 0) continue;
+    if (claimed.length === 0) continue;
     out.commandsClaimed += claimed.length;
 
     const [system] = await asPrincipal(
@@ -537,8 +523,9 @@ async function sweepExpiredDocumentPreviews(
  * other active one erp.dispatch_bindings() lists, with a tenant context and no
  * principal. An organisation nobody named used to have its email queued by the
  * minute pass and sent by nothing; the list is now the minute pass's own, read
- * afresh each pass. A listed organisation gets its queues drained and no more:
- * no jobs stage and no credentials, for the reasons on TenantBinding.discovered.
+ * afresh each pass. A listed organisation gets its email and webhooks drained
+ * and no more: no jobs, outbox or commands stage and no credentials, for the
+ * reasons on TenantBinding.discovered.
  *
  * A named organisation keeps its principal when the database lists it too. If
  * the list cannot be read — the migration that defines it not yet applied, say —
@@ -592,29 +579,82 @@ async function stage(
   }
 }
 
+/**
+ * Whether this process has asked for the undrained backlog to be retired.
+ *
+ * Once per process, or per isolate for the dispatch function, and on its first
+ * pass. The database decides the rest: erp.retire_undrained_notifications_everywhere()
+ * does nothing once any drain pass has been recorded, so a later process asking
+ * again costs one query and retires nothing.
+ */
+let backlogRetirementAsked = false;
+
+/**
+ * Email and webhooks queued while nothing drained, retired before the first
+ * pass could send them.
+ *
+ * Until something drains, the minute pass still queues: job failures, approval
+ * tasks, incident notices. A migration that retired them when it ran covers
+ * only the moment it ran, and the first pass may come hours or days later — a
+ * deploy that stopped before scheduling, a function that could not start. So
+ * the first pass of every process asks too, before any email or webhook stage.
+ * The rows become in-app notices, as a failed email does; which organisations
+ * had any goes to the log. A failure here is counted and the pass carries on,
+ * as any other stage's would.
+ */
+async function retireUndrainedBacklog(sql: Sql): Promise<void> {
+  if (backlogRetirementAsked) return;
+  backlogRetirementAsked = true;
+  const rows = await sql`
+    select tenant_code, retired from erp.retire_undrained_notifications_everywhere()`;
+  for (const row of rows) {
+    const retired = Number(row["retired"] ?? 0);
+    if (retired > 0) {
+      console.log(
+        `[clove-erp] retired ${retired} undrained notification(s) for organisation ` +
+          `${String(row["tenant_code"])}: queued before anything drained`,
+      );
+    }
+  }
+}
+
 /** One pass over everything that is due, for every organisation this worker serves. */
 export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainReport> {
   const out = empty();
   const startedAt = new Date();
   await stage(out, "purge", null, () => sweepDeletedTenants(sql, out));
+  // Before any organisation's email or webhook stage below.
+  await stage(out, "backlog", null, () => retireUndrainedBacklog(sql));
   const bindings = await bindingsFor(sql, cfg, out);
   out.organisations = bindings.length;
   for (const binding of bindings) {
     const t = binding.tenantId;
     await stage(out, "reclaim", t, () => reclaimStranded(sql, binding, out));
     await stage(out, "previews", t, () => sweepExpiredDocumentPreviews(sql, binding, cfg, out));
-    // Only for an organisation an operator named. The minute pass
-    // (erp.run_due_jobs_all_tenants) already runs every active organisation's
-    // SQL jobs, in the same tenant context with no principal, so a listed
-    // organisation loses nothing here. What it would gain is the rest:
-    // handlers only TypeScript implements, which the minute pass never runs
-    // and which are platform work — platform.poll_dependency_status declares
-    // incidents for every organisation from whatever feed its job names.
+    // The jobs, the outbox and the commands only for an organisation an
+    // operator named.
+    //
+    // Jobs: the minute pass (erp.run_due_jobs_all_tenants) already runs every
+    // active organisation's SQL jobs, in the same tenant context with no
+    // principal, so a listed organisation loses nothing here. What it would
+    // gain is the rest: handlers only TypeScript implements, which the minute
+    // pass never runs and which are platform work — platform.poll_dependency_status
+    // declares incidents for every organisation from whatever feed its job names.
+    //
+    // The outbox and the commands: CLOVEERP_SYSTEMS is one list for the whole
+    // process, the systems an operator set up for the organisations named
+    // beside it. A listed organisation that registered a system under one of
+    // those codes chose its endpoint itself, so delivering for it would have
+    // this process post that organisation's payloads wherever it pointed; and
+    // a system that needs its credential_ref could not be delivered anyway,
+    // because none is resolved for a listed organisation (resolveCredential),
+    // so the rows it claimed would sit until their lease ran out, every pass.
+    // Not claiming leaves them queued for a worker that names the organisation.
     if (!binding.discovered) {
       await stage(out, "jobs", t, () => drainJobs(sql, binding, cfg, out));
+      await stage(out, "outbox", t, () => drainOutbox(sql, binding, cfg, out));
+      await stage(out, "commands", t, () => drainCommands(sql, binding, cfg, out));
     }
-    await stage(out, "outbox", t, () => drainOutbox(sql, binding, cfg, out));
-    await stage(out, "commands", t, () => drainCommands(sql, binding, cfg, out));
     await stage(out, "email", t, () => drainEmail(sql, binding, cfg, out));
     await stage(out, "webhooks", t, () => drainWebhooks(sql, binding, cfg, out));
   }

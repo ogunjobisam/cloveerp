@@ -9,7 +9,7 @@
 -- settle the worker calls asks for exactly that — a tenant, never a principal.
 -- So the worker is given the same list, from the database, by the same rule.
 --
--- Eight things, one file:
+-- Nine things, one file:
 --
 --   1. erp.dispatch_bindings() — the active organisations, in code order, for a
 --      trusted session only. The worker binds each with a tenant and no
@@ -27,7 +27,12 @@
 --      superseded invitation is a revoked one), unexpired, for a person who does
 --      not yet sign in. Anything else is no rows, never an error, so a caller
 --      probing tokens learns nothing a wrong guess would not tell them. It
---      answers with the person's id, which the allowance in 5 is asked about.
+--      answers with the person's id, which the claim in 5 is asked about.
+--      Beside it, erp.auth_identity_is_bound(account) says whether a sign-in
+--      account is already somebody's — a member of any organisation, or
+--      platform staff — so the function knows whether a password on it may have
+--      been planted by somebody else and must be replaced before a link to it is
+--      sent.
 --
 --   3. The scheduled dispatch request waits 55 seconds. pg_net gives up after
 --      its default of a few seconds; a drain pass over every organisation takes
@@ -40,15 +45,19 @@
 --      and the timestamps; the counts stay in erp_meta.drain_pass for the
 --      platform.
 --
---   5. How often an invitation may be emailed. The invite function asks
---      erp.invitation_send_allowance() before it makes a sign-in link. A person
---      invited twice in ten minutes gets no second email. An organisation emails
---      at most five invitations an hour and ten a day, or twenty and fifty once
---      it has been live for more than a week. A fresh link for a pending
---      invitation waits ten minutes after the last, stops after five, and counts
---      against the same day. erp.note_invitation_link_sent() records each link
---      that left on the invitation itself (link_sent_at, links_sent), so every
---      copy of the function reads the same count.
+--   5. How often an invitation may be emailed, and how many organisations one
+--      sign-in may make. Every invitation email is one row in
+--      erp.invitation_email_log, written by erp.claim_invitation_email() in the
+--      same statement that decided it may go, under one lock, before any sign-in
+--      link is made. The limits are counted from those rows: an address gets at
+--      most one in ten minutes and three a day from every organisation together;
+--      an organisation five an hour and ten a day, or twenty and fifty once it
+--      has been live for more than a week; a person sending is held to the same
+--      numbers across every organisation they belong to; an invitation gets five
+--      emails; and new organisations together send two hundred a day. A limit
+--      kept per organisation alone is multiplied by making organisations, so
+--      erp.onboard_tenant() refuses a sign-in that made one in the last day or
+--      already holds two that are not live.
 --
 --   6. A credential reference names a variable under CLOVEERP_CREDENTIAL_, or a
 --      store other than env://. The worker reads env:// from the environment the
@@ -65,11 +74,22 @@
 --      organisation, and a job of that kind already switched on elsewhere is
 --      switched off.
 --
---   8. Email queued while nothing drained is not sent days late. On a database
---      no drain pass has served, email and webhook messages queued, pending or
---      held for more than an hour are suppressed with the reason
+--   8. Email queued while nothing drained is not sent days late. Whenever no
+--      drain pass has ever been recorded,
+--      erp.retire_undrained_notifications_everywhere() suppresses, in every
+--      organisation, the email and webhook messages queued, pending or held for
+--      more than an hour, with the reason
 --      CLOVEERP_EMAIL_NOT_SENT, and each person is shown the message in the
---      product instead, as a failed send has always left it.
+--      product instead, as a failed send has always left it. This file calls it
+--      once; deploy.yml calls it again right before it schedules the drain, and
+--      the worker on its first pass, because the first pass can come long after
+--      the migration. And an organisation is never sent an incident notice
+--      posted before it existed, nor anything about an incident resolved before
+--      then: erp.communicate_incidents() used to give a new organisation every
+--      old notice on its first minute.
+--
+--   9. The channel form's hint names a credential under the prefix, and the
+--      dictionary holds its words.
 --
 -- Two suites that were already on file follow the new rules: the webhook
 -- delivery suite's credential names a variable under the prefix, and the
@@ -169,6 +189,48 @@ comment on function erp.invitation_for_resend(text) is
   'for one. Trusted sessions only: the invite function uses it to email a fresh '
   'sign-in link to the address on file.';
 
+-- Whether a sign-in account is already somebody's. The invite function makes a
+-- sign-in link for the address an invitation names, and when that address
+-- already has an account the link signs into it. An account nobody has joined
+-- with may carry a password somebody else chose before the invitation was
+-- sent, so the function replaces that password before it sends the link. An
+-- account a person already signs in with, as a member of an organisation or as
+-- platform staff, is theirs, and its password is left alone.
+create or replace function erp.auth_identity_is_bound(p_auth_user_id uuid)
+returns boolean
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+begin
+  if not erp.session_is_trusted() then
+    raise exception 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION: role % may not ask whether a sign-in account is in use', current_user
+      using errcode = '42501',
+            hint = 'The invite function asks over its own database connection. A signed-in session never asks about another account.';
+  end if;
+
+  if p_auth_user_id is null then
+    return false;
+  end if;
+
+  -- A membership counts whatever its status: an account suspended from one
+  -- organisation is still a person's own. Staff count once they have signed
+  -- in, which is when the staff row takes the account's id; a staff row still
+  -- waiting for its first sign-in names an address, not an account.
+  return exists (select 1 from erp.app_user u where u.auth_user_id = p_auth_user_id)
+      or exists (select 1 from erp_meta.platform_staff s where s.auth_user_id = p_auth_user_id);
+end;
+$$;
+revoke all on function erp.auth_identity_is_bound(uuid) from public, anon, authenticated;
+
+comment on function erp.auth_identity_is_bound(uuid) is
+  'Whether a Supabase Auth account is already in use: some organisation has a '
+  'member signed in with it, or a platform staff row carries it. False for an '
+  'account nobody has joined with, and for null. Trusted sessions only: the '
+  'invite function asks before it sends a sign-in link into an existing account, '
+  'and replaces the password of one that is not in use.';
+
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 3. The scheduled dispatch request waits for the drain
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -231,59 +293,131 @@ comment on table erp_meta.drain_pass is
   'organisation who and when; the counts are the platform''s and stay here.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 5. How often an invitation may be emailed
+-- 5. How often an invitation may be emailed, and how many organisations one
+--    sign-in may make
 -- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Every invitation email the invite function sends is one row in
+-- erp.invitation_email_log, written before the sign-in link is made by the same
+-- statement that decided the email may go. Every limit is counted from those
+-- rows, under one lock, so any number of copies of the function asking at once
+-- cannot between them send more than the rows allow. A limit kept per
+-- organisation alone is multiplied by making organisations, so the limits are
+-- also kept per address, per person sending across every organisation they
+-- belong to, and across every new organisation together; and one sign-in may
+-- not make organisations one after another.
 
--- Each link the invite function emails is recorded on the invitation it was for:
--- when the latest left, and how many have. Every copy of the function reads the
--- same two columns; a count kept in one copy's memory was that copy's alone.
-alter table erp.invitation
-  add column if not exists link_sent_at timestamptz,
-  add column if not exists links_sent integer not null default 0;
-
+-- An earlier draft of this file, never released, counted on the invitation
+-- itself, asked before sending and recorded after. A database that ran it loses
+-- both here.
+drop function if exists erp_test.assert_invitation_send_allowance_suite();
+drop function if exists erp_test.invitation_send_allowance_suite();
+drop function if exists erp.invitation_send_allowance(uuid, text);
+drop function if exists erp.note_invitation_link_sent(uuid);
 alter table erp.invitation drop constraint if exists invitation_links_sent_check;
-alter table erp.invitation add constraint invitation_links_sent_check check (links_sent >= 0);
+alter table erp.invitation drop column if exists link_sent_at;
+alter table erp.invitation drop column if exists links_sent;
 
-comment on column erp.invitation.link_sent_at is
-  'When a sign-in link for this invitation was last emailed. Null until one is.';
-comment on column erp.invitation.links_sent is
-  'How many sign-in links have been emailed for this invitation, the first included.';
+create table if not exists erp.invitation_email_log (
+  id                   uuid primary key default gen_random_uuid(),
+  tenant_id            uuid not null references erp.tenant (id) on delete cascade,
+  -- The invitation the email was for. Not a foreign key: the row is counted
+  -- after the invitation is superseded, claimed or gone.
+  invitation_id        uuid,
+  app_user_id          uuid not null,
+  -- The address, folded, as it is counted across every organisation.
+  email_lower          text not null,
+  -- The Supabase Auth account of the person who sent it. Null for a fresh
+  -- sign-in link asked for with an invitation link, which nobody signed in sends.
+  sent_by_auth_user_id uuid,
+  kind                 text not null check (kind in ('invite', 'resend')),
+  created_at           timestamptz not null default now(),
+  created_by           uuid,
+  constraint invitation_email_log_address_folded
+    check (email_lower = lower(btrim(email_lower)) and email_lower <> '')
+);
 
-create or replace function erp.invitation_send_allowance(p_app_user_id uuid, p_kind text)
+create index if not exists invitation_email_log_tenant_idx
+  on erp.invitation_email_log (tenant_id, created_at);
+create index if not exists invitation_email_log_address_idx
+  on erp.invitation_email_log (email_lower, created_at);
+create index if not exists invitation_email_log_sender_idx
+  on erp.invitation_email_log (sent_by_auth_user_id, created_at);
+create index if not exists invitation_email_log_invitation_idx
+  on erp.invitation_email_log (invitation_id) where invitation_id is not null;
+
+comment on table erp.invitation_email_log is
+  'Every invitation email and fresh sign-in link the invite function was allowed '
+  'to send, one row each, written by erp.claim_invitation_email() before the link '
+  'is made. The sending limits are counted from these rows. Append-only.';
+
+select erp_meta.register_table('erp', 'invitation_email_log', 'tenant_scoped_append_only',
+  'Invitation emails sent, one row each, counted for the sending limits.');
+
+-- The address is kept after the person it was for is erased: it is what stops
+-- one address being sent invitation emails from every organisation at once,
+-- and erp.execute_erasure() reaches a principal inside one organisation while
+-- this is counted across all of them.
+insert into erp_ref.personal_data_exemption (schema_name, table_name, column_name, rationale) values
+  ('erp', 'invitation_email_log', 'email_lower',
+   'The address an invitation email went to, kept as the minimum record that it '
+   'was written to, so the sending limits can count every organisation''s email to '
+   'one address together. Erasing it would reset the limit that protects that '
+   'address, as erasing a suppression would resume the writing it stopped.')
+on conflict (schema_name, table_name, column_name) do update set rationale = excluded.rationale;
+
+create or replace function erp.claim_invitation_email(p_app_user_id uuid, p_kind text, p_auth_user_id uuid)
 returns table (allowed boolean, reason text)
 language plpgsql
-stable
+volatile
 security invoker
 set search_path = ''
 as $$
 declare
-  v_tenant   uuid;
-  v_pending  erp.invitation%rowtype;
-  v_generous boolean;
-  v_hour_cap integer;
-  v_day_cap  integer;
-  v_person   integer;
-  v_hour     integer;
-  v_day      integer;
+  c_address_day   constant integer := 3;
+  c_new_hour      constant integer := 5;
+  c_new_day       constant integer := 10;
+  c_trusted_hour  constant integer := 20;
+  c_trusted_day   constant integer := 50;
+  c_emails        constant integer := 5;
+  c_new_together  constant integer := 200;
+  v_tenant        uuid;
+  v_email         text;
+  v_pending       uuid;
+  v_trusted       boolean;
+  v_hour_cap      integer;
+  v_day_cap       integer;
+  v_recent        integer;
+  v_hour          integer;
+  v_day           integer;
 begin
   if not erp.session_is_trusted() then
-    raise exception 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION: role % may not ask whether an invitation may be emailed', current_user
+    raise exception 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION: role % may not claim an invitation email', current_user
       using errcode = '42501',
-            hint = 'The invite function asks over its own database connection. A signed-in session invites through the door, and the function decides whether the email goes.';
+            hint = 'The invite function claims over its own database connection. A signed-in session invites through the door, and the function decides whether the email goes.';
   end if;
 
   if p_kind is null or p_kind not in ('invite', 'resend') then
-    raise exception 'CLOVEERP_INVITATION_SEND_KIND_UNKNOWN: % is not a kind of invitation email', coalesce(p_kind, 'null')
+    raise exception 'CLOVEERP_INVITATION_EMAIL_KIND_UNKNOWN: % is not a kind of invitation email', coalesce(p_kind, 'null')
       using errcode = '22023',
-            hint = 'Ask with invite once the door has made the invitation, or with resend before a fresh sign-in link is emailed.';
+            hint = 'Claim with invite once the door has made the invitation, or with resend before a fresh sign-in link is made.';
   end if;
 
-  select u.tenant_id into v_tenant from erp.app_user u where u.id = p_app_user_id;
+  -- One claim at a time, everywhere. The counts below and the row that ends
+  -- the claim are read and written under this lock, and it is held until the
+  -- claim's transaction ends, so a claim waiting for it counts the row the
+  -- claim before it wrote.
+  perform pg_advisory_xact_lock(hashtext('erp.claim_invitation_email'));
+
+  select u.tenant_id, lower(btrim(u.email))
+    into v_tenant, v_email
+    from erp.app_user u
+   where u.id = p_app_user_id;
 
   -- The invitation the email would be for: the newest one this person could
-  -- still redeem. None, and there is nothing to email.
-  if v_tenant is not null then
-    select i.* into v_pending
+  -- still redeem. None, or nowhere to send it, and there is nothing to email.
+  if v_tenant is not null and coalesce(v_email, '') <> '' then
+    select i.id into v_pending
       from erp.invitation i
      where i.tenant_id = v_tenant
        and i.app_user_id = p_app_user_id
@@ -293,130 +427,210 @@ begin
      order by i.created_at desc, i.id desc
      limit 1;
   end if;
-  if v_pending.id is null then
+  if v_pending is null then
     return query select false, 'no such invitation'::text;
     return;
   end if;
 
-  -- An organisation that has been live for more than a week has shown it is
-  -- one. Anything newer, or not yet live, sends little until it has.
-  select coalesce(erp.tenant_is_live(t.id) and t.created_at < now() - interval '7 days', false)
-    into v_generous
-    from erp.tenant t
-   where t.id = v_tenant;
-  v_hour_cap := case when v_generous then 20 else 5 end;
-  v_day_cap  := case when v_generous then 50 else 10 end;
+  -- Every count below includes the email being claimed: the rows already on
+  -- file, and one.
 
-  if p_kind = 'invite' then
-    -- Asked after the door made the invitation, so every count includes it.
-    select count(*) into v_person
-      from erp.invitation i
-     where i.tenant_id = v_tenant
-       and i.app_user_id = p_app_user_id
-       and i.created_at > now() - interval '10 minutes';
-    if v_person > 1 then
-      return query select false, 'This person was invited less than ten minutes ago, so no second email was sent.'::text;
-      return;
-    end if;
-
-    select count(*) filter (where i.created_at > now() - interval '1 hour'),
-           count(*)
-      into v_hour, v_day
-      from erp.invitation i
-     where i.tenant_id = v_tenant
-       and i.created_at > now() - interval '1 day';
-    if v_hour > v_hour_cap then
-      return query select false, 'Too many invitations have been sent from this organisation in the last hour.'::text;
-      return;
-    end if;
-    if v_day > v_day_cap then
-      return query select false, 'Too many invitations have been sent from this organisation today.'::text;
-      return;
-    end if;
-
-    return query select true, null::text;
-    return;
-  end if;
-
-  -- resend: asked before the link is made, so the counts are of what has gone.
-  if v_pending.link_sent_at is not null and v_pending.link_sent_at > now() - interval '10 minutes' then
-    return query select false, 'A sign-in link for this invitation was sent less than ten minutes ago.'::text;
-    return;
-  end if;
-  if v_pending.links_sent >= 5 then
+  -- 1. One invitation, five emails, whoever asks for them.
+  select count(*) into v_day
+    from erp.invitation_email_log l
+   where l.invitation_id = v_pending;
+  if v_day + 1 > c_emails then
     return query select false, 'Too many sign-in links have been sent for this invitation.'::text;
     return;
   end if;
 
-  -- The day's email: every invitation made today, and every link re-sent. An
-  -- invitation keeps its count and the time of its latest link, not a line per
-  -- link, so an invitation whose latest link left today counts every link it
-  -- has had beyond the one its making already counted. That can count a
-  -- yesterday's link today; it cannot miss one of today's.
-  select count(*) filter (where i.created_at > now() - interval '1 day')
-         + coalesce(sum(case when i.created_at > now() - interval '1 day'
-                             then greatest(i.links_sent - 1, 0)
-                             else i.links_sent end)
-                      filter (where i.link_sent_at > now() - interval '1 day'), 0)
-    into v_day
-    from erp.invitation i
-   where i.tenant_id = v_tenant
-     and (i.created_at > now() - interval '1 day' or i.link_sent_at > now() - interval '1 day');
-  if v_day >= v_day_cap then
+  -- 2. One address, from every organisation together: ten minutes apart, and
+  --    three a day.
+  select count(*) filter (where l.created_at > now() - interval '10 minutes'),
+         count(*)
+    into v_recent, v_day
+    from erp.invitation_email_log l
+   where l.email_lower = v_email
+     and l.created_at > now() - interval '24 hours';
+  if v_recent + 1 > 1 then
+    return query select false, 'This address was sent an invitation email less than ten minutes ago.'::text;
+    return;
+  end if;
+  if v_day + 1 > c_address_day then
+    return query select false, 'This address has already had three invitation emails today.'::text;
+    return;
+  end if;
+
+  -- 3. The organisation. One that has been live for more than a week has shown
+  --    it is one; anything newer, or never live, sends little until it has.
+  select coalesce(erp.tenant_is_live(t.id) and t.created_at < now() - interval '7 days', false)
+    into v_trusted
+    from erp.tenant t
+   where t.id = v_tenant;
+  v_trusted := coalesce(v_trusted, false);
+  v_hour_cap := case when v_trusted then c_trusted_hour else c_new_hour end;
+  v_day_cap  := case when v_trusted then c_trusted_day  else c_new_day  end;
+
+  select count(*) filter (where l.created_at > now() - interval '1 hour'),
+         count(*)
+    into v_hour, v_day
+    from erp.invitation_email_log l
+   where l.tenant_id = v_tenant
+     and l.created_at > now() - interval '24 hours';
+  if v_hour + 1 > v_hour_cap then
+    return query select false, 'Too many invitations have been sent from this organisation in the last hour.'::text;
+    return;
+  end if;
+  if v_day + 1 > v_day_cap then
     return query select false, 'Too many invitations have been sent from this organisation today.'::text;
     return;
   end if;
 
+  -- 4. The person sending, across every organisation they are an active member
+  --    of: the same numbers, over all of those organisations' email together,
+  --    and the smaller numbers if any of them has not yet earned the larger. A
+  --    second organisation adds nothing to spend.
+  if p_auth_user_id is not null then
+    select coalesce(bool_and(coalesce(erp.tenant_is_live(t.id) and t.created_at < now() - interval '7 days', false)), true)
+      into v_trusted
+      from erp.tenant t
+     where t.id in (select u.tenant_id from erp.app_user u
+                     where u.auth_user_id = p_auth_user_id and u.status = 'active');
+    v_hour_cap := case when v_trusted then c_trusted_hour else c_new_hour end;
+    v_day_cap  := case when v_trusted then c_trusted_day  else c_new_day  end;
+
+    select count(*) filter (where l.created_at > now() - interval '1 hour'),
+           count(*)
+      into v_hour, v_day
+      from erp.invitation_email_log l
+     where l.tenant_id in (select u.tenant_id from erp.app_user u
+                            where u.auth_user_id = p_auth_user_id and u.status = 'active')
+       and l.created_at > now() - interval '24 hours';
+    if v_hour + 1 > v_hour_cap then
+      return query select false, 'You have sent too many invitations in the last hour.'::text;
+      return;
+    end if;
+    if v_day + 1 > v_day_cap then
+      return query select false, 'You have sent too many invitations today.'::text;
+      return;
+    end if;
+  end if;
+
+  -- 5. Every organisation that has not yet earned the larger numbers, together.
+  --    However many there are, and however many people made them, they share
+  --    one day's email.
+  select coalesce(erp.tenant_is_live(t.id) and t.created_at < now() - interval '7 days', false)
+    into v_trusted
+    from erp.tenant t
+   where t.id = v_tenant;
+  if not coalesce(v_trusted, false) then
+    select coalesce(sum(x.n), 0)::integer
+      into v_day
+      from (select l.tenant_id, count(*) as n
+              from erp.invitation_email_log l
+             where l.created_at > now() - interval '24 hours'
+             group by l.tenant_id) x
+      join erp.tenant t on t.id = x.tenant_id
+     where not coalesce(erp.tenant_is_live(t.id) and t.created_at < now() - interval '7 days', false);
+    if v_day + 1 > c_new_together then
+      return query select false, 'New organisations have sent as many invitation emails as they may today. Try again tomorrow.'::text;
+      return;
+    end if;
+  end if;
+
+  insert into erp.invitation_email_log
+    (tenant_id, invitation_id, app_user_id, email_lower, sent_by_auth_user_id, kind)
+  values
+    (v_tenant, v_pending, p_app_user_id, v_email, p_auth_user_id, p_kind);
+
   return query select true, null::text;
 end;
 $$;
-revoke all on function erp.invitation_send_allowance(uuid, text) from public, anon, authenticated;
+revoke all on function erp.claim_invitation_email(uuid, text, uuid) from public, anon, authenticated;
 
-comment on function erp.invitation_send_allowance(uuid, text) is
-  'Whether one more invitation email may go for this person. invite, asked once '
-  'the door has made the invitation: no when they were invited twice in ten '
-  'minutes, or the organisation is over five an hour or ten a day (twenty and '
-  'fifty once it has been live for more than a week). resend, asked before a '
-  'fresh sign-in link: no within ten minutes of the last link, after five, or '
-  'when the day''s invitations and re-sent links reach the day''s limit. No '
-  'rather than an error for a person with no pending invitation. Trusted '
+comment on function erp.claim_invitation_email(uuid, text, uuid) is
+  'Claims one invitation email for this person''s newest pending invitation, or '
+  'says why not. Counted from erp.invitation_email_log under one lock, the '
+  'email included: five per invitation; per address across every organisation, '
+  'one in ten minutes and three a day; per organisation, five an hour and ten a '
+  'day, or twenty and fifty once live for more than a week; per person sending '
+  '(the Supabase Auth account, when given), the same over every organisation '
+  'they are an active member of, at the smaller numbers if any is not yet '
+  'trusted; and two hundred a day across every organisation not yet trusted. '
+  'When every limit holds it writes the row and answers yes. No rather than an '
+  'error for a person with nothing pending. invite is claimed once the door has '
+  'made the invitation, resend before a fresh sign-in link is made. Trusted '
   'sessions only; SECURITY INVOKER so the trust test sees the role that connected.';
 
-create or replace function erp.note_invitation_link_sent(p_app_user_id uuid)
-returns void
-language plpgsql
-volatile
-security invoker
-set search_path = ''
-as $$
-begin
-  if not erp.session_is_trusted() then
-    raise exception 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION: role % may not record that an invitation link was emailed', current_user
+-- One sign-in, one new organisation at a time. Every organisation can email
+-- invitations, so a sign-in that could make organisations one after another
+-- could email without limit. erp.onboard_tenant() is the door a signed-in person
+-- makes an organisation through; the platform's own onboarding goes through
+-- erp.provision_tenant() and is not touched.
+do $onboarding$
+declare
+  v_sig text := 'erp.onboard_tenant(text,text)';
+  v_def text := pg_get_functiondef('erp.onboard_tenant(text,text)'::regprocedure);
+  v_n   text := $n$  insert into erp.tenant (code, name, status, provisioned_at)
+$n$;
+  v_r   text := $r$  -- Each organisation can email invitations, so a sign-in that could make
+  -- organisations one after another could email without limit. Nobody who
+  -- made an organisation in the last day makes another, nor anybody who
+  -- already holds two that are not live. The lock keeps two requests from the
+  -- same sign-in from both passing before either has made its organisation.
+  perform pg_advisory_xact_lock(hashtext('erp.onboard_tenant'), hashtext(v_auth_id::text));
+  if exists (select 1
+               from erp.app_user u
+               join erp.tenant t on t.id = u.tenant_id
+              where u.auth_user_id = v_auth_id
+                and u.status = 'active'
+                and t.created_at > now() - interval '24 hours')
+     or (select count(*)
+           from erp.app_user u
+          where u.auth_user_id = v_auth_id
+            and u.status = 'active'
+            and not erp.tenant_is_live(u.tenant_id)) >= 2 then
+    raise exception 'CLOVEERP_ONBOARDING_LIMIT: this sign-in made an organisation in the last day, or already has two that are not live, so it cannot make another'
       using errcode = '42501',
-            hint = 'The invite function records the link it sent over its own database connection. A signed-in session does not.';
+            hint = 'Contact Clove ERP to add another organisation.';
   end if;
 
-  -- The invitation the link was for: the newest this person could still redeem.
-  update erp.invitation i
-     set link_sent_at = now(),
-         links_sent   = i.links_sent + 1
-   where i.id = (select p.id
-                   from erp.invitation p
-                   join erp.app_user u on u.tenant_id = p.tenant_id and u.id = p.app_user_id
-                  where u.id = p_app_user_id
-                    and p.claimed_at is null
-                    and p.revoked_at is null
-                    and p.expires_at > now()
-                  order by p.created_at desc, p.id desc
-                  limit 1);
-end;
-$$;
-revoke all on function erp.note_invitation_link_sent(uuid) from public, anon, authenticated;
+$r$;
+begin
+  if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
+    raise exception 'CLOVEERP_ONBOARDING_UNRECOGNISED: erp.onboard_tenant() is not the body this migration patches';
+  end if;
+  execute replace(v_def, v_n, v_r || v_n);
 
-comment on function erp.note_invitation_link_sent(uuid) is
-  'Records that a sign-in link was emailed for this person''s newest pending '
-  'invitation: the time, and one more to its count. Nothing for a person with '
-  'none. Trusted sessions only; the invite function calls it after every send.';
+  if position('CLOVEERP_ONBOARDING_LIMIT' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_ONBOARDING_UNRECOGNISED: erp.onboard_tenant() did not take the limit';
+  end if;
+end
+$onboarding$;
+
+select erp.register_refusal('CLOVEERP_ONBOARDING_LIMIT',
+  'Making another organisation from a sign-in that made one in the last day, or that already has two that are not live.',
+  'Every organisation can send invitation emails, so organisations made one after another would let one sign-in send email without any limit.',
+  'Contact Clove ERP to add another organisation.');
+
+-- The privilege's written reason gains the read the limit makes.
+do $onboarding_allowance$
+declare v_moved integer;
+begin
+  update erp_meta.security_definer_allowance
+     set rationale = 'Creates a tenant for a caller who has no principal and therefore no tenant '
+                     'context, so row-level security has nothing to scope to. Writes only rows '
+                     'belonging to the tenant it is creating, and binds it to auth.uid(). Before it '
+                     'writes, it reads only the organisations auth.uid() is already an active member '
+                     'of, when each was made and whether it is live, to refuse a caller who made one '
+                     'in the last day or holds two that are not live.'
+   where schema_name = 'erp' and function_name = 'onboard_tenant';
+  get diagnostics v_moved = row_count;
+  if v_moved <> 1 then
+    raise exception 'CLOVEERP_ALLOWANCE_NOT_MOVED: % row(s) updated for erp.onboard_tenant, expected 1', v_moved;
+  end if;
+end
+$onboarding_allowance$;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 6. A credential is a name under the platform's prefix
@@ -625,7 +839,8 @@ $superadmin_suite$;
 -- a database no drain pass has served, a message more than an hour old is
 -- suppressed with its reason and the person is shown it in the product, the
 -- in-app copy a failed send has always left (escalation_of names the message
--- it stands in for). Anything younger goes out as normal.
+-- it stands in for). Anything younger goes out as normal. And an organisation
+-- made after an incident was declared is not sent that incident's history.
 
 create or replace function erp.retire_undrained_notifications()
 returns integer
@@ -678,46 +893,176 @@ comment on function erp.retire_undrained_notifications() is
   'Suppresses the organisation''s email and webhook messages that have been '
   'queued, pending or held for more than an hour, with the reason '
   'CLOVEERP_EMAIL_NOT_SENT, and gives each person the in-app copy a failed send '
-  'leaves. Returns how many. Run once, by the release that first drains email, '
-  'on a database no drain pass has served. Trusted sessions only.';
+  'leaves. Returns how many. Called for every organisation by '
+  'erp.retire_undrained_notifications_everywhere() while no drain pass has been '
+  'recorded. Trusted sessions only.';
 
-do $backlog$
+-- The migration is not the moment draining starts. A deploy can stop between
+-- them, the drain can fail to start for hours, and meanwhile the minute pass
+-- keeps queueing: job failures, approval tasks, incident notices. So the
+-- retirement is a function anybody about to start the drain calls — this file
+-- once, deploy.yml right before it schedules the drain, and the worker on its
+-- first pass — and it does nothing at all once a drain pass is on record.
+create or replace function erp.retire_undrained_notifications_everywhere()
+returns table (tenant_code text, retired integer)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
 declare
-  t       record;
-  v_n     integer;
-  v_total integer := 0;
+  t           record;
+  v_claims    text := coalesce(current_setting('request.jwt.claims', true), '');
+  v_tenant    text := coalesce(current_setting('erp.job_tenant_id', true), '');
+  v_principal text := coalesce(current_setting('erp.job_principal_id', true), '');
 begin
+  if not erp.session_is_trusted() then
+    raise exception 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION: role % may not retire queued messages', current_user
+      using errcode = '42501',
+            hint = 'The release, deploy.yml and the dispatch worker retire what waited for the first drain. A signed-in session never does.';
+  end if;
+
+  -- Once anything has drained, whatever is queued is the drain's to send.
   if exists (select 1 from erp_meta.drain_pass) then
-    raise notice 'queued messages: a drain pass has run here, so nothing waited for nobody';
     return;
   end if;
 
   for t in
     select tn.id, tn.code
       from erp.tenant tn
-     where exists (select 1 from erp.notification n
-                    where n.tenant_id = tn.id
-                      and n.channel_kind in ('email', 'webhook')
-                      and n.status in ('queued', 'pending', 'held')
-                      and n.created_at < now() - interval '1 hour')
      order by tn.code
   loop
+    -- Each organisation for this transaction only, as nobody in it.
     perform set_config('request.jwt.claims', '', true);
-    perform set_config('erp.job_tenant_id', t.id::text, true);
     perform set_config('erp.job_principal_id', '', true);
-    v_n := erp.retire_undrained_notifications();
-    v_total := v_total + v_n;
-    raise notice '%: % message(s) queued before email could leave are shown in the product instead', t.code, v_n;
+    perform set_config('erp.job_tenant_id', t.id::text, true);
+    tenant_code := t.code;
+    retired := erp.retire_undrained_notifications();
+    return next;
   end loop;
-  perform set_config('erp.job_tenant_id', '', true);
-  perform set_config('erp.job_principal_id', '', true);
 
-  raise notice 'queued messages: % retired', v_total;
+  -- And the caller's own context back as it was.
+  perform set_config('request.jwt.claims', v_claims, true);
+  perform set_config('erp.job_tenant_id', v_tenant, true);
+  perform set_config('erp.job_principal_id', v_principal, true);
+end;
+$$;
+revoke all on function erp.retire_undrained_notifications_everywhere() from public, anon, authenticated;
+
+comment on function erp.retire_undrained_notifications_everywhere() is
+  'While no drain pass has been recorded, retires in every organisation the '
+  'email and webhook messages that waited more than an hour for a drain, '
+  'through erp.retire_undrained_notifications(), and answers each organisation''s '
+  'code with how many. No rows, and nothing touched, once any drain pass is on '
+  'record. The release that brings the drain calls it, deploy.yml calls it right '
+  'before scheduling the drain, and the worker calls it on its first pass. '
+  'Trusted sessions only; the caller''s own context is restored.';
+
+do $backlog$
+declare
+  r        record;
+  v_orgs   integer := 0;
+  v_total  integer := 0;
+begin
+  if exists (select 1 from erp_meta.drain_pass) then
+    raise notice 'queued messages: a drain pass has run here, so nothing waited for nobody';
+    return;
+  end if;
+
+  for r in select e.tenant_code, e.retired from erp.retire_undrained_notifications_everywhere() e loop
+    v_orgs := v_orgs + 1;
+    v_total := v_total + r.retired;
+    if r.retired > 0 then
+      raise notice '%: % message(s) queued before email could leave are shown in the product instead', r.tenant_code, r.retired;
+    end if;
+  end loop;
+
+  raise notice 'queued messages: % retired across % organisation(s)', v_total, v_orgs;
 end
 $backlog$;
 
+-- An organisation is told what happened while it existed. The sweep delivered
+-- every declaration and update it had no delivery row for, and nothing writes
+-- those rows when an organisation is made, so a new organisation's first minute
+-- queued an email for every notice ever posted to all organisations, resolved
+-- incidents included. Now a declaration or an update posted before the
+-- organisation was made is not sent to it, nor anything about an incident
+-- resolved before then; one still open is followed from its next update.
+do $incidents$
+declare
+  v_sig text := 'erp.communicate_incidents()';
+  v_def text := pg_get_functiondef('erp.communicate_incidents()'::regprocedure);
+  v_new text;
+  n1 text := $n$  v_cmd      uuid;
+begin
+$n$;
+  r1 text := $r$  v_cmd      uuid;
+  v_created  timestamptz;
+begin
+$r$;
+  n2 text := $n$  v_plat := erp.is_platform_organisation(v_tenant);
+$n$;
+  r2 text := $r$  v_plat := erp.is_platform_organisation(v_tenant);
+  -- When this organisation was made. Nothing posted before it is its news.
+  select t.created_at into v_created from erp.tenant t where t.id = v_tenant;
+$r$;
+  n3 text := $n$       where exists (select 1 from erp_meta.incident_tenant t where t.incident_id = i.id and t.tenant_id = v_tenant)
+          or coalesce(i.affects_all_tenants, false))
+$n$;
+  r3 text := $r$       where (exists (select 1 from erp_meta.incident_tenant t where t.incident_id = i.id and t.tenant_id = v_tenant)
+              or coalesce(i.affects_all_tenants, false))
+         -- Nothing about an incident resolved before this organisation existed.
+         and (i.resolved_at is null or i.resolved_at >= v_created))
+$r$;
+  n4 text := $n$                        where d.tenant_id = v_tenant and d.incident_id = m.id and d.incident_update_id is null)
+$n$;
+  r4 text := $r$                        where d.tenant_id = v_tenant and d.incident_id = m.id and d.incident_update_id is null)
+       and m.declared_at >= v_created
+       and m.created_at >= v_created
+$r$;
+  n5 text := $n$                        where d.tenant_id = v_tenant and d.incident_id = m.id and d.incident_update_id = up.id)
+$n$;
+  r5 text := $r$                        where d.tenant_id = v_tenant and d.incident_id = m.id and d.incident_update_id = up.id)
+       and up.posted_at >= v_created
+$r$;
+begin
+  if (length(v_def) - length(replace(v_def, n1, ''))) / length(n1) <> 1
+     or (length(v_def) - length(replace(v_def, n2, ''))) / length(n2) <> 1
+     or (length(v_def) - length(replace(v_def, n3, ''))) / length(n3) <> 1
+     or (length(v_def) - length(replace(v_def, n4, ''))) / length(n4) <> 1
+     or (length(v_def) - length(replace(v_def, n5, ''))) / length(n5) <> 1 then
+    raise exception 'CLOVEERP_INCIDENT_SWEEP_UNRECOGNISED: erp.communicate_incidents() is not the body this migration patches';
+  end if;
+  v_new := replace(replace(replace(replace(replace(v_def, n1, r1), n2, r2), n3, r3), n4, r4), n5, r5);
+  execute v_new;
+
+  v_def := pg_get_functiondef(v_sig::regprocedure);
+  if position('i.resolved_at >= v_created' in v_def) = 0
+     or position('m.declared_at >= v_created' in v_def) = 0
+     or position('up.posted_at >= v_created' in v_def) = 0 then
+    raise exception 'CLOVEERP_INCIDENT_SWEEP_UNRECOGNISED: erp.communicate_incidents() did not take the organisation''s own start';
+  end if;
+end
+$incidents$;
+
 -- ═════════════════════════════════════════════════════════════════════════════
--- 9. The suites
+-- 9. The words the channel form says
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- The form's hint suggested env://OPS_CHAT_TOKEN, which section 6 now refuses.
+-- It names a variable under the prefix, and the dictionary holds the words so
+-- an organisation can rename them.
+
+insert into erp_ref.resource (key, locale, value, description)
+select erp_ref.ui_key(v.text), 'en', v.text,
+       'A screen string declared at its call site and rendered through ui(). The channel form''s hint for a credential reference, naming a variable the worker resolves.'
+  from (values
+  ('A pointer into a secret store, such as env://CLOVEERP_CREDENTIAL_OPS_CHAT. Never the secret.')
+) as v(text)
+on conflict (key, locale) do update set value = excluded.value;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 10. The suites
 -- ═════════════════════════════════════════════════════════════════════════════
 
 create or replace function erp_test.dispatch_bindings_suite()
@@ -919,6 +1264,12 @@ declare
   v_second_n   integer;
   v_superseded boolean;
   v_garbage_n  integer;
+  v_staff      uuid := gen_random_uuid();
+  v_bound_before boolean;
+  v_bound_after  boolean;
+  v_bound_staff  boolean;
+  v_bound_nobody boolean;
+  v_bound_null   boolean;
 begin
   -- 1. Refused without EXECUTE.
   begin
@@ -961,8 +1312,35 @@ begin
   detail := case when v_ok then 'security invoker' else 'security definer: the test would see the owner' end;
   return next;
 
-  -- 4-7 mint, age, claim and supersede invitations through the real doors, and
-  -- undo all of it.
+  -- 4. Whether an account is in use is refused to a signed-in session too.
+  v_ok := false; v_msg := null;
+  begin
+    execute 'grant execute on function erp.auth_identity_is_bound(uuid) to authenticated';
+    execute 'set local role authenticated';
+    perform erp.auth_identity_is_bound(gen_random_uuid());
+    v_msg := 'with execute granted, a signed-in session was told whether an account is in use';
+    raise exception 'ZZ_RESEND_SUITE_UNDO';
+  exception when others then
+    execute 'reset role';
+    if sqlerrm <> 'ZZ_RESEND_SUITE_UNDO' then
+      v_ok := sqlstate = '42501' and sqlerrm like 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION:%';
+      v_msg := left(sqlerrm, 120);
+    end if;
+  end;
+  case_name := 'granted execute by mistake, the account check still refuses a signed-in session itself';
+  passed := v_ok; detail := v_msg;
+  return next;
+
+  -- 5.
+  select not p.prosecdef into v_ok
+    from pg_catalog.pg_proc p where p.oid = 'erp.auth_identity_is_bound(uuid)'::regprocedure;
+  case_name := 'the account check''s trust test runs in the caller''s frame';
+  passed := coalesce(v_ok, false);
+  detail := case when v_ok then 'security invoker' else 'security definer: the test would see the owner' end;
+  return next;
+
+  -- 6-10 mint, age, claim and supersede invitations through the real doors, ask
+  -- whether accounts are in use, and undo all of it.
   begin
     select * into r from erp.provision_tenant(v_code, 'Resend suite', 'admin@' || v_code || '.test', 'Resend Admin');
 
@@ -986,10 +1364,20 @@ begin
             now() - interval '15 days', now() - interval '1 day');
     select count(*) into v_expired_n from erp.invitation_for_resend(v_expired);
 
-    -- A claimed one: the administrator signs in and redeems it.
+    -- A claimed one: the administrator signs in and redeems it. The account
+    -- they signed in with is nobody's before, and theirs after.
+    v_bound_before := erp.auth_identity_is_bound(v_subject);
     perform set_config('request.jwt.claims', json_build_object('sub', v_subject)::text, true);
     perform erp.claim_invitation(r.admin_token);
     select count(*) into v_claimed_n from erp.invitation_for_resend(r.admin_token);
+    v_bound_after := erp.auth_identity_is_bound(v_subject);
+
+    -- Platform staff who have signed in; an account nobody has; and none.
+    insert into erp_meta.platform_staff (email, auth_user_id, display_name, staff_role)
+    values ('staff-' || v_code || '@zz-resend.test', v_staff, 'Resend suite staff', 'support');
+    v_bound_staff := erp.auth_identity_is_bound(v_staff);
+    v_bound_nobody := erp.auth_identity_is_bound(gen_random_uuid());
+    v_bound_null := erp.auth_identity_is_bound(null);
 
     -- A superseded one: the administrator invites a colleague, then invites
     -- them again, which withdraws the first token.
@@ -1028,7 +1416,17 @@ begin
                                      v_first_n, coalesce(v_superseded::text, 'unknown'), v_second_n));
   return next;
 
-  -- 8. Garbage is zero rows, never an error.
+  case_name := 'an account nobody joined with is not in use; one a member signs in with, or platform staff, is';
+  passed := v_state is null
+            and v_bound_before is false and v_bound_after is true and v_bound_staff is true
+            and v_bound_nobody is false and v_bound_null is false;
+  detail := coalesce(v_state, format('before joining %s, after %s; staff %s; nobody''s %s; none %s',
+                                     coalesce(v_bound_before::text, 'no answer'), coalesce(v_bound_after::text, 'no answer'),
+                                     coalesce(v_bound_staff::text, 'no answer'), coalesce(v_bound_nobody::text, 'no answer'),
+                                     coalesce(v_bound_null::text, 'no answer')));
+  return next;
+
+  -- 11. Garbage is zero rows, never an error.
   begin
     select count(*) into v_garbage_n
       from (select 1 from erp.invitation_for_resend(null)
@@ -1054,7 +1452,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 8;
+  c_expected constant integer := 11;
   v_total  integer;
   v_passed integer;
   v_detail text;
@@ -1078,443 +1476,705 @@ end;
 $$;
 revoke all on function erp_test.assert_invitation_for_resend_suite() from public, anon, authenticated;
 
-create or replace function erp_test.invitation_send_allowance_suite()
+-- Fixtures for the invitation email suite. Rows are written directly so their
+-- times can be set: the attribution trigger keeps a created_at it is given.
+
+create or replace function erp_test.invitation_email_organisation(p_code text, p_created_at timestamptz, p_live boolean)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+begin
+  insert into erp.tenant (code, name, status, created_at)
+  values (p_code, 'Invitation email suite', 'active', p_created_at)
+  returning id into v_id;
+  perform erp.set_job_tenant(v_id);
+  insert into erp.environment (tenant_id, code, name, kind, is_live, is_self)
+  values (v_id, 'production', 'Production', 'production', p_live, true);
+  return v_id;
+end;
+$$;
+revoke all on function erp_test.invitation_email_organisation(text, timestamptz, boolean) from public, anon, authenticated;
+
+create or replace function erp_test.invitation_email_person(p_tenant uuid, p_email text, p_invited_at timestamptz default now())
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+begin
+  perform erp.set_job_tenant(p_tenant);
+  insert into erp.app_user (tenant_id, kind, status, display_name, email)
+  values (p_tenant, 'person', 'invited', 'Invited person', p_email)
+  returning id into v_id;
+  insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at)
+  values (p_tenant, v_id, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
+          p_invited_at, p_invited_at + interval '7 days');
+  return v_id;
+end;
+$$;
+revoke all on function erp_test.invitation_email_person(uuid, text, timestamptz) from public, anon, authenticated;
+
+create or replace function erp_test.invitation_email_sent(p_tenant uuid, p_count integer, p_ago interval,
+                                                         p_email text default null, p_invitation uuid default null)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  insert into erp.invitation_email_log (tenant_id, invitation_id, app_user_id, email_lower, kind, created_at)
+  select p_tenant, p_invitation, gen_random_uuid(),
+         coalesce(lower(p_email), 'sent-' || g || '-' || replace(gen_random_uuid()::text, '-', '') || '@zz-mail.test'),
+         case when p_invitation is null then 'invite' else 'resend' end,
+         now() - p_ago
+    from generate_series(1, p_count) g;
+end;
+$$;
+revoke all on function erp_test.invitation_email_sent(uuid, integer, interval, text, uuid) from public, anon, authenticated;
+
+-- The claim's answer as one line: 'true: -', or 'false: ' and the reason.
+create or replace function erp_test.invitation_email_answer(p_app_user_id uuid, p_kind text, p_auth_user_id uuid)
+returns text
+language sql
+volatile
+security invoker
+set search_path = ''
+as $$
+  select format('%s: %s', a.allowed::text, coalesce(a.reason, '-'))
+    from erp.claim_invitation_email(p_app_user_id, p_kind, p_auth_user_id) a
+$$;
+revoke all on function erp_test.invitation_email_answer(uuid, text, uuid) from public, anon, authenticated;
+
+create or replace function erp_test.invitation_email_budget_suite()
 returns table(case_name text, passed boolean, detail text)
 language plpgsql
 security invoker
 set search_path = ''
 as $$
 declare
-  v_tag            text := substr(replace(gen_random_uuid()::text, '-', ''), 1, 8);
-  v_young          uuid;
-  v_old            uuid;
-  v_parked         uuid;
-  v_daily          uuid;
-  v_p              uuid;
-  v_q              uuid;
-  v_i              integer;
-  v_ok             boolean;
-  v_msg            text;
-  v_hint           text;
-  v_state          text;
-  v_unknown_invite text;
-  v_unknown_resend text;
-  v_first_ok       boolean;
-  v_first_reason   text;
-  v_again_ok       boolean;
-  v_again_reason   text;
-  v_young_fifth    boolean;
-  v_young_sixth    boolean;
-  v_young_reason   text;
-  v_old_sixth      boolean;
-  v_old_last       boolean;
-  v_old_reason     text;
-  v_parked_sixth   boolean;
-  v_tenth          boolean;
-  v_eleventh       boolean;
-  v_daily_reason   text;
-  v_recent_ok      boolean;
-  v_recent_reason  text;
-  v_later_ok       boolean;
-  v_worn_ok        boolean;
-  v_worn_reason    text;
-  v_resend_ninth   boolean;
-  v_resend_tenth   boolean;
-  v_resend_reason  text;
-  v_claimed_invite text;
+  c_yes          constant text := 'true: -';
+  c_none         constant text := 'false: no such invitation';
+  c_links        constant text := 'false: Too many sign-in links have been sent for this invitation.';
+  c_gap          constant text := 'false: This address was sent an invitation email less than ten minutes ago.';
+  c_address      constant text := 'false: This address has already had three invitation emails today.';
+  c_org_hour     constant text := 'false: Too many invitations have been sent from this organisation in the last hour.';
+  c_org_day      constant text := 'false: Too many invitations have been sent from this organisation today.';
+  c_you_hour     constant text := 'false: You have sent too many invitations in the last hour.';
+  c_you_day      constant text := 'false: You have sent too many invitations today.';
+  c_together     constant text := 'false: New organisations have sent as many invitation emails as they may today. Try again tomorrow.';
+  v_tag          text := substr(replace(gen_random_uuid()::text, '-', ''), 1, 8);
+  v_inviter      uuid := gen_random_uuid();
+  v_s1           uuid := gen_random_uuid();
+  v_s2           uuid := gen_random_uuid();
+  v_s3           uuid := gen_random_uuid();
+  v_s4           uuid := gen_random_uuid();
+  v_s5           uuid := gen_random_uuid();
+  v_first_sub    uuid := gen_random_uuid();
+  v_two_sub      uuid := gen_random_uuid();
+  v_one_sub      uuid := gen_random_uuid();
+  v_ok           boolean;
+  v_msg          text;
+  v_hint         text;
+  v_state        text;
+  v_onboard_state text;
+  v_unknown      text;
+  v_org          uuid;
+  v_other        uuid;
+  v_new          uuid;
+  v_trusted      uuid;
+  v_fill         uuid;
+  v_p            uuid;
+  v_q            uuid;
+  v_inv          uuid;
+  v_base         integer;
+  v_first        text;
+  v_logged       integer;
+  v_logged_ok    boolean;
+  v_again_invite text;
+  v_again_resend text;
+  v_claimed      text;
   v_claimed_resend text;
-  v_noted_at       timestamptz;
-  v_noted_n        integer;
-  v_other_n        integer;
-  v_noted_raised   text;
-  v_noted_ok       boolean;
-  v_noted_reason   text;
-  v_reasons        text;
+  v_refused_rows integer;
+  v_gap_nine     text;
+  v_gap_eleven   text;
+  v_shared_one   text;
+  v_shared_two   text;
+  v_third        text;
+  v_fourth       text;
+  v_links_fifth  text;
+  v_links_sixth  text;
+  v_hour_fifth   text;
+  v_hour_sixth   text;
+  v_parked_sixth text;
+  v_day_tenth    text;
+  v_day_eleventh text;
+  v_t_twentieth  text;
+  v_t_next_hour  text;
+  v_t_fiftieth   text;
+  v_t_next_day   text;
+  v_you_fifth    text;
+  v_you_sixth    text;
+  v_second_org   text;
+  v_you_tenth    text;
+  v_you_eleventh text;
+  v_mixed        text;
+  v_all_trusted  text;
+  v_together_last text;
+  v_together_over text;
+  v_together_trusted text;
+  v_update_msg   text;
+  v_delete_msg   text;
+  v_reasons      text;
+  v_onboarded    jsonb;
+  v_second_msg   text;
+  v_second_made  integer;
+  v_two_msg      text;
+  v_one_made     jsonb;
 begin
-  -- 1. The allowance refuses a signed-in session itself, should a grant ever reach it.
-  v_ok := false; v_msg := null;
+  -- 1. Refused without EXECUTE.
   begin
-    execute 'grant execute on function erp.invitation_send_allowance(uuid, text) to authenticated';
     execute 'set local role authenticated';
-    perform 1 from erp.invitation_send_allowance(gen_random_uuid(), 'invite');
-    v_msg := 'with execute granted, a signed-in session was answered';
-    raise exception 'ZZ_ALLOWANCE_SUITE_UNDO';
+    perform 1 from erp.claim_invitation_email(gen_random_uuid(), 'invite', null);
+    execute 'reset role';
+    v_ok := false; v_msg := 'a signed-in session claimed an invitation email';
   exception when others then
     execute 'reset role';
-    if sqlerrm <> 'ZZ_ALLOWANCE_SUITE_UNDO' then
-      v_ok := sqlstate = '42501' and sqlerrm like 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION:%';
-      v_msg := left(sqlerrm, 120);
-    end if;
+    v_ok := sqlstate = '42501'; v_msg := left(sqlerrm, 120);
   end;
-  case_name := 'granted execute by mistake, the allowance still refuses a signed-in session itself';
+  case_name := 'a signed-in session cannot claim an invitation email';
   passed := v_ok; detail := v_msg;
   return next;
 
-  -- 2. So does the record of a sent link.
+  -- 2. Refused by the function itself, should a grant ever reach it.
   v_ok := false; v_msg := null;
   begin
-    execute 'grant execute on function erp.note_invitation_link_sent(uuid) to authenticated';
+    execute 'grant execute on function erp.claim_invitation_email(uuid, text, uuid) to authenticated';
     execute 'set local role authenticated';
-    perform erp.note_invitation_link_sent(gen_random_uuid());
-    v_msg := 'with execute granted, a signed-in session recorded a sent link';
-    raise exception 'ZZ_ALLOWANCE_SUITE_UNDO';
+    perform 1 from erp.claim_invitation_email(gen_random_uuid(), 'invite', null);
+    v_msg := 'with execute granted, a signed-in session was answered';
+    raise exception 'ZZ_BUDGET_SUITE_UNDO';
   exception when others then
     execute 'reset role';
-    if sqlerrm <> 'ZZ_ALLOWANCE_SUITE_UNDO' then
+    if sqlerrm <> 'ZZ_BUDGET_SUITE_UNDO' then
       v_ok := sqlstate = '42501' and sqlerrm like 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION:%';
       v_msg := left(sqlerrm, 120);
     end if;
   end;
-  case_name := 'granted execute by mistake, recording a sent link still refuses a signed-in session itself';
+  case_name := 'granted execute by mistake, the claim still refuses a signed-in session itself';
   passed := v_ok; detail := v_msg;
   return next;
 
   -- 3.
-  select bool_and(not p.prosecdef) into v_ok
-    from pg_catalog.pg_proc p
-   where p.oid in ('erp.invitation_send_allowance(uuid,text)'::regprocedure,
-                   'erp.note_invitation_link_sent(uuid)'::regprocedure);
-  case_name := 'both trust tests run in the caller''s frame';
+  select not p.prosecdef into v_ok
+    from pg_catalog.pg_proc p where p.oid = 'erp.claim_invitation_email(uuid,text,uuid)'::regprocedure;
+  case_name := 'the claim''s trust test runs in the caller''s frame';
   passed := coalesce(v_ok, false);
   detail := case when v_ok then 'security invoker' else 'security definer: the test would see the owner' end;
   return next;
 
   -- 4.
-  v_ok := false; v_msg := null; v_hint := null;
+  v_ok := true; v_msg := null;
+  foreach v_unknown in array array['remind', ''] loop
+    begin
+      perform 1 from erp.claim_invitation_email(gen_random_uuid(), v_unknown, null);
+      v_ok := false; v_msg := concat_ws('; ', v_msg, format('%L was answered', v_unknown));
+    exception when others then
+      get stacked diagnostics v_hint = pg_exception_hint;
+      if not (sqlstate = '22023' and sqlerrm like 'CLOVEERP_INVITATION_EMAIL_KIND_UNKNOWN:%' and coalesce(v_hint, '') <> '') then
+        v_ok := false; v_msg := concat_ws('; ', v_msg, left(sqlerrm, 80));
+      end if;
+    end;
+  end loop;
   begin
-    perform 1 from erp.invitation_send_allowance(gen_random_uuid(), 'remind');
-    v_msg := 'a kind that is neither invite nor resend was answered';
+    perform 1 from erp.claim_invitation_email(gen_random_uuid(), null, null);
+    v_ok := false; v_msg := concat_ws('; ', v_msg, 'no kind was answered');
   exception when others then
-    get stacked diagnostics v_hint = pg_exception_hint;
-    v_ok := sqlstate = '22023' and sqlerrm like 'CLOVEERP_INVITATION_SEND_KIND_UNKNOWN:%' and coalesce(v_hint, '') <> '';
-    v_msg := left(sqlerrm, 120);
+    if sqlstate <> '22023' then v_ok := false; v_msg := concat_ws('; ', v_msg, left(sqlerrm, 80)); end if;
   end;
   case_name := 'a kind that is neither invite nor resend is refused by name, with the next action';
-  passed := v_ok; detail := v_msg;
+  passed := v_ok; detail := coalesce(v_msg, 'remind, blank and no kind refused');
   return next;
 
   -- 5.
   begin
-    select coalesce(format('%s, %s', a.allowed, a.reason), 'no row') into v_unknown_invite
-      from erp.invitation_send_allowance(gen_random_uuid(), 'invite') a;
-    select coalesce(format('%s, %s', a.allowed, a.reason), 'no row') into v_unknown_resend
-      from erp.invitation_send_allowance(gen_random_uuid(), 'resend') a;
+    select concat_ws(' | ',
+             coalesce(erp_test.invitation_email_answer(gen_random_uuid(), 'invite', gen_random_uuid()), 'no row'),
+             coalesce(erp_test.invitation_email_answer(gen_random_uuid(), 'resend', null), 'no row'),
+             coalesce(erp_test.invitation_email_answer(null, 'invite', null), 'no row'))
+      into v_unknown;
     v_msg := null;
   exception when others then
     v_msg := 'raised: ' || left(sqlerrm, 120);
   end;
   case_name := 'a person nobody invited is answered no, never an error';
-  passed := v_msg is null
-            and v_unknown_invite = 'false, no such invitation'
-            and v_unknown_resend = 'false, no such invitation';
-  detail := coalesce(v_msg, format('invite: %s; resend: %s', v_unknown_invite, v_unknown_resend));
+  passed := v_msg is null and v_unknown = concat_ws(' | ', c_none, c_none, c_none);
+  detail := coalesce(v_msg, v_unknown);
   return next;
 
-  -- 6-18 build four organisations and their invitations by hand, ask, and undo
-  -- all of it. The rows are written directly so their times can be set: the
-  -- attribution trigger keeps a created_at from being moved later.
+  -- 6-25 build organisations, people and email already sent, claim, and undo
+  -- all of it.
   begin
     -- Nobody signed in: every row below is written for the organisation named.
     perform set_config('request.jwt.claims', '', true);
 
-    -- A new organisation, already live.
-    insert into erp.tenant (code, name, status)
-    values ('zz-allow-new-' || v_tag, 'Allowance suite, new', 'active') returning id into v_young;
-    -- Live for a month.
-    insert into erp.tenant (code, name, status, created_at)
-    values ('zz-allow-old-' || v_tag, 'Allowance suite, established', 'active', now() - interval '30 days') returning id into v_old;
-    -- A month old, and never live.
-    insert into erp.tenant (code, name, status, created_at)
-    values ('zz-allow-built-' || v_tag, 'Allowance suite, not live', 'active', now() - interval '30 days') returning id into v_parked;
-    -- New and not live, for the day's limits.
-    insert into erp.tenant (code, name, status)
-    values ('zz-allow-day-' || v_tag, 'Allowance suite, daily', 'active') returning id into v_daily;
+    -- A new organisation, already live; and one live for a month.
+    v_new := erp_test.invitation_email_organisation('zz-mail-new-' || v_tag, now(), true);
+    v_trusted := erp_test.invitation_email_organisation('zz-mail-trusted-' || v_tag, now() - interval '30 days', true);
 
-    perform erp.set_job_tenant(v_young);
-    insert into erp.environment (tenant_id, code, name, kind, is_live, is_self)
-    values (v_young, 'production', 'Production', 'production', true, true);
-    perform erp.set_job_tenant(v_old);
-    insert into erp.environment (tenant_id, code, name, kind, is_live, is_self)
-    values (v_old, 'production', 'Production', 'production', true, true);
-    perform erp.set_job_tenant(v_parked);
-    insert into erp.environment (tenant_id, code, name, kind, is_live, is_self)
-    values (v_parked, 'production', 'Production', 'production', false, true);
-    perform erp.set_job_tenant(v_daily);
-    insert into erp.environment (tenant_id, code, name, kind, is_live, is_self)
-    values (v_daily, 'production', 'Production', 'production', false, true);
+    -- ── One invitation, emailed; made again; asked for again ───────────────────
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_new, v_inviter, 'person', 'active', 'Inviter', 'inviter@' || v_tag || '.test');
+    v_p := erp_test.invitation_email_person(v_new, 'first@' || v_tag || '.test');
+    select i.id into v_inv from erp.invitation i where i.tenant_id = v_new and i.app_user_id = v_p;
+    v_first := erp_test.invitation_email_answer(v_p, 'invite', v_inviter);
+    select count(*),
+           coalesce(bool_and(l.tenant_id = v_new and l.invitation_id = v_inv and l.app_user_id = v_p
+                             and l.email_lower = 'first@' || v_tag || '.test'
+                             and l.sent_by_auth_user_id = v_inviter and l.kind = 'invite'
+                             and l.created_at = now()), false)
+      into v_logged, v_logged_ok
+      from erp.invitation_email_log l
+     where l.app_user_id = v_p;
 
-    -- ── The new organisation: one person, invited, then invited again ─────────
-    perform erp.set_job_tenant(v_young);
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_young, 'person', 'invited', 'First Person', 'first@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-    values (v_young, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-    select a.allowed, a.reason into v_first_ok, v_first_reason
-      from erp.invitation_send_allowance(v_p, 'invite') a;
-
+    -- The door invites the same person again: the first invitation is
+    -- superseded and a new one made. Then a fresh link is asked for with it.
+    perform erp.set_job_tenant(v_new);
     update erp.invitation i set revoked_at = now(), revoked_reason = 'superseded by a new invitation'
-     where i.tenant_id = v_young and i.app_user_id = v_p and i.revoked_at is null;
+     where i.tenant_id = v_new and i.app_user_id = v_p and i.revoked_at is null;
     insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-    values (v_young, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-    select a.allowed, a.reason into v_again_ok, v_again_reason
-      from erp.invitation_send_allowance(v_p, 'invite') a;
+    values (v_new, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
+    v_again_invite := erp_test.invitation_email_answer(v_p, 'invite', v_inviter);
+    v_again_resend := erp_test.invitation_email_answer(v_p, 'resend', null);
 
-    -- Three more people make five invitations this hour; a fourth makes six.
-    for v_i in 1..3 loop
-      insert into erp.app_user (tenant_id, kind, status, display_name, email)
-      values (v_young, 'person', 'invited', 'Person ' || v_i, 'new' || v_i || '@' || v_tag || '.test') returning id into v_q;
-      insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-      values (v_young, v_q, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-    end loop;
-    select a.allowed into v_young_fifth from erp.invitation_send_allowance(v_q, 'invite') a;
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_young, 'person', 'invited', 'Person 4', 'new4@' || v_tag || '.test') returning id into v_q;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-    values (v_young, v_q, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-    select a.allowed, a.reason into v_young_sixth, v_young_reason
-      from erp.invitation_send_allowance(v_q, 'invite') a;
+    -- An invitation already redeemed.
+    v_q := erp_test.invitation_email_person(v_new, 'claimed@' || v_tag || '.test');
+    update erp.invitation i set claimed_at = now(), claimed_by = gen_random_uuid()
+     where i.tenant_id = v_new and i.app_user_id = v_q;
+    v_claimed := erp_test.invitation_email_answer(v_q, 'invite', v_inviter);
+    v_claimed_resend := erp_test.invitation_email_answer(v_q, 'resend', null);
+    select count(*) into v_refused_rows
+      from erp.invitation_email_log l
+     where l.app_user_id = v_q
+        or (l.app_user_id = v_p and l.invitation_id <> v_inv);
 
-    -- ── The established organisation: six this hour, then twenty-one ─────────
-    perform erp.set_job_tenant(v_old);
-    for v_i in 1..21 loop
-      insert into erp.app_user (tenant_id, kind, status, display_name, email)
-      values (v_old, 'person', 'invited', 'Person ' || v_i, 'old' || v_i || '@' || v_tag || '.test') returning id into v_q;
-      insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-      values (v_old, v_q, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-      if v_i = 6 then
-        select a.allowed into v_old_sixth from erp.invitation_send_allowance(v_q, 'invite') a;
-      end if;
-    end loop;
-    select a.allowed, a.reason into v_old_last, v_old_reason
-      from erp.invitation_send_allowance(v_q, 'invite') a;
+    -- ── One address ───────────────────────────────────────────────────────────
+    -- Emailed nine minutes ago, and eleven minutes ago.
+    v_q := erp_test.invitation_email_person(v_trusted, 'gap-nine@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_trusted, 1, interval '9 minutes', 'gap-nine@' || v_tag || '.test');
+    v_gap_nine := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_trusted, 'gap-eleven@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_trusted, 1, interval '11 minutes', 'gap-eleven@' || v_tag || '.test');
+    v_gap_eleven := erp_test.invitation_email_answer(v_q, 'invite', null);
 
-    -- ── Old but never live: six this hour ────────────────────────────────────
-    perform erp.set_job_tenant(v_parked);
-    for v_i in 1..6 loop
-      insert into erp.app_user (tenant_id, kind, status, display_name, email)
-      values (v_parked, 'person', 'invited', 'Person ' || v_i, 'built' || v_i || '@' || v_tag || '.test') returning id into v_q;
-      insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-      values (v_parked, v_q, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-    end loop;
-    select a.allowed into v_parked_sixth from erp.invitation_send_allowance(v_q, 'invite') a;
+    -- The same address in two organisations, written differently.
+    v_q := erp_test.invitation_email_person(v_trusted, 'Shared@' || v_tag || '.test');
+    v_shared_one := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_new, 'shared@' || v_tag || '.test');
+    v_shared_two := erp_test.invitation_email_answer(v_q, 'invite', null);
 
-    -- ── The day: nine made this morning, then a tenth and an eleventh now ───
-    perform erp.set_job_tenant(v_daily);
-    for v_i in 1..11 loop
-      insert into erp.app_user (tenant_id, kind, status, display_name, email)
-      values (v_daily, 'person', 'invited', 'Person ' || v_i, 'day' || v_i || '@' || v_tag || '.test') returning id into v_q;
-      insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at)
-      values (v_daily, v_q, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-              case when v_i <= 9 then now() - interval '3 hours' else now() end, now() + interval '7 days');
-      if v_i = 10 then
-        select a.allowed into v_tenth from erp.invitation_send_allowance(v_q, 'invite') a;
-      end if;
-    end loop;
-    select a.allowed, a.reason into v_eleventh, v_daily_reason
-      from erp.invitation_send_allowance(v_q, 'invite') a;
+    -- Two emails earlier today, then three.
+    v_q := erp_test.invitation_email_person(v_trusted, 'third@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_trusted, 2, interval '2 hours', 'third@' || v_tag || '.test');
+    v_third := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_trusted, 'fourth@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_trusted, 3, interval '2 hours', 'fourth@' || v_tag || '.test');
+    v_fourth := erp_test.invitation_email_answer(v_q, 'invite', null);
 
-    -- ── Resending, in the established organisation ───────────────────────────
-    -- Invitations made two days ago, so only their links count today.
-    perform erp.set_job_tenant(v_old);
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_old, 'person', 'invited', 'Recent Link', 'recent@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at, link_sent_at, links_sent)
-    values (v_old, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() - interval '2 days', now() + interval '5 days', now() - interval '5 minutes', 1);
-    select a.allowed, a.reason into v_recent_ok, v_recent_reason
-      from erp.invitation_send_allowance(v_p, 'resend') a;
+    -- ── One invitation ────────────────────────────────────────────────────────
+    -- Invited three days ago; four links went two days ago, then five.
+    v_q := erp_test.invitation_email_person(v_trusted, 'links-four@' || v_tag || '.test', now() - interval '3 days');
+    select i.id into v_inv from erp.invitation i where i.tenant_id = v_trusted and i.app_user_id = v_q;
+    perform erp_test.invitation_email_sent(v_trusted, 4, interval '2 days', 'links-four@' || v_tag || '.test', v_inv);
+    v_links_fifth := erp_test.invitation_email_answer(v_q, 'resend', null);
+    v_q := erp_test.invitation_email_person(v_trusted, 'links-five@' || v_tag || '.test', now() - interval '3 days');
+    select i.id into v_inv from erp.invitation i where i.tenant_id = v_trusted and i.app_user_id = v_q;
+    perform erp_test.invitation_email_sent(v_trusted, 5, interval '2 days', 'links-five@' || v_tag || '.test', v_inv);
+    v_links_sixth := erp_test.invitation_email_answer(v_q, 'resend', null);
 
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_old, 'person', 'invited', 'Older Link', 'older@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at, link_sent_at, links_sent)
-    values (v_old, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() - interval '2 days', now() + interval '5 days', now() - interval '11 minutes', 1);
-    select a.allowed into v_later_ok from erp.invitation_send_allowance(v_p, 'resend') a;
+    -- ── One organisation ──────────────────────────────────────────────────────
+    -- New and live: four this hour, then five.
+    v_org := erp_test.invitation_email_organisation('zz-mail-hour-' || v_tag, now(), true);
+    perform erp_test.invitation_email_sent(v_org, 4, interval '20 minutes');
+    v_q := erp_test.invitation_email_person(v_org, 'hour-fifth@' || v_tag || '.test');
+    v_hour_fifth := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_org, 'hour-sixth@' || v_tag || '.test');
+    v_hour_sixth := erp_test.invitation_email_answer(v_q, 'invite', null);
+    select v_refused_rows + count(*) into v_refused_rows
+      from erp.invitation_email_log l where l.app_user_id = v_q;
 
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_old, 'person', 'invited', 'Worn Link', 'worn@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at, link_sent_at, links_sent)
-    values (v_old, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() - interval '2 days', now() + interval '5 days', now() - interval '2 hours', 5);
-    select a.allowed, a.reason into v_worn_ok, v_worn_reason
-      from erp.invitation_send_allowance(v_p, 'resend') a;
+    -- A month old and never live: five this hour.
+    v_org := erp_test.invitation_email_organisation('zz-mail-parked-' || v_tag, now() - interval '30 days', false);
+    perform erp_test.invitation_email_sent(v_org, 5, interval '20 minutes');
+    v_q := erp_test.invitation_email_person(v_org, 'parked-sixth@' || v_tag || '.test');
+    v_parked_sixth := erp_test.invitation_email_answer(v_q, 'invite', null);
 
-    -- A claimed invitation is nothing to email, either way.
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_old, 'person', 'invited', 'Claimed', 'claimed@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at, claimed_at, claimed_by)
-    values (v_old, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() + interval '7 days', now(), gen_random_uuid());
-    select coalesce(format('%s, %s', a.allowed, a.reason), 'no row') into v_claimed_invite
-      from erp.invitation_send_allowance(v_p, 'invite') a;
-    select coalesce(format('%s, %s', a.allowed, a.reason), 'no row') into v_claimed_resend
-      from erp.invitation_send_allowance(v_p, 'resend') a;
+    -- New and not live: nine earlier today, then ten.
+    v_org := erp_test.invitation_email_organisation('zz-mail-day-' || v_tag, now(), false);
+    perform erp_test.invitation_email_sent(v_org, 9, interval '3 hours');
+    v_q := erp_test.invitation_email_person(v_org, 'day-tenth@' || v_tag || '.test');
+    v_day_tenth := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_org, 'day-eleventh@' || v_tag || '.test');
+    v_day_eleventh := erp_test.invitation_email_answer(v_q, 'invite', null);
 
-    -- ── Resending against the day, in the organisation that was never live ──
-    -- Six made this hour, and a person whose invitation is two days old and has
-    -- had three links, the latest twenty minutes ago: nine today. Then one more
-    -- invitation makes ten.
-    perform erp.set_job_tenant(v_parked);
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_parked, 'person', 'invited', 'Resent', 'resent@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at, link_sent_at, links_sent)
-    values (v_parked, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() - interval '2 days', now() + interval '5 days', now() - interval '20 minutes', 3);
-    select a.allowed into v_resend_ninth from erp.invitation_send_allowance(v_p, 'resend') a;
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_parked, 'person', 'invited', 'Person 7', 'built7@' || v_tag || '.test') returning id into v_q;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, expires_at)
-    values (v_parked, v_q, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'), now() + interval '7 days');
-    select a.allowed, a.reason into v_resend_tenth, v_resend_reason
-      from erp.invitation_send_allowance(v_p, 'resend') a;
+    -- Live for a month: nineteen this hour, then twenty.
+    v_org := erp_test.invitation_email_organisation('zz-mail-thour-' || v_tag, now() - interval '30 days', true);
+    perform erp_test.invitation_email_sent(v_org, 19, interval '20 minutes');
+    v_q := erp_test.invitation_email_person(v_org, 'thour-twentieth@' || v_tag || '.test');
+    v_t_twentieth := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_org, 'thour-next@' || v_tag || '.test');
+    v_t_next_hour := erp_test.invitation_email_answer(v_q, 'invite', null);
 
-    -- ── The record of a sent link ─────────────────────────────────────────────
-    -- A superseded invitation from three days ago and the pending one that
-    -- replaced it: the link is for the pending one.
-    perform erp.set_job_tenant(v_old);
-    insert into erp.app_user (tenant_id, kind, status, display_name, email)
-    values (v_old, 'person', 'invited', 'Noted', 'noted@' || v_tag || '.test') returning id into v_p;
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at, revoked_at, revoked_reason)
-    values (v_old, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() - interval '3 days', now() + interval '4 days', now() - interval '2 days', 'superseded by a new invitation');
-    insert into erp.invitation (tenant_id, app_user_id, token_digest, created_at, expires_at)
-    values (v_old, v_p, encode(extensions.digest(gen_random_uuid()::text, 'sha256'), 'hex'),
-            now() - interval '2 days', now() + interval '5 days');
-    perform erp.note_invitation_link_sent(v_p);
-    perform erp.note_invitation_link_sent(v_p);
-    select i.link_sent_at, i.links_sent into v_noted_at, v_noted_n
-      from erp.invitation i
-     where i.tenant_id = v_old and i.app_user_id = v_p and i.revoked_at is null;
-    select coalesce(sum(i.links_sent), 0) into v_other_n
-      from erp.invitation i
-     where i.tenant_id = v_old and i.app_user_id = v_p and i.revoked_at is not null;
+    -- Live for a month: forty-nine earlier today, then fifty.
+    v_org := erp_test.invitation_email_organisation('zz-mail-tday-' || v_tag, now() - interval '30 days', true);
+    perform erp_test.invitation_email_sent(v_org, 49, interval '3 hours');
+    v_q := erp_test.invitation_email_person(v_org, 'tday-fiftieth@' || v_tag || '.test');
+    v_t_fiftieth := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_org, 'tday-next@' || v_tag || '.test');
+    v_t_next_day := erp_test.invitation_email_answer(v_q, 'invite', null);
+
+    -- ── One person sending, across their organisations ────────────────────────
+    -- A member of two new organisations: three this hour from one and one from
+    -- the other, then four and two.
+    v_org := erp_test.invitation_email_organisation('zz-mail-c1a-' || v_tag, now(), false);
+    v_other := erp_test.invitation_email_organisation('zz-mail-c1b-' || v_tag, now(), false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_s1, 'person', 'active', 'Sender one', 'sender-one@' || v_tag || '.test'),
+           (v_other, v_s1, 'person', 'active', 'Sender one', 'sender-one@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_org, 3, interval '20 minutes');
+    perform erp_test.invitation_email_sent(v_other, 1, interval '20 minutes');
+    v_q := erp_test.invitation_email_person(v_other, 'you-fifth@' || v_tag || '.test');
+    v_you_fifth := erp_test.invitation_email_answer(v_q, 'invite', v_s1);
+    v_q := erp_test.invitation_email_person(v_other, 'you-sixth@' || v_tag || '.test');
+    v_you_sixth := erp_test.invitation_email_answer(v_q, 'invite', v_s1);
+
+    -- Five this hour from one organisation, and then the same sign-in is a
+    -- member of a second, new one that has sent nothing.
+    v_org := erp_test.invitation_email_organisation('zz-mail-c2a-' || v_tag, now(), false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_s2, 'person', 'active', 'Sender two', 'sender-two@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_org, 5, interval '20 minutes');
+    v_other := erp_test.invitation_email_organisation('zz-mail-c2b-' || v_tag, now(), false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_other, v_s2, 'person', 'active', 'Sender two', 'sender-two@' || v_tag || '.test');
+    v_q := erp_test.invitation_email_person(v_other, 'fresh-org@' || v_tag || '.test');
+    v_second_org := erp_test.invitation_email_answer(v_q, 'invite', v_s2);
+
+    -- Six earlier today from one and three from the other, then ten.
+    v_org := erp_test.invitation_email_organisation('zz-mail-c3a-' || v_tag, now(), false);
+    v_other := erp_test.invitation_email_organisation('zz-mail-c3b-' || v_tag, now(), false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_s3, 'person', 'active', 'Sender three', 'sender-three@' || v_tag || '.test'),
+           (v_other, v_s3, 'person', 'active', 'Sender three', 'sender-three@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_org, 6, interval '3 hours');
+    perform erp_test.invitation_email_sent(v_other, 3, interval '3 hours');
+    v_q := erp_test.invitation_email_person(v_other, 'you-tenth@' || v_tag || '.test');
+    v_you_tenth := erp_test.invitation_email_answer(v_q, 'invite', v_s3);
+    v_q := erp_test.invitation_email_person(v_other, 'you-eleventh@' || v_tag || '.test');
+    v_you_eleventh := erp_test.invitation_email_answer(v_q, 'invite', v_s3);
+
+    -- Sending from an organisation live for a month, five this hour, while also a
+    -- member of a new one.
+    v_org := erp_test.invitation_email_organisation('zz-mail-c4a-' || v_tag, now() - interval '30 days', true);
+    v_other := erp_test.invitation_email_organisation('zz-mail-c4b-' || v_tag, now(), false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_s4, 'person', 'active', 'Sender four', 'sender-four@' || v_tag || '.test'),
+           (v_other, v_s4, 'person', 'active', 'Sender four', 'sender-four@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_org, 5, interval '20 minutes');
+    v_q := erp_test.invitation_email_person(v_org, 'mixed@' || v_tag || '.test');
+    v_mixed := erp_test.invitation_email_answer(v_q, 'invite', v_s4);
+
+    -- A member only of an organisation live for a month: six this hour.
+    v_org := erp_test.invitation_email_organisation('zz-mail-c5-' || v_tag, now() - interval '30 days', true);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_s5, 'person', 'active', 'Sender five', 'sender-five@' || v_tag || '.test');
+    perform erp_test.invitation_email_sent(v_org, 6, interval '20 minutes');
+    v_q := erp_test.invitation_email_person(v_org, 'all-trusted@' || v_tag || '.test');
+    v_all_trusted := erp_test.invitation_email_answer(v_q, 'invite', v_s5);
+
+    -- ── Every new organisation together ───────────────────────────────────────
+    -- Whatever new organisations have sent today, made up to 199 by one of them;
+    -- then another new organisation sends the two hundredth, and the next.
+    select coalesce(sum(x.n), 0)::integer
+      into v_base
+      from (select l.tenant_id, count(*) as n
+              from erp.invitation_email_log l
+             where l.created_at > now() - interval '24 hours'
+             group by l.tenant_id) x
+      join erp.tenant t on t.id = x.tenant_id
+     where not coalesce(erp.tenant_is_live(t.id) and t.created_at < now() - interval '7 days', false);
+    v_fill := erp_test.invitation_email_organisation('zz-mail-fill-' || v_tag, now(), false);
+    if v_base < 199 then
+      perform erp_test.invitation_email_sent(v_fill, 199 - v_base, interval '2 hours');
+    end if;
+    v_org := erp_test.invitation_email_organisation('zz-mail-together-' || v_tag, now(), false);
+    v_q := erp_test.invitation_email_person(v_org, 'together-last@' || v_tag || '.test');
+    v_together_last := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_org, 'together-over@' || v_tag || '.test');
+    v_together_over := erp_test.invitation_email_answer(v_q, 'invite', null);
+    v_q := erp_test.invitation_email_person(v_trusted, 'together-trusted@' || v_tag || '.test');
+    v_together_trusted := erp_test.invitation_email_answer(v_q, 'invite', null);
+
+    -- ── The record stays as written ───────────────────────────────────────────
     begin
-      perform erp.note_invitation_link_sent(gen_random_uuid());
+      update erp.invitation_email_log l set kind = 'resend' where l.app_user_id = v_p;
+      v_update_msg := 'a sent email was rewritten';
     exception when others then
-      v_noted_raised := left(sqlerrm, 120);
+      v_update_msg := case when sqlerrm like '%APPEND_ONLY%' then null else left(sqlerrm, 120) end;
     end;
-    select a.allowed, a.reason into v_noted_ok, v_noted_reason
-      from erp.invitation_send_allowance(v_p, 'resend') a;
+    begin
+      delete from erp.invitation_email_log l where l.app_user_id = v_p;
+      v_delete_msg := 'a sent email was removed';
+    exception when others then
+      v_delete_msg := case when sqlerrm like '%APPEND_ONLY%' then null else left(sqlerrm, 120) end;
+    end;
 
-    raise exception 'ZZ_ALLOWANCE_SUITE_UNDO';
+    raise exception 'ZZ_BUDGET_SUITE_UNDO';
   exception when others then
-    if sqlerrm <> 'ZZ_ALLOWANCE_SUITE_UNDO' then v_state := left(sqlerrm, 200); end if;
+    if sqlerrm <> 'ZZ_BUDGET_SUITE_UNDO' then v_state := left(sqlerrm, 200); end if;
   end;
 
-  case_name := 'an invitation the door has just made may be emailed';
-  passed := v_state is null and coalesce(v_first_ok, false) and v_first_reason is null;
-  detail := coalesce(v_state, format('allowed %s, reason %s', v_first_ok, coalesce(v_first_reason, 'none')));
+  case_name := 'an invitation the door has just made may be emailed, and exactly that email is recorded';
+  passed := v_state is null and v_first = c_yes and v_logged = 1 and coalesce(v_logged_ok, false);
+  detail := coalesce(v_state, format('%s; %s row(s) recorded, as claimed: %s',
+                                     coalesce(v_first, 'no answer'), v_logged, coalesce(v_logged_ok::text, 'unknown')));
   return next;
 
-  case_name := 'the same person invited again within ten minutes gets no second email';
-  passed := v_state is null and v_again_ok is false and coalesce(v_again_reason, '') <> '';
-  detail := coalesce(v_state, format('allowed %s: %s', v_again_ok, coalesce(v_again_reason, 'no reason')));
+  case_name := 'an invitation already redeemed is nothing to email, and a refused claim records nothing';
+  passed := v_state is null and v_claimed = c_none and v_claimed_resend = c_none and v_refused_rows = 0;
+  detail := coalesce(v_state, format('invite: %s; resend: %s; %s row(s) for refused claims',
+                                     coalesce(v_claimed, 'no answer'), coalesce(v_claimed_resend, 'no answer'), v_refused_rows));
   return next;
 
-  case_name := 'a new organisation may email five invitations an hour, and not a sixth';
-  passed := v_state is null and coalesce(v_young_fifth, false) and v_young_sixth is false
-            and v_young_reason = 'Too many invitations have been sent from this organisation in the last hour.';
-  detail := coalesce(v_state, format('fifth %s; sixth %s: %s', v_young_fifth, v_young_sixth, coalesce(v_young_reason, 'no reason')));
+  case_name := 'inviting the same person again and asking for a fresh link does not get round the ten minutes';
+  passed := v_state is null and v_again_invite = c_gap and v_again_resend = c_gap;
+  detail := coalesce(v_state, format('invited again: %s; fresh link: %s',
+                                     coalesce(v_again_invite, 'no answer'), coalesce(v_again_resend, 'no answer')));
   return next;
 
-  case_name := 'an organisation live for more than a week may email twenty an hour: the sixth goes, the twenty-first does not';
-  passed := v_state is null and coalesce(v_old_sixth, false) and v_old_last is false
-            and v_old_reason = 'Too many invitations have been sent from this organisation in the last hour.';
-  detail := coalesce(v_state, format('sixth %s; twenty-first %s: %s', v_old_sixth, v_old_last, coalesce(v_old_reason, 'no reason')));
+  case_name := 'an address waits ten minutes: nine minutes after the last email is refused, eleven is allowed';
+  passed := v_state is null and v_gap_nine = c_gap and v_gap_eleven = c_yes;
+  detail := coalesce(v_state, format('nine: %s; eleven: %s', coalesce(v_gap_nine, 'no answer'), coalesce(v_gap_eleven, 'no answer')));
+  return next;
+
+  case_name := 'the same address invited from a second organisation is refused, however it is written';
+  passed := v_state is null and v_shared_one = c_yes and v_shared_two = c_gap;
+  detail := coalesce(v_state, format('first organisation: %s; second: %s',
+                                     coalesce(v_shared_one, 'no answer'), coalesce(v_shared_two, 'no answer')));
+  return next;
+
+  case_name := 'an address has three invitation emails a day: the third goes, the fourth does not';
+  passed := v_state is null and v_third = c_yes and v_fourth = c_address;
+  detail := coalesce(v_state, format('third: %s; fourth: %s', coalesce(v_third, 'no answer'), coalesce(v_fourth, 'no answer')));
+  return next;
+
+  case_name := 'an invitation has five emails: the fifth goes, the sixth does not';
+  passed := v_state is null and v_links_fifth = c_yes and v_links_sixth = c_links;
+  detail := coalesce(v_state, format('fifth: %s; sixth: %s', coalesce(v_links_fifth, 'no answer'), coalesce(v_links_sixth, 'no answer')));
+  return next;
+
+  case_name := 'a new organisation may email five an hour: the fifth goes, the sixth does not';
+  passed := v_state is null and v_hour_fifth = c_yes and v_hour_sixth = c_org_hour;
+  detail := coalesce(v_state, format('fifth: %s; sixth: %s', coalesce(v_hour_fifth, 'no answer'), coalesce(v_hour_sixth, 'no answer')));
   return next;
 
   case_name := 'an organisation that has never gone live is held to five an hour however old it is';
-  passed := v_state is null and v_parked_sixth is false;
-  detail := coalesce(v_state, format('sixth %s', v_parked_sixth));
+  passed := v_state is null and v_parked_sixth = c_org_hour;
+  detail := coalesce(v_state, format('sixth: %s', coalesce(v_parked_sixth, 'no answer')));
   return next;
 
-  case_name := 'a new organisation may email ten invitations a day, and not an eleventh';
-  passed := v_state is null and coalesce(v_tenth, false) and v_eleventh is false
-            and v_daily_reason = 'Too many invitations have been sent from this organisation today.';
-  detail := coalesce(v_state, format('tenth %s; eleventh %s: %s', v_tenth, v_eleventh, coalesce(v_daily_reason, 'no reason')));
+  case_name := 'a new organisation may email ten a day: the tenth goes, the eleventh does not';
+  passed := v_state is null and v_day_tenth = c_yes and v_day_eleventh = c_org_day;
+  detail := coalesce(v_state, format('tenth: %s; eleventh: %s', coalesce(v_day_tenth, 'no answer'), coalesce(v_day_eleventh, 'no answer')));
   return next;
 
-  case_name := 'a fresh sign-in link waits ten minutes after the last one';
-  passed := v_state is null and v_recent_ok is false and coalesce(v_recent_reason, '') <> '' and coalesce(v_later_ok, false);
-  detail := coalesce(v_state, format('five minutes after: %s (%s); eleven minutes after: %s',
-                                     v_recent_ok, coalesce(v_recent_reason, 'no reason'), v_later_ok));
+  case_name := 'an organisation live for more than a week may email twenty an hour: the twentieth goes, the next does not';
+  passed := v_state is null and v_t_twentieth = c_yes and v_t_next_hour = c_org_hour;
+  detail := coalesce(v_state, format('twentieth: %s; next: %s', coalesce(v_t_twentieth, 'no answer'), coalesce(v_t_next_hour, 'no answer')));
   return next;
 
-  case_name := 'an invitation that has had five sign-in links gets no sixth';
-  passed := v_state is null and v_worn_ok is false and coalesce(v_worn_reason, '') <> '';
-  detail := coalesce(v_state, format('allowed %s: %s', v_worn_ok, coalesce(v_worn_reason, 'no reason')));
+  case_name := 'and fifty a day: the fiftieth goes, the next does not';
+  passed := v_state is null and v_t_fiftieth = c_yes and v_t_next_day = c_org_day;
+  detail := coalesce(v_state, format('fiftieth: %s; next: %s', coalesce(v_t_fiftieth, 'no answer'), coalesce(v_t_next_day, 'no answer')));
   return next;
 
-  case_name := 'a re-sent link counts against the organisation''s day with the invitations made';
-  passed := v_state is null and coalesce(v_resend_ninth, false) and v_resend_tenth is false
-            and v_resend_reason = 'Too many invitations have been sent from this organisation today.';
-  detail := coalesce(v_state, format('with nine today %s; with ten %s: %s', v_resend_ninth, v_resend_tenth, coalesce(v_resend_reason, 'no reason')));
+  case_name := 'a person sending from two organisations is counted across both: the fifth this hour goes, the sixth does not';
+  passed := v_state is null and v_you_fifth = c_yes and v_you_sixth = c_you_hour;
+  detail := coalesce(v_state, format('fifth: %s; sixth: %s', coalesce(v_you_fifth, 'no answer'), coalesce(v_you_sixth, 'no answer')));
   return next;
 
-  case_name := 'an invitation already redeemed is nothing to email';
-  passed := v_state is null
-            and v_claimed_invite = 'false, no such invitation'
-            and v_claimed_resend = 'false, no such invitation';
-  detail := coalesce(v_state, format('invite: %s; resend: %s', v_claimed_invite, v_claimed_resend));
+  case_name := 'a second organisation for the same sign-in does not start the count again';
+  passed := v_state is null and v_second_org = c_you_hour;
+  detail := coalesce(v_state, format('first email from the second organisation: %s', coalesce(v_second_org, 'no answer')));
   return next;
 
-  case_name := 'a sent link is recorded on the pending invitation only, and counted each time';
-  passed := v_state is null and v_noted_at = now() and v_noted_n = 2 and v_other_n = 0 and v_noted_raised is null;
-  detail := coalesce(v_state, format('pending: %s link(s), last at %s; superseded: %s; unknown person: %s',
-                                     v_noted_n, v_noted_at, v_other_n, coalesce(v_noted_raised, 'nothing raised')));
+  case_name := 'and ten a day across both: the tenth goes, the eleventh does not';
+  passed := v_state is null and v_you_tenth = c_yes and v_you_eleventh = c_you_day;
+  detail := coalesce(v_state, format('tenth: %s; eleventh: %s', coalesce(v_you_tenth, 'no answer'), coalesce(v_you_eleventh, 'no answer')));
   return next;
 
-  case_name := 'once a link is recorded, the next one waits';
-  passed := v_state is null and v_noted_ok is false
-            and v_noted_reason = 'A sign-in link for this invitation was sent less than ten minutes ago.';
-  detail := coalesce(v_state, format('allowed %s: %s', v_noted_ok, coalesce(v_noted_reason, 'no reason')));
+  case_name := 'a person also belonging to a new organisation is held to the smaller numbers where they send from an established one';
+  passed := v_state is null and v_mixed = c_you_hour;
+  detail := coalesce(v_state, format('sixth this hour: %s', coalesce(v_mixed, 'no answer')));
   return next;
 
-  -- 18. What the inviter is shown is a plain sentence.
-  v_reasons := concat_ws(' | ', v_again_reason, v_young_reason, v_old_reason, v_daily_reason,
-                         v_recent_reason, v_worn_reason, v_resend_reason, v_noted_reason);
+  case_name := 'a person whose organisations are all established is held to the larger numbers';
+  passed := v_state is null and v_all_trusted = c_yes;
+  detail := coalesce(v_state, format('seventh this hour: %s', coalesce(v_all_trusted, 'no answer')));
+  return next;
+
+  case_name := 'new organisations together may email two hundred a day: the two hundredth goes, the next does not, and an established organisation still may';
+  passed := v_state is null and v_base <= 199
+            and v_together_last = c_yes and v_together_over = c_together and v_together_trusted = c_yes;
+  detail := coalesce(v_state, format('%s already today; two hundredth: %s; next: %s; established: %s', v_base,
+                                     coalesce(v_together_last, 'no answer'), coalesce(v_together_over, 'no answer'),
+                                     coalesce(v_together_trusted, 'no answer')));
+  return next;
+
+  case_name := 'a recorded email cannot be rewritten or removed';
+  passed := v_state is null and v_update_msg is null and v_delete_msg is null;
+  detail := coalesce(v_state, concat_ws('; ', v_update_msg, v_delete_msg), 'update and delete refused');
+  return next;
+
+  -- What the inviter is shown is a plain sentence.
+  v_reasons := concat_ws(' | ', substr(c_links, 8), substr(c_gap, 8), substr(c_address, 8), substr(c_org_hour, 8),
+                         substr(c_org_day, 8), substr(c_you_hour, 8), substr(c_you_day, 8), substr(c_together, 8));
   case_name := 'every reason is a plain sentence with no internal words';
-  passed := v_state is null
-            and v_reasons is not null
-            and v_reasons !~* '(CLOVEERP|_|tenant|app user|digest|token|null)'
-            and not exists (select 1 from unnest(array[v_again_reason, v_young_reason, v_old_reason, v_daily_reason,
-                                                      v_recent_reason, v_worn_reason, v_resend_reason, v_noted_reason]) x
-                             where x is null or x !~ '^[A-Z].*\.$');
-  detail := coalesce(v_state, v_reasons);
+  passed := v_reasons !~* '(CLOVEERP|_|tenant|app user|principal|digest|token|null|claim)'
+            and not exists (select 1 from unnest(array[c_links, c_gap, c_address, c_org_hour, c_org_day,
+                                                        c_you_hour, c_you_day, c_together]) x
+                             where substr(x, 8) !~ '^[A-Z].*\.$');
+  detail := v_reasons;
+  return next;
+
+  -- 26-29 onboard as three sign-ins, and undo all of it.
+  begin
+    perform set_config('request.jwt.claims', '', true);
+    perform set_config('erp.job_tenant_id', '', true);
+    insert into auth.users (id, email) values
+      (v_first_sub, 'first-' || v_tag || '@zz-onboard.test'),
+      (v_two_sub, 'two-' || v_tag || '@zz-onboard.test'),
+      (v_one_sub, 'one-' || v_tag || '@zz-onboard.test');
+
+    -- A sign-in with no organisation makes one, and a moment later asks again.
+    perform set_config('request.jwt.claims', json_build_object('sub', v_first_sub)::text, true);
+    v_onboarded := erp.onboard_tenant('Onboarding limit, first', 'zz-onboard-first-' || v_tag);
+    begin
+      perform erp.onboard_tenant('Onboarding limit, second', 'zz-onboard-second-' || v_tag);
+      v_second_msg := 'a second organisation was made within the day';
+    exception when others then
+      get stacked diagnostics v_hint = pg_exception_hint;
+      if sqlstate = '42501' and sqlerrm like 'CLOVEERP_ONBOARDING_LIMIT:%' and v_hint like 'Contact Clove ERP%' then
+        v_second_msg := null;
+      else
+        v_second_msg := left(sqlerrm, 120);
+      end if;
+    end;
+    select count(*) into v_second_made from erp.tenant t where t.code = 'zz-onboard-second-' || v_tag;
+
+    -- A sign-in already in two organisations made days ago, neither live.
+    perform set_config('request.jwt.claims', '', true);
+    v_org := erp_test.invitation_email_organisation('zz-onboard-nl1-' || v_tag, now() - interval '3 days', false);
+    v_other := erp_test.invitation_email_organisation('zz-onboard-nl2-' || v_tag, now() - interval '3 days', false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_two_sub, 'person', 'active', 'Two organisations', 'two-' || v_tag || '@zz-onboard.test'),
+           (v_other, v_two_sub, 'person', 'active', 'Two organisations', 'two-' || v_tag || '@zz-onboard.test');
+
+    -- And one in a single organisation made days ago, not live.
+    v_org := erp_test.invitation_email_organisation('zz-onboard-nl3-' || v_tag, now() - interval '3 days', false);
+    insert into erp.app_user (tenant_id, auth_user_id, kind, status, display_name, email)
+    values (v_org, v_one_sub, 'person', 'active', 'One organisation', 'one-' || v_tag || '@zz-onboard.test');
+    perform set_config('erp.job_tenant_id', '', true);
+
+    perform set_config('request.jwt.claims', json_build_object('sub', v_two_sub)::text, true);
+    begin
+      perform erp.onboard_tenant('Onboarding limit, third', 'zz-onboard-third-' || v_tag);
+      v_two_msg := 'a sign-in in two organisations that are not live made a third';
+    exception when others then
+      get stacked diagnostics v_hint = pg_exception_hint;
+      if sqlstate = '42501' and sqlerrm like 'CLOVEERP_ONBOARDING_LIMIT:%' and v_hint like 'Contact Clove ERP%' then
+        v_two_msg := null;
+      else
+        v_two_msg := left(sqlerrm, 120);
+      end if;
+    end;
+
+    perform set_config('request.jwt.claims', json_build_object('sub', v_one_sub)::text, true);
+    v_one_made := erp.onboard_tenant('Onboarding limit, fourth', 'zz-onboard-fourth-' || v_tag);
+
+    perform set_config('request.jwt.claims', '', true);
+    raise exception 'ZZ_BUDGET_SUITE_UNDO';
+  exception when others then
+    if sqlerrm <> 'ZZ_BUDGET_SUITE_UNDO' then v_onboard_state := left(sqlerrm, 200); end if;
+  end;
+
+  case_name := 'a sign-in with no organisation still makes one';
+  passed := v_onboard_state is null and (v_onboarded ->> 'tenant_id') is not null;
+  detail := coalesce(v_onboard_state, coalesce(v_onboarded::text, 'nothing made'));
+  return next;
+
+  case_name := 'a sign-in that made an organisation in the last day cannot make another, and is told to contact Clove ERP';
+  passed := v_onboard_state is null and v_second_msg is null and v_second_made = 0;
+  detail := coalesce(v_onboard_state, v_second_msg, format('refused; %s organisation(s) made', v_second_made));
+  return next;
+
+  case_name := 'a sign-in in two organisations that are not live cannot make a third';
+  passed := v_onboard_state is null and v_two_msg is null;
+  detail := coalesce(v_onboard_state, v_two_msg, 'refused');
+  return next;
+
+  case_name := 'a sign-in in one older organisation that is not live may make another';
+  passed := v_onboard_state is null and (v_one_made ->> 'tenant_id') is not null;
+  detail := coalesce(v_onboard_state, coalesce(v_one_made::text, 'nothing made'));
+  return next;
+
+  case_name := 'the onboarding refusal is registered with its next action';
+  passed := exists (select 1 from erp_ref.refusal f
+                     where f.code = 'CLOVEERP_ONBOARDING_LIMIT'
+                       and f.next_action = 'Contact Clove ERP to add another organisation.')
+            and exists (select 1 from erp_ref.resource r
+                         where r.locale = 'en'
+                           and r.key = erp_ref.refusal_key('CLOVEERP_ONBOARDING_LIMIT', 'next_action'));
+  detail := 'CLOVEERP_ONBOARDING_LIMIT';
   return next;
 end;
 $$;
-revoke all on function erp_test.invitation_send_allowance_suite() from public, anon, authenticated;
+revoke all on function erp_test.invitation_email_budget_suite() from public, anon, authenticated;
 
-create or replace function erp_test.assert_invitation_send_allowance_suite()
+create or replace function erp_test.assert_invitation_email_budget_suite()
 returns text
 language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 18;
+  c_expected constant integer := 30;
   v_total  integer;
   v_passed integer;
   v_detail text;
 begin
-  create temp table if not exists _invitation_send_allowance on commit drop as
-    select * from erp_test.invitation_send_allowance_suite();
+  create temp table if not exists _invitation_email_budget on commit drop as
+    select * from erp_test.invitation_email_budget_suite();
   select count(*), count(*) filter (where coalesce(passed, false)),
          string_agg(format('  %s — %s', case_name, detail), E'\n') filter (where not coalesce(passed, false))
     into v_total, v_passed, v_detail
-    from _invitation_send_allowance;
-  drop table _invitation_send_allowance;
+    from _invitation_email_budget;
+  drop table _invitation_email_budget;
   if v_total <> c_expected then
-    raise exception 'CLOVEERP_INVITATION_ALLOWANCE_SUITE_SHRANK: % case(s), expected %', v_total, c_expected
+    raise exception 'CLOVEERP_INVITATION_EMAIL_BUDGET_SUITE_SHRANK: % case(s), expected %', v_total, c_expected
       using detail = 'A case was added or lost. Update the count deliberately.';
   end if;
   if v_passed <> v_total then
-    raise exception E'CLOVEERP_INVITATION_ALLOWANCE_SUITE_FAILED: %/% case(s) failed\n%', v_total - v_passed, v_total, v_detail;
+    raise exception E'CLOVEERP_INVITATION_EMAIL_BUDGET_SUITE_FAILED: %/% case(s) failed\n%', v_total - v_passed, v_total, v_detail;
   end if;
-  return format('invitation send allowance: %s/%s cases passed', v_passed, v_total);
+  return format('invitation email budget: %s/%s cases passed', v_passed, v_total);
 end;
 $$;
-revoke all on function erp_test.assert_invitation_send_allowance_suite() from public, anon, authenticated;
+revoke all on function erp_test.assert_invitation_email_budget_suite() from public, anon, authenticated;
 
 create or replace function erp_test.drain_boundaries_suite()
 returns table(case_name text, passed boolean, detail text)
@@ -1555,6 +2215,24 @@ declare
   v_copies       integer;
   v_untouched    text;
   v_findings     integer;
+  v_n8           uuid;
+  v_with_pass    integer;
+  v_with_pass_status text;
+  v_rows         integer;
+  v_orgs         integer;
+  v_mine         integer;
+  v_tenants      integer;
+  v_waited_status text;
+  v_ctx_before   text;
+  v_ctx_after    text;
+  v_inc_before   uuid;
+  v_inc_resolved uuid;
+  v_inc_now      uuid;
+  v_up_after     uuid;
+  v_told_update  integer;
+  v_told_declared integer;
+  v_told_total   integer;
+  v_told         jsonb;
 begin
   -- 1. Nothing already on file runs a worker-only handler outside the platform
   --    organisation: the release switched any such job off, and the writer
@@ -1589,15 +2267,36 @@ begin
   passed := v_ok; detail := v_msg;
   return next;
 
-  -- 3.
-  select not p.prosecdef into v_ok
-    from pg_catalog.pg_proc p where p.oid = 'erp.retire_undrained_notifications()'::regprocedure;
-  case_name := 'the retirement''s trust test runs in the caller''s frame';
+  -- 3. So does retiring in every organisation.
+  v_ok := false; v_msg := null;
+  begin
+    execute 'grant execute on function erp.retire_undrained_notifications_everywhere() to authenticated';
+    execute 'set local role authenticated';
+    perform 1 from erp.retire_undrained_notifications_everywhere();
+    v_msg := 'with execute granted, a signed-in session retired queued messages in every organisation';
+    raise exception 'ZZ_BOUNDARY_SUITE_UNDO';
+  exception when others then
+    execute 'reset role';
+    if sqlerrm <> 'ZZ_BOUNDARY_SUITE_UNDO' then
+      v_ok := sqlstate = '42501' and sqlerrm like 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION:%';
+      v_msg := left(sqlerrm, 120);
+    end if;
+  end;
+  case_name := 'granted execute by mistake, retiring in every organisation still refuses a signed-in session itself';
+  passed := v_ok; detail := v_msg;
+  return next;
+
+  -- 4.
+  select bool_and(not p.prosecdef) into v_ok
+    from pg_catalog.pg_proc p
+   where p.oid in ('erp.retire_undrained_notifications()'::regprocedure,
+                   'erp.retire_undrained_notifications_everywhere()'::regprocedure);
+  case_name := 'both retirements'' trust tests run in the caller''s frame';
   passed := coalesce(v_ok, false);
   detail := case when v_ok then 'security invoker' else 'security definer: the test would see the owner' end;
   return next;
 
-  -- 4-17 build an organisation, act in it, and undo all of it.
+  -- 5-21 build an organisation, act in it, and undo all of it.
   begin
     select * into r from erp.provision_tenant(v_code, 'Boundary suite', 'admin@' || v_code || '.test', 'Boundary Admin');
     perform set_config('erp.job_tenant_id', '', true);
@@ -1776,6 +2475,65 @@ begin
 
     v_again := erp.retire_undrained_notifications();
 
+    -- ── Retiring whenever draining first starts ───────────────────────────────
+    -- A message that waited three hours. With a drain pass on record, retiring
+    -- everywhere does nothing; with none, it retires it, names every
+    -- organisation once, and leaves the session's own context as it was.
+    insert into erp.notification (tenant_id, severity, app_user_id, channel_kind, subject, body, status, created_at)
+    values (r.tenant_id, 'high', r.admin_user_id, 'email', 'Boundary: waited', 'Queued while nothing drained.', 'queued', now() - interval '3 hours')
+    returning id into v_n8;
+    perform erp.record_drain_pass('zz-boundary-suite', now(), '{}'::jsonb);
+    select count(*) into v_with_pass from erp.retire_undrained_notifications_everywhere();
+    select n.status into v_with_pass_status from erp.notification n where n.id = v_n8;
+
+    delete from erp_meta.drain_pass;
+    v_ctx_before := concat_ws('|', current_setting('erp.job_tenant_id', true), current_setting('request.jwt.claims', true));
+    select count(*), count(distinct e.tenant_code), coalesce(max(e.retired) filter (where e.tenant_code = v_code), -1)
+      into v_rows, v_orgs, v_mine
+      from erp.retire_undrained_notifications_everywhere() e;
+    v_ctx_after := concat_ws('|', current_setting('erp.job_tenant_id', true), current_setting('request.jwt.claims', true));
+    select count(*) into v_tenants from erp.tenant;
+    select n.status into v_waited_status from erp.notification n where n.id = v_n8;
+
+    -- ── Incident notices from before the organisation existed ─────────────────
+    -- This organisation was made at the start of this transaction. An incident
+    -- declared two days ago and still open, with an update from yesterday and
+    -- one from now; one declared three days ago and resolved yesterday, with a
+    -- note from now; and one declared now.
+    insert into erp_meta.incident (code, severity_code, title, commander, communications_owner, scribe,
+                                   scope, affects_all_tenants, declared_at, created_at)
+    values ('zz-bound-open-' || v_code, 'sev2', 'Boundary: declared before', 'A. Commander', 'Comms Owner', 'C. Scribe',
+            'Every organisation', true, now() - interval '2 days', now() - interval '2 days')
+    returning id into v_inc_before;
+    insert into erp_meta.incident_update (incident_id, posted_at, body, posted_by)
+    values (v_inc_before, now() - interval '1 day', 'Boundary: posted before the organisation existed.', 'Comms Owner');
+    insert into erp_meta.incident_update (incident_id, posted_at, body, posted_by)
+    values (v_inc_before, now(), 'Boundary: posted once the organisation existed.', 'Comms Owner')
+    returning id into v_up_after;
+    insert into erp_meta.incident (code, severity_code, title, commander, communications_owner, scribe,
+                                   scope, affects_all_tenants, declared_at, created_at, resolved_at)
+    values ('zz-bound-resolved-' || v_code, 'sev3', 'Boundary: resolved before', 'A. Commander', 'Comms Owner', 'C. Scribe',
+            'Every organisation', true, now() - interval '3 days', now() - interval '3 days', now() - interval '1 day')
+    returning id into v_inc_resolved;
+    insert into erp_meta.incident_update (incident_id, posted_at, body, posted_by)
+    values (v_inc_resolved, now(), 'Boundary: a note on an incident resolved before the organisation existed.', 'Comms Owner');
+    insert into erp_meta.incident (code, severity_code, title, commander, communications_owner, scribe,
+                                   scope, affects_all_tenants, declared_at, created_at)
+    values ('zz-bound-now-' || v_code, 'sev2', 'Boundary: declared now', 'A. Commander', 'Comms Owner', 'C. Scribe',
+            'Every organisation', true, now(), now())
+    returning id into v_inc_now;
+
+    perform set_config('request.jwt.claims', '', true);
+    perform erp.set_job_tenant(r.tenant_id);
+    v_told := erp.communicate_incidents();
+    select count(*) filter (where d.incident_id = v_inc_before and d.incident_update_id = v_up_after),
+           count(*) filter (where d.incident_id = v_inc_now and d.incident_update_id is null),
+           count(*)
+      into v_told_update, v_told_declared, v_told_total
+      from erp_meta.incident_delivery d
+     where d.tenant_id = r.tenant_id
+       and d.incident_id in (v_inc_before, v_inc_resolved, v_inc_now);
+
     raise exception 'ZZ_BOUNDARY_SUITE_UNDO';
   exception when others then
     if sqlerrm <> 'ZZ_BOUNDARY_SUITE_UNDO' then v_state := left(sqlerrm, 200); end if;
@@ -1814,7 +2572,7 @@ begin
 
   case_name := 'a handler the database runs is scheduled there as before';
   passed := v_state is null and coalesce(v_sql_job, false);
-  detail := coalesce(v_state, format('zzreclaim on file: %s', v_sql_job));
+  detail := coalesce(v_state, format('zzreclaim on file: %s', coalesce(v_sql_job::text, 'unknown')));
   return next;
 
   case_name := 'a job acting for an organisation that is not the platform''s cannot record a provider''s feed';
@@ -1824,7 +2582,7 @@ begin
 
   case_name := 'the platform''s organisation schedules the feed and records it, and so does the sweep that acts for none';
   passed := v_state is null and coalesce(v_platform_job, false) and v_platform_obs = 1 and v_sweep_obs = 2;
-  detail := coalesce(v_state, format('job on file %s; observations %s then %s', v_platform_job, v_platform_obs, v_sweep_obs));
+  detail := coalesce(v_state, format('job on file %s; observations %s then %s', coalesce(v_platform_job::text, 'unknown'), v_platform_obs, v_sweep_obs));
   return next;
 
   case_name := 'email and webhook messages queued, pending or held for over an hour are suppressed with the reason';
@@ -1848,6 +2606,27 @@ begin
   detail := coalesce(v_state, format('%s finding(s); second pass retired %s', v_findings, v_again));
   return next;
 
+  case_name := 'once a drain pass is on record, retiring in every organisation does nothing and names none';
+  passed := v_state is null and v_with_pass = 0 and v_with_pass_status = 'queued';
+  detail := coalesce(v_state, format('%s organisation(s) named; the waiting message is %s', v_with_pass, coalesce(v_with_pass_status, 'gone')));
+  return next;
+
+  case_name := 'with no drain pass on record, it names every organisation once, retires what waited, and leaves the session as it was';
+  passed := v_state is null
+            and v_rows = v_tenants and v_orgs = v_tenants and v_mine = 1
+            and v_waited_status = 'suppressed'
+            and v_ctx_after is not distinct from v_ctx_before;
+  detail := coalesce(v_state, format('%s row(s) for %s organisation(s) (%s distinct); this one retired %s; the waiting message is %s; context %s',
+                                     v_rows, v_tenants, v_orgs, v_mine, coalesce(v_waited_status, 'gone'),
+                                     case when v_ctx_after is not distinct from v_ctx_before then 'kept' else 'changed' end));
+  return next;
+
+  case_name := 'an organisation is told only what was posted after it existed, and nothing about an incident resolved before then';
+  passed := v_state is null and v_told_update = 1 and v_told_declared = 1 and v_told_total = 2;
+  detail := coalesce(v_state, format('update after it existed %s, declaration after %s, %s notice(s) in all: %s',
+                                     v_told_update, v_told_declared, v_told_total, coalesce(v_told::text, 'no answer')));
+  return next;
+
   case_name := 'the suite leaves nothing behind';
   passed := not exists (select 1 from erp.tenant t where t.code = v_code);
   detail := v_code || ' is gone';
@@ -1862,7 +2641,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 17;
+  c_expected constant integer := 21;
   v_total  integer;
   v_passed integer;
   v_detail text;
@@ -1887,7 +2666,7 @@ $$;
 revoke all on function erp_test.assert_drain_boundaries_suite() from public, anon, authenticated;
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 10. Generators, then the checks that read what changed
+-- 11. Generators, then the checks that read what changed
 -- ═════════════════════════════════════════════════════════════════════════════
 
 select erp.apply_row_security();
@@ -1898,25 +2677,34 @@ select erp.apply_audit_coverage();
 select erp.apply_live_config_guards();
 select erp.apply_execute_grants();
 
+-- The channel form's words, and the refusal the onboarding door gained.
+select erp.assert_resource_coverage('en');
+select erp.assert_vocabulary_aligned();
+
 select erp_test.assert_dispatch_bindings_suite();
 select erp_test.assert_invitation_for_resend_suite();
-select erp_test.assert_invitation_send_allowance_suite();
+select erp_test.assert_invitation_email_budget_suite();
 select erp_test.assert_drain_boundaries_suite();
 -- Restated here, or reading what changed under them: the webhook suite's
--- credential, the superadmin suite's worker-only job, and the dependency feed
--- the incident suite records.
+-- credential, the superadmin suite's worker-only job, and the incident sweep
+-- and the dependency feed the incident suite records.
 select erp_test.assert_webhook_delivery_suite();
 select erp_test.assert_queued_run_suite();
 select erp_test.assert_superadmin_suite();
 select erp_test.assert_incident_communication_suite();
 
+-- The new log is a tenant table like every other: attributed, isolated, and its
+-- address said out loud in the personal-data register.
+select erp.assert_attribution_coverage();
+select erp.assert_personal_data_register_sound();
 select erp.assert_isolation();
 select erp.assert_no_public_execute();
 select erp.assert_invoker_doors_executable();
 select erp.assert_session_context_hygiene();
 -- No public function is created here; the allowance row a public door is judged
--- by changed wording, and the doors that reach erp.upsert_job() and
--- erp.upsert_notification_channel() reach new refusals, so the judge reads them again.
+-- by changed wording, and the doors that reach erp.upsert_job(),
+-- erp.upsert_notification_channel() and erp.onboard_tenant() reach new
+-- refusals, so the judge reads them again.
 select erp.assert_public_api_safe();
 select erp.assert_authorising_doors_are_volatile();
 select erp.assert_ci_coverage();
