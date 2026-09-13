@@ -826,7 +826,36 @@ jobs:
         # that one becomes the other is a dependency a parallel run may break.
         run: |
           set -euo pipefail
+
+          # The bucket before the migrations. `supabase start` applies every
+          # file in supabase/migrations and only THEN creates the buckets
+          # config.toml declares — and 20260911123400 ends by asserting that
+          # the document-output bucket exists, so the stack never came up:
+          #
+          #   ERROR: ERPWARE_DOCUMENT_ARCHIVE_MISSING: the private document
+          #   archive does not exist (SQLSTATE P0001)
+          #
+          # on every push to main since this step was written. The schema job
+          # passes because supabase/ci/00_host_bootstrap.sql inserts the bucket
+          # first, and a real project has it because the Storage API made it
+          # before the first migration ran. Same order here: start the stack
+          # with the migrations out of the CLI's sight, let it create the
+          # bucket, put the migrations back, and apply them. --include-all for
+          # the reason deploy.yml gives; with nothing applied yet it changes
+          # nothing, and it keeps the two invocations saying the same thing.
+          held="$RUNNER_TEMP/migrations.held"
+          restore() {
+            if [[ -d "$held" ]]; then
+              rmdir supabase/migrations
+              mv "$held" supabase/migrations
+            fi
+          }
+          trap restore EXIT
+          mv supabase/migrations "$held"
+          mkdir supabase/migrations
           supabase start
+          restore
+          supabase migration up --local --include-all
           # Into the runner's temp rather than the checkout: it carries the
           # stack's service-role key, and the working tree is not the place.
           supabase status -o env > "$RUNNER_TEMP/stack.env"
