@@ -39,6 +39,11 @@ concurrency:
 jobs:
   build-and-assert:
     runs-on: ubuntu-latest
+    # The two cache keys below, for the compat job: it reads the databases
+    # this job builds rather than building its own.
+    outputs:
+      exact: ${{ steps.keys.outputs.exact }}
+      base: ${{ steps.keys.outputs.base }}
 
     # Deliberately NOT a `services:` container.
     #
@@ -826,7 +831,36 @@ jobs:
         # that one becomes the other is a dependency a parallel run may break.
         run: |
           set -euo pipefail
+
+          # The bucket before the migrations. `supabase start` applies every
+          # file in supabase/migrations and only THEN creates the buckets
+          # config.toml declares — and 20260911123400 ends by asserting that
+          # the document-output bucket exists, so the stack never came up:
+          #
+          #   ERROR: ERPWARE_DOCUMENT_ARCHIVE_MISSING: the private document
+          #   archive does not exist (SQLSTATE P0001)
+          #
+          # on every push to main since this step was written. The schema job
+          # passes because supabase/ci/00_host_bootstrap.sql inserts the bucket
+          # first, and a real project has it because the Storage API made it
+          # before the first migration ran. Same order here: start the stack
+          # with the migrations out of the CLI's sight, let it create the
+          # bucket, put the migrations back, and apply them. --include-all for
+          # the reason deploy.yml gives; with nothing applied yet it changes
+          # nothing, and it keeps the two invocations saying the same thing.
+          held="$RUNNER_TEMP/migrations.held"
+          restore() {
+            if [[ -d "$held" ]]; then
+              rmdir supabase/migrations
+              mv "$held" supabase/migrations
+            fi
+          }
+          trap restore EXIT
+          mv supabase/migrations "$held"
+          mkdir supabase/migrations
           supabase start
+          restore
+          supabase migration up --local --include-all
           # Into the runner's temp rather than the checkout: it carries the
           # stack's service-role key, and the working tree is not the place.
           supabase status -o env > "$RUNNER_TEMP/stack.env"
@@ -886,9 +920,10 @@ jobs:
   # deploy.yml on merge, the application by a publish somebody does by hand.
   # So for a while after either, the other is behind — and a rollback of the
   # application is a publish of the previous build against the current schema.
-  # This job builds the schema as main has it and as this pull request leaves
-  # it, extracts every door name from the application on each side, and says
-  # what each combination would do:
+  # This job takes the schema as main has it and as this pull request leaves
+  # it — from the databases the build job cached, or by building them when it
+  # must — extracts every door name from the application on each side, and
+  # says what each combination would do:
   #
   #   main's application against this PR's schema — a door main still calls
   #   that this PR removes breaks the running app the moment the schema
@@ -998,20 +1033,33 @@ jobs:
           say false
 
   compat:
-    needs: changes
-    # Only when this pull request changes something under supabase/.
+    needs: [changes, build-and-assert]
+    # Only when this pull request changes something under supabase/, and only
+    # once the build job has finished, because the build job is where the
+    # databases this one reads now come from.
     #
-    # The job builds the schema twice — the merge base and this head — and
-    # fails when main's application calls a door this pull request removes.
-    # Both the doors it adds and the doors it removes come from the migrations,
-    # so a pull request that changes no migration has an empty set of each, and
-    # the comparison can only conclude that nothing was removed. Thirty minutes
-    # to prove A equals A.
+    # Until 13 September this job built both schemas from nothing on every
+    # push — two full replays, thirty to forty minutes, the last job standing
+    # on every pull request — while the build job beside it had been restoring
+    # its database from a cache keyed on the migrations' blob ids for days. That
+    # cache already holds both sides: main's under the key the build job calls
+    # base, this head's under the one it calls exact, saved by the build job
+    # moments before this one starts. And the question asked here needs no
+    # database at all, only the names: a custom-format dump's own table of
+    # contents lists every function it carries, schema and all. So this reads
+    # both lists from the dumps, and replays a side from its migrations only
+    # when the cache cannot answer for it — main's tree in the minutes after a
+    # merge, before main's own build has run.
     #
-    # supabase/ rather than supabase/migrations/, because the two builds each
-    # use their own side's supabase/ci/00_host_bootstrap.sql and a change there
-    # could in principle move a door too.
-    if: github.event_name == 'pull_request' && needs.changes.outputs.schema == 'true'
+    # !cancelled() rather than the default success(): a red catalogue on the
+    # build job says nothing about whether this pull request removes a door
+    # main's application calls, and the dump it saved before the catalogue ran
+    # is still good.
+    #
+    # supabase/ rather than supabase/migrations/, because each side's bootstrap
+    # is part of what built its dump, and a change there could in principle
+    # move a door too.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.schema == 'true' }}
     runs-on: ubuntu-latest
     env:
       PGHOST: localhost
@@ -1031,6 +1079,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends postgresql-client
 
       - name: Start PostgreSQL
+        # The build job's image, for two reasons: pg_restore has to be the
+        # container's, because the runner's is 16 and the dumps are 17; and a
+        # side the cache cannot answer for is still replayed here, as before.
         run: |
           set -euo pipefail
           docker run -d --name clove-erp-compat \
@@ -1053,29 +1104,97 @@ jobs:
           git worktree add "$RUNNER_TEMP/base" "$base"
           echo "comparing against $base"
 
-      - name: Build both schemas
+      - name: The database main built, if the cache still has it
+        id: base_cache
+        if: needs.build-and-assert.outputs.base != ''
+        uses: actions/cache/restore@v4
+        with:
+          # The same three paths the build job saves under, because the path
+          # list is part of a cache entry's identity: a different list is a
+          # different entry, and this one would never hit.
+          path: |
+            ${{ runner.temp }}/clove_erp.dump
+            ${{ runner.temp }}/clove_erp.roles.sql
+            ${{ runner.temp }}/clove_erp.roles.tsv
+          key: clove-erp-schema-v4-pg17.6.1.167-${{ needs.build-and-assert.outputs.base }}
+
+      - name: Set it aside before the other one lands on the same path
         run: |
           set -euo pipefail
-          build() {
+          if [[ -s "$RUNNER_TEMP/clove_erp.dump" ]]; then
+            mv "$RUNNER_TEMP/clove_erp.dump" "$RUNNER_TEMP/base.dump"
+          fi
+          rm -f "$RUNNER_TEMP/clove_erp.roles.sql" "$RUNNER_TEMP/clove_erp.roles.tsv"
+
+      - name: The database this branch built, which the build job has just saved
+        id: head_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/clove_erp.dump
+            ${{ runner.temp }}/clove_erp.roles.sql
+            ${{ runner.temp }}/clove_erp.roles.tsv
+          key: clove-erp-schema-v4-pg17.6.1.167-${{ needs.build-and-assert.outputs.exact }}
+
+      - name: Every door on each side
+        run: |
+          set -euo pipefail
+          if [[ -s "$RUNNER_TEMP/clove_erp.dump" ]]; then
+            mv "$RUNNER_TEMP/clove_erp.dump" "$RUNNER_TEMP/head.dump"
+          fi
+
+          # From a dump: its table of contents, read by the container's
+          # pg_restore. A function's entry reads
+          #   123; 1255 45678 FUNCTION public erp_scan(p_code text) postgres
+          # so the schema is the fifth field and the name is the sixth up to
+          # its first parenthesis — the set erp.door_manifest() would give.
+          doors_from_dump() {
+            docker cp "$1" clove-erp-compat:/tmp/side.dump
+            docker exec clove-erp-compat pg_restore -l /tmp/side.dump \
+              | awk '$4 == "FUNCTION" && $5 == "public" { sub(/\(.*/, "", $6); print $6 }' \
+              | grep -E '^erp_' | sort -u
+          }
+
+          # From the migrations: what this job did for both sides before the
+          # cache, kept for the side the cache cannot answer for.
+          doors_from_tree() {
             local db="$1" root="$2"
-            psql -v ON_ERROR_STOP=1 -d postgres -c "create database $db"
+            psql -v ON_ERROR_STOP=1 -d postgres -c "create database $db" >/dev/null
             $PSQL -d "$db" -f "$root/supabase/ci/00_host_bootstrap.sql"
             for f in "$root"/supabase/migrations/*.sql; do
               $PSQL -d "$db" --single-transaction -f "$f" >/dev/null
             done
+            psql -v ON_ERROR_STOP=1 -d "$db" -tAc "select door from erp.door_manifest()" | sort -u
           }
-          build clove_head "$GITHUB_WORKSPACE"
-          build clove_base "$RUNNER_TEMP/base"
+
+          side() {
+            local name="$1" dump="$2" root="$3"
+            if [[ -s "$dump" ]]; then
+              echo "$name: from the cached dump, $(wc -c < "$dump") bytes" >&2
+              doors_from_dump "$dump"
+            else
+              echo "$name: no cached database; building it from the migrations" >&2
+              doors_from_tree "clove_$name" "$root"
+            fi
+          }
+
+          side head "$RUNNER_TEMP/head.dump" "$GITHUB_WORKSPACE" > doors_head.txt
+          side base "$RUNNER_TEMP/base.dump" "$RUNNER_TEMP/base"  > doors_base.txt
+
+          # A dump with no doors in it is not a schema, it is the wrong file.
+          for f in doors_head.txt doors_base.txt; do
+            if ! grep -q . "$f"; then
+              echo "$f is empty; refusing to compare nothing with something" >&2
+              exit 1
+            fi
+          done
+          echo "doors: $(wc -l < doors_head.txt) on this branch, $(wc -l < doors_base.txt) on main"
 
       - name: What each side names, and what each side has
         run: |
           set -euo pipefail
-          doors() { psql -v ON_ERROR_STOP=1 -d "$1" -tAc "select door from erp.door_manifest()" 2>/dev/null \
-                    || psql -v ON_ERROR_STOP=1 -d "$1" -tAc "select proname from pg_proc where pronamespace = 'public'::regnamespace and proname like 'erp\_%' order by 1"; }
           names() { grep -rhoE '"erp_[a-z0-9_]+"' "$1" --include='*.ts' --include='*.tsx' \
                       --exclude='*.test.ts' --exclude='*.test.tsx' --exclude-dir=integrations | tr -d '"' | sort -u; }
-          doors clove_head | sort -u > doors_head.txt
-          doors clove_base | sort -u > doors_base.txt
           names "$GITHUB_WORKSPACE/src" > names_head.txt
           names "$RUNNER_TEMP/base/src" > names_base.txt
 

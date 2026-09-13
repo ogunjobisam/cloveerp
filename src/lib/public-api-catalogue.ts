@@ -38,7 +38,7 @@ export const publicApiOperations: readonly PublicApiOperation[] = [
     operationId: "listDocuments",
     summary: "List documents",
     description: "Returns business documents visible to the service principal.",
-    permission: "documents.read",
+    permission: "administration.read",
     door: "erp_documents",
     write: false,
   },

@@ -505,8 +505,8 @@ export const INVENTORY: ModuleDef = {
         },
         { kind: "date", name: "p_effective_from", label: "In force from" },
         {
-          ...pickChangeSet("p_change_set_id", "Add to change set", false),
-          hint: "Leave unchosen to start a new change set for this proposal.",
+          ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+          hint: "Leave unchosen to start a new change for this proposal.",
         },
       ],
       invalidates: ["erp_container_identity_policies", "erp_change_sets"],
@@ -540,8 +540,8 @@ export const INVENTORY: ModuleDef = {
           required: true,
         },
         {
-          ...pickChangeSet("p_change_set_id", "Add to change set", false),
-          hint: "Leave unchosen to start a new change set for this proposal.",
+          ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+          hint: "Leave unchosen to start a new change for this proposal.",
         },
       ],
       invalidates: ["erp_change_sets"],
