@@ -754,15 +754,16 @@ on conflict (code) do update set
   detail_function = excluded.detail_function, detail_arguments = excluded.detail_arguments,
   blurb = excluded.blurb, runs_in_ci = excluded.runs_in_ci;
 
--- ── The refusals this migration raises ──────────────────────────────────────
+-- ── The refusal a door raises ────────────────────────────────────────────────
+--
+-- Only the writers' refusal is registered. The assertion and the suite raise
+-- their own codes with a hint, as every assertion and suite wrapper here does,
+-- and erp.refusal_report() does not read them: registering a code it cannot
+-- see raised is a finding of its own.
 select erp.register_refusal('CLOVEERP_UNKNOWN_SETUP_STEP',
   'Ticking or setting aside a setup step that does not exist.',
   'The walkthrough offers only steps that are registered; an unknown one came from somewhere else.',
   'Reload the screen and take the step from its walkthrough.');
-select erp.register_refusal('CLOVEERP_SETUP_WALKTHROUGH_BROKEN',
-  'A build whose setup walkthrough register disagrees with its evidence, its doors or its order.',
-  'A step was added or changed without the branch, the door or the ordering it claims.',
-  'Read the findings in the build log and correct the register in a migration.');
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 9. The suite
@@ -857,14 +858,6 @@ begin
 end;
 $$;
 
-select erp.register_refusal('CLOVEERP_SETUP_WALKTHROUGH_SUITE_FAILED',
-  'A build whose setup walkthrough suite has a failing case.',
-  'A case of erp_test.setup_walkthrough_suite() did not hold.',
-  'Read the failing case in the build log and correct the register or the evidence in a migration.');
-select erp.register_refusal('CLOVEERP_SETUP_WALKTHROUGH_SUITE_INCOMPLETE',
-  'A build whose setup walkthrough suite ran a different number of cases than it pins.',
-  'A case was added or lost without the pinned count changing.',
-  'Update c_expected in erp_test.assert_setup_walkthrough_suite() deliberately.');
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 10. The words the walkthrough says

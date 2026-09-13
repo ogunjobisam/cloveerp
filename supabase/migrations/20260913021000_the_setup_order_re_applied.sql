@@ -4,8 +4,10 @@
 -- audit screen a blurb of nineteen characters against the register's own
 -- check of twenty, so the file refused at that statement on every environment
 -- that tried it — the build's empty cluster and the preview branch alike —
--- and applied nowhere. The second version fixed the one word. That is still an
--- edit to a pushed migration, and the rule does not ask whether the first
+-- and applied nowhere. The second version fixed the one word; the third took
+-- out three refusal registrations for codes erp.refusal_report() does not read,
+-- which its own assertion refused at the file's last line. Each is an edit to
+-- a pushed migration, and the rule does not ask whether the first
 -- version reached anywhere: it asks for a new migration that re-applies the
 -- definition, and a line in supabase/ci/migrations_edited.txt naming it. This
 -- is that migration. It re-applies the setup order exactly as the edited file
