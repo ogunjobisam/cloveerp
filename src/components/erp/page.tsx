@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
-import { WalkthroughButton } from "./walkthrough";
+import { useContext, useState, type ReactNode } from "react";
+import { PageHeaderExtras } from "./page-extras";
 
 /**
  * The pieces every screen inside the shell shares.
@@ -88,6 +88,7 @@ export function RefreshButton() {
 }
 
 export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+  const Extras = useContext(PageHeaderExtras);
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
@@ -95,7 +96,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
         {children ? <Prose className="mt-1 text-sm text-muted-foreground">{children}</Prose> : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <WalkthroughButton />
+        {Extras ? <Extras /> : null}
         <RefreshButton />
       </div>
     </div>

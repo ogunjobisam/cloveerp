@@ -87,7 +87,7 @@ insert into erp_ref.setup_screen (screen_path, seq, blurb) values
   ('/administration/adoption', 21, 'Training scenarios for the people who will use it.'),
   ('/administration/terminology', 22, 'Your own words for the product''s, where they differ.'),
   ('/operations/assurance', 23, 'What the platform proves about this organisation, on demand.'),
-  ('/administration/audit', 24, 'Who did what, when.'),
+  ('/administration/audit', 24, 'Who did what, and when, across the organisation.'),
   ('/administration/erasure', 25, 'Personal data requests, when one arrives.'),
   ('/administration/accessibility', 26, 'The accessibility statement.'),
   ('/administration/commercial', 27, 'The plan, its meters, and the agreement.')
