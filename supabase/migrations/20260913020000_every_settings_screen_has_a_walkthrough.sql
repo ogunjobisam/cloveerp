@@ -815,7 +815,8 @@ begin
   return query select 'on the organisation screen the company comes before the site that needs it',
     (select s.seq from erp_ref.setup_step s where s.code = 'organisation.company')
       < (select s.seq from erp_ref.setup_step s where s.code = 'organisation.site')
-    and 'organisation.company' = any ((select s.requires from erp_ref.setup_step s where s.code = 'organisation.site')),
+    and exists (select 1 from erp_ref.setup_step s
+                 where s.code = 'organisation.site' and 'organisation.company' = any (s.requires)),
     'organisation.company before organisation.site, and required by it';
   return query select 'a progress row must say something: done, dismissed, or it does not exist',
     exists (select 1 from pg_constraint
