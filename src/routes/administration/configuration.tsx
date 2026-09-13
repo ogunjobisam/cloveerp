@@ -1,7 +1,7 @@
 import { friendlyError } from "@/lib/errors";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ActionButton, ErrorNote, PermissionNote } from "../../components/erp/action";
 import { ActionBar, codeField, pickFrom, reason } from "../../components/erp/actions-bar";
@@ -11,6 +11,7 @@ import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 
 /**
  * Installing configuration, from the app.
@@ -57,6 +58,13 @@ const REASON_CATEGORIES = [
 ];
 
 export const Route = createFileRoute("/administration/configuration")({
+  // ?change=<id> arrives from the onboarding interview, so the change a person
+  // was just told about is the row they see first. Optional, so every existing
+  // link to this screen stays valid without it.
+  validateSearch: (search: Record<string, unknown>): { change?: string } =>
+    typeof search["change"] === "string" && search["change"] !== ""
+      ? { change: search["change"] }
+      : {},
   head: () => ({
     meta: [
       { title: "Configuration — Clove ERP" },
@@ -87,9 +95,19 @@ type ChangeSet = {
   status: string;
   created_at: string;
   authored_by: string | null;
-  /** The database's own answer to "may I approve this?" — the author may not. */
   is_own: boolean;
+  /**
+   * The database's own answer to "may I approve this?": false only once the
+   * organisation is live and the caller authored the change. Before go-live
+   * there is nobody else to ask, and the database lets the author approve.
+   */
+  may_approve?: boolean;
 };
+
+/** A reader that predates may_approve falls back to the stricter rule. */
+function mayApprove(s: ChangeSet): boolean {
+  return s.may_approve ?? !s.is_own;
+}
 
 /**
  * A numeric knob on an installer.
@@ -226,6 +244,7 @@ function statusTone(status: string): "ok" | "warn" | "muted" {
 function Configuration() {
   const { session } = useErpSession();
   const queryClient = useQueryClient();
+  const { change } = Route.useSearch();
 
   const allowed = hasPermission(session, "administration.configure");
 
@@ -269,7 +288,7 @@ function Configuration() {
           <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
         </div>
       ) : (
-        <ChangeSetsPanel sets={data ?? []} onDone={invalidate} />
+        <ChangeSetsPanel sets={data ?? []} onDone={invalidate} highlight={change ?? null} />
       )}
 
       <DataPanel<ModuleInstallation>
@@ -504,31 +523,37 @@ function Configuration() {
 }
 
 /**
- * Explaining the bootstrap window without claiming to know which side of it you
- * are on.
+ * Explaining the bootstrap window from what the database says about each row.
  *
- * Nothing on the public API reports whether the tenant has gone live, so the
- * screen states the rule and lets the change-set list speak for the state: a set
- * sitting at `ready` is a set B6 is holding for a second person.
+ * Each change carries may_approve, so the screen no longer guesses whether the
+ * organisation is live: a waiting change the reader authored and may not
+ * approve is one the database is holding for a second administrator, and a
+ * waiting change the reader may approve is simply waiting for them.
  */
 function BootstrapNotice({ sets }: { sets: ChangeSet[] }) {
+  const { ui } = useT();
   const waiting = sets.filter((s) => s.status === "ready" || s.status === "approved");
+  const heldForSomeoneElse = waiting.filter((s) => s.status === "ready" && !mayApprove(s));
 
   return (
     <section className="min-w-0 rounded-xl border border-dashed border-border bg-card/50 p-4 sm:p-5">
-      <h2 className="text-sm font-semibold">Before and after go-live</h2>
+      <h2 className="text-sm font-semibold">{ui("Before and after go-live")}</h2>
       <Prose className="mt-1 text-xs text-muted-foreground">
-        While an organisation is still being built, an installer approves and promotes its own
-        change set — there is nobody else to ask, and requiring a second person would make a new
-        organisation impossible to configure. Once you go live, separation of duties applies: the
-        author of a change set may not approve it, so a second administrator is required.
+        {ui(
+          "While an organisation is still being set up, whoever makes a change can approve it and put it in force: there is nobody else to ask yet. Once the organisation is live, the person who made a change may not approve it, so a second administrator does.",
+        )}
       </Prose>
       {waiting.length > 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
-            {waiting.length} change {waiting.length === 1 ? "set is" : "sets are"} waiting
+            {ui("Changes waiting")}: {waiting.length}
           </span>{" "}
-          — this organisation is live, so those need a second administrator.
+          —{" "}
+          {heldForSomeoneElse.length > 0
+            ? ui(
+                "this organisation is live, and the ones you made need another administrator to approve them.",
+              )
+            : ui("approve them and put them in force below.")}
         </p>
       ) : null}
     </section>
@@ -638,8 +663,26 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
   );
 }
 
-function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => void }) {
+function ChangeSetsPanel({
+  sets,
+  onDone,
+  highlight,
+}: {
+  sets: ChangeSet[];
+  onDone: () => void;
+  highlight: string | null;
+}) {
+  const { ui } = useT();
   const [error, setError] = useState<unknown>(null);
+  const highlighted = highlight !== null && sets.some((s) => s.change_set_id === highlight);
+
+  // Bring the change a link pointed at into view once, when it is on the list.
+  useEffect(() => {
+    if (!highlighted || highlight === null) return;
+    document
+      .getElementById(`change-${highlight}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlight, highlighted]);
 
   const approve = useMutation({
     mutationFn: (id: string) => callErp("erp_approve_change_set", { p_change_set_id: id }),
@@ -672,6 +715,11 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
       </header>
 
       <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
+        {highlight !== null && !highlighted && sets.length > 0 ? (
+          <p className="mb-3 text-xs text-muted-foreground">
+            {ui("The change you followed a link to is not on this list.")}
+          </p>
+        ) : null}
         {sets.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No change sets yet. Installing a module above authors the first one.
@@ -679,7 +727,16 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
         ) : (
           <Table columns={["Set", "Author", "Status", "Created", ""]}>
             {sets.map((s) => (
-              <tr key={s.change_set_id} className="border-b border-border/50 last:border-0">
+              <tr
+                key={s.change_set_id}
+                id={`change-${s.change_set_id}`}
+                aria-current={s.change_set_id === highlight ? "true" : undefined}
+                className={`border-b border-border/50 last:border-0 ${
+                  s.change_set_id === highlight
+                    ? "bg-accent/10 outline outline-2 outline-accent"
+                    : ""
+                }`}
+              >
                 <td className="py-2 pr-4">
                   <span className="font-mono text-xs text-muted-foreground">{s.code}</span> {s.name}
                 </td>
@@ -696,11 +753,11 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
                       <ActionButton
                         variant="secondary"
                         onClick={() => approve.mutate(s.change_set_id)}
-                        disabled={busy || s.is_own}
+                        disabled={busy || !mayApprove(s)}
                         title={
-                          s.is_own
-                            ? "You authored this change set, so you may not approve it."
-                            : undefined
+                          mayApprove(s)
+                            ? undefined
+                            : ui("You made this change, so another administrator approves it.")
                         }
                       >
                         Approve
@@ -711,9 +768,9 @@ function ChangeSetsPanel({ sets, onDone }: { sets: ChangeSet[]; onDone: () => vo
                         Promote
                       </ActionButton>
                     ) : null}
-                    {s.status === "ready" && s.is_own ? (
+                    {s.status === "ready" && !mayApprove(s) ? (
                       <span className="self-center text-xs text-muted-foreground">
-                        yours — needs another administrator
+                        {ui("Yours — another administrator approves it")}
                       </span>
                     ) : null}
                   </div>
