@@ -522,7 +522,7 @@ jobs:
         #               organisation that had any.
         #   the job     rescheduled only when the register, cron.job and this
         #               URL disagree, or the stored command predates the request
-        #               timeout 20260913110000 gives it. Rescheduling renumbers
+        #               timeout 20260913120000 gives it. Rescheduling renumbers
         #               both jobs, which on every deploy would be churn.
         #
         # After the scheduler is started again, so the new jobs are not left
