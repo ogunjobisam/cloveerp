@@ -7,16 +7,18 @@ import { friendlyError } from "@/lib/errors";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import {
+  completeCount,
   nextScreen,
   nextStep,
-  settingsScreenFor,
   stepState,
+  tileFor,
   type SetupScreenProgress,
   type Walkthrough,
   type WalkthroughStep,
 } from "../../lib/walkthrough";
 import { useErpAction } from "./action";
 import { hasActionOpener, openAction } from "./action-registry";
+import { TOUCH } from "./page";
 
 /**
  * The Settings walkthrough (specification Part 22).
@@ -37,7 +39,6 @@ import { hasActionOpener, openAction } from "./action-registry";
  * exists or it does not, whoever is looking.
  */
 
-const TOUCH = "min-h-11";
 const INVALIDATES = ["erp_setup_walkthrough", "erp_setup_progress"];
 
 function useWalkthrough(path: string | null, enabled: boolean) {
@@ -51,9 +52,22 @@ function useWalkthrough(path: string | null, enabled: boolean) {
 /** The button in the page header, and the sheet it opens. */
 export function WalkthroughButton() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const path = settingsScreenFor(pathname);
+  const tile = tileFor(pathname);
   const { ui } = useT();
   const [open, setOpen] = useState(false);
+  // The setup order names two Work-area screens as well (common data is
+  // where units and business partners are made), so a tile outside Settings
+  // still gets the button when the order lists it. One cached read decides.
+  const order = useQuery({
+    queryKey: ["erp_setup_progress"],
+    queryFn: () => callErp<SetupScreenProgress[]>("erp_setup_progress"),
+    staleTime: 5 * 60 * 1000,
+    enabled: tile !== null && !tile.settings,
+  });
+  const inOrder =
+    tile !== null &&
+    (tile.settings || (order.data?.some((p) => p.screen_path === tile.path) ?? false));
+  const path = inOrder && tile ? tile.path : null;
   const walk = useWalkthrough(path, open);
 
   if (!path) return null;
@@ -129,7 +143,7 @@ function WalkthroughBody({
   if (!screen) return null;
   const steps = [...data.steps].sort((a, b) => a.seq - b.seq);
   const next = nextStep(steps);
-  const complete = steps.filter((s) => s.complete).length;
+  const complete = completeCount(steps);
 
   return (
     <div className="flex flex-col gap-4">

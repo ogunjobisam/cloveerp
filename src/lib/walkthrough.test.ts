@@ -3,7 +3,9 @@ import {
   completeCount,
   nextScreen,
   nextStep,
+  settingsScreenFor,
   stepState,
+  tileFor,
   type SetupScreenProgress,
   type WalkthroughStep,
 } from "./walkthrough";
@@ -107,5 +109,28 @@ describe("the setup order", () => {
     expect(
       completeCount([step({ code: "a", seq: 1, complete: true }), step({ code: "b", seq: 2 })]),
     ).toBe(1);
+  });
+});
+
+describe("which screen a path belongs to", () => {
+  test("a Settings tile and a path beneath it both resolve to the tile", () => {
+    expect(settingsScreenFor("/administration/organisation")).toBe("/administration/organisation");
+    expect(settingsScreenFor("/administration/organisation/anything")).toBe(
+      "/administration/organisation",
+    );
+  });
+
+  test("the longest tile wins when one tile path prefixes another", () => {
+    expect(tileFor("/finance/cost-centres")?.path).toBe("/finance/cost-centres");
+  });
+
+  test("a Work tile is a tile but not a Settings screen", () => {
+    expect(tileFor("/master-data")?.settings).toBe(false);
+    expect(settingsScreenFor("/master-data")).toBeNull();
+  });
+
+  test("the Settings home and an unknown path are nobody's tile", () => {
+    expect(tileFor("/settings")).toBeNull();
+    expect(tileFor("/no-such-screen")).toBeNull();
   });
 });

@@ -711,8 +711,14 @@ export function ActionDialog({
   const { ui } = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  // The walkthrough opens this form by the door it drives.
-  useEffect(() => registerActionOpener(fn, () => setOpen(true)), [fn]);
+  // The walkthrough opens this form by the door it drives — only while the
+  // form is offered. A dialog the viewer cannot see must not answer to its
+  // name, or the walkthrough would close on a button that opened nothing.
+  const permitted = !permission || hasPermission(session, permission);
+  useEffect(
+    () => (permitted ? registerActionOpener(fn, () => setOpen(true)) : undefined),
+    [fn, permitted],
+  );
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(fields));
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
@@ -795,7 +801,7 @@ export function ActionDialog({
   }
 
   // Not offered rather than offered-and-disabled. The database still decides.
-  if (permission && !hasPermission(session, permission)) return null;
+  if (!permitted) return null;
 
   /**
    * A question or two is a confirmation; a form is a piece of work.

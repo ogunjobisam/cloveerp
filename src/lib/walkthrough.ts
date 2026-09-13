@@ -7,13 +7,19 @@
  */
 import { allTiles, areaOf } from "./modules";
 
-/** The Settings tile this path belongs to, or nothing if it is not one. */
-export function settingsScreenFor(pathname: string): string | null {
+/** The tile this path belongs to — the longest tile path that prefixes it. */
+export function tileFor(pathname: string): { path: string; settings: boolean } | null {
   const tile = allTiles()
     .filter((t) => pathname === t.path || pathname.startsWith(`${t.path}/`))
     .sort((a, b) => b.path.length - a.path.length)[0];
-  if (!tile || areaOf(tile.group) !== "settings") return null;
-  return tile.path;
+  if (!tile) return null;
+  return { path: tile.path, settings: areaOf(tile.group) === "settings" };
+}
+
+/** The Settings tile this path belongs to, or nothing if it is not one. */
+export function settingsScreenFor(pathname: string): string | null {
+  const tile = tileFor(pathname);
+  return tile && tile.settings ? tile.path : null;
 }
 
 export type WalkthroughRequirement = {
