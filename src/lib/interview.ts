@@ -398,28 +398,40 @@ export function statusText(status: string | null, ui: Translate): string {
 }
 
 /**
- * The proposals accepting would still move. After go-live a set waiting for
- * approval is somebody else's to move, so pressing again would change nothing.
+ * The proposals accepting would still move. After go-live accepting stops at
+ * ready and never approves or puts anything in force, so a set waiting for
+ * approval, or approved and waiting to be put in force, is somebody else's to
+ * move: pressing again would change nothing.
  */
 export function pendingProposals(proposals: SessionProposal[], live: boolean): SessionProposal[] {
   return proposals.filter((p) => {
     const kind = statusKind(p.change_set_status);
     if (kind === "in_force" || kind === "not_applied" || kind === "applying") return false;
-    return !(live && kind === "waiting");
+    return !(live && (kind === "waiting" || kind === "approved"));
   });
 }
 
 export type OutcomeKind =
   | "in_force"
   | "books_set_up"
+  | "chart_in_place"
   | "waiting_second"
+  | "approved_waiting"
   | "waiting_approval"
   | "needs_attention"
   | "waiting_section"
   | "not_needed"
   | "not_acceptable";
 
-export function outcomeKind(step: Pick<AcceptStep, "outcome" | "waits_for">): OutcomeKind {
+/**
+ * What one accepted step came to. `status` is where its change stands now:
+ * after go-live accepting reports "ready" both for a change it has just sent
+ * for approval and for one somebody already approved, and only the second is
+ * waiting to be put in force rather than for a second administrator.
+ */
+export function outcomeKind(
+  step: Pick<AcceptStep, "outcome" | "waits_for"> & { status?: string | null },
+): OutcomeKind {
   switch (step.outcome) {
     case "promoted":
     case "already_promoted":
@@ -427,8 +439,10 @@ export function outcomeKind(step: Pick<AcceptStep, "outcome" | "waits_for">): Ou
     case "set_up":
     case "already_set_up":
       return "books_set_up";
+    case "chart_applied":
+      return "chart_in_place";
     case "ready":
-      return "waiting_second";
+      return step.status === "approved" ? "approved_waiting" : "waiting_second";
     case "awaiting_approval":
       return "waiting_approval";
     case "refused":
@@ -804,6 +818,42 @@ export function opensGate(answer: unknown): boolean {
 /** Two answers are the same answer regardless of key order — the autosave's "changed?". */
 export function sameAnswer(a: unknown, b: unknown): boolean {
   return canonical(a) === canonical(b);
+}
+
+/**
+ * Whether the autosave may skip sending an answer because it matches what is
+ * held. Never after the last save of that question failed: going back to the
+ * stored value, or clearing, has to be sent, both to clear the failure and to
+ * find out what the server really holds if the failed call had committed.
+ */
+export function skipsSave(value: unknown, held: unknown, lastSaveFailed: boolean): boolean {
+  return !lastSaveFailed && sameAnswer(value, held);
+}
+
+/**
+ * The questions whose answers did not save, as far as proposing is concerned:
+ * those whose last save failed, among the questions that still apply. A
+ * failure under a question that no longer applies does not hold proposing
+ * back, because propose reads only answers whose question applies.
+ */
+export function unsavedCodes(failed: Iterable<string>, applying: ReadonlySet<string>): string[] {
+  return [...failed].filter((code) => applying.has(code));
+}
+
+/**
+ * The list shown before proposing: every applying question whose card shows a
+ * failed save, and every one a flush reported as not saved that is still
+ * failed now, so a later successful save takes it off the list.
+ */
+export function unsavedQuestions<T extends { code: string; applies: boolean }>(
+  questions: T[],
+  showsError: (code: string) => boolean,
+  reported: readonly string[],
+  failed: ReadonlySet<string>,
+): T[] {
+  return questions.filter(
+    (q) => q.applies && (showsError(q.code) || (reported.includes(q.code) && failed.has(q.code))),
+  );
 }
 
 function canonical(v: unknown): string {

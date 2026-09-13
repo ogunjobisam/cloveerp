@@ -628,7 +628,9 @@ select v.key, 'en', v.value, v.description
     ('interview.org.chart.unavailable.books_set_up', 'Your books are already set up, so the numbering can no longer change.',
      'Onboarding interview: why the statutory numbering cannot be picked.'),
     ('interview.org.chart.unavailable.statutory_on', 'This organisation already uses the statutory numbering.',
-     'Onboarding interview: why the standard numbering cannot be picked.')
+     'Onboarding interview: why the standard numbering cannot be picked.'),
+    ('interview.org.chart.unavailable.one_company', 'Statutory numbering can be set up for one company only for now, and you have more than one.',
+     'Onboarding interview: why the statutory numbering cannot be picked.')
   ) v(key, value, description)
 on conflict (key, locale) do update set value = excluded.value, description = excluded.description;
 
@@ -938,6 +940,7 @@ declare
   v_chart      text;
   v_stat_ok    boolean;
   v_std_ok     boolean;
+  v_one_co     boolean;
   v_companies  jsonb;
   v_countries  jsonb;
   v_sugg       jsonb;
@@ -980,7 +983,11 @@ begin
   -- The numbering a receipt account is offered in: the one in force when the
   -- statutory numbering is already on, else this session's answer.
   v_chart     := case when v_statutory then 'statutory' else coalesce(v_eff ->> 'org.chart', 'standard') end;
-  v_stat_ok   := v_statutory or (v_on_plan and not v_books and not v_posted);
+  -- The statutory numbering's accounts arrive as one pack, and a pack that
+  -- names no company lands on the first one: a second company would have
+  -- books and no chart. So it is offered to one company only, for now.
+  v_one_co    := v_entities <= 1 and coalesce((v_eff -> 'org.multi_company') <> 'true'::jsonb, true);
+  v_stat_ok   := v_statutory or (v_on_plan and not v_books and not v_posted and v_one_co);
   v_std_ok    := not v_statutory;
 
   v_countries := case when jsonb_typeof(v_eff -> 'org.countries') = 'array'
@@ -1061,7 +1068,8 @@ begin
                                  when v_stat_ok then null
                                  when not v_on_plan then erp.text('interview.org.chart.unavailable.not_on_plan')
                                  when v_posted then erp.text('interview.org.chart.unavailable.posted')
-                                 else erp.text('interview.org.chart.unavailable.books_set_up') end)
+                                 when v_books then erp.text('interview.org.chart.unavailable.books_set_up')
+                                 else erp.text('interview.org.chart.unavailable.one_company') end)
                              when 'standard' then x.value || jsonb_build_object(
                                'available', v_std_ok,
                                'unavailable_reason', case
@@ -1188,16 +1196,20 @@ begin
             from erp_ref.currency c where c.is_active), '[]'::jsonb);
         -- A new company takes its country's currency, else the first
         -- company's; an existing one only where this session gave it a
-        -- country whose currency differs.
+        -- country whose currency differs and its books are not set up, since
+        -- a company with a general ledger keeps its currency.
         v_likely := (
           select jsonb_agg(jsonb_build_object('left', d.company, 'right', d.ccy) order by d.ord)
-            from (select b.company, b.ord, b.present, b.current_ccy,
+            from (select b.company, b.ord, b.present, b.current_ccy, b.has_gl,
                          coalesce((select co.default_currency::text from erp_ref.country co
                                     where co.code = b.answered_country),
                                   b.current_ccy, v_e0_ccy) as ccy
                     from (select c.value ->> 'value' as company, c.ord,
                                  (c.value ->> 'present')::boolean as present,
                                  en.base_currency::text as current_ccy,
+                                 exists (select 1 from erp.ledger l
+                                          where l.tenant_id = v_tenant and l.entity_id = en.id
+                                            and l.code = 'GL') as has_gl,
                                  (select upper(btrim(p.value ->> 'right')) from jsonb_array_elements(v_countries) p
                                    where erp.slug_code(p.value ->> 'left') = c.value ->> 'value'
                                      and nullif(btrim(p.value ->> 'right'), '') is not null
@@ -1207,7 +1219,7 @@ begin
                               on en.tenant_id = v_tenant and en.status = 'active'
                              and en.code = c.value ->> 'value') b) d
            where d.ccy is not null
-             and (not d.present or d.ccy is distinct from d.current_ccy));
+             and (not d.present or (d.ccy is distinct from d.current_ccy and not d.has_gl)));
 
       elsif q.code = 'org.countries' then
         v_left := v_companies;
@@ -1573,10 +1585,13 @@ update erp_ai.proposal p
 -- Re-emitted from the live body (20260906080000:353, patched by
 -- 20260906143000:941). What changed: answers are read through
 -- erp.interview_effective_answers(); a statutory numbering answer adds the
--- feature, refused once accounts exist; an existing company not listed as new
--- takes a change to its currency, country, language or financial year while it
--- has no general ledger; the variance account follows the numbering answer;
--- and the pair reader reads {left,right} first.
+-- feature, refused once accounts exist and refused with more than one company;
+-- an existing company takes a change to its country or language, and to its
+-- currency or financial year only while it has no general ledger, keeping
+-- everything else it has; a company listed as new that already exists is
+-- treated as the existing company it is; the allocation setting keeps what the
+-- organisation already set beside the method; the variance account follows
+-- the numbering answer; and the pair reader reads {left,right} first.
 create or replace function erp.propose_organisation_shape(p_session_id uuid, p_change_set_id uuid)
 returns integer
 language plpgsql
@@ -1597,9 +1612,18 @@ declare
   v_ccys   jsonb; v_ctrys jsonb; v_locs jsonb;
   v_listed text[] := '{}'::text[];
   v_ent    record;
+  v_statutory boolean;
+  v_renamed jsonb := '{}'::jsonb;
+  v_active  integer;
+  v_new     integer;
+  v_name    text;
+  v_fy_here integer;
+  v_here    jsonb;
 begin
   select e0.code, e0.base_currency, e0.country_code into v_first
     from erp.entity e0 where e0.tenant_id = v_tenant and e0.status = 'active' order by e0.code limit 1;
+
+  v_statutory := erp.capability_on(v_tenant, 'statutory_chart_8_1', current_date);
 
   -- The numbering. Standard is what the finance installer already does, so
   -- only statutory proposes anything, and only while it is not on. The
@@ -1608,7 +1632,37 @@ begin
   -- where the answer can still be changed.
   select (ia.answer #>> '{}') into v_chart from erp.interview_effective_answers(p_session_id) ia
    where ia.question_code = 'org.chart';
-  if v_chart = 'statutory' and not erp.capability_on(v_tenant, 'statutory_chart_8_1', current_date) then
+
+  -- The statutory numbering's accounts arrive as one pack, and a pack that
+  -- names no company puts them all on the first company by code. A second
+  -- company would get books and no accounts to post to, so the numbering
+  -- covers one company for now: refused here, while the answers can change.
+  select count(*) into v_active
+    from erp.entity en where en.tenant_id = v_tenant and en.status = 'active';
+  select count(distinct erp.slug_code(x.value ->> 'left')) into v_new
+    from erp.interview_effective_answers(p_session_id) ia
+   cross join lateral jsonb_array_elements(case when jsonb_typeof(ia.answer) = 'array'
+                                                then ia.answer else '[]'::jsonb end) x
+   where ia.question_code = 'org.companies'
+     and erp.slug_code(x.value ->> 'left') is not null
+     and coalesce(btrim(x.value ->> 'right'), '') <> ''
+     and not exists (select 1 from erp.entity en
+                      where en.tenant_id = v_tenant and en.status = 'active'
+                        and en.code = erp.slug_code(x.value ->> 'left'));
+  if v_chart = 'statutory' and not v_statutory and v_active + v_new > 1 then
+    raise exception
+      'CLOVEERP_INTERVIEW_CHART_ONE_COMPANY: statutory numbering can be set up for one company only for now, and this organisation would have %', v_active + v_new
+      using errcode = '23514',
+            hint = 'Keep the standard numbering, or leave the numbering question unanswered, while you have more than one company.';
+  end if;
+  if v_statutory and v_new > 0 then
+    raise exception
+      'CLOVEERP_INTERVIEW_CHART_ONE_COMPANY: this organisation numbers its nominal accounts by statutory ranges, which can be set up for one company only for now, so another company cannot be added'
+      using errcode = '23514',
+            hint = 'Leave the new companies out of this interview.';
+  end if;
+
+  if v_chart = 'statutory' and not v_statutory then
     if exists (select 1 from erp.account a where a.tenant_id = v_tenant) then
       raise exception
         'CLOVEERP_INTERVIEW_CHART_ALREADY_CHOSEN: this organisation already has nominal accounts, and the statutory numbering is chosen before any exist'
@@ -1643,6 +1697,15 @@ begin
   loop
     v_code := erp.slug_code(e ->> 'left');
     continue when v_code is null or coalesce(btrim(e ->> 'right'), '') = '';
+    -- A company that already exists is not created again with defaults:
+    -- promoting an entity item rewrites every field it has, so it is left to
+    -- the loop below, which keeps what the company already holds, and only
+    -- the name given here travels.
+    if exists (select 1 from erp.entity en
+                where en.tenant_id = v_tenant and en.status = 'active' and en.code = v_code) then
+      v_renamed := v_renamed || jsonb_build_object(v_code, btrim(e ->> 'right'));
+      continue;
+    end if;
     v_listed := v_listed || v_code;
     select upper(btrim(x ->> 'right')) into v_ccy from jsonb_array_elements(v_ccys) x
      where erp.slug_code(x ->> 'left') = v_code limit 1;
@@ -1662,21 +1725,23 @@ begin
   end loop;
 
   -- A company that already exists — the one every organisation starts with,
-  -- most often — takes what this session says about it, while it has no
-  -- general ledger: after that its currency is in its books. Everything it
-  -- already has is restated, because promoting an entity item rewrites the
-  -- company; and nothing is proposed where nothing would change.
+  -- most often — takes what this session says about its country and
+  -- language. Its currency and financial year change only while it has no
+  -- general ledger: after that they are in its books, so a company with one
+  -- restates them as they are (and promotion refuses anything else).
+  -- Everything it already has is restated, because promoting an entity item
+  -- rewrites the company; and nothing is proposed where nothing would change.
   for v_ent in
     select en.code, en.name, en.legal_name,
            en.base_currency::text as base_currency, en.country_code::text as country_code,
            en.reporting_locale, en.document_locale, en.fiscal_year_start_month::integer as fiscal_year_start_month,
            (select pe.code from erp.entity pe
-             where pe.tenant_id = v_tenant and pe.id = en.parent_entity_id) as parent_code
+             where pe.tenant_id = v_tenant and pe.id = en.parent_entity_id) as parent_code,
+           exists (select 1 from erp.ledger l
+                    where l.tenant_id = v_tenant and l.entity_id = en.id and l.code = 'GL') as has_gl
       from erp.entity en
      where en.tenant_id = v_tenant and en.status = 'active'
        and not (en.code = any (v_listed))
-       and not exists (select 1 from erp.ledger l
-                        where l.tenant_id = v_tenant and l.entity_id = en.id and l.code = 'GL')
      order by en.code
   loop
     select upper(btrim(x ->> 'right')) into v_ccy from jsonb_array_elements(v_ccys) x
@@ -1685,21 +1750,28 @@ begin
      where erp.slug_code(x ->> 'left') = v_ent.code and nullif(btrim(x ->> 'right'), '') is not null limit 1;
     select btrim(x ->> 'right') into v_loc from jsonb_array_elements(v_locs) x
      where erp.slug_code(x ->> 'left') = v_ent.code and nullif(btrim(x ->> 'right'), '') is not null limit 1;
+    v_fy_here := v_fy;
+    if v_ent.has_gl then
+      v_ccy := null;
+      v_fy_here := null;
+    end if;
+    v_name := coalesce(nullif(v_renamed ->> v_ent.code, ''), v_ent.name);
 
     continue when coalesce(v_ccy, v_ent.base_currency) is not distinct from v_ent.base_currency
               and coalesce(v_ctry, v_ent.country_code) is not distinct from v_ent.country_code
               and coalesce(v_loc, v_ent.reporting_locale) is not distinct from v_ent.reporting_locale
               and coalesce(v_loc, v_ent.document_locale) is not distinct from v_ent.document_locale
-              and coalesce(v_fy, v_ent.fiscal_year_start_month) is not distinct from v_ent.fiscal_year_start_month;
+              and coalesce(v_fy_here, v_ent.fiscal_year_start_month) is not distinct from v_ent.fiscal_year_start_month
+              and v_name is not distinct from v_ent.name;
 
     perform erp.add_change_set_item(p_change_set_id, 'entity', v_ent.code,
       jsonb_build_object(
-        'code', v_ent.code, 'name', v_ent.name, 'legal_name', v_ent.legal_name,
+        'code', v_ent.code, 'name', v_name, 'legal_name', v_ent.legal_name,
         'currency', coalesce(v_ccy, v_ent.base_currency),
         'country', coalesce(v_ctry, v_ent.country_code),
         'locale', coalesce(v_loc, v_ent.reporting_locale),
         'document_locale', coalesce(v_loc, v_ent.document_locale),
-        'fiscal_year_start_month', coalesce(v_fy, v_ent.fiscal_year_start_month),
+        'fiscal_year_start_month', coalesce(v_fy_here, v_ent.fiscal_year_start_month),
         'parent', v_ent.parent_code));
     v_items := v_items + 1;
   end loop;
@@ -1752,10 +1824,16 @@ begin
   select (ia.answer #>> '{}') into v_choice from erp.interview_effective_answers(p_session_id) ia
    where ia.question_code = 'org.allocation_method';
   if v_choice in ('fefo', 'fifo', 'lifo') then
+    -- The setting is written whole, so the rest of what is in force now —
+    -- one batch per order, the nearest location first — is carried beside
+    -- the method rather than put back to a default.
     perform erp.add_change_set_item(p_change_set_id, 'config', 'stock.allocation_policy',
       jsonb_build_object('config_type', 'stock.allocation_policy',
-                         'value', jsonb_build_object('expiry_controlled', 'fefo', 'default', v_choice,
-                                                     'single_batch_per_order', false, 'prefer_nearest_location', true)));
+                         'value', jsonb_build_object('expiry_controlled', 'fefo',
+                                                     'single_batch_per_order', false, 'prefer_nearest_location', true)
+                                  || case when jsonb_typeof(erp.config_value('stock.allocation_policy')) = 'object'
+                                          then erp.config_value('stock.allocation_policy') else '{}'::jsonb end
+                                  || jsonb_build_object('default', v_choice)));
     v_items := v_items + 1;
   end if;
 
@@ -1784,12 +1862,17 @@ begin
     v_k := upper(btrim(coalesce(v_pair ->> 'left', v_pair ->> 0, v_pair ->> 'site', v_pair ->> 'key')));
     v_v := lower(btrim(coalesce(v_pair ->> 'right', v_pair ->> 1, v_pair ->> 'method', v_pair ->> 'value')));
     continue when coalesce(v_k, '') = '' or v_v not in ('fefo', 'fifo', 'lifo');
+    -- What applies at that site now, carried beside the method as above.
+    v_here := (select erp.config_value('stock.allocation_policy', null, null, s2.entity_id, s2.id)
+                 from erp.site s2 where s2.tenant_id = v_tenant and s2.code = v_k);
     perform erp.add_change_set_item(p_change_set_id, 'config', 'stock.allocation_policy|*|' || v_k,
       jsonb_build_object('config_type', 'stock.allocation_policy', 'site', v_k,
                          'entity', (select e2.code from erp.site s2 join erp.entity e2 on e2.id = s2.entity_id
                                        where s2.tenant_id = v_tenant and s2.code = v_k),
-                         'value', jsonb_build_object('expiry_controlled', 'fefo', 'default', v_v,
-                                                     'single_batch_per_order', false, 'prefer_nearest_location', true)));
+                         'value', jsonb_build_object('expiry_controlled', 'fefo',
+                                                     'single_batch_per_order', false, 'prefer_nearest_location', true)
+                                  || case when jsonb_typeof(v_here) = 'object' then v_here else '{}'::jsonb end
+                                  || jsonb_build_object('default', v_v)));
     v_items := v_items + 1;
   end loop;
 
@@ -1812,6 +1895,16 @@ comment on function erp.propose_organisation_shape(uuid, uuid) is
 -- abbreviation; the threshold follows the currency's minor units; the
 -- change-set code carries the session rather than the second; and the
 -- proposal records its session and section.
+--
+-- And a record that already exists is never restated with blanks. Promoting
+-- a department, an approval band, a grouping, a value, a product code pattern
+-- or a marshalling area rewrites every field the promoter reads, so a field
+-- the answer does not speak to is carried from the record as it stands: a
+-- department keeps its cost centre, parent, company and manager; a grouping
+-- keeps its product kinds, order and name key, and stays compulsory once it
+-- is; a value keeps its abbreviation, parent and name key. A new department
+-- takes the cost centre its starter pack suggests, and a new grouping the
+-- order and compulsion its pack gives it.
 create or replace function erp_ai.propose_from_interview(p_session_id uuid)
 returns jsonb
 language plpgsql
@@ -1837,6 +1930,8 @@ declare
   v_role     text;
   v_lm       boolean;
   v_obj      text;
+  v_json     jsonb;
+  v_lower    bigint;
 begin
   select * into s from erp.interview_session
    where tenant_id = v_tenant and id = p_session_id for update;
@@ -1882,8 +1977,29 @@ begin
       for e in select jsonb_array_elements(coalesce(a, '[]'::jsonb)) loop
         select li.code, li.name into v_code, v_name from erp.interview_list_item(e) li;
         continue when v_code is null;
+        -- The payload keys erp.apply_change_set_item()'s department arm reads.
+        v_json := (
+          select jsonb_build_object(
+                   'default_cost_centre', d.default_cost_centre,
+                   'parent', (select pd.code from erp.department pd
+                               where pd.tenant_id = d.tenant_id and pd.id = d.parent_department_id),
+                   'entity', (select en.code from erp.entity en
+                               where en.tenant_id = d.tenant_id and en.id = d.entity_id),
+                   'manager_email', (select u.email from erp.app_user u
+                                      where u.tenant_id = d.tenant_id and u.id = d.manager_user_id))
+            from erp.department d
+           where d.tenant_id = v_tenant and d.code = upper(v_code));
+        if v_json is null then
+          v_json := (
+            select jsonb_build_object('default_cost_centre', nullif(pi.payload ->> 'default_cost_centre', ''))
+              from erp_ref.pack_item pi
+             where pi.object_kind = 'department' and pi.object_key = upper(v_code) and not pi.is_decision
+             order by pi.pack_code
+             limit 1);
+        end if;
         perform erp.add_change_set_item(v_cs, 'department', v_code,
-          jsonb_build_object('code', v_code, 'name', v_name));
+          jsonb_strip_nulls(jsonb_build_object('code', v_code, 'name', v_name)
+                            || coalesce(v_json, '{}'::jsonb)));
         v_items := v_items + 1;
       end loop;
     end if;
@@ -1919,16 +2035,36 @@ begin
         loop
           select li.code into v_code from erp.interview_list_item(e) li;
           continue when v_code is null;
+          v_lower := round((a #>> '{}')::numeric * (10::numeric ^ coalesce(v_minor, 2)))::bigint;
+          -- A first band this department already has keeps what the answers
+          -- do not speak to: its ceiling (while it is still above the new
+          -- threshold), escalation, vacancy, tolerance and whether approvers
+          -- sign in parallel.
+          v_json := (
+            select jsonb_build_object(
+                     'upper_bound_minor', case when ab.upper_bound_minor > v_lower then ab.upper_bound_minor end,
+                     'is_parallel', ab.is_parallel,
+                     'rerun_lower_bands', ab.rerun_lower_bands,
+                     'escalate_after_hours', round(extract(epoch from ab.escalate_after) / 3600)::integer,
+                     'vacancy', ab.vacancy::text,
+                     'tolerance_pct', ab.tolerance_pct)
+              from erp.approval_band ab
+              join erp.department d on d.tenant_id = ab.tenant_id and d.id = ab.department_id
+             where ab.tenant_id = v_tenant and d.code = upper(v_code)
+               and ab.object_type = coalesce(v_obj, 'purchase_order') and ab.seq = 1
+               and ab.status = 'active'
+             order by ab.valid_from desc
+             limit 1);
           perform erp.add_change_set_item(v_cs, 'approval_band',
             format('%s|%s|1', v_code, coalesce(v_obj, 'purchase_order')),
-            jsonb_build_object(
+            jsonb_strip_nulls(coalesce(v_json, '{}'::jsonb) || jsonb_build_object(
               'department', v_code,
               'object_type', coalesce(v_obj, 'purchase_order'),
               'seq', 1,
-              'lower_bound_minor', round((a #>> '{}')::numeric * (10::numeric ^ coalesce(v_minor, 2))),
+              'lower_bound_minor', v_lower,
               'currency', coalesce(v_ccy, 'GBP'),
               'approver_role', v_role,
-              'use_line_manager', v_lm));
+              'use_line_manager', v_lm)));
           v_items := v_items + 1;
         end loop;
       end if;
@@ -1988,9 +2124,34 @@ begin
       for e in select jsonb_array_elements(coalesce(v_axes, '[]'::jsonb)) loop
         select li.code, li.name into v_code, v_name from erp.interview_list_item(e) li;
         continue when v_code is null;
+        -- The payload keys erp.apply_change_set_item()'s classification_axis
+        -- arm reads. The compulsory answer can make a grouping compulsory,
+        -- never optional again: the base pack makes product type compulsory
+        -- because determination reads it first.
+        v_json := (
+          select jsonb_build_object(
+                   'item_classes', array_to_string(ca.item_classes, ','),
+                   'seq', ca.seq,
+                   'name_key', ca.name_key,
+                   'is_mandatory', ca.is_mandatory or coalesce(v_lm, false))
+            from erp.classification_axis ca
+           where ca.tenant_id = v_tenant and ca.code = upper(v_code));
+        if v_json is null then
+          v_json := (
+            select jsonb_build_object(
+                     'seq', case when jsonb_typeof(pi.payload -> 'seq') = 'number'
+                                 then (pi.payload ->> 'seq')::integer end,
+                     'is_mandatory', coalesce(pi.payload -> 'is_mandatory' = 'true'::jsonb, false)
+                                     or coalesce(v_lm, false))
+              from erp_ref.pack_item pi
+             where pi.object_kind = 'classification_axis' and pi.object_key = upper(v_code) and not pi.is_decision
+             order by pi.pack_code
+             limit 1);
+        end if;
         perform erp.add_change_set_item(v_cs, 'classification_axis', v_code,
-          jsonb_build_object('code', v_code, 'name', v_name,
-                             'is_mandatory', coalesce(v_lm, false)));
+          jsonb_strip_nulls(jsonb_build_object('code', v_code, 'name', v_name,
+                                               'is_mandatory', coalesce(v_lm, false))
+                            || coalesce(v_json, '{}'::jsonb)));
         v_items := v_items + 1;
       end loop;
 
@@ -2014,9 +2175,20 @@ begin
           erp.slug_code(e ->> 'left'));
         v_code := coalesce(upper(nullif(btrim(e ->> 'code'), '')), erp.slug_code(e ->> 'right'));
         continue when v_axis is null or v_code is null;
+        -- A value that already exists keeps its abbreviation — codes may
+        -- already be built from it — its parent and its name key.
+        v_json := (
+          select jsonb_build_object(
+                   'abbreviation', cv.abbreviation,
+                   'parent', (select pv.code from erp.classification_value pv
+                               where pv.tenant_id = cv.tenant_id and pv.id = cv.parent_value_id),
+                   'name_key', cv.name_key)
+            from erp.classification_value cv
+            join erp.classification_axis ca on ca.tenant_id = cv.tenant_id and ca.id = cv.axis_id
+           where cv.tenant_id = v_tenant and ca.code = upper(v_axis) and cv.code = upper(v_code));
         perform erp.add_change_set_item(v_cs, 'classification_value',
           v_axis || '|' || v_code,
-          jsonb_build_object(
+          jsonb_strip_nulls(jsonb_build_object(
             'axis', v_axis,
             'code', v_code,
             'name', coalesce(nullif(btrim(e ->> 'right'), ''), v_code),
@@ -2026,7 +2198,8 @@ begin
                   and pi.object_key = v_axis || '|' || v_code
                 order by pi.pack_code limit 1),
               nullif(left(regexp_replace(v_code, '[^A-Z0-9]', '', 'g'), 4), ''),
-              left(v_code, 4))));
+              left(v_code, 4)))
+            || coalesce(v_json, '{}'::jsonb)));
         v_items := v_items + 1;
       end loop;
     end if;
@@ -2039,13 +2212,28 @@ begin
        where ia.question_code = 'code.digits';
 
       if nullif(btrim(coalesce(v_code, '')), '') is not null then
+        -- A pattern that already exists keeps its name, casing, the product
+        -- kinds it covers and its company; the answers speak to its shape.
+        v_json := (
+          select jsonb_build_object(
+                   'name', ct.name,
+                   'casing', ct.casing,
+                   'item_classes', array_to_string(ct.item_classes, ','),
+                   'entity', (select en.code from erp.entity en
+                               where en.tenant_id = ct.tenant_id and en.id = ct.entity_id))
+            from erp.code_template ct
+           where ct.tenant_id = v_tenant and ct.code = 'ITEM'
+           order by ct.version desc
+           limit 1);
         perform erp.add_change_set_item(v_cs, 'code_template', 'ITEM',
-          jsonb_build_object(
-            'code', 'ITEM', 'name', 'Item code', 'casing', 'upper',
+          jsonb_strip_nulls(jsonb_build_object(
+            'code', 'ITEM', 'name', 'Item code', 'casing', 'upper')
+            || coalesce(v_json, '{}'::jsonb)
+            || jsonb_build_object(
             'segments', jsonb_build_array(
               jsonb_build_object('kind', 'literal', 'value', upper(btrim(v_code))),
               jsonb_build_object('kind', 'sequence',
-                                 'length', greatest(1, coalesce((a #>> '{}')::integer, 6))))));
+                                 'length', greatest(1, coalesce((a #>> '{}')::integer, 6)))))));
         v_items := v_items + 1;
       end if;
     end if;
@@ -2077,11 +2265,29 @@ begin
       loop
         select li.code, li.name into v_code, v_name from erp.interview_list_item(e) li;
         continue when v_code is null;
+        -- An area that already exists on the site it would land on keeps its
+        -- location, channel, order type, product kinds, quantities and
+        -- whether it holds printing back.
+        v_json := (
+          select jsonb_build_object(
+                   'location', (select l.code from erp.location l
+                                 where l.tenant_id = ra.tenant_id and l.id = ra.location_id),
+                   'channel', ra.channel_code,
+                   'order_type', ra.order_type_code,
+                   'item_classes', array_to_string(ra.item_classes, ','),
+                   'min_quantity', ra.min_quantity,
+                   'max_quantity', ra.max_quantity,
+                   'gate_printing', ra.gate_printing)
+            from erp.release_area ra
+           where ra.tenant_id = v_tenant and ra.code = upper(v_code)
+             and ra.site_id = (select st.id from erp.site st
+                                where st.tenant_id = v_tenant and st.status = 'active'
+                                order by st.code limit 1));
         perform erp.add_change_set_item(v_cs, 'release_area', v_code,
-          jsonb_build_object(
+          jsonb_strip_nulls(coalesce(v_json, '{}'::jsonb) || jsonb_build_object(
             'code', v_code, 'name', v_name,
             'replenishment_mode', coalesce(v_obj, 'pull'),
-            'ageing_hours', greatest(1, coalesce((a #>> '{}')::integer, 72))));
+            'ageing_hours', greatest(1, coalesce((a #>> '{}')::integer, 72)))));
         v_items := v_items + 1;
       end loop;
     end if;

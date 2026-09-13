@@ -1,6 +1,6 @@
 -- Accepting the interview puts it in force.
 --
--- 20260913080000 made the interview easy to answer: likely answers, starter
+-- 20260913100000 made the interview easy to answer: likely answers, starter
 -- suggestions, a sessions list and a readable diff per section. What it left
 -- is the last mile. A proposed interview was seven change sets on the
 -- Configuration screen, listed newest first with one shared timestamp, and a
@@ -23,12 +23,22 @@
 --     window. After go-live accepting stops at ready: the self-approval
 --     control is never asked to look away, and a second administrator
 --     approves on Configuration.
---   * Finance is set up by accepting when accounting codes were proposed and
---     finance is not yet installed: the statutory chart's pack first when the
---     organisation section switched that chart on, then the finance installer
---     for every active company that has no general ledger yet, by code. It
---     waits for the organisation section, which carries both the companies
---     and the chart, in every state.
+--   * The statutory chart's pack is brought in whenever that chart is on and
+--     no nominal account exists yet, whether or not accounting codes were
+--     proposed: choosing the numbering promised the accounts. Finance is set
+--     up when accounting codes were proposed and finance is not installed, or
+--     a company has no general ledger yet: the pack first, then the finance
+--     installer for every active company without a general ledger, by code.
+--     The step waits for the organisation section, which carries both the
+--     companies and the chart, in every state. The statutory chart with more
+--     than one company is refused, because its pack charts one company.
+--   * Promotion itself now refuses the two things the organisation section
+--     could only check when it was proposed: changing the currency or the
+--     financial year of a company whose books are set up, and switching the
+--     statutory numbering on over accounts that already exist. And the
+--     finance installer refuses a company with no accounts under the
+--     statutory numbering, rather than giving it ledgers and nothing to post
+--     to.
 --   * A refusal is reported per section with its code, message, detail and
 --     hint, and the sections that depend on it wait for it; nothing is raised
 --     except for an interview that does not exist or has not been proposed.
@@ -36,7 +46,7 @@
 --
 -- The work lives beside the proposer in the intelligence schema: it reads
 -- erp_ai.proposal, finds each section through the session columns
--- 20260913080000 added, and calls only the change-set and installer functions
+-- 20260913100000 added, and calls only the change-set and installer functions
 -- a person's own change goes through. Nothing registered as a transaction-path
 -- function reaches it, so the intelligence boundary is unchanged; and it
 -- never touches a proposal's status, producer or reviewer.
@@ -54,8 +64,113 @@
 --     master-data change requests to approve configuration; five walkthrough
 --     reasons promised defaults the interview never proposes, a chart the base
 --     pack never ships and a screen that does not approve changes.
---   * erp_test.interview_ease_suite(): fourteen cases over the answering doors
---     20260913080000 built and the accepting door this file builds.
+--   * erp_test.interview_ease_suite(): nineteen cases over the answering doors
+--     20260913100000 built and the accepting door this file builds.
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 0. Promotion refuses what would rewrite a company's books
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- The organisation section checks two things when it is proposed: a company's
+-- currency and financial year change only while it has no general ledger, and
+-- the statutory numbering is chosen only while no nominal account exists. A
+-- proposal is frozen, and the books can be set up between proposing it and
+-- promoting it — on Configuration, or by a second administrator approving it
+-- later — so both are checked again where items are applied, which every
+-- route reaches: accepting, approving on Configuration, replaying a manifest.
+--
+-- Patched from the definition the database carries, by asserted replacement,
+-- as 20260912260000 did; nothing else in the promoter changes.
+
+do $promoter$
+declare
+  v_def text := pg_get_functiondef('erp.apply_change_set_item(uuid)'::regprocedure);
+  v_n1  text := $n1$perform erp.upsert_entity(p ->> 'code', p ->> 'name', p ->> 'legal_name',$n1$;
+  v_r1  text := $r1$-- A company whose books are set up keeps its currency and the
+        -- month its financial year starts: its ledgers, periods and postings
+        -- are in them. The currency compared is the one erp.upsert_entity()
+        -- would write, which is the first company's when none is given.
+        if exists (
+             select 1 from erp.entity ex
+              where ex.tenant_id = v_tenant and ex.code = erp.slug_code(p ->> 'code')
+                and exists (select 1 from erp.ledger l
+                             where l.tenant_id = v_tenant and l.entity_id = ex.id and l.code = 'GL')
+                and (ex.base_currency is distinct from coalesce(
+                       nullif(p ->> 'currency', '')::character(3),
+                       (select e1.base_currency from erp.entity e1
+                         where e1.tenant_id = v_tenant and e1.status = 'active'
+                         order by e1.code limit 1),
+                       'GBP'::character(3))
+                     or ex.fiscal_year_start_month is distinct from
+                        coalesce((p ->> 'fiscal_year_start_month')::smallint, 1::smallint))) then
+          raise exception
+            'CLOVEERP_COMPANY_BOOKS_ALREADY_KEPT: company % already keeps its books, so its currency and the month its financial year starts cannot change', p ->> 'code'
+            using errcode = '23514',
+                  hint = 'Leave the currency and the financial year of a company whose books are set up as they are. A business that keeps its books in another currency or year is added as a company of its own.';
+        end if;
+        perform erp.upsert_entity(p ->> 'code', p ->> 'name', p ->> 'legal_name',$r1$;
+  v_n2  text := $n2$when 'capability' then$n2$;
+  v_r2  text := $r2$when 'capability' then
+      -- The statutory numbering gives the standard chart's numbers to other
+      -- things, so it is switched on before any nominal account exists or not
+      -- at all. Here rather than in erp.set_capability(), which the Features
+      -- screen and the chart suites call before there are accounts.
+      if i.operation <> 'remove'
+         and p ->> 'code' = 'statutory_chart_8_1'
+         and coalesce((p ->> 'enabled')::boolean, true)
+         and not erp.capability_on(v_tenant, 'statutory_chart_8_1', current_date)
+         and exists (select 1 from erp.account a where a.tenant_id = v_tenant) then
+        raise exception
+          'CLOVEERP_CHART_ALREADY_IN_USE: this organisation already has nominal accounts, so the statutory numbering cannot be switched on'
+          using errcode = '23514',
+                hint = 'Choose the numbering before any nominal account exists. This organisation keeps the numbering its accounts already use.';
+      end if;$r2$;
+begin
+  if (length(v_def) - length(replace(v_def, v_n1, ''))) / length(v_n1) <> 1 then
+    raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the entity arm of erp.apply_change_set_item() is not the text this migration patches';
+  end if;
+  if (length(v_def) - length(replace(v_def, v_n2, ''))) / length(v_n2) <> 1 then
+    raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the capability arm of erp.apply_change_set_item() is not the text this migration patches';
+  end if;
+  execute replace(replace(v_def, v_n1, v_r1), v_n2, v_r2);
+
+  v_def := pg_get_functiondef('erp.apply_change_set_item(uuid)'::regprocedure);
+  if position('CLOVEERP_COMPANY_BOOKS_ALREADY_KEPT' in v_def) = 0
+     or position('CLOVEERP_CHART_ALREADY_IN_USE' in v_def) = 0 then
+    raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the promoter did not take both refusals';
+  end if;
+end
+$promoter$;
+
+-- And the finance installer, which creates no accounts under the statutory
+-- numbering because the chart_8_1 pack ships them, refuses a company that has
+-- none rather than giving it ledgers and periods with nothing to post to. The
+-- chart and demonstration suites apply the pack before they install finance,
+-- so none of them reaches this.
+do $installer$
+declare
+  v_def text := pg_get_functiondef('erp.configure_finance(integer,character,uuid)'::regprocedure);
+  v_n   text := $n$  v_ccy := coalesce(p_currency, e.base_currency, 'GBP');$n$;
+  v_r   text := $r$  if erp.capability_on(v_tenant, 'statutory_chart_8_1', current_date)
+     and not exists (select 1 from erp.account a where a.tenant_id = v_tenant and a.entity_id = e.id) then
+    raise exception
+      'CLOVEERP_STATUTORY_CHART_NOT_APPLIED: company % has no nominal accounts, and under the statutory numbering they come from the statutory chart pack, not from setting up finance', e.code
+      using errcode = '23514',
+            hint = 'Apply the statutory chart pack on the Packs screen and put it in force, then set up finance. The statutory numbering covers one company for now.';
+  end if;
+  v_ccy := coalesce(p_currency, e.base_currency, 'GBP');$r$;
+begin
+  if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
+    raise exception 'CLOVEERP_INSTALLER_UNRECOGNISED: erp.configure_finance() is not the text this migration patches';
+  end if;
+  execute replace(v_def, v_n, v_r);
+
+  if position('CLOVEERP_STATUTORY_CHART_NOT_APPLIED' in
+              pg_get_functiondef('erp.configure_finance(integer,character,uuid)'::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_INSTALLER_UNRECOGNISED: erp.configure_finance() did not take its refusal';
+  end if;
+end
+$installer$;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 1. Accepting an interview
@@ -85,6 +200,12 @@ declare
   v_detail    text;
   v_hint      text;
   v_has_b3    boolean;
+  v_stat      boolean;
+  v_need_chart boolean;
+  v_need_books boolean;
+  v_fp_cs     uuid;
+  v_fp_code   text;
+  v_fp_status text;
   v_pack      jsonb;
   v_pack_cs   uuid;
   v_ent       record;
@@ -145,28 +266,54 @@ begin
         into v_has_b3;
 
       -- The finance installer's own test for "already installed".
-      select c.id, c.code, c.status::text into v_cs, v_code, v_before
+      select c.id, c.code, c.status::text into v_fp_cs, v_fp_code, v_fp_status
         from erp.change_set c
        where c.tenant_id = v_tenant and c.code = 'finance-posting';
 
-      if not v_has_b3 then
-        v_outcome := 'not_needed';
-        v_cs := null; v_code := null; v_before := null;
-        v_landed := true;
-      elsif v_cs is not null then
-        v_outcome := 'already_set_up';
-        v_after := v_before;
-        v_landed := v_before = 'promoted';
+      -- Two things this step can owe. The statutory numbering's accounts,
+      -- whenever that numbering is on and no nominal account exists yet,
+      -- whether or not accounting codes were proposed: choosing the numbering
+      -- promised them, and nothing else brings them in. And the books, when
+      -- accounting codes were proposed and finance is not installed, or a
+      -- company (one the organisation section has just created, most often)
+      -- has no general ledger yet.
+      v_stat := erp.capability_on(v_tenant, 'statutory_chart_8_1', current_date);
+      v_need_chart := v_stat and not exists (select 1 from erp.account a where a.tenant_id = v_tenant);
+      v_need_books := v_has_b3
+                      and (v_fp_cs is null
+                           or exists (select 1 from erp.entity e
+                                       where e.tenant_id = v_tenant and e.status = 'active'
+                                         and not exists (select 1 from erp.ledger l
+                                                          where l.tenant_id = v_tenant and l.entity_id = e.id
+                                                            and l.code = 'GL')));
+
+      if not v_need_chart and not v_need_books then
+        if v_has_b3 and v_fp_cs is not null then
+          v_outcome := 'already_set_up';
+          v_cs := v_fp_cs; v_code := v_fp_code; v_before := v_fp_status; v_after := v_fp_status;
+          v_landed := v_fp_status = 'promoted';
+        else
+          v_outcome := 'not_needed';
+          v_landed := true;
+        end if;
       elsif v_waits is not null then
         v_outcome := 'skipped';
-        v_cs := null; v_code := null; v_before := null;
+      elsif v_stat and (select count(*) from erp.entity e
+                         where e.tenant_id = v_tenant and e.status = 'active') > 1 then
+        -- The pack names no company, so its accounts land on the first one by
+        -- code, and every other company would have books and nothing to post
+        -- to. Refused until the numbering can be set up per company.
+        v_outcome := 'refused';
+        v_state := '23514';
+        v_msg := 'CLOVEERP_STATUTORY_CHART_ONE_COMPANY: statutory numbering can be set up for one company only for now, and this organisation has more than one, so the books were not set up';
+        v_hint := 'Keep the standard numbering while you have more than one company. The other sections that do not need the books still go in.';
       else
-        v_cs := null; v_code := null; v_before := null;
+        v_before := null;
 
         -- The statutory chart ships its accounts as a pack, and the installer
         -- creates none of its own once that chart is on; so the pack lands
         -- first, reused when it was already applied.
-        if erp.capability_on(v_tenant, 'statutory_chart_8_1', current_date) then
+        if v_need_chart then
           begin
             select tp.change_set_id into v_pack_cs
               from erp.tenant_pack tp
@@ -221,11 +368,16 @@ begin
                            when v_msg is not null then 'refused'
                            else 'ready'
                          end;
+          elsif not v_need_books then
+            -- The accounts are in; nothing asked for the books yet.
+            v_outcome := 'chart_applied';
+            v_landed := true;
           end if;
         end if;
 
         if v_outcome is null then
           v_cs := null; v_code := null; v_after := null;
+          v_before := v_fp_status;
           begin
             for v_ent in
               select e.id from erp.entity e
@@ -256,11 +408,18 @@ begin
            where c.tenant_id = v_tenant and c.code = 'finance-posting';
 
           v_landed := coalesce(v_msg is null and v_after = 'promoted', false);
-          v_outcome := case
-                         when v_msg like 'CLOVEERP_CHANGE_SET_APPROVAL_PENDING%' then 'awaiting_approval'
-                         when v_msg is not null then 'refused'
-                         else 'set_up'
-                       end;
+
+          -- The installer submits and approves in one call before go-live, so
+          -- an approval chain on configuration changes refuses the approval
+          -- and the whole call rolls back: the ledgers, the change and the
+          -- approval request with them. Nothing is waiting for anybody, so
+          -- this is a refusal with the way out, not a wait.
+          if v_msg like 'CLOVEERP_CHANGE_SET_APPROVAL_PENDING%' then
+            v_detail := v_msg;
+            v_msg := 'CLOVEERP_FINANCE_SET_UP_HELD_BY_APPROVAL: the books could not be set up, because an approval chain on configuration changes asks for sign-off first and setting up the books is approved in the same step before go-live, so nothing was kept';
+            v_hint := 'Take configuration changes out of the approval chain until the books are set up, then accept again; put the chain back afterwards.';
+          end if;
+          v_outcome := case when v_msg is not null then 'refused' else 'set_up' end;
         end if;
       end if;
     else
@@ -377,9 +536,11 @@ comment on function erp_ai.accept_interview(uuid) is
   'organisation, finance, departments, approvals, accounting codes, product '
   'classification, product codes, marshalling areas. Submits each section''s '
   'change set; before go-live also approves and promotes it, as the module '
-  'installers do; after go-live stops at ready. Sets finance up (the §8.1 '
-  'chart pack first when that chart is on) when accounting codes were '
-  'proposed and finance is not installed. Reports each section''s outcome and '
+  'installers do; after go-live stops at ready. Brings in the §8.1 chart pack '
+  'whenever that chart is on and no nominal account exists, and sets finance '
+  'up when accounting codes were proposed and finance is not installed or a '
+  'company has no general ledger; the statutory chart is refused with more '
+  'than one company. Reports each section''s outcome and '
   'refusal rather than raising, and picks up where each section stands when '
   'run again. Never changes a proposal''s status, producer or reviewer.';
 
@@ -536,12 +697,14 @@ select erp_test.assert_setup_walkthrough_suite();
 -- 4. The suite
 -- ═════════════════════════════════════════════════════════════════════════════
 --
--- Five organisations, each with its own sign-in and at most one proposal:
---   zzease1  not live; answering, never proposed               cases 1-4
+-- Seven organisations, each with its own sign-in:
+--   zzease1  not live; answering, never proposed               cases 1-4, 14
 --   zzease2  not live, no finance, one site                    cases 4-10
---   zzease3  not live, finance installed first                 case 12
+--   zzease3  not live, finance installed first                 cases 12, 16, 17
 --   zzease4  not live, no finance; the statutory chart         case 11
 --   zzease5  live, with a second administrator                 case 13
+--   zzease6  not live; a department and a grouping exist       case 15
+--   zzease7  not live; the statutory chart and nothing else    case 18
 
 create or replace function erp_test.interview_ease_suite()
 returns table(case_name text, passed boolean, detail text)
@@ -555,14 +718,19 @@ declare
   a4 uuid := gen_random_uuid();
   a5 uuid := gen_random_uuid();
   a6 uuid := gen_random_uuid();
+  a7 uuid := gen_random_uuid();
+  a8 uuid := gen_random_uuid();
   v        jsonb;
   q        jsonb;
   res      jsonb;
   res2     jsonb;
   res3     jsonb;
-  t1 uuid; t2 uuid; t3 uuid; t4 uuid; t5 uuid;
+  t1 uuid; t2 uuid; t3 uuid; t4 uuid; t5 uuid; t6 uuid; t7 uuid;
   e2 uuid;
   s1a uuid; s1b uuid; s2 uuid; s3 uuid; s4 uuid; s5 uuid;
+  s1c uuid; s3b uuid; s6 uuid; s7 uuid;
+  v_cs2 uuid;
+  v_u7  uuid;
   v_b1 uuid; v_b2 uuid; v_b3 uuid; v_b7 uuid;
   v_u6     uuid;
   v_tok    text;
@@ -586,7 +754,9 @@ begin
       (a3, 'ease3@zzease3.test'),
       (a4, 'ease4@zzease4.test'),
       (a5, 'author@zzease5.test'),
-      (a6, 'second@zzease5.test');
+      (a6, 'second@zzease5.test'),
+      (a7, 'ease6@zzease6.test'),
+      (a8, 'ease7@zzease7.test');
 
     -- ── zzease1: answering ────────────────────────────────────────────────
 
@@ -1139,6 +1309,207 @@ begin
                      v_ok2, v_msg, v_ok3, coalesce(' (' || v_msg2 || ')', ''));
     return next;
 
+    -- ── zzease1 again: the statutory chart and two companies ────────────
+
+    -- 14
+    perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
+    s1c := (public.erp_start_interview('ease-1c') ->> 'session_id')::uuid;
+    perform public.erp_answer_interview(s1c, 'org.multi_company', 'true'::jsonb);
+    perform public.erp_answer_interview(s1c, 'org.companies', '[{"left":"ZZ-IE","right":"Zz Ireland"}]'::jsonb);
+    v := public.erp_interview_questions(s1c);
+    q := null;
+    select x.el into q from jsonb_array_elements(v) as x(el) where x.el ->> 'code' = 'org.chart';
+    v_ok1 := q is not null
+      and exists (select 1 from jsonb_array_elements(case when jsonb_typeof(q -> 'suggestions') = 'array'
+                                                          then q -> 'suggestions' else '[]'::jsonb end) as sg(el)
+                   where sg.el ->> 'value' = 'statutory'
+                     and sg.el -> 'available' = 'false'::jsonb
+                     and coalesce(btrim(sg.el ->> 'unavailable_reason'), '') <> '');
+    v_msg := null;
+    begin
+      perform public.erp_answer_interview(s1c, 'org.chart', '"statutory"'::jsonb);
+      perform public.erp_propose_from_interview(s1c);
+      v_ok2 := false; v_msg := 'the statutory numbering was proposed for two companies';
+    exception when others then
+      v_ok2 := sqlerrm like 'CLOVEERP_INTERVIEW_CHART_ONE_COMPANY%'; v_msg := left(sqlerrm, 90);
+    end;
+    v_ok3 := (select s.status from erp.interview_session s where s.tenant_id = t1 and s.id = s1c) = 'open'
+      and not exists (select 1 from erp_ai.proposal p where p.tenant_id = t1 and p.interview_session_id = s1c);
+    case_name := 'the statutory numbering is not offered, and is refused, for more than one company';
+    passed := coalesce(v_ok1 and v_ok2 and v_ok3, false);
+    detail := format('offered as unavailable with a reason %s; proposing it refused by name %s (%s); '
+                     'the interview stays open with nothing proposed %s',
+                     v_ok1, v_ok2, v_msg, v_ok3);
+    return next;
+
+    -- ── zzease6: what already exists is kept ─────────────────────────────
+
+    -- 15
+    perform set_config('request.jwt.claims', json_build_object('sub', a7)::text, true);
+    v := erp.onboard_tenant('Ease six', 'zzease6');
+    t6 := (v ->> 'tenant_id')::uuid;
+    v_u7 := (v ->> 'principal_id')::uuid;
+    -- What a starter pack, or a person on the organisation screen, leaves
+    -- behind: a department with a parent, a manager and a cost centre, and a
+    -- compulsory grouping. Written directly, as the organisation is not live.
+    perform erp.upsert_department('EXEC', 'Executive', null, null, 'CC100', null, null);
+    perform erp.upsert_department('FIN', 'Finance', v_u7,
+      (select d.id from erp.department d where d.tenant_id = t6 and d.code = 'EXEC'), 'CC200', null, null);
+    perform erp.upsert_classification_axis('PRODUCT_TYPE', 'Product type', true, 'FG', 10, null);
+
+    s6 := (public.erp_start_interview('ease-6') ->> 'session_id')::uuid;
+    perform public.erp_answer_interview(s6, 'dept.list',
+      '[{"code":"FIN","name":"Finance"},{"code":"SALES","name":"Sales"}]'::jsonb);
+    perform public.erp_answer_interview(s6, 'classification.axes', '[{"code":"PRODUCT_TYPE","name":"Product type"}]'::jsonb);
+    perform public.erp_answer_interview(s6, 'classification.mandatory', 'false'::jsonb);
+    v_msg := null; res2 := null;
+    begin
+      res := public.erp_propose_from_interview(s6);
+      res2 := public.erp_accept_interview(s6);
+    exception when others then
+      v_msg := left(sqlerrm, 120);
+    end;
+    v_ok1 := v_msg is null
+      and exists (select 1 from jsonb_array_elements(res2 -> 'steps') as x(el)
+                   where x.el ->> 'step' = 'B.1' and x.el ->> 'outcome' = 'promoted')
+      and exists (select 1 from jsonb_array_elements(res2 -> 'steps') as x(el)
+                   where x.el ->> 'step' = 'B.4' and x.el ->> 'outcome' = 'promoted');
+    v_ok2 := exists (select 1 from erp.department d
+                      where d.tenant_id = t6 and d.code = 'FIN' and d.name = 'Finance'
+                        and d.default_cost_centre = 'CC200'
+                        and d.manager_user_id = v_u7
+                        and d.parent_department_id = (select p.id from erp.department p
+                                                        where p.tenant_id = t6 and p.code = 'EXEC'));
+    v_ok3 := exists (select 1 from erp.department d
+                      where d.tenant_id = t6 and d.code = 'SALES' and d.default_cost_centre = 'CC600');
+    v_ok4 := exists (select 1 from erp.classification_axis ca
+                      where ca.tenant_id = t6 and ca.code = 'PRODUCT_TYPE'
+                        and ca.is_mandatory and ca.seq = 10 and ca.item_classes = array['FG']::text[]);
+    case_name := 'picking a department or a grouping that already exists keeps what it already had';
+    passed := coalesce(v_ok1 and v_ok2 and v_ok3 and v_ok4, false);
+    detail := format('accepted%s: %s; FIN keeps its cost centre, parent and manager %s (%s); '
+                     'a new starter department takes its suggested cost centre %s; '
+                     'product type stays compulsory, in its place, for its kinds %s (%s)',
+                     coalesce(' with a raise (' || v_msg || ')', ''),
+                     coalesce((select string_agg(format('%s %s', x.el ->> 'step', x.el ->> 'outcome'), '; ' order by x.ord)
+                                 from jsonb_array_elements(res2 -> 'steps') with ordinality as x(el, ord)), 'none'),
+                     v_ok2,
+                     coalesce((select format('%s, parent %s, manager %s', d.default_cost_centre,
+                                             (select p.code from erp.department p where p.id = d.parent_department_id),
+                                             d.manager_user_id is not null)
+                                 from erp.department d where d.tenant_id = t6 and d.code = 'FIN'), 'missing'),
+                     v_ok3, v_ok4,
+                     coalesce((select format('compulsory %s, seq %s, kinds %s', ca.is_mandatory, ca.seq, ca.item_classes)
+                                 from erp.classification_axis ca where ca.tenant_id = t6 and ca.code = 'PRODUCT_TYPE'), 'missing'));
+    return next;
+
+    -- ── zzease3 again: promotion guards the books ────────────────────────
+
+    -- 16
+    perform set_config('request.jwt.claims', json_build_object('sub', a3)::text, true);
+    v_msg := null; v_msg2 := null;
+    begin
+      v_cs2 := erp.create_change_set('ease-3-currency', 'A company''s currency', null);
+      perform erp.add_change_set_item(v_cs2, 'entity', 'MAIN',
+        jsonb_build_object('code', 'MAIN', 'name', 'Ease three', 'currency', 'EUR', 'country', 'GB',
+                           'locale', 'en', 'document_locale', 'en', 'fiscal_year_start_month', 1));
+      perform erp.submit_change_set(v_cs2);
+      perform erp.approve_change_set(v_cs2);
+      perform erp.promote_change_set(v_cs2);
+      v_ok1 := false; v_msg := 'a company whose books are set up changed its currency';
+    exception when others then
+      v_ok1 := sqlerrm like 'CLOVEERP_COMPANY_BOOKS_ALREADY_KEPT%'; v_msg := left(sqlerrm, 90);
+    end;
+    begin
+      v_cs2 := erp.create_change_set('ease-3-numbering', 'The statutory numbering', null);
+      perform erp.add_change_set_item(v_cs2, 'capability', 'statutory_chart_8_1',
+        jsonb_build_object('code', 'statutory_chart_8_1', 'enabled', true, 'reason', 'interview ease suite'));
+      perform erp.submit_change_set(v_cs2);
+      perform erp.approve_change_set(v_cs2);
+      perform erp.promote_change_set(v_cs2);
+      v_ok2 := false; v_msg2 := 'the statutory numbering went on over accounts that already exist';
+    exception when others then
+      v_ok2 := sqlerrm like 'CLOVEERP_CHART_ALREADY_IN_USE%'; v_msg2 := left(sqlerrm, 90);
+    end;
+    v_ok3 := (select e.base_currency::text from erp.entity e where e.tenant_id = t3 and e.code = 'MAIN') = 'GBP'
+      and not erp.capability_on(t3, 'statutory_chart_8_1', current_date);
+    case_name := 'promotion refuses a new currency for a company with books, and the statutory numbering over existing accounts';
+    passed := coalesce(v_ok1 and v_ok2 and v_ok3, false);
+    detail := format('currency refused %s (%s); numbering refused %s (%s); company and numbering unchanged %s',
+                     v_ok1, v_msg, v_ok2, v_msg2, v_ok3);
+    return next;
+
+    -- 17
+    s3b := (public.erp_start_interview('ease-3b') ->> 'session_id')::uuid;
+    perform public.erp_answer_interview(s3b, 'org.multi_company', 'true'::jsonb);
+    perform public.erp_answer_interview(s3b, 'org.companies', '[{"left":"ZZ-NEW","right":"Zz New"}]'::jsonb);
+    perform public.erp_answer_interview(s3b, 'posting.item_classes', '[{"code":"SPARE","name":"Spare parts"}]'::jsonb);
+    v_msg := null; res2 := null;
+    begin
+      res := public.erp_propose_from_interview(s3b);
+      res2 := public.erp_accept_interview(s3b);
+    exception when others then
+      v_msg := left(sqlerrm, 120);
+    end;
+    v_ok1 := v_msg is null
+      and exists (select 1 from jsonb_array_elements(res2 -> 'steps') as x(el)
+                   where x.el ->> 'step' = 'B.7' and x.el ->> 'outcome' = 'promoted')
+      and exists (select 1 from jsonb_array_elements(res2 -> 'steps') as x(el)
+                   where x.el ->> 'step' = 'finance' and x.el ->> 'outcome' = 'set_up');
+    v_ok2 := exists (select 1 from erp.ledger l
+                       join erp.entity e on e.tenant_id = l.tenant_id and e.id = l.entity_id
+                      where l.tenant_id = t3 and e.code = 'ZZ-NEW' and l.code = 'GL')
+      and exists (select 1 from erp.account a
+                    join erp.entity e on e.tenant_id = a.tenant_id and e.id = a.entity_id
+                   where a.tenant_id = t3 and e.code = 'ZZ-NEW');
+    v_ok3 := exists (select 1 from jsonb_array_elements(res2 -> 'steps') as x(el)
+                      where x.el ->> 'step' = 'B.3' and x.el ->> 'outcome' = 'promoted');
+    case_name := 'a company added once finance is installed gets its books when accounting codes are accepted';
+    passed := coalesce(v_ok1 and v_ok2 and v_ok3, false);
+    detail := format('company in force and its books set up %s; ledger and accounts on ZZ-NEW %s; accounting codes in force %s; steps: %s%s',
+                     v_ok1, v_ok2, v_ok3,
+                     coalesce((select string_agg(format('%s %s%s', x.el ->> 'step', x.el ->> 'outcome',
+                                                        coalesce(' [' || (x.el -> 'refusal' ->> 'message') || ']', '')),
+                                                 '; ' order by x.ord)
+                                 from jsonb_array_elements(res2 -> 'steps') with ordinality as x(el, ord)), 'none'),
+                     coalesce(' (' || v_msg || ')', ''));
+    return next;
+
+    -- ── zzease7: the statutory chart with no accounting codes ────────────
+
+    -- 18
+    perform set_config('request.jwt.claims', json_build_object('sub', a8)::text, true);
+    v := erp.onboard_tenant('Ease seven', 'zzease7');
+    t7 := (v ->> 'tenant_id')::uuid;
+    s7 := (public.erp_start_interview('ease-7') ->> 'session_id')::uuid;
+    perform public.erp_answer_interview(s7, 'org.chart', '"statutory"'::jsonb);
+    v_msg := null; res := null; res2 := null;
+    begin
+      res := public.erp_propose_from_interview(s7);
+      res2 := public.erp_accept_interview(s7);
+    exception when others then
+      v_msg := left(sqlerrm, 120);
+    end;
+    v_ok1 := v_msg is null
+      and not exists (select 1 from jsonb_array_elements(res -> 'proposals') as x(el) where x.el ->> 'section' = 'B.3')
+      and exists (select 1 from jsonb_array_elements(res2 -> 'steps') as x(el)
+                   where x.el ->> 'step' = 'finance' and x.el ->> 'outcome' = 'chart_applied');
+    v_ok2 := erp.capability_on(t7, 'statutory_chart_8_1', current_date)
+      and exists (select 1 from erp.account a where a.tenant_id = t7 and a.code = '2300' and a.status = 'active')
+      and not exists (select 1 from erp.account a where a.tenant_id = t7 and a.code = '1200');
+    v_ok3 := not exists (select 1 from erp.ledger l where l.tenant_id = t7);
+    case_name := 'choosing the statutory numbering with no accounting codes still brings in its nominal accounts';
+    passed := coalesce(v_ok1 and v_ok2 and v_ok3, false);
+    detail := format('only the chart was owed, and it landed %s; the numbering on with its accounts and no standard ones %s; '
+                     'the books wait for accounting codes %s; steps: %s%s',
+                     v_ok1, v_ok2, v_ok3,
+                     coalesce((select string_agg(format('%s %s%s', x.el ->> 'step', x.el ->> 'outcome',
+                                                        coalesce(' [' || (x.el -> 'refusal' ->> 'message') || ']', '')),
+                                                 '; ' order by x.ord)
+                                 from jsonb_array_elements(res2 -> 'steps') with ordinality as x(el, ord)), 'none'),
+                     coalesce(' (' || v_msg || ')', ''));
+    return next;
+
   exception when others then
     get stacked diagnostics v_err = message_text, v_err_detail = pg_exception_detail,
                             v_err_ctx = pg_exception_context;
@@ -1158,19 +1529,19 @@ begin
   perform set_config('request.jwt.claims', '', true);
   select coalesce(array_agg(t.id), '{}'::uuid[]) into v_tenants
     from erp.tenant t
-   where t.code in ('zzease1', 'zzease2', 'zzease3', 'zzease4', 'zzease5');
+   where t.code in ('zzease1', 'zzease2', 'zzease3', 'zzease4', 'zzease5', 'zzease6', 'zzease7');
   foreach v_t in array v_tenants loop
     perform erp.begin_tenant_purge(v_t);
     delete from erp.tenant where id = v_t;
     perform erp.end_tenant_purge();
   end loop;
-  delete from auth.users where id in (a1, a2, a3, a4, a5, a6);
+  delete from auth.users where id in (a1, a2, a3, a4, a5, a6, a7, a8);
 
-  -- 14
+  -- 19
   case_name := 'the suite removes the organisations and sign-ins it built';
   passed := not exists (select 1 from erp.tenant t
-                         where t.code in ('zzease1', 'zzease2', 'zzease3', 'zzease4', 'zzease5'))
-        and not exists (select 1 from auth.users u where u.id in (a1, a2, a3, a4, a5, a6));
+                         where t.code in ('zzease1', 'zzease2', 'zzease3', 'zzease4', 'zzease5', 'zzease6', 'zzease7'))
+        and not exists (select 1 from auth.users u where u.id in (a1, a2, a3, a4, a5, a6, a7, a8));
   detail := format('%s organisation(s) purged', coalesce(array_length(v_tenants, 1), 0));
   return next;
 end;
@@ -1184,9 +1555,11 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  -- Four on answering, four on proposing and reading, five on accepting, and
-  -- the clean-up.
-  c_expected constant integer := 14;
+  -- Four on answering, four on proposing and reading, five on accepting, one
+  -- on the statutory numbering and two companies, one on keeping what exists,
+  -- two on the books under a company added later and promotion's own guards,
+  -- one on the statutory numbering alone, and the clean-up.
+  c_expected constant integer := 19;
   v_total  integer;
   v_passed integer;
   v_detail text;
@@ -1415,7 +1788,14 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('The change you followed a link to is not on this list.'),
     ('You made this change, so another administrator approves it.'),
     ('Yours — another administrator approves it'),
-    ('Questions about how this organisation works, a section at a time with likely answers; your answers become changes you accept.')
+    ('Questions about how this organisation works, a section at a time with likely answers; your answers become changes you accept.'),
+    ('Could not refresh. What you see is what last loaded, and your unsaved answers are kept.'),
+    ('Try again'),
+    ('Why'),
+    ('Nothing here is waiting for you. A change waiting for approval is approved on Configuration, and an approved change is put in force there.'),
+    ('You chose statutory numbering, so its nominal accounts are added now. The books themselves are set up when you accept accounting codes.'),
+    ('The nominal accounts are in place'),
+    ('Approved, waiting to be put in force on Configuration')
   ) as v(text)
 on conflict (key, locale) do nothing;
 

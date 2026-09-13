@@ -32,8 +32,11 @@ import {
   resumeSection,
   sameAnswer,
   sectionProgress,
+  skipsSave,
   statusText,
   toAnswer,
+  unsavedCodes,
+  unsavedQuestions,
   wireValue,
   type Question,
   type Suggestion,
@@ -495,6 +498,27 @@ describe("reading the doors", () => {
     expect(outcomeKind({ outcome: "set_up", waits_for: null })).toBe("books_set_up");
     expect(outcomeKind({ outcome: "not_needed", waits_for: null })).toBe("not_needed");
   });
+
+  test("the statutory accounts alone are their own outcome, not 'nothing to do'", () => {
+    expect(outcomeKind({ outcome: "chart_applied", waits_for: null })).toBe("chart_in_place");
+    const read = readAccept({
+      steps: [{ step: "finance", outcome: "chart_applied", status: "promoted" }],
+    });
+    expect(read.steps[0] ? outcomeKind(read.steps[0]) : null).toBe("chart_in_place");
+  });
+
+  test("after go-live, ready for a change already approved waits to be put in force, not for approval", () => {
+    const read = readAccept({
+      live: true,
+      stops_at: "ready",
+      steps: [
+        { step: "B.1", outcome: "ready", status_before: "draft", status: "ready" },
+        { step: "B.7", outcome: "ready", status_before: "approved", status: "approved" },
+      ],
+    });
+    expect(read.steps.map((s) => outcomeKind(s))).toEqual(["waiting_second", "approved_waiting"]);
+    expect(outcomeKind({ outcome: "ready", waits_for: null, status: null })).toBe("waiting_second");
+  });
 });
 
 describe("statuses in plain words", () => {
@@ -522,10 +546,9 @@ describe("statuses in plain words", () => {
       "ready",
       "approved",
     ]);
-    expect(pendingProposals(proposals, true).map((p) => p.change_set_status)).toEqual([
-      "draft",
-      "approved",
-    ]);
+    // Accepting after go-live stops at ready: it neither approves nor puts in
+    // force, so an approved change is not the button's to move either.
+    expect(pendingProposals(proposals, true).map((p) => p.change_set_status)).toEqual(["draft"]);
   });
 });
 
@@ -797,5 +820,47 @@ describe("a likely answer, as a person reads it", () => {
         same,
       ),
     ).toBe("Product type");
+  });
+});
+
+describe("an answer that did not save", () => {
+  test("going back to the stored answer after a failed save is sent again", () => {
+    expect(skipsSave(true, true, false)).toBe(true);
+    expect(skipsSave(true, true, true)).toBe(false);
+    // Clearing a first answer that failed: null matches null, and still goes.
+    expect(skipsSave(null, null, true)).toBe(false);
+    expect(skipsSave({ b: 1, a: 2 }, { a: 2, b: 1 }, false)).toBe(true);
+    expect(skipsSave(false, true, false)).toBe(false);
+  });
+
+  test("only failures under questions that still apply hold proposing back", () => {
+    const failed = new Set(["approval.threshold", "dept.list"]);
+    expect(unsavedCodes(failed, new Set(["dept.list", "approval.needed"]))).toEqual(["dept.list"]);
+    expect(unsavedCodes(failed, new Set(["approval.needed"]))).toEqual([]);
+    expect(unsavedCodes(new Set<string>(), new Set(["dept.list"]))).toEqual([]);
+  });
+
+  test("the list before proposing: failed cards, and reported failures until they save", () => {
+    const qs = [
+      { code: "dept.list", applies: true },
+      { code: "approval.needed", applies: true },
+      { code: "approval.threshold", applies: false },
+      { code: "code.prefix", applies: true },
+    ];
+    const erroring = (code: string) => code === "code.prefix";
+    // A reported failure that is still failed is listed even with no card in error.
+    expect(
+      unsavedQuestions(
+        qs,
+        erroring,
+        ["dept.list", "approval.threshold"],
+        new Set(["dept.list", "approval.threshold"]),
+      ).map((q) => q.code),
+    ).toEqual(["dept.list", "code.prefix"]);
+    // Once it saves it drops off, so the button is not held back for ever.
+    expect(
+      unsavedQuestions(qs, erroring, ["dept.list"], new Set<string>()).map((q) => q.code),
+    ).toEqual(["code.prefix"]);
+    expect(unsavedQuestions(qs, () => false, [], new Set(["dept.list"]))).toEqual([]);
   });
 });

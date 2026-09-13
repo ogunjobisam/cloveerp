@@ -41,11 +41,13 @@ import {
   readQuestions,
   readSessions,
   resumeSection,
-  sameAnswer,
   SECTION_ORDER,
   sectionProgress,
+  skipsSave,
   statusKind,
   statusText,
+  unsavedCodes,
+  unsavedQuestions,
   wireValue,
   type AcceptResult,
   type AcceptStep,
@@ -260,7 +262,7 @@ function Onboarding() {
         <p className="text-sm text-muted-foreground">{ui("Loading your interviews…")}</p>
       </Card>
     );
-  } else if (sessions.error) {
+  } else if (sessions.data === undefined) {
     body = (
       <Card>
         <ErrorNote error={sessions.error} />
@@ -312,6 +314,13 @@ function Onboarding() {
           "Your first-day questionnaire. Describe how the business works — your companies, departments, who signs off spending, how products are grouped and coded — and your answers become the set-up to match. Most questions come with a likely answer you can take with one press. Nothing changes until you accept what your answers propose.",
         )}
       </PageHeader>
+      {mayConfigure && sessions.data !== undefined && sessions.error ? (
+        <RefreshNote
+          error={sessions.error}
+          busy={sessions.isFetching}
+          onRetry={() => void sessions.refetch()}
+        />
+      ) : null}
       {body}
     </div>
   );
@@ -383,7 +392,7 @@ function Interview({
       </Card>
     );
   }
-  if (questions.error) {
+  if (questions.data === undefined) {
     // A failed read is not an empty question list, and must not look like one.
     return (
       <Card id="interview-section">
@@ -402,7 +411,61 @@ function Interview({
       </Card>
     );
   }
-  return <InterviewDesk session={session} questions={questions.data} onProposed={onProposed} />;
+  // A refresh that failed after the questions loaded keeps the desk, and the
+  // answers being typed into it, on the page: the note says the questions may
+  // be out of date, and the next refresh that succeeds clears it. The desk
+  // stays the second child either way, so the note coming and going never
+  // remounts it.
+  return (
+    <>
+      {questions.error ? (
+        <RefreshNote
+          error={questions.error}
+          busy={questions.isFetching}
+          onRetry={() => void questions.refetch()}
+        />
+      ) : null}
+      <InterviewDesk session={session} questions={questions.data} onProposed={onProposed} />
+    </>
+  );
+}
+
+/** A background refresh failed; what is on the page is the last that loaded. */
+function RefreshNote({
+  error,
+  busy,
+  onRetry,
+}: {
+  error: unknown;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  const { ui } = useT();
+  return (
+    <div
+      role="status"
+      className="flex min-w-0 flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2"
+    >
+      <TriangleAlert
+        className="size-4 shrink-0 text-amber-700 dark:text-amber-400"
+        aria-hidden="true"
+      />
+      <p className="min-w-0 flex-1 text-sm">
+        {ui(
+          "Could not refresh. What you see is what last loaded, and your unsaved answers are kept.",
+        )}
+      </p>
+      <ActionButton variant="secondary" onClick={onRetry} busy={busy}>
+        {ui("Try again")}
+      </ActionButton>
+      <details className="w-full text-xs text-muted-foreground">
+        <summary className="cursor-pointer">{ui("Why")}</summary>
+        <div className="mt-2">
+          <ErrorNote error={error} />
+        </div>
+      </details>
+    </div>
+  );
 }
 
 type Phase = "idle" | "waiting" | "saving" | "saved" | "invalid" | "error";
@@ -433,9 +496,17 @@ function useAutosave(sessionId: string) {
   const chains = useRef<Record<string, Promise<void>>>({});
   const latest = useRef<Record<string, number>>({});
   const failed = useRef<Set<string>>(new Set());
+  // The same set, as state, so the screen can read it while rendering.
+  const [failedCodes, setFailedCodes] = useState<ReadonlySet<string>>(() => new Set());
 
   const mark = useCallback((code: string, state: SaveState) => {
     setStates((s) => ({ ...s, [code]: state }));
+  }, []);
+
+  const setFailed = useCallback((code: string, on: boolean) => {
+    if (on) failed.current.add(code);
+    else failed.current.delete(code);
+    setFailedCodes(new Set(failed.current));
   }, []);
 
   const queue = useCallback(
@@ -451,19 +522,19 @@ function useAutosave(sessionId: string) {
         .then(
           () => {
             if (latest.current[code] !== n) return;
-            failed.current.delete(code);
+            setFailed(code, false);
             mark(code, { phase: "saved", error: null, invalid: null });
           },
           (error: unknown) => {
             if (latest.current[code] !== n) return;
             delete sent.current[code];
-            failed.current.add(code);
+            setFailed(code, true);
             mark(code, { phase: "error", error, invalid: null });
           },
         );
       chains.current[code] = run;
     },
-    [mark, mutateAsync, sessionId],
+    [mark, mutateAsync, sessionId, setFailed],
   );
 
   const change = useCallback(
@@ -482,7 +553,10 @@ function useAutosave(sessionId: string) {
       const value = wireValue(built);
       const held =
         q.code in sent.current ? sent.current[q.code] : hasAnswer(q.answer) ? q.answer : null;
-      if (sameAnswer(value, held)) {
+      // A question whose last save failed is sent again even when the answer
+      // matches what is held, or going back to the stored value would leave
+      // it failed with no card saying so.
+      if (skipsSave(value, held, failed.current.has(q.code))) {
         mark(
           q.code,
           q.code in sent.current ? { phase: "saved", error: null, invalid: null } : IDLE,
@@ -505,16 +579,23 @@ function useAutosave(sessionId: string) {
     [mark, queue],
   );
 
-  /** Saves what is still waiting, and says whether every answer is now saved. */
-  const flush = useCallback(async (): Promise<boolean> => {
-    for (const [code, waiting] of Object.entries(timers.current)) {
-      clearTimeout(waiting.handle);
-      delete timers.current[code];
-      queue(code, waiting.value);
-    }
-    await Promise.all(Object.values(chains.current));
-    return failed.current.size === 0;
-  }, [queue]);
+  /**
+   * Saves what is still waiting, and names the questions among `applying`
+   * whose answers did not save. A failure under a question that no longer
+   * applies does not count: propose does not read that answer.
+   */
+  const flush = useCallback(
+    async (applying: ReadonlySet<string>): Promise<string[]> => {
+      for (const [code, waiting] of Object.entries(timers.current)) {
+        clearTimeout(waiting.handle);
+        delete timers.current[code];
+        queue(code, waiting.value);
+      }
+      await Promise.all(Object.values(chains.current));
+      return unsavedCodes(failed.current, applying);
+    },
+    [queue],
+  );
 
   // Leaving the page does not strand a typed answer in a timer.
   useEffect(() => {
@@ -539,7 +620,7 @@ function useAutosave(sessionId: string) {
   };
   const saving = Object.values(states).some((s) => s.phase === "waiting" || s.phase === "saving");
 
-  return { change, draftOf, stateOf, valueOf, retry, flush, saving };
+  return { change, draftOf, stateOf, valueOf, retry, flush, saving, failedCodes };
 }
 
 function InterviewDesk({
@@ -557,6 +638,8 @@ function InterviewDesk({
     () => resumeSection(sectionProgress(questions)) ?? SECTIONS[0] ?? "B.7",
   );
   const [flushing, setFlushing] = useState(false);
+  // What the last press of Propose found not saved, until each saves.
+  const [notSaved, setNotSaved] = useState<string[]>([]);
 
   const propose = useErpAction({
     fn: "erp_propose_from_interview",
@@ -577,7 +660,12 @@ function InterviewDesk({
   const invalid = questions.filter(
     (q) => q.applies && autosave.stateOf(q.code).phase === "invalid",
   );
-  const unsaved = questions.filter((q) => q.applies && autosave.stateOf(q.code).phase === "error");
+  const unsaved = unsavedQuestions(
+    questions,
+    (code) => autosave.stateOf(code).phase === "error",
+    notSaved,
+    autosave.failedCodes,
+  );
   useUnsavedGuard(autosave.saving || flushing || invalid.length > 0);
 
   const index = Math.max(0, SECTIONS.indexOf(section));
@@ -600,15 +688,18 @@ function InterviewDesk({
   };
 
   const doPropose = async () => {
+    const applying = new Set(questions.filter((q) => q.applies).map((q) => q.code));
     setFlushing(true);
-    let saved = false;
+    let codes: string[] = [];
     try {
-      saved = await autosave.flush();
+      codes = await autosave.flush(applying);
     } finally {
       setFlushing(false);
     }
-    // Proposing over an answer that did not save would propose the old one.
-    if (saved) propose.mutate({ p_session_id: session.session_id });
+    setNotSaved(codes);
+    // Proposing over an answer that did not save would propose the old one;
+    // the list above says which, rather than the press doing nothing.
+    if (codes.length === 0) propose.mutate({ p_session_id: session.session_id });
   };
 
   const pct = here && here.asked > 0 ? Math.round((here.answered / here.asked) * 100) : 0;
@@ -1539,6 +1630,9 @@ function Outcome({
   const names = namesFromQuestions(questions.data ?? []);
 
   const pending = pendingProposals(session.proposals, live);
+  const someApproved = session.proposals.some(
+    (p) => statusKind(p.change_set_status) === "approved",
+  );
   const allInForce =
     session.proposals.length > 0 &&
     session.proposals.every((p) => statusKind(p.change_set_status) === "in_force");
@@ -1653,9 +1747,13 @@ function Outcome({
             <p className="mt-2 text-sm text-muted-foreground">
               {allInForce
                 ? ui("Everything this interview proposed is in force.")
-                : ui(
-                    "Nothing here is waiting for you. A change waiting for approval is approved on Configuration.",
-                  )}
+                : someApproved
+                  ? ui(
+                      "Nothing here is waiting for you. A change waiting for approval is approved on Configuration, and an approved change is put in force there.",
+                    )
+                  : ui(
+                      "Nothing here is waiting for you. A change waiting for approval is approved on Configuration.",
+                    )}
             </p>
           )}
         </Card>
@@ -1670,9 +1768,13 @@ function FinanceCard({ step }: { step: AcceptStep }) {
     <article className="min-w-0 rounded-xl border border-dashed border-border bg-card/60 p-4 sm:p-5">
       <h3 className="text-sm font-semibold">{ui("Setting up the books")}</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        {ui(
-          "Accounting codes need books to post to, so the books are set up for each company that has none, with nominal accounts numbered the way you chose.",
-        )}
+        {outcomeKind(step) === "chart_in_place"
+          ? ui(
+              "You chose statutory numbering, so its nominal accounts are added now. The books themselves are set up when you accept accounting codes.",
+            )
+          : ui(
+              "Accounting codes need books to post to, so the books are set up for each company that has none, with nominal accounts numbered the way you chose.",
+            )}
       </p>
       <StepOutcome step={step} />
     </article>
@@ -1778,8 +1880,12 @@ function StepOutcome({ step }: { step: AcceptStep }) {
       return line(check, ui("In force"), ok);
     case "books_set_up":
       return line(check, ui("The books are set up"), ok);
+    case "chart_in_place":
+      return line(check, ui("The nominal accounts are in place"), ok);
     case "waiting_second":
       return line(clock, ui("Waiting for a second administrator to approve"), waiting);
+    case "approved_waiting":
+      return line(clock, ui("Approved, waiting to be put in force on Configuration"), waiting);
     case "waiting_approval":
       return line(
         clock,
