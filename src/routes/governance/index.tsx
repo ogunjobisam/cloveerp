@@ -1,12 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickItem, pickParty } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom, pickItem, pickParty } from "../../components/erp/actions-bar";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
 
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { useT } from "../../lib/i18n";
+
+/** One picker for the four doors that take a mass change; the status is shown
+ *  because applying wants a previewed one and reversing an applied one. */
+const pickMassChange = () =>
+  pickFrom(
+    "erp_mass_changes",
+    "mass_change_id",
+    ["code", "object_type", "status"],
+    "p_mass_change_id",
+    "Mass change",
+  );
 
 export const Route = createFileRoute("/governance/")({
   head: () => ({
@@ -49,39 +60,30 @@ function Governance() {
         note="Proposing a change, and the mass change that proposes the same edit against many records."
         actions={[
           {
+            label: "Preview a mass change",
+            description:
+              "Works out which records the selector matches and what each would become. A mass change is applied only after it has been previewed.",
+            permission: "master_data.write",
+            fn: "erp_preview_mass_change",
+            fields: [pickMassChange()],
+            invalidates: ["erp_mass_changes"],
+          },
+          {
             label: "Apply a mass change",
             description:
               "Applies an approved mass change to every record it names. Each record's old value is kept, so the whole change can be reversed as one.",
             permission: "master_data.write",
             fn: "erp_apply_mass_change",
-            fields: [
-              {
-                kind: "text",
-                name: "p_mass_change_id",
-                label: "Mass change id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id returned when the mass change was opened; mass changes are not listed on this page yet.",
-              },
-            ],
-            invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
+            fields: [{ ...pickMassChange(), hint: "Only a previewed mass change can be applied." }],
+            invalidates: ["erp_mass_changes", "erp_change_requests", "erp_items", "erp_parties"],
           },
           {
             label: "Reverse a mass change",
             description: "Puts every record the mass change touched back as it was.",
             permission: "master_data.write",
             fn: "erp_reverse_mass_change",
-            fields: [
-              {
-                kind: "text",
-                name: "p_mass_change_id",
-                label: "Mass change id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id returned when the mass change was opened; mass changes are not listed on this page yet.",
-              },
-            ],
-            invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
+            fields: [{ ...pickMassChange(), hint: "Only an applied mass change can be reversed." }],
+            invalidates: ["erp_mass_changes", "erp_change_requests", "erp_items", "erp_parties"],
           },
           {
             label: "Open a change request",
@@ -164,7 +166,7 @@ function Governance() {
                 hint: "Optional. Shown to whoever approves this.",
               },
             ],
-            invalidates: ["erp_change_requests"],
+            invalidates: ["erp_change_requests", "erp_mass_changes"],
             mapArgs: (v) => ({
               p_object_type: v["p_object_type"],
               p_selector: JSON.parse(v["p_selector"] ?? "{}"),

@@ -259,13 +259,7 @@ function Distribution() {
             permission: "reporting.read",
             fn: "erp_subscribe_to_report",
             fields: [
-              pickFrom(
-                "erp_report_versions",
-                "report_code",
-                ["report_code", "report_name"],
-                "p_report_code",
-                "Report",
-              ),
+              pickFrom("erp_reports", "code", ["code", "name"], "p_report_code", "Report"),
               {
                 kind: "choice",
                 name: "p_subscriber_kind",
@@ -338,13 +332,7 @@ function Distribution() {
             fn: "erp_add_report_pack_item",
             fields: [
               pickFrom("erp_report_packs", "code", ["code", "name"], "p_pack_code", "Pack"),
-              pickFrom(
-                "erp_report_versions",
-                "report_code",
-                ["report_code", "report_name"],
-                "p_report_code",
-                "Report",
-              ),
+              pickFrom("erp_reports", "code", ["code", "name"], "p_report_code", "Report"),
               { kind: "number", name: "p_seq", label: "Order" },
             ],
             invalidates: ["erp_report_packs"],
@@ -355,13 +343,7 @@ function Distribution() {
             fn: "erp_remove_report_pack_item",
             fields: [
               pickFrom("erp_report_packs", "code", ["code", "name"], "p_pack_code", "Pack"),
-              pickFrom(
-                "erp_report_versions",
-                "report_code",
-                ["report_code", "report_name"],
-                "p_report_code",
-                "Report",
-              ),
+              pickFrom("erp_reports", "code", ["code", "name"], "p_report_code", "Report"),
             ],
             invalidates: ["erp_report_packs"],
           },

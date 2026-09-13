@@ -192,8 +192,8 @@ export type OptionSource = {
   label: string[];
   /**
    * The key holding the list, when the door answers with an object of several
-   * lists rather than one list. `erp_permissions_directory` is the case: one
-   * read carries principals, roles and the permission catalogue.
+   * lists rather than one list. `erp_analytics_contract` is the case: one read
+   * carries `views` and `credentials`, and a picker asks for one of them.
    */
   path?: string;
 };

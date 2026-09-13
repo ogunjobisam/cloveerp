@@ -362,19 +362,21 @@ function Configuration() {
             label: "Roll back to a snapshot",
             description:
               "Restores the configuration a promotion took a snapshot of. The reason is kept with the rollback.",
-            permission: "administration.configure",
+            // The door authorises administration.promote: rolling a promotion
+            // back is the promoter's act, as promoting was.
+            permission: "administration.promote",
             fn: "erp_rollback_to_snapshot",
             fields: [
-              {
-                kind: "text",
-                name: "p_snapshot_id",
-                label: "Snapshot id",
-                required: true,
-                hint: "From the change's promotion record.",
-              },
+              pickFrom(
+                "erp_config_snapshots",
+                "snapshot_id",
+                ["code", "change_code", "taken"],
+                "p_snapshot_id",
+                "Snapshot",
+              ),
               reason("p_reason", "Reason", true),
             ],
-            invalidates: ["erp_change_sets"],
+            invalidates: ["erp_change_sets", "erp_config_snapshots"],
           },
         ]}
       />

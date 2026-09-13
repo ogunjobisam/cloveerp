@@ -434,7 +434,8 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   },
   {
     label: "Qualify a supplier",
-    permission: "procurement.order",
+    // The database authorises master_data.approve, not procurement.order.
+    permission: "master_data.approve",
     fn: "erp_qualify_supplier",
     fields: [
       pickParty("supplier"),

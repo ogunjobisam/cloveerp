@@ -224,7 +224,9 @@ function MasterData() {
             label: "Merge duplicate business partners",
             description:
               "Every reference to the duplicate is moved to the survivor; the duplicate is withdrawn, not deleted.",
-            permission: "master_data.write",
+            // The database authorises master_data.approve: a merge withdraws a
+            // record and is not undone, which is the second person's act.
+            permission: "master_data.approve",
             fn: "erp_merge_master_record",
             fields: [
               pickParty(undefined, "p_survivor_id", "Record being kept"),
@@ -243,7 +245,9 @@ function MasterData() {
             label: "Merge duplicate products",
             description:
               "Every reference to the duplicate is moved to the survivor; the duplicate is withdrawn, not deleted.",
-            permission: "master_data.write",
+            // The database authorises master_data.approve: a merge withdraws a
+            // record and is not undone, which is the second person's act.
+            permission: "master_data.approve",
             fn: "erp_merge_master_record",
             fields: [
               pickItem("p_survivor_id", "Record being kept"),
