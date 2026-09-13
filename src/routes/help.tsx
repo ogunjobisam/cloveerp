@@ -65,8 +65,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         <Link to="/administration/permissions" className="underline">
           People and permissions
         </Link>
-        . The invitation is a single-use token shown once — send it to them straight away; it cannot
-        be recovered later.
+        . They are emailed a link that brings them in, and the screen also offers the link to copy.
       </>
     ),
   },

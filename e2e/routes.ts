@@ -35,6 +35,10 @@ export const ROUTES: readonly RouteUnderTest[] = [
   { path: "/signin", kind: "public", file: "signin.tsx" },
 
   { path: "/help", kind: "desk", file: "help.tsx" },
+  // An invitation's landing page: its own way in signed out, and straight on
+  // to the desk for somebody already inside an organisation with no invitation
+  // held, which is the state this suite renders it in.
+  { path: "/join", kind: "desk", file: "join.tsx" },
   { path: "/profile", kind: "desk", file: "profile.tsx" },
   { path: "/settings", kind: "desk", file: "settings.tsx" },
   { path: "/notifications", kind: "desk", file: "notifications.tsx" },

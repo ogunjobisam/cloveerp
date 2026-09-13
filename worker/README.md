@@ -54,10 +54,15 @@ Two entrypoints over one core.
 
 Configuration, all from the environment and none of it from the database:
 
-    CLOVEERP_DATABASE_URL   a connection string for a role that bypasses RLS
-    CLOVEERP_TENANTS        comma-separated tenant ids to serve
-    CLOVEERP_PRINCIPALS     matching service principal ids, same order
-    CLOVEERP_SYSTEMS        comma-separated external system codes to drain
+    CLOVEERP_DATABASE_URL   a connection string for a role that bypasses RLS (default SUPABASE_DB_URL)
+    CLOVEERP_TENANTS        optional: comma-separated tenant ids to serve as a named principal
+    CLOVEERP_PRINCIPALS     matching service principal ids, same order; both lists or neither.
+                            Every other active organisation erp.dispatch_bindings() lists is
+                            served too, each pass, with a tenant context and no principal —
+                            its email and webhooks only: no jobs (the minute pass runs its SQL
+                            jobs), no outbox or commands, and no credential_ref resolved
+    CLOVEERP_SYSTEMS        comma-separated external system codes to drain, for the organisations
+                            named in CLOVEERP_TENANTS only
     CLOVEERP_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
     CLOVEERP_WORKER_NAME    the name a claim is recorded under (default clove-erp-worker-<pid>)
     CLOVEERP_LEASE_SECONDS  how long a claim lasts before the reclaimer settles it (default 300)
@@ -65,15 +70,36 @@ Configuration, all from the environment and none of it from the database:
     CLOVEERP_ONCE           1 to run a single pass and exit (what the build does)
     CLOVEERP_RESEND_ENDPOINT where email is posted instead of Resend (the build's stub)
     RESEND_API_KEY          the send credential for the email handler
-    <REF>                   the value a credential_ref names — see below
+    CLOVEERP_CREDENTIAL_<NAME> the value a credential_ref names — see below
 
 These were `ERPWARE_*` until 20260904980000 renamed the product's prefix. There
 is no compatibility shim: `required()` throws by name, so a half-done rename
 stops the worker rather than degrading it quietly.
 
 A `credential_ref` is a URI and only `env://` is implemented. The name after
-the scheme is read from the environment **exactly as written** — `env://SMTP_PW`
-reads `SMTP_PW`, with no prefix of any kind. This file said `ERPWARE_SECRET_<REF>`
-for months, which no code has ever read.
+the scheme must match `^CLOVEERP_CREDENTIAL_[A-Z0-9_]{1,100}$`, and is read from
+the environment as written — `env://CLOVEERP_CREDENTIAL_SMTP_PW` reads
+`CLOVEERP_CREDENTIAL_SMTP_PW`. Any other name is refused, by the database when the
+reference is written and by the worker when it is read: the same environment
+holds `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL` and `RESEND_API_KEY`, and a
+reference an administrator writes must not be able to name them.
+
+A reference is resolved only for an organisation named in `CLOVEERP_TENANTS`.
+One an operator did not name is refused before the environment is read, because
+nobody decided which credentials are its to use; its webhook with no reference
+still posts.
 
 A credential is read here and used here. It is never written back.
+
+## Mail queued while nothing drained
+
+The first pass of every process (every isolate, for the dispatch function)
+calls `erp.retire_undrained_notifications_everywhere()` before any email or
+webhook is claimed. Until any drain pass has been recorded, it suppresses every
+email and webhook notification still waiting (queued, pending or held) and more
+than an hour old, in every organisation, and leaves an in-app notice in its
+place, so the first drain does not send days-old job failures, approvals and
+incident notices. Once a pass is recorded it does nothing. A
+failure is logged and counted in the pass's `failures`, and the pass carries on.
+The deploy workflow calls the same function just before it schedules the
+dispatch function.

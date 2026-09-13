@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
+import { InviteDialog } from "../../components/erp/invite-dialog";
 
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
@@ -122,34 +123,11 @@ function Permissions() {
         screen.
       </PageHeader>
 
+      <InviteDialog />
+
       <ActionBar
         title="Bringing somebody in"
-        note="Bringing somebody into this organisation. An invitation returns a single-use token to hand over."
         actions={[
-          {
-            label: "Invite a person",
-            permission: "administration.users",
-            fn: "erp_invite_principal",
-            fields: [
-              {
-                kind: "text",
-                name: "p_email",
-                label: "Email",
-                required: true,
-                placeholder: "sam@northwindfoods.co.uk",
-                hint: "They sign in with this address.",
-              },
-              {
-                kind: "text",
-                name: "p_display_name",
-                label: "Name",
-                required: true,
-                placeholder: "Sam Ogunjobi",
-                hint: "The name shown beside their actions.",
-              },
-            ],
-            invalidates: ["erp_permissions_directory"],
-          },
           {
             label: "Create a service user",
             permission: "administration.users",

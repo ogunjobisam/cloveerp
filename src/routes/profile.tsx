@@ -1,6 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 
 import { friendlyError } from "@/lib/errors";
 
@@ -8,7 +8,7 @@ import { ActionButton, ErrorNote, useErpAction } from "../components/erp/action"
 import { Gate } from "../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../components/erp/page";
 import { useErpSession } from "../components/erp/session-context";
-import { callErp } from "../lib/erp";
+import { callErp, supabase } from "../lib/erp";
 import { useT } from "../lib/i18n";
 
 /**
@@ -279,6 +279,134 @@ function Profile() {
         </div>
         {save.error ? <ErrorNote error={save.error} /> : null}
       </form>
+
+      <SetPassword />
     </div>
+  );
+}
+
+const MIN_PASSWORD = 8;
+
+/**
+ * A password for the account this person signs in with.
+ *
+ * Everybody who joined by invitation arrived through a one-time sign-in link
+ * and has no password, so without this their only way back in is another
+ * link. Supabase Auth changes the password of the signed-in user and nobody
+ * else's, so there is no permission here either. The length and the match are
+ * checked on the screen for a quicker answer; Auth applies its own policy and
+ * refuses what that does not allow, and the refusal is shown as it comes.
+ *
+ * The words are plain JSX rather than ui(), so this change needs no resource
+ * rows; a later pass can seed them.
+ */
+function SetPassword() {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const change = useMutation({
+    mutationFn: async (next: string) => {
+      if (!supabase) {
+        throw new Error(
+          "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.",
+        );
+      }
+      const { error } = await supabase.auth.updateUser({ password: next });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setPassword("");
+      setConfirm("");
+    },
+  });
+
+  // Typing again starts a new attempt: the last answer no longer describes it.
+  const edit = (set: (v: string) => void) => (e: ChangeEvent<HTMLInputElement>) => {
+    set(e.target.value);
+    setProblem(null);
+    if (change.isSuccess || change.isError) change.reset();
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (change.isPending) return;
+        if (password.length < MIN_PASSWORD) {
+          setProblem(`Use at least ${MIN_PASSWORD} characters.`);
+          return;
+        }
+        if (password !== confirm) {
+          setProblem("The two passwords do not match.");
+          return;
+        }
+        setProblem(null);
+        change.mutate(password);
+      }}
+      className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5"
+    >
+      <h2 className="text-sm font-semibold">Set a password</h2>
+      <Prose className="mt-0.5 text-xs text-muted-foreground">
+        If you joined by invitation, you signed in with a link and have no password yet. Set one
+        here to sign in with your email address and a password. A password you set replaces any you
+        had.
+      </Prose>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <label htmlFor="new-password" className="block text-sm font-medium">
+          New password
+          <input
+            id="new-password"
+            type="password"
+            required
+            minLength={MIN_PASSWORD}
+            value={password}
+            onChange={edit(setPassword)}
+            autoComplete="new-password"
+            className={FIELD}
+          />
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
+            At least {MIN_PASSWORD} characters.
+          </span>
+        </label>
+        <label htmlFor="confirm-password" className="block text-sm font-medium">
+          Confirm the password
+          <input
+            id="confirm-password"
+            type="password"
+            required
+            minLength={MIN_PASSWORD}
+            value={confirm}
+            onChange={edit(setConfirm)}
+            autoComplete="new-password"
+            className={FIELD}
+          />
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
+            The same again, to catch a typing mistake.
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <ActionButton type="submit" variant="primary" busy={change.isPending}>
+          {change.isPending ? "Setting…" : "Set password"}
+        </ActionButton>
+        {change.isSuccess ? (
+          <p role="status" className="text-sm text-ok">
+            Password set. Next time, sign in with your email address and this password.
+          </p>
+        ) : null}
+      </div>
+      {problem ? (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {problem}
+        </p>
+      ) : null}
+      {change.error ? (
+        <div className="mt-3">
+          <ErrorNote error={change.error} />
+        </div>
+      ) : null}
+    </form>
   );
 }

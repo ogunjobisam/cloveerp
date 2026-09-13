@@ -19,10 +19,19 @@ import {
   Users,
 } from "lucide-react";
 
+import {
+  createInvitationWithoutEmail,
+  CreateWithoutEmail,
+  InvitationOutcome,
+  sendInvitation,
+  type InvitationSent,
+  type PersonInviteRequest,
+} from "../erp/invite-dialog";
 import { OfferOwnership } from "../erp/ownership";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
-import { callErp } from "../../lib/erp";
+import { callErp, ErpError, InviteOutcomeUnknown } from "../../lib/erp";
+import type { OnboardCompanyArgs } from "../../lib/invitation-email";
 import {
   atLeast,
   ROLE_BLURB,
@@ -32,7 +41,7 @@ import {
   type PlatformTenant,
   type MyTenancy,
 } from "../../lib/platform";
-import { Card, Fail, TokenNotice, statusTone, INPUT } from "./kit";
+import { Card, Fail, statusTone, INPUT } from "./kit";
 
 /** Organisations, and everything done to one.
  *
@@ -53,7 +62,12 @@ export function Companies({ role }: { role: PlatformRole }) {
     currency: "GBP",
     country: "GB",
   });
-  const [token, setToken] = useState<{ email: string; token: string } | null>(null);
+  // The last invitation made here: whether it was emailed, and its link. Shown
+  // once, because the database keeps only a digest of the token inside it.
+  const [invitation, setInvitation] = useState<{
+    sent: InvitationSent;
+    onboarded: boolean;
+  } | null>(null);
 
   const tenants = useQuery({
     queryKey: ["erp_platform_tenants"],
@@ -62,21 +76,27 @@ export function Companies({ role }: { role: PlatformRole }) {
 
   const refresh = () => queryClient.invalidateQueries();
 
+  // The code of an organisation whose onboarding could not reach the invite
+  // function. It may well exist now, so a later attempt refused as a duplicate
+  // is most likely that one, and the screen says so rather than leaving the
+  // operator to wonder who else took the code.
+  const [uncertainCode, setUncertainCode] = useState<string | null>(null);
+
+  // The invite function calls erp_platform_onboard_company as the signed-in
+  // operator, then emails the first administrator their invitation. Never
+  // retried without it: a second call is refused because the organisation the
+  // first one made already exists.
   const onboard = useMutation({
-    mutationFn: () =>
-      callErp<{ admin_email: string; admin_token: string; is_live: boolean }>(
-        "erp_platform_onboard_company",
-        {
-          p_code: form.code,
-          p_name: form.name,
-          p_admin_email: form.admin_email,
-          p_admin_display_name: form.admin_display_name || form.admin_email,
-          p_base_currency: form.currency,
-          p_country_code: form.country,
-        },
-      ),
-    onSuccess: (r) => {
-      setToken({ email: r.admin_email, token: r.admin_token });
+    mutationFn: (args: OnboardCompanyArgs) =>
+      sendInvitation({ door: "erp_platform_onboard_company", args }),
+    onError: (error, args) => {
+      if (!(error instanceof InviteOutcomeUnknown)) return;
+      setUncertainCode(args.p_code);
+      void refresh();
+    },
+    onSuccess: (sent) => {
+      setUncertainCode(null);
+      setInvitation({ sent, onboarded: true });
       setOpen(false);
       setForm({
         code: "",
@@ -100,18 +120,32 @@ export function Companies({ role }: { role: PlatformRole }) {
     onSuccess: refresh,
   });
 
+  // And erp_platform_invite_admin the same way, for a further administrator.
   const invite = useMutation({
-    mutationFn: (v: { id: string; email: string; name: string }) =>
-      callErp<{ email: string; token: string }>("erp_platform_invite_admin", {
-        p_tenant_id: v.id,
-        p_email: v.email,
-        p_display_name: v.name,
-      }),
-    onSuccess: (r) => {
-      setToken({ email: r.email, token: r.token });
+    mutationFn: (request: PersonInviteRequest) => sendInvitation(request),
+    onError: (error) => {
+      if (error instanceof InviteOutcomeUnknown) void refresh();
+    },
+    onSuccess: (sent) => {
+      setInvitation({ sent, onboarded: false });
       void refresh();
     },
   });
+  // Only when a person asks, after the function could not be reached.
+  const direct = useMutation({
+    mutationFn: (request: PersonInviteRequest) => createInvitationWithoutEmail(request),
+    onSuccess: (sent) => {
+      invite.reset();
+      setInvitation({ sent, onboarded: false });
+      void refresh();
+    },
+  });
+  const inviteUncertain =
+    invite.error instanceof InviteOutcomeUnknown ? invite.variables : undefined;
+  const probablyCreated =
+    uncertainCode !== null &&
+    onboard.variables?.p_code.trim().toLowerCase() === uncertainCode.trim().toLowerCase() &&
+    isOrganisationExists(onboard.error);
 
   /**
    * Which organisations you are currently inside.
@@ -168,7 +202,7 @@ export function Companies({ role }: { role: PlatformRole }) {
   const busyError =
     onboard.error ??
     setStatus.error ??
-    invite.error ??
+    (inviteUncertain ? null : invite.error) ??
     enter.error ??
     purge.error ??
     sweep.error ??
@@ -177,21 +211,38 @@ export function Companies({ role }: { role: PlatformRole }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {token ? (
-        <TokenNotice
-          email={token.email}
-          token={token.token}
+      {invitation ? (
+        <InvitationOutcome
+          result={invitation.sent}
           /* An organisation is handed over in setup, not finished: its first
              administrator is its only one, and nobody may approve their own
              change set once it is live. Saying so here is cheaper than the
              support ticket that asks why nothing can be installed. */
           note={
-            "The organisation is in setup. It installs and configures freely until it has a " +
-            "second administrator and somebody takes it live."
+            invitation.onboarded
+              ? "The organisation is in setup. It installs and configures freely until it has a " +
+                "second administrator and somebody takes it live."
+              : undefined
           }
         />
       ) : null}
       {busyError ? <Fail error={busyError} /> : null}
+      {probablyCreated ? (
+        <p role="status" className="-mt-3 text-xs text-muted-foreground">
+          The organisation was probably created by the earlier attempt, which could not reach the
+          invitation service. Look for {onboard.variables?.p_code ?? "it"} in the list below.
+        </p>
+      ) : null}
+      {inviteUncertain ? (
+        <div className="flex flex-col gap-2">
+          <Fail error={invite.error} />
+          <CreateWithoutEmail
+            busy={direct.isPending}
+            onCreate={() => direct.mutate(inviteUncertain)}
+          />
+          {direct.error ? <Fail error={direct.error} /> : null}
+        </div>
+      ) : null}
 
       {mayOperate ? (
         <Card
@@ -212,7 +263,14 @@ export function Companies({ role }: { role: PlatformRole }) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                onboard.mutate();
+                onboard.mutate({
+                  p_code: form.code,
+                  p_name: form.name,
+                  p_admin_email: form.admin_email,
+                  p_admin_display_name: form.admin_display_name || form.admin_email,
+                  p_base_currency: form.currency,
+                  p_country_code: form.country,
+                });
               }}
               className="grid gap-3 sm:grid-cols-2"
             >
@@ -284,7 +342,8 @@ export function Companies({ role }: { role: PlatformRole }) {
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">
-              The invitation token appears once, here, when the organisation is created.
+              Its first administrator is emailed an invitation when the organisation is created, and
+              the link appears here once, to copy.
             </p>
           )}
         </Card>
@@ -410,8 +469,12 @@ export function Companies({ role }: { role: PlatformRole }) {
                           onClick={() => {
                             const email = window.prompt(`Invite an administrator to ${t.name}:`);
                             if (!email) return;
-                            const name = window.prompt("Their name:") ?? email;
-                            invite.mutate({ id: t.id, email, name });
+                            const name = window.prompt("Their name:")?.trim() || email;
+                            direct.reset();
+                            invite.mutate({
+                              door: "erp_platform_invite_admin",
+                              args: { p_tenant_id: t.id, p_email: email, p_display_name: name },
+                            });
                           }}
                           className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
                         >
@@ -499,6 +562,16 @@ export function Companies({ role }: { role: PlatformRole }) {
       </Card>
     </div>
   );
+}
+
+/**
+ * The refusal erp.provision_tenant raises for a code already taken:
+ * CLOVEERP_TENANT_EXISTS, or ERPWARE_ for as long as errors.ts accepts both, or
+ * the unique constraint itself if two attempts race past that check.
+ */
+function isOrganisationExists(error: unknown): boolean {
+  if (!(error instanceof ErpError)) return false;
+  return /^(?:CLOVEERP|ERPWARE)_TENANT_EXISTS$/.test(error.erpCode ?? "") || error.code === "23505";
 }
 
 export { Ownership } from "../erp/ownership";

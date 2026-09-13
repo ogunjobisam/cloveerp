@@ -34,6 +34,14 @@ export function connect(databaseUrl: string): Sql {
  *
  * The principal must be kind = 'service'. set_job_principal() refuses to adopt
  * a person, so a worker can never act as somebody.
+ *
+ * Or there is no principal at all: an organisation erp.dispatch_bindings()
+ * listed rather than one named in CLOVEERP_PRINCIPALS. That is the minute pass's
+ * own shape — erp.run_due_jobs_all_tenants() declares a tenant and clears the
+ * principal before every organisation — and every claim and settle the drain
+ * calls asks for a tenant and reads no principal; the audit trail records the
+ * work as the system. Skipping the call is not a weaker handshake: the tenant is
+ * still declared first, by a trusted session, for this transaction only.
  */
 export async function asPrincipal<T>(
   sql: Sql,
@@ -42,7 +50,9 @@ export async function asPrincipal<T>(
 ): Promise<T> {
   return sql.begin(async (tx) => {
     await tx`select erp.set_job_tenant(${binding.tenantId}::uuid)`;
-    await tx`select erp.set_job_principal(${binding.principalId}::uuid)`;
+    if (binding.principalId !== null) {
+      await tx`select erp.set_job_principal(${binding.principalId}::uuid)`;
+    }
     return work(tx as unknown as Sql);
   }) as Promise<T>;
 }

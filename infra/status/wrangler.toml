@@ -14,7 +14,9 @@
 #
 # Then register the page in the platform's own organisation as an external
 # system on adapter status_page@1 with base_url = https://<host>/publish and
-# credential_ref = env://CLOVEERP_STATUS_TOKEN, and enable status.publish.
+# credential_ref = env://CLOVEERP_CREDENTIAL_STATUS_TOKEN, and enable
+# status.publish. That reference is the Clove dispatch worker's, not this
+# worker's, and it resolves only for an organisation named in CLOVEERP_TENANTS.
 name = "clove-status"
 main = "src/index.js"
 compatibility_date = "2026-09-01"

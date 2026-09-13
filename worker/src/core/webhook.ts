@@ -18,7 +18,8 @@ import { createHmac } from "node:crypto";
  * own statement. One message failing must not roll back the ones that already
  * left.
  *
- * The credential is resolved from the channel's reference, used, and dropped.
+ * The credential is resolved from the channel's reference, used, and dropped,
+ * and only for an organisation an operator named (see resolveCredential).
  * It is never written back and never logged: a failure's text goes into
  * erp.notification.failure_reason, which is a column somebody reads on a
  * screen, so it must never carry a secret.
@@ -141,10 +142,12 @@ export async function drainWebhooks(
   for (const row of claimed) {
     let credential: string | null = null;
     try {
-      credential = resolveCredential(row.credential_ref ?? null);
+      credential = resolveCredential(row.credential_ref ?? null, b);
     } catch (err) {
-      // A reference that resolves to nothing in this environment is a
-      // configuration fault, and a permanent one for this pass.
+      // A reference that resolves to nothing in this environment, names a
+      // variable outside CLOVEERP_CREDENTIAL_, or belongs to an organisation
+      // nobody named is a configuration fault, and a permanent one for this
+      // message. erp.fail_webhook() tells the person in-app instead.
       await asPrincipal(
         sql,
         b,

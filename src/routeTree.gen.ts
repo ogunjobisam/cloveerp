@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as JoinRouteImport } from './routes/join'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
@@ -86,6 +87,11 @@ const DeviceRoute = DeviceRouteImport.update({
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JoinRoute = JoinRouteImport.update({
+  id: '/join',
+  path: '/join',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotificationsRoute = NotificationsRouteImport.update({
@@ -375,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/device': typeof DeviceRoute
   '/help': typeof HelpRoute
+  '/join': typeof JoinRoute
   '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
@@ -435,6 +442,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/device': typeof DeviceRoute
   '/help': typeof HelpRoute
+  '/join': typeof JoinRoute
   '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
@@ -496,6 +504,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/device': typeof DeviceRoute
   '/help': typeof HelpRoute
+  '/join': typeof JoinRoute
   '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
@@ -558,6 +567,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/device'
     | '/help'
+    | '/join'
     | '/notifications'
     | '/platform'
     | '/product'
@@ -618,6 +628,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/device'
     | '/help'
+    | '/join'
     | '/notifications'
     | '/platform'
     | '/product'
@@ -678,6 +689,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/device'
     | '/help'
+    | '/join'
     | '/notifications'
     | '/platform'
     | '/product'
@@ -739,6 +751,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DeviceRoute: typeof DeviceRoute
   HelpRoute: typeof HelpRoute
+  JoinRoute: typeof JoinRoute
   NotificationsRoute: typeof NotificationsRoute
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
@@ -823,6 +836,13 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/help'
       preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join': {
+      id: '/join'
+      path: '/join'
+      fullPath: '/join'
+      preLoaderRoute: typeof JoinRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notifications': {
@@ -1211,6 +1231,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DeviceRoute: DeviceRoute,
   HelpRoute: HelpRoute,
+  JoinRoute: JoinRoute,
   NotificationsRoute: NotificationsRoute,
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,

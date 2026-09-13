@@ -24,7 +24,13 @@
 #   4. read back: the command `succeeded`, the stub received one POST carrying
 #      the key, the email is `sent` with the provider id the stub returned, and
 #      the pass is recorded in erp_meta.drain_pass, which is what
-#      erp.dispatch_evidence() shows an operator.
+#      erp.dispatch_evidence() shows an operator;
+#   5. queue a second email and run the worker again with no organisation named
+#      at all — no CLOVEERP_TENANTS, no CLOVEERP_PRINCIPALS, no systems — which
+#      is how the dispatch function runs on live: erp.dispatch_bindings() lists
+#      the organisation, the worker serves it with no principal, and the email
+#      is sent. Both passes served every active organisation exactly once,
+#      whether one was named or none was, and no stage failed.
 #
 # Reads PSQL from the environment like run_checks.sh, and the PG* variables for
 # the worker's connection string unless CLOVEERP_DATABASE_URL is set. Needs bun
@@ -170,5 +176,58 @@ else
   check "the gateway is whole after the pass" "refused" "yes"
 fi
 
+# ---------------------------------------------------------------------------
+# 5. Nobody named the organisation
+# ---------------------------------------------------------------------------
+# The worker above was told which organisation to serve and as whom. Live's
+# dispatch function is told neither: it serves every active organisation
+# erp.dispatch_bindings() lists, with a tenant context and no principal, as the
+# minute pass does. A second email, queued the same way, must leave by that
+# route alone.
+second=$($PSQL_CMD -tA <<SQL
+begin;
+select u.id as admin_id, u.auth_user_id as admin_auth
+  from erp.app_user u where u.tenant_id = '${TENANT}' and u.email = 'admin@ci-demo.test' \gset
+select set_config('request.jwt.claims', json_build_object('sub', :'admin_auth')::text, true) as ctx \gset
+insert into erp.notification (tenant_id, severity, app_user_id, channel_kind, subject, body, status)
+values ('${TENANT}', 'info', :'admin_id', 'email', 'CI discovered drain', 'Nobody named this organisation to the worker.', 'pending')
+returning id as second_id \gset
+select d.sent as dispatched from erp.dispatch_notifications() d \gset
+select n.status as second_status from erp.notification n where n.id = :'second_id' \gset
+commit;
+\echo :second_id|:second_status
+SQL
+)
+IFS='|' read -r SECOND SECOND_QUEUED <<<"$(printf '%s\n' "$second" | tail -n 1)"
+echo "notification $SECOND ($SECOND_QUEUED), for a worker that names no organisation"
+[[ "$SECOND_QUEUED" == "queued" ]] || { echo "dispatch left the second email at '$SECOND_QUEUED', not queued" >&2; exit 1; }
+
+# Exit status is a check here rather than set -e's: a stage that failed makes a
+# one-shot run exit non-zero, and the checks below say more about why than the
+# script stopping would.
+if (
+  cd "$here/worker"
+  env -u CLOVEERP_TENANTS -u CLOVEERP_PRINCIPALS -u CLOVEERP_SYSTEMS \
+    CLOVEERP_DATABASE_URL="$DATABASE_URL" \
+    CLOVEERP_WORKER_NAME="ci-drain-discovered" \
+    RESEND_API_KEY="ci-stub-key" \
+    CLOVEERP_RESEND_ENDPOINT="$STUB/emails" \
+    CLOVEERP_ONCE=1 \
+    bun run src/main.ts
+); then
+  check "a worker naming no organisation finished its pass" "yes" "yes"
+else
+  check "a worker naming no organisation finished its pass" "exited non-zero" "yes"
+fi
+
+check "and sent the email nobody named an organisation for" \
+  "$($PSQL_CMD -q -tAc "select status || ':' || (provider_message_id like 'stub\_%') from erp.notification where id = '$SECOND'")" "sent:true"
+check "listing every active organisation, and nothing else" \
+  "$($PSQL_CMD -q -tAc "select count(*) || '|' || ((select count(*) from erp.dispatch_bindings()) = (select count(*) from erp.tenant where status = 'active')) from erp_meta.drain_pass p where p.worker = 'ci-drain-discovered' and (p.report ->> 'organisations')::int = (select count(*) from erp.tenant where status = 'active')")" "1|true"
+check "the named pass served the named organisation and every other, once each" \
+  "$($PSQL_CMD -q -tAc "select count(*) from erp_meta.drain_pass p where p.worker = 'ci-drain' and (p.report ->> 'organisations')::int = (select count(*) from erp.tenant where status = 'active')")" "1"
+check "and neither pass had a stage fail" \
+  "$($PSQL_CMD -q -tAc "select coalesce(string_agg(p.worker || '=' || coalesce(p.report ->> 'failures', 'unreported'), ',' order by p.worker), 'no passes') from erp_meta.drain_pass p where p.worker in ('ci-drain', 'ci-drain-discovered')")" "ci-drain=0,ci-drain-discovered=0"
+
 [[ $fail -eq 0 ]] || { echo; echo "worker log follows"; cat "${RUNNER_TEMP:-/tmp}/clove-stub.log"; exit 1; }
-echo "a command, an email and a webhook left the building, once each, and the database knows it"
+echo "a command, an email and a webhook left the building, once each, and the database knows it; so did an email for an organisation nobody named"

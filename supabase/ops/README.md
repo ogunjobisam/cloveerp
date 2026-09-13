@@ -178,9 +178,11 @@ Specification v1.6 §16.5. An incident update is one row
    `status.<domain>` at it. The token is never stored in the product.
 3. In the platform organisation, register an external system on adapter
    `status_page@1` with `connection = {"base_url": "https://<host>/publish"}`
-   and `credential_ref = env://CLOVEERP_STATUS_TOKEN`; enable the operation
-   `status.publish`; give the dispatch worker `CLOVEERP_STATUS_TOKEN` and add
-   the system's code to `CLOVEERP_SYSTEMS`.
+   and `credential_ref = env://CLOVEERP_CREDENTIAL_STATUS_TOKEN`; enable the
+   operation `status.publish`; give the dispatch worker
+   `CLOVEERP_CREDENTIAL_STATUS_TOKEN` and add the system's code to
+   `CLOVEERP_SYSTEMS`. The reference resolves only for an organisation named in
+   `CLOVEERP_TENANTS`, so name the platform organisation there.
 4. In the platform organisation, create the job `poll_dependency_status` on
    handler `platform.poll_dependency_status` (interval, five minutes is
    plenty). It needs the worker: the database engine leaves it alone and

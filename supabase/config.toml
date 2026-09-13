@@ -23,16 +23,24 @@ allowed_mime_types = ["application/pdf"]
 #   import_map  is load-bearing. worker/src/core/db.ts imports the bare
 #               specifier "postgres", which Deno cannot resolve on its own.
 #               Without this the function does not build at all.
-#   verify_jwt  matches the deploy flag documented in the function's header.
-#               The shared secret it checks is a second gate, not the only one:
-#               the work is already gated by B1, but the request rate is not.
+#   verify_jwt  is false. The one caller is pg_cron: the job
+#               erp.ensure_platform_schedule() creates posts with net.http_post
+#               and sends content-type and x-dispatch-secret, and no
+#               Authorization header (20260906100000), so a gateway JWT check
+#               refused every tick before the function ran and no email ever
+#               left. The gate is the secret — the vault's
+#               cloveerp_dispatch_secret, which deploy.yml creates — checked
+#               before any configuration is read or any work claimed
+#               (functions/dispatch/index.ts). The JWT check added nothing to
+#               it: the anon key that satisfies it ships in every browser bundle
+#               (src/lib/erp.ts). The work itself is gated by B1 either way.
 [functions.dispatch]
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/import_map.json"
 
 # The contact form's ingress.
 #
-# verify_jwt is false, and it is the only function here for which that is true.
+# verify_jwt is false, as it is for dispatch and invite, but for its own reason.
 # The caller is a visitor to cloveerp.com with no session, which is the whole
 # point: erp.assert_public_api_safe() refuses a public.erp_* door executable by
 # anon, so the alternative to this function is not a safer door — it is no
@@ -43,6 +51,25 @@ import_map = "./functions/import_map.json"
 # import_map for the same reason dispatch needs it: worker/src/core/db.ts
 # imports the bare specifier "postgres", which Deno cannot resolve on its own.
 [functions.enquiry]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
+# Invitations that arrive by email.
+#
+# verify_jwt is false because the function checks its caller itself, two ways,
+# and a gateway JWT check would refuse the second:
+#
+#   sending     needs a real signed-in user. The function asks Auth who the
+#               bearer is, refuses the anon key alone, and calls the invitation
+#               door as that user, so the door's own permission check decides.
+#   resending   needs no session at all: a person whose sign-in link expired
+#               holds only the pending invitation's token, and asks for a fresh
+#               link to the address that invitation was issued to. The answer
+#               never says whether the token was good.
+#
+# import_map for the same reason as the two above: it reaches worker/src/core,
+# which imports the bare specifier "postgres".
+[functions.invite]
 verify_jwt = false
 import_map = "./functions/import_map.json"
 

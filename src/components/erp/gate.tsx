@@ -1,11 +1,13 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
+import { readJoinArrival } from "../../lib/invitation-email";
+import { clearStoredInvitation, readStoredInvitation } from "../../lib/invitation-token";
 import { usePlatformMe } from "../../lib/platform";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
@@ -29,7 +31,7 @@ import { Wordmark } from "./logo";
  * administrator.
  */
 
-function Centred({ children }: { children: ReactNode }) {
+export function Centred({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">{children}</div>
@@ -56,7 +58,7 @@ function NotConfigured() {
   );
 }
 
-function GoogleGlyph() {
+export function GoogleGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
       <path
@@ -79,6 +81,19 @@ function GoogleGlyph() {
   );
 }
 
+export type SignInProps = {
+  onSignedIn?: () => void;
+  /** Said above the form, for a route that knows why the person is here. */
+  notice?: ReactNode;
+  /**
+   * Where Google sends the browser back to, as a path on this site; the origin
+   * when omitted. Supabase Auth honours a path on its Site URL's own host, or
+   * one on its redirect allow-list, and otherwise quietly sends the browser to
+   * the Site URL instead.
+   */
+  returnPath?: string;
+};
+
 /**
  * The sign-in screen, on its own so `/signin` can be a place you go.
  *
@@ -86,11 +101,13 @@ function GoogleGlyph() {
  * re-renders, and the route the person asked for is behind it. On its own
  * route there is nothing watching, so the caller says where to go next.
  */
-export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
+export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState<"idle" | "sending" | "sent" | "rate-limited">("idle");
+  const emailField = useRef<HTMLInputElement>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,12 +119,40 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
     setBusy(false);
   }
 
+  /**
+   * A sign-in link by email, for somebody with no password — everyone who
+   * joined by invitation, until they set one on their profile.
+   *
+   * shouldCreateUser is false, so this signs in an account that exists and
+   * makes none. The screen says the same thing whether the address has an
+   * account or not, because saying otherwise would tell anybody who types an
+   * address whether it is a customer's. The one failure it names is being
+   * asked too often, which says nothing about the address and has a remedy.
+   */
+  async function emailMeASignInLink() {
+    setError(null);
+    // Only the email field has to be valid for this; the password is not used.
+    if (!emailField.current?.reportValidity()) return;
+    setLink("sending");
+    let limited = false;
+    try {
+      const { error } = await supabase!.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
+      });
+      limited = error !== null && isRateLimited(error);
+    } catch {
+      /* the same answer as any other outcome */
+    }
+    setLink(limited ? "rate-limited" : "sent");
+  }
+
   async function signInWithGoogle() {
     setBusy(true);
     setError(null);
     const { error } = await supabase!.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: `${window.location.origin}${returnPath ?? ""}` },
     });
     // On success the browser navigates away to Google; only failures return here.
     if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
@@ -116,6 +161,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
 
   return (
     <Centred>
+      {notice}
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
         <Wordmark size={30} />
         <h1 className="mt-4 text-lg font-semibold">Sign in to Clove ERP</h1>
@@ -130,7 +176,11 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setLink("idle");
+            }}
+            ref={emailField}
             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             autoComplete="username"
           />
@@ -156,7 +206,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
 
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || link === "sending"}
           className="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
           {busy ? "Signing in…" : "Sign in"}
@@ -178,6 +228,28 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
           Continue with Google
         </button>
 
+        <button
+          type="button"
+          onClick={() => void emailMeASignInLink()}
+          disabled={busy || link === "sending"}
+          className="mt-3 w-full rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+        >
+          {link === "sending" ? "Sending…" : "Email me a sign-in link"}
+        </button>
+        {link === "sent" ? (
+          <p role="status" className="mt-3 text-sm text-muted-foreground">
+            If that address has an account, a sign-in link is on its way.
+          </p>
+        ) : link === "rate-limited" ? (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            Too many sign-in links have been asked for just now. Wait a minute, then try again.
+          </p>
+        ) : (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Joined by invitation and have no password? Enter your email and ask for a link.
+          </p>
+        )}
+
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <Link to="/product" className="underline underline-offset-2">
             About Clove ERP
@@ -185,6 +257,20 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
         </p>
       </form>
     </Centred>
+  );
+}
+
+/** Supabase Auth refusing because it was asked too often — the one failure worth naming. */
+function isRateLimited(error: {
+  status?: number | undefined;
+  code?: string | undefined;
+  message: string;
+}) {
+  return (
+    error.status === 429 ||
+    error.code === "over_email_send_rate_limit" ||
+    error.code === "over_request_rate_limit" ||
+    /rate limit|too many requests/i.test(error.message)
   );
 }
 
@@ -203,15 +289,47 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
  * belongs on the same screen, since from here the two states are
  * indistinguishable — you are signed in and the database has nothing to say
  * about you.
+ *
+ * Somebody who arrived through an invitation link has already said which of
+ * the two they are, so theirs comes first — but it is redeemed only when they
+ * press Join, on a card that names the account about to join. A sign-in joins
+ * one organisation for good, and a held token does not say whose it is: the
+ * link may have been opened in a browser already signed in to another account,
+ * with the wrong Google account picked, or planted in this tab by somebody
+ * else entirely. Only the person signed in can tell, so they are asked, and
+ * "Not you?" signs them out with the invitation still held for the right
+ * account. The rest of the screen stays: a refused invitation (expired, already
+ * used) leaves them a paste box and the choice to start their own organisation.
  */
-function Onboarding({ onSignOut }: { onSignOut: () => void }) {
+function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
   const queryClient = useQueryClient();
   const platform = usePlatformMe();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | null>(null);
+  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | "join" | null>(null);
+
+  // Read once: the card stays up with its refusal even after a failed attempt.
+  const [invitation] = useState<string | null>(readStoredInvitation);
+  const [joinError, setJoinError] = useState<unknown>(null);
+
+  // Only ever from the Join button. Nothing claims on arrival.
+  async function join(stored: string) {
+    setBusy("join");
+    setJoinError(null);
+    try {
+      await callErp("erp_claim_invitation", { p_token: stored });
+      clearStoredInvitation();
+      await queryClient.invalidateQueries();
+    } catch (e) {
+      setJoinError(e);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const refusal = joinError ? friendlyError(joinError) : null;
 
   async function run(which: "create" | "demo" | "redeem") {
     setBusy(which);
@@ -220,7 +338,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
       if (which === "create") {
         await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
       } else if (which === "redeem") {
-        await callErp("erp_claim_invitation", { p_token: token.trim() });
+        await callErp("erp_claim_invitation", { p_token: pastedToken(token) });
       } else {
         await callErp("erp_seed_demo");
       }
@@ -236,6 +354,55 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
 
   return (
     <Centred>
+      {invitation ? (
+        <section className="mb-4 rounded-xl border border-primary/40 bg-primary/5 p-6">
+          <h2 className="text-lg font-semibold">You have been invited to join an organisation</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Joining brings this account into the organisation that invited you, with the roles it
+            has given you. An account can belong to only one organisation, so check this is the
+            account the invitation was meant for.
+          </p>
+          <p className="mt-3 text-sm">
+            You are signed in as{" "}
+            <span className="font-medium break-all">
+              {email ?? "an account with no email address"}
+            </span>
+            .
+          </p>
+
+          {refusal ? (
+            <div role="alert" className="mt-3 text-sm">
+              <p className="font-medium text-destructive">{refusal.title}</p>
+              {refusal.body ? <p className="mt-1 text-muted-foreground">{refusal.body}</p> : null}
+              <p className="mt-1 text-muted-foreground">
+                An invitation works once, expires, and is replaced when a new one is sent. Ask
+                whoever invited you to send it again.
+              </p>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => void join(invitation)}
+            disabled={busy !== null}
+            className="mt-4 w-full break-all rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          >
+            {busy === "join" ? "Joining…" : email ? `Join as ${email}` : "Join with this account"}
+          </button>
+          <p className="mt-3 text-center text-sm text-muted-foreground">
+            Not you?{" "}
+            <button
+              type="button"
+              onClick={onSignOut}
+              disabled={busy !== null}
+              className="font-medium underline underline-offset-2 disabled:opacity-60"
+            >
+              Sign out
+            </button>
+          </p>
+        </section>
+      ) : null}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -308,7 +475,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
               onChange={(e) => setToken(e.target.value)}
               spellCheck={false}
               autoComplete="off"
-              placeholder="Paste your invitation token"
+              placeholder="Paste your invitation link or token"
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
             />
           </label>
@@ -321,7 +488,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
             {busy === "redeem" ? "Redeeming…" : "Redeem invitation"}
           </button>
           <p className="mt-2 text-xs text-muted-foreground">
-            A token works once and then never again.
+            An invitation works once and then never again.
           </p>
         </div>
 
@@ -348,6 +515,17 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   );
 }
 
+/**
+ * What somebody pasted: a bare token, or the join link an inviter copied, whose
+ * token sits after the #. Anything else is passed on as typed, and the
+ * database says what is wrong with it.
+ */
+function pastedToken(pasted: string): string {
+  const value = pasted.trim();
+  const hash = value.indexOf("#");
+  return (hash >= 0 ? readJoinArrival(value.slice(hash)).invitation : null) ?? value;
+}
+
 const SCOPE_KEY = "clove-erp.scope";
 
 function readScope(): Scope {
@@ -369,7 +547,20 @@ function readScope(): Scope {
  * is a different application against the same functions, and a warehouse
  * screen wrapped in a desk's navigation would be neither.
  */
-export function Gate({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
+export function Gate({
+  children,
+  bare = false,
+  signedOut,
+}: {
+  children: ReactNode;
+  bare?: boolean;
+  /**
+   * What a route shows somebody with no session, in place of the sign-in
+   * screen. /join has its own: the person arrived with an invitation, and the
+   * one thing to offer them is the way in that invitation carries.
+   */
+  signedOut?: ReactNode;
+}) {
   const [authSession, setAuthSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   // Each route mounts its own Gate, so scope held in plain state would reset on
@@ -415,7 +606,7 @@ export function Gate({ children, bare = false }: { children: ReactNode; bare?: b
         </p>
       </Centred>
     );
-  if (!authSession) return <SignIn />;
+  if (!authSession) return signedOut ?? <SignIn />;
 
   const signOut = () => supabase!.auth.signOut();
 
@@ -444,7 +635,9 @@ export function Gate({ children, bare = false }: { children: ReactNode; bare?: b
     );
   }
 
-  if (!data?.tenant_id) return <Onboarding onSignOut={signOut} />;
+  if (!data?.tenant_id) {
+    return <Onboarding email={authSession.user.email ?? null} onSignOut={signOut} />;
+  }
 
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>

@@ -28,8 +28,12 @@ async function main() {
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 
+  // The organisations are not all known here: every pass asks
+  // erp.dispatch_bindings() for the active ones nobody named.
   console.log(
-    `[clove-erp] ${cfg.workerName} serving ${cfg.bindings.length} tenant(s), ` +
+    `[clove-erp] ${cfg.workerName} serving every active organisation ` +
+      `(erp.dispatch_bindings(), read each pass; ${cfg.bindings.length} named in ` +
+      `CLOVEERP_TENANTS with their own principal), ` +
       `systems: ${cfg.systems.join(", ") || "(none)"}, ` +
       `lease ${cfg.leaseSeconds}s, request timeout ${cfg.httpTimeoutMs}ms`,
   );
@@ -53,9 +57,18 @@ async function main() {
           report.reclaimed.runs +
           report.reclaimed.messages +
           report.reclaimed.email +
-          report.reclaimed.webhook >
+          report.reclaimed.webhook +
+          report.failures >
         0;
       if (did || once) console.log(`[clove-erp] ${JSON.stringify(report)}`);
+      // A stage that failed was caught so the other organisations could carry on,
+      // not so the pass could pass: a one-shot run still fails, as a throw does.
+      // Which stage, and for which organisation, is already in the log above.
+      if (once && report.failures > 0) {
+        console.error(`[clove-erp] pass finished with ${report.failures} failed stage(s)`);
+        await sql.end({ timeout: 10 });
+        process.exit(1);
+      }
     } catch (err) {
       // A pass that throws is this process failing, not the work failing —
       // anything claimed keeps its lease and is reclaimed by the database.

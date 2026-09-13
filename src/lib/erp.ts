@@ -1,4 +1,17 @@
-import { createClient, type Session } from "@supabase/supabase-js";
+import {
+  createClient,
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+  type Session,
+} from "@supabase/supabase-js";
+
+import type {
+  InviteRequest,
+  InviteResponse,
+  ResendRequest,
+  ResendResponse,
+} from "./invitation-email";
 
 /**
  * The single point at which the front end touches the database.
@@ -204,6 +217,123 @@ export async function callErp<T>(fn: string, args: Record<string, unknown> = {})
   }
 
   return data as T;
+}
+
+/**
+ * The invite function certainly did not run, so nothing it would have done was
+ * done.
+ *
+ * Only one answer proves that: the platform itself replying 404 or 503 — a
+ * function not deployed, or one that did not start — which it does without the
+ * function's own `error` field. The screen may then make the invitation through
+ * the door directly, as it did before email existed, and show the link to copy
+ * with the reason it was not sent.
+ */
+export class InviteNotRun extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InviteNotRun";
+  }
+}
+
+/**
+ * The request to the invite function failed on the way, so nobody here can say
+ * whether it ran.
+ *
+ * A network failure or a relay error can arrive after the function has already
+ * called the door and sent the email. Calling the door again then does harm:
+ * erp_invite_principal supersedes the emailed token, so the person invited
+ * holds a dead link, and erp_platform_onboard_company refuses the second
+ * attempt because the organisation now exists. So this is never retried on its
+ * own — the screen says what may have happened, and a person decides.
+ *
+ * friendlyError() reads `title` and `body`; `detail` is what supabase-js said.
+ */
+export class InviteOutcomeUnknown extends Error {
+  readonly title = "Could not reach the invitation service.";
+  readonly body =
+    "The invitation may already have been created and emailed, so check the list before trying again.";
+  readonly detail: string | null;
+
+  constructor(detail?: string | null) {
+    super(
+      "Could not reach the invitation service. The invitation may already have been created and emailed, so check the list before trying again.",
+    );
+    this.name = "InviteOutcomeUnknown";
+    this.detail = detail || null;
+  }
+}
+
+/**
+ * What a failed call to the invite function means, as one of the errors above.
+ *
+ *   FunctionsFetchError, FunctionsRelayError   InviteOutcomeUnknown
+ *   404 or 503 without the function's `error`  InviteNotRun
+ *   anything the function said                 ErpError, in its words
+ *
+ * Anything the function itself said must not be retried by calling the door
+ * directly either: the function may already have made the invitation.
+ */
+export async function inviteFailure(error: unknown): Promise<unknown> {
+  if (error instanceof FunctionsFetchError || error instanceof FunctionsRelayError) {
+    return new InviteOutcomeUnknown(error.message);
+  }
+
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response;
+    let said: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = await response.json();
+      if (typeof parsed === "object" && parsed !== null) said = parsed as Record<string, unknown>;
+    } catch {
+      /* not JSON: not the function speaking */
+    }
+    const message = said["error"];
+    if (typeof message !== "string" && (response.status === 404 || response.status === 503)) {
+      return new InviteNotRun("The email service for this site is not available yet");
+    }
+    const code = said["code"];
+    const hint = said["hint"];
+    return new ErpError(
+      typeof message === "string" && message !== ""
+        ? message
+        : `The invitation could not be sent (the email service answered ${response.status}).`,
+      {
+        code: typeof code === "string" ? code : undefined,
+        hint: typeof hint === "string" ? hint : undefined,
+      },
+    );
+  }
+
+  return error;
+}
+
+/**
+ * Calling supabase/functions/invite.
+ *
+ * functions.invoke rather than a hand-built fetch, because it attaches what the
+ * function checks — the session's bearer token, the apikey, and the client
+ * header the function's preflight allows.
+ *
+ * A refusal comes back as an ErpError built from the function's JSON, which
+ * carries the database's own message, code and hint, so friendlyError() and
+ * isPermissionDenied read it exactly as they read a callErp refusal. Every
+ * other failure is sorted by inviteFailure() above.
+ */
+export async function callInvite(body: InviteRequest): Promise<InviteResponse>;
+export async function callInvite(body: ResendRequest): Promise<ResendResponse>;
+export async function callInvite(
+  body: InviteRequest | ResendRequest,
+): Promise<InviteResponse | ResendResponse> {
+  if (!supabase) {
+    throw new Error(
+      "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.",
+    );
+  }
+
+  const { data, error } = await supabase.functions.invoke("invite", { body });
+  if (!error) return data as InviteResponse | ResendResponse;
+  throw await inviteFailure(error);
 }
 
 export const emptySession: ErpSession = {
