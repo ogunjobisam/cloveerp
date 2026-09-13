@@ -73,16 +73,18 @@ export const documentOutput = createServerFn({ method: "POST" })
         ) => Promise<{ data: T; error: { message: string } | null }>
       )(name, args);
 
-    // Abandoned previews are swept on every request, so a screen nobody came
-    // back to does not leave a file for somebody to find later.
-    const swept = await rpc<{ storage_paths?: string[] } | null>(
-      "erp_purge_expired_document_previews",
-    );
-    const stale = (swept.data?.storage_paths ?? []) as string[];
-    if (stale.length > 0) await archive.remove(stale);
-
     if (data.action === "preview") {
       if (!data.documentId) refuse("Choose an invoice to preview against.");
+
+      // Abandoned previews are swept whenever a new one is made, so a screen
+      // nobody came back to does not leave a file for somebody to find later.
+      // The door asks for document.template_manage, which making a preview
+      // needs too; the worker sweeps for everybody else on its own schedule.
+      const swept = await rpc<{ storage_paths?: string[] } | null>(
+        "erp_purge_expired_document_previews",
+      );
+      const stale = (swept.data?.storage_paths ?? []) as string[];
+      if (stale.length > 0) await archive.remove(stale);
 
       // Reading the contract is gated on the invoice's own read permission;
       // registering the preview additionally needs template management.
