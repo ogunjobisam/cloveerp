@@ -1,11 +1,12 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
+import { clearStoredInvitation, readStoredInvitation } from "../../lib/invitation-token";
 import { usePlatformMe } from "../../lib/platform";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
@@ -79,6 +80,18 @@ function GoogleGlyph() {
   );
 }
 
+export type SignInProps = {
+  onSignedIn?: () => void;
+  /** Said above the form, for a route that knows why the person is here. */
+  notice?: ReactNode;
+  /**
+   * Where Google sends the browser back to, as a path on this site. The origin
+   * when omitted. It has to be on Supabase Auth's redirect allow-list, or Auth
+   * quietly sends the browser to the Site URL instead.
+   */
+  returnPath?: string;
+};
+
 /**
  * The sign-in screen, on its own so `/signin` can be a place you go.
  *
@@ -86,7 +99,7 @@ function GoogleGlyph() {
  * re-renders, and the route the person asked for is behind it. On its own
  * route there is nothing watching, so the caller says where to go next.
  */
-export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
+export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +120,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
     setError(null);
     const { error } = await supabase!.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: `${window.location.origin}${returnPath ?? ""}` },
     });
     // On success the browser navigates away to Google; only failures return here.
     if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
@@ -116,6 +129,7 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
 
   return (
     <Centred>
+      {notice}
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
         <Wordmark size={30} />
         <h1 className="mt-4 text-lg font-semibold">Sign in to Clove ERP</h1>
@@ -203,6 +217,11 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => void } = {}) {
  * belongs on the same screen, since from here the two states are
  * indistinguishable — you are signed in and the database has nothing to say
  * about you.
+ *
+ * Somebody who arrived through an invitation link has already said which of
+ * the two they are, so theirs comes first and is redeemed without asking. The
+ * rest of the screen stays: a refused invitation (expired, already used)
+ * leaves them a paste box and the choice to start their own organisation.
  */
 function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   const queryClient = useQueryClient();
@@ -211,7 +230,38 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   const [code, setCode] = useState("");
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | null>(null);
+  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | "join" | null>(null);
+
+  // Read once: the card stays up with its refusal even after a failed attempt.
+  const [invitation] = useState<string | null>(readStoredInvitation);
+  const [joinError, setJoinError] = useState<unknown>(null);
+  const attempted = useRef(false);
+
+  const join = useCallback(
+    async (stored: string) => {
+      setBusy("join");
+      setJoinError(null);
+      try {
+        await callErp("erp_claim_invitation", { p_token: stored });
+        clearStoredInvitation();
+        await queryClient.invalidateQueries();
+      } catch (e) {
+        setJoinError(e);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [queryClient],
+  );
+
+  // Once per mount, and only once even when effects run twice in development.
+  useEffect(() => {
+    if (!invitation || attempted.current) return;
+    attempted.current = true;
+    void join(invitation);
+  }, [invitation, join]);
+
+  const refusal = joinError ? friendlyError(joinError) : null;
 
   async function run(which: "create" | "demo" | "redeem") {
     setBusy(which);
@@ -236,6 +286,36 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
 
   return (
     <Centred>
+      {invitation ? (
+        <section className="mb-4 rounded-xl border border-primary/40 bg-primary/5 p-6">
+          <h2 className="text-lg font-semibold">You have been invited to join an organisation</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Joining brings this account into the organisation that invited you, with the roles it
+            has given you.
+          </p>
+
+          {refusal ? (
+            <div role="alert" className="mt-3 text-sm">
+              <p className="font-medium text-destructive">{refusal.title}</p>
+              {refusal.body ? <p className="mt-1 text-muted-foreground">{refusal.body}</p> : null}
+              <p className="mt-1 text-muted-foreground">
+                An invitation works once and expires. Ask whoever invited you to send it again, or
+                paste a token below.
+              </p>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => void join(invitation)}
+            disabled={busy !== null}
+            className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          >
+            {busy === "join" ? "Joining…" : "Join now"}
+          </button>
+        </section>
+      ) : null}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -369,7 +449,16 @@ function readScope(): Scope {
  * is a different application against the same functions, and a warehouse
  * screen wrapped in a desk's navigation would be neither.
  */
-export function Gate({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
+export function Gate({
+  children,
+  bare = false,
+  signIn,
+}: {
+  children: ReactNode;
+  bare?: boolean;
+  /** What the sign-in screen says and where Google returns, when this route has a reason. */
+  signIn?: Omit<SignInProps, "onSignedIn">;
+}) {
   const [authSession, setAuthSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   // Each route mounts its own Gate, so scope held in plain state would reset on
@@ -415,7 +504,7 @@ export function Gate({ children, bare = false }: { children: ReactNode; bare?: b
         </p>
       </Centred>
     );
-  if (!authSession) return <SignIn />;
+  if (!authSession) return <SignIn {...signIn} />;
 
   const signOut = () => supabase!.auth.signOut();
 

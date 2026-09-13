@@ -19,10 +19,12 @@ import {
   Users,
 } from "lucide-react";
 
+import { InvitationOutcome } from "../erp/invite-dialog";
 import { OfferOwnership } from "../erp/ownership";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
+import { requestInvitation, type InvitationSent } from "../../lib/invitation.functions";
 import {
   atLeast,
   ROLE_BLURB,
@@ -53,7 +55,12 @@ export function Companies({ role }: { role: PlatformRole }) {
     currency: "GBP",
     country: "GB",
   });
-  const [token, setToken] = useState<{ email: string; token: string } | null>(null);
+  // An invitation also says whether it was emailed; onboarding does not email yet.
+  const [token, setToken] = useState<{
+    email: string;
+    token: string;
+    delivery: InvitationSent | null;
+  } | null>(null);
 
   const tenants = useQuery({
     queryKey: ["erp_platform_tenants"],
@@ -76,7 +83,7 @@ export function Companies({ role }: { role: PlatformRole }) {
         },
       ),
     onSuccess: (r) => {
-      setToken({ email: r.admin_email, token: r.admin_token });
+      setToken({ email: r.admin_email, token: r.admin_token, delivery: null });
       setOpen(false);
       setForm({
         code: "",
@@ -100,15 +107,18 @@ export function Companies({ role }: { role: PlatformRole }) {
     onSuccess: refresh,
   });
 
+  // The server function calls erp_platform_invite_admin as the signed-in
+  // operator, then emails the new administrator their link.
   const invite = useMutation({
     mutationFn: (v: { id: string; email: string; name: string }) =>
-      callErp<{ email: string; token: string }>("erp_platform_invite_admin", {
-        p_tenant_id: v.id,
-        p_email: v.email,
-        p_display_name: v.name,
+      requestInvitation({
+        kind: "platform",
+        tenantId: v.id,
+        email: v.email,
+        displayName: v.name,
       }),
     onSuccess: (r) => {
-      setToken({ email: r.email, token: r.token });
+      setToken({ email: r.email, token: r.token, delivery: r });
       void refresh();
     },
   });
@@ -178,18 +188,21 @@ export function Companies({ role }: { role: PlatformRole }) {
   return (
     <div className="flex flex-col gap-5">
       {token ? (
-        <TokenNotice
-          email={token.email}
-          token={token.token}
-          /* An organisation is handed over in setup, not finished: its first
+        <div className="flex flex-col gap-2">
+          <TokenNotice
+            email={token.email}
+            token={token.token}
+            /* An organisation is handed over in setup, not finished: its first
              administrator is its only one, and nobody may approve their own
              change set once it is live. Saying so here is cheaper than the
              support ticket that asks why nothing can be installed. */
-          note={
-            "The organisation is in setup. It installs and configures freely until it has a " +
-            "second administrator and somebody takes it live."
-          }
-        />
+            note={
+              "The organisation is in setup. It installs and configures freely until it has a " +
+              "second administrator and somebody takes it live."
+            }
+          />
+          {token.delivery ? <InvitationOutcome result={token.delivery} /> : null}
+        </div>
       ) : null}
       {busyError ? <Fail error={busyError} /> : null}
 
@@ -410,7 +423,7 @@ export function Companies({ role }: { role: PlatformRole }) {
                           onClick={() => {
                             const email = window.prompt(`Invite an administrator to ${t.name}:`);
                             if (!email) return;
-                            const name = window.prompt("Their name:") ?? email;
+                            const name = window.prompt("Their name:")?.trim() || email;
                             invite.mutate({ id: t.id, email, name });
                           }}
                           className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"

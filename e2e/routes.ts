@@ -35,6 +35,9 @@ export const ROUTES: readonly RouteUnderTest[] = [
   { path: "/signin", kind: "public", file: "signin.tsx" },
 
   { path: "/help", kind: "desk", file: "help.tsx" },
+  // An invitation's landing page: the sign-in screen signed out, and straight
+  // on to the desk for somebody already inside an organisation.
+  { path: "/join", kind: "desk", file: "join.tsx" },
   { path: "/profile", kind: "desk", file: "profile.tsx" },
   { path: "/settings", kind: "desk", file: "settings.tsx" },
   { path: "/notifications", kind: "desk", file: "notifications.tsx" },
