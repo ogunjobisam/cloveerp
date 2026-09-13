@@ -616,6 +616,21 @@ jobs:
         # erp_ref.permission.
         run: supabase/ci/app_permissions.sh
 
+      - name: Every form asks for the permission its door asks for
+        # The desk names a door and a permission in the same declaration, and
+        # nothing compared the two. On 13 September three forms were found by
+        # hand naming a permission their door never asks for — merge under
+        # master_data.write against a door on approve, qualify supplier under
+        # procurement.order against master_data.approve, rollback under
+        # configure against promote — and a static walk then found fourteen
+        # more. A gate on the wrong code hides the control from people the
+        # database would serve and shows it to people the database refuses,
+        # and the refusal arrives only on submit. This extracts every (door,
+        # permission) pair from src and hands the list to
+        # erp.assert_app_gates_match(), which follows the door into the erp.*
+        # functions it reaches and refuses a pair the chain never authorises.
+        run: supabase/ci/app_gates.sh
+
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
         # with no code impact. That is only true of strings erp_ref.resource

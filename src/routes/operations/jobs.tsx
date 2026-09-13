@@ -184,7 +184,7 @@ function Jobs() {
           },
           {
             label: "Set a kill switch",
-            permission: "administration.jobs",
+            permission: "administration.configure",
             fn: "erp_set_kill_switch",
             fields: [
               {
@@ -215,7 +215,7 @@ function Jobs() {
           },
           {
             label: "Clear a kill switch",
-            permission: "administration.jobs",
+            permission: "administration.configure",
             fn: "erp_clear_kill_switch",
             fields: [
               {

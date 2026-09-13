@@ -328,7 +328,7 @@ function Cutover() {
             label: "Opening balance reconciliation",
             description:
               "For one loaded batch: each check the load has to satisfy, the expected and actual figures, and whether it passes.",
-            permission: "administration.read",
+            permission: "master_data.read",
             fn: "erp_opening_balance_reconciliation",
             fields: [
               pickFrom(

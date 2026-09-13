@@ -726,7 +726,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Post a count",
       description: "Turn a counted task into a stock adjustment.",
-      permission: "inventory.count",
+      permission: "inventory.adjust",
       fn: "erp_post_count",
       fields: [
         pickFrom(
@@ -867,7 +867,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Apply calculated policy",
       description: "Adopt the stocking policy the engine calculates for one product and site.",
-      permission: "inventory.adjust",
+      permission: "planning.run",
       fn: "erp_apply_calculated_policy",
       fields: [pickItem(), pickSite()],
       invalidates: ["erp_stock_health"],
@@ -1509,7 +1509,7 @@ export const FINANCE: ModuleDef = {
     },
     {
       label: "Allocate a landed cost",
-      permission: "finance.post",
+      permission: "procurement.match",
       fn: "erp_allocate_landed_cost",
       fields: [
         pickFrom(
@@ -2497,7 +2497,7 @@ export const PRODUCTION: ModuleDef = {
     },
     {
       label: "Close a works order",
-      permission: "production.execute",
+      permission: "production.release",
       fn: "erp_close_works_order",
       fields: [
         pickFrom(
@@ -2690,7 +2690,7 @@ export const QUALITY: ModuleDef = {
   actions: [
     {
       label: "Raise a quality event",
-      permission: "quality.inspect",
+      permission: "quality.disposition",
       fn: "erp_raise_quality_event",
       fields: [
         {
@@ -3021,7 +3021,7 @@ export const QUALITY: ModuleDef = {
 export const LOGISTICS: ModuleDef = {
   flow: {
     title: "Despatch, step by step",
-    note: "Plan the shipment, choose the carrier, book it, then confirm what arrived.",
+    note: "Plan the shipment, choose the carrier, book it, then record the proof of delivery. A delivery is confirmed or failed on its own document page.",
     stages: [
       {
         label: "Delivery",
@@ -3031,7 +3031,6 @@ export const LOGISTICS: ModuleDef = {
         typeCode: "delivery",
         partyRole: "customer",
         recordArg: "p_delivery_id",
-        actionFn: "erp_confirm_delivery",
         createFn: "erp_plan_shipment",
       },
       {
@@ -3053,14 +3052,6 @@ export const LOGISTICS: ModuleDef = {
         actionFn: "erp_book_shipment",
       },
       {
-        label: "Confirm",
-        hint: "Delivered, or failed with a reason. Both are facts the customer will ask about.",
-        typeCode: "delivery",
-        partyRole: "customer",
-        recordArg: "p_delivery_id",
-        actionFn: "erp_confirm_delivery",
-      },
-      {
         label: "Proof",
         hint: "The signature or the photograph, attached to the shipment.",
         list: SHIPMENT_LIST,
@@ -3077,42 +3068,6 @@ export const LOGISTICS: ModuleDef = {
   permission: "logistics.read",
   group: "move",
   actions: [
-    {
-      label: "Confirm a delivery",
-      description:
-        "The customer has it. Confirming is what closes the delivery and starts the clock on the invoice.",
-      permission: "logistics.plan",
-      fn: "erp_confirm_delivery",
-      fields: [
-        pickFrom(
-          "erp_documents",
-          "document_id",
-          ["document_number", "state"],
-          "p_delivery_id",
-          "Delivery",
-          { p_type_code: "delivery", p_limit: 100 },
-        ),
-      ],
-      invalidates: ["erp_documents", "erp_delivery_performance"],
-    },
-    {
-      label: "Record a failed delivery",
-      description: "It did not arrive, and why. The reason is what the carrier review reads.",
-      permission: "logistics.plan",
-      fn: "erp_fail_delivery",
-      fields: [
-        pickFrom(
-          "erp_documents",
-          "document_id",
-          ["document_number", "state"],
-          "p_delivery_id",
-          "Delivery",
-          { p_type_code: "delivery", p_limit: 100 },
-        ),
-        reason("p_reason", "Reason", true),
-      ],
-      invalidates: ["erp_documents", "erp_delivery_performance"],
-    },
     {
       label: "Plan a shipment",
       description: "Group deliveries leaving one site on one day.",
@@ -3162,7 +3117,7 @@ export const LOGISTICS: ModuleDef = {
     },
     {
       label: "Book a shipment",
-      permission: "logistics.despatch",
+      permission: "logistics.plan",
       fn: "erp_book_shipment",
       fields: [
         pickFrom(

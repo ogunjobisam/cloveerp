@@ -220,7 +220,7 @@ function Output() {
             label: "Render an output template",
             description:
               "Renders one template for one document in a locale, into the output store.",
-            permission: "administration.read",
+            permission: "administration.configure",
             fn: "erp_render_output_template",
             fields: [
               pickFrom("erp_output_templates", "code", ["code", "kind"], "p_code", "Template"),

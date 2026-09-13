@@ -167,7 +167,7 @@ function StockAudit() {
           {
             label: "Post a count",
             description: "Accept the difference and correct the stock by it.",
-            permission: "inventory.count",
+            permission: "inventory.adjust",
             fn: "erp_post_count",
             fields: [countTask()],
             invalidates,
