@@ -9,6 +9,7 @@ import {
   pickLine,
   pickLocation,
   pickParty,
+  pickReasonCode,
   pickSite,
   reason,
   type ActionSpec,
@@ -121,7 +122,7 @@ const SALES_ACTIONS: ActionSpec[] = [
       pickFrom(
         "erp_documents",
         "document_id",
-        ["document_number", "status"],
+        ["document_number", "state"],
         "p_document_id",
         "Document",
         { p_limit: 100 },
@@ -137,18 +138,13 @@ const SALES_ACTIONS: ActionSpec[] = [
       pickFrom(
         "erp_documents",
         "document_id",
-        ["document_number", "status"],
+        ["document_number", "state"],
         "p_original_document_id",
         "Original document",
         { p_limit: 100 },
       ),
-      {
-        kind: "combo",
-        name: "p_reason_code",
-        label: "Reason code",
-        required: true,
-        options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
-      },
+      // The door only checks non-empty, so the register is enforced here.
+      pickReasonCode("RETURN_CUSTOMER", "p_reason_code", "Reason code", true),
       reason("p_reason", "Reason", true),
       {
         kind: "choice",

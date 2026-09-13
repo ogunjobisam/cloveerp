@@ -286,9 +286,15 @@ function Output() {
               },
               pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
               {
-                kind: "text",
-                name: "p_template_code",
-                label: "Template code",
+                ...pickFrom(
+                  "erp_output_templates",
+                  "code",
+                  ["code", "kind"],
+                  "p_template_code",
+                  "Template",
+                  undefined,
+                  false,
+                ),
                 hint: "Leave empty for any template of the kind.",
               },
               { kind: "site", name: "p_site_id", label: "Site", required: false },
@@ -322,9 +328,15 @@ function Output() {
               ),
               pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
               {
-                kind: "text",
-                name: "p_document_id",
-                label: "Document id",
+                ...pickFrom(
+                  "erp_documents",
+                  "document_id",
+                  ["document_number", "document_type"],
+                  "p_document_id",
+                  "Document",
+                  { p_limit: 200 },
+                  false,
+                ),
                 hint: "Optional; a label for a document carries its number.",
               },
             ],
@@ -392,12 +404,18 @@ function Output() {
             fn: "erp_record_sender_verification",
             fields: [
               {
-                kind: "text",
+                // Registering a domain (above) types it; verifying one chooses it.
+                kind: "select",
                 name: "p_domain",
                 label: "Domain",
                 required: true,
-                placeholder: "northwindfoods.co.uk",
                 hint: "The domain the DNS records were published for.",
+                options: {
+                  fn: "erp_sender_identities",
+                  path: "identities",
+                  value: "domain",
+                  label: ["domain", "category", "status"],
+                },
               },
               {
                 kind: "choice",

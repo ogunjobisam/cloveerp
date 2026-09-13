@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ActionButton, ErrorNote, PermissionNote } from "../../components/erp/action";
-import { ActionBar, pickFrom, reason } from "../../components/erp/actions-bar";
+import { ActionBar, codeField, pickFrom, reason } from "../../components/erp/actions-bar";
 import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
@@ -36,6 +36,25 @@ type ModuleInstallation = {
   upgrade_available: boolean;
   installed_at: string | null;
 };
+
+/**
+ * The erp_ref.reason_category codes, as seeded. The writers refuse anything
+ * else, and a new category is a product change rather than a row, so a fixed
+ * list is the honest control.
+ */
+const REASON_CATEGORIES = [
+  { value: "STOCK_ADJUSTMENT", label: "Stock adjustment" },
+  { value: "SCRAP", label: "Scrap and destruction" },
+  { value: "RETURN_SUPPLIER", label: "Return to supplier" },
+  { value: "RETURN_CUSTOMER", label: "Customer return" },
+  { value: "ORDER_HOLD", label: "Order hold" },
+  { value: "ORDER_CANCEL", label: "Order cancellation" },
+  { value: "APPROVAL_REJECT", label: "Approval rejection" },
+  { value: "BATCH_AMENDMENT", label: "Batch amendment" },
+  { value: "ALLOCATION_OVERRIDE", label: "Allocation override" },
+  { value: "PRICE_OVERRIDE", label: "Price and discount override" },
+  { value: "PERIOD_REOPEN", label: "Period reopen" },
+];
 
 export const Route = createFileRoute("/administration/configuration")({
   head: () => ({
@@ -291,13 +310,13 @@ function Configuration() {
             permission: "administration.read",
             fn: "erp_module_upgrade_plan",
             fields: [
-              {
-                kind: "text",
-                name: "p_install_code",
-                label: "Module",
-                required: true,
-                hint: "The install code from the table above, such as inventory-operations.",
-              },
+              pickFrom(
+                "erp_module_installations",
+                "install_code",
+                ["install_code", "module_code"],
+                "p_install_code",
+                "Module",
+              ),
             ],
           },
           {
@@ -307,13 +326,13 @@ function Configuration() {
             permission: "administration.configure",
             fn: "erp_upgrade_module_configuration",
             fields: [
-              {
-                kind: "text",
-                name: "p_install_code",
-                label: "Module",
-                required: true,
-                hint: "The install code from the table above.",
-              },
+              pickFrom(
+                "erp_module_installations",
+                "install_code",
+                ["install_code", "module_code"],
+                "p_install_code",
+                "Module",
+              ),
             ],
             invalidates: ["erp_module_installations", "erp_change_sets"],
           },
@@ -370,20 +389,20 @@ function Configuration() {
             fn: "erp_upsert_reason_code",
             fields: [
               {
-                kind: "text",
+                kind: "choice",
                 name: "p_category",
                 label: "Category",
                 required: true,
-                hint: "For example RETURN, WRITE_OFF, PRICE_OVERRIDE.",
+                hint: "The kind of action this reason belongs to.",
+                choices: REASON_CATEGORIES,
               },
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "DAMAGED",
-                hint: "A short code people will pick from lists.",
-              },
+              // Codes are unique per category, so the same code may be listed
+              // under two of them; the pick cannot follow the category above.
+              codeField("p_code", "Code", "DAMAGED", {
+                fn: "erp_reason_codes",
+                value: "code",
+                label: ["category", "code", "name"],
+              }),
               {
                 kind: "text",
                 name: "p_name",
@@ -424,20 +443,27 @@ function Configuration() {
             fn: "erp_set_reason_code_status",
             fields: [
               {
-                kind: "text",
+                kind: "choice",
                 name: "p_category",
                 label: "Category",
                 required: true,
-                placeholder: "stock_adjustment",
                 hint: "The kind of action this reason belongs to.",
+                choices: REASON_CATEGORIES,
               },
               {
-                kind: "text",
+                // A combo, not a select: a code can sit under two categories,
+                // and a select keyed by code would offer two identical options.
+                kind: "combo",
                 name: "p_code",
                 label: "Code",
                 required: true,
                 placeholder: "DAMAGED",
                 hint: "The reason code to switch.",
+                options: {
+                  fn: "erp_reason_codes",
+                  value: "code",
+                  label: ["category", "code", "name"],
+                },
               },
               {
                 kind: "choice",

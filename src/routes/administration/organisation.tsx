@@ -7,6 +7,8 @@ import {
   pickCountry,
   pickCurrency,
   pickFrom,
+  pickLocale,
+  pickRoleCode,
   pickSite,
   reason,
 } from "../../components/erp/actions-bar";
@@ -50,6 +52,7 @@ const SITE_TYPES = [
   { value: "retail", label: "Retail" },
   { value: "office", label: "Office" },
   { value: "third_party", label: "Third party" },
+  { value: "in_transit", label: "In transit" },
   { value: "virtual", label: "Virtual" },
 ];
 
@@ -67,6 +70,7 @@ type Site = {
 /** The kinds of place stock can stand in. */
 const LOCATION_TYPES = [
   { value: "receiving", label: "Goods in (receiving)" },
+  { value: "zone", label: "Zone" },
   { value: "bulk", label: "Bulk storage" },
   { value: "pick", label: "Pick face" },
   { value: "staging", label: "Staging" },
@@ -88,6 +92,22 @@ type LocationRow = {
   is_pickable: boolean;
   is_blocked: boolean;
 };
+
+/** The month a fiscal year opens in. erp.entity holds it as 1 to 12. */
+const MONTHS = [
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+];
 
 /** The object types a routing rule can be written against. */
 
@@ -119,6 +139,49 @@ const pickPrincipal = (name: string, label: string, required = true): Field => (
   required,
   options: { fn: "erp_principals", value: "id", label: ["display_name"] },
 });
+
+/**
+ * A named approver is assigned to a person, a department or a role, and the
+ * subject is chosen from the matching list rather than pasted as an id. One
+ * picker cannot follow a kind chosen beside it, so each kind is its own action;
+ * the kind travels as a single-option choice that arrives already set.
+ */
+const namedApproverFields = (
+  subjectKind: { value: string; label: string },
+  subject: Field,
+): Field[] => [
+  {
+    kind: "choice",
+    name: "p_subject_kind",
+    label: "Applies to",
+    required: true,
+    default: subjectKind.value,
+    choices: [subjectKind],
+  },
+  subject,
+  {
+    kind: "choice",
+    name: "p_object_type",
+    label: "Object type",
+    required: true,
+    choices: OBJECT_TYPES,
+  },
+  pickPrincipal("p_approver_user_id", "Approver"),
+  {
+    kind: "choice",
+    name: "p_mode",
+    label: "Mode",
+    choices: [
+      { value: "prepends", label: "Sits in front of the department bands" },
+      { value: "replaces", label: "Replaces the department bands" },
+    ],
+  },
+  { kind: "money", name: "p_lower_bound_minor", label: "From", currency: "GBP" },
+  { kind: "money", name: "p_upper_bound_minor", label: "Up to", currency: "GBP" },
+  reason(),
+  { kind: "date", name: "p_valid_from", label: "Valid from" },
+  { kind: "date", name: "p_valid_to", label: "Valid to" },
+];
 
 type Delegation = {
   delegation_id: string;
@@ -272,29 +335,30 @@ function Organisation() {
                 hint: "The books are kept in this.",
               },
               pickCountry("p_country_code", "Country", true),
+              // Optional, both: the door defaults each to en when left blank.
+              pickLocale("p_reporting_locale", "Reporting locale", false),
               {
-                kind: "text",
-                name: "p_reporting_locale",
-                label: "Reporting locale",
-                hint: "For example en-GB or de.",
-              },
-              {
-                kind: "text",
-                name: "p_document_locale",
-                label: "Document locale",
-                placeholder: "en-GB",
+                ...pickLocale("p_document_locale", "Document locale", false),
                 hint: "The language printed documents use, if not the reporting one.",
               },
               {
-                kind: "number",
+                // Sent as the text "3"; the door's parameter is an integer and
+                // the call casts it on the way in, as it does every argument.
+                kind: "choice",
                 name: "p_fiscal_year_start_month",
                 label: "Fiscal year starts in month",
-                hint: "1 to 12.",
+                choices: MONTHS,
               },
               {
-                kind: "text",
-                name: "p_parent_code",
-                label: "Parent company code",
+                ...pickFrom(
+                  "erp_entities",
+                  "code",
+                  ["code", "name"],
+                  "p_parent_code",
+                  "Parent company",
+                  undefined,
+                  false,
+                ),
                 hint: "For a subsidiary.",
               },
             ],
@@ -305,7 +369,11 @@ function Organisation() {
             permission: "administration.configure",
             fn: "erp_upsert_department",
             fields: [
-              codeField("p_code", "Code", "FIN"),
+              codeField("p_code", "Code", "FIN", {
+                fn: "erp_departments",
+                value: "code",
+                label: ["code", "name"],
+              }),
               {
                 kind: "text",
                 name: "p_name",
@@ -316,11 +384,15 @@ function Organisation() {
               pickPrincipal("p_manager_user_id", "Manager"),
               pickDepartment("p_parent_department_id", "Parent department", false),
               {
-                kind: "text",
+                // A combo: the door stores the code unchecked, so a centre may
+                // be named before finance has created it, and the list behind
+                // it is read with finance.read, which an administrator may lack.
+                kind: "combo",
                 name: "p_default_cost_centre",
                 label: "Default cost centre",
                 placeholder: "CC-1000",
                 hint: "Charged by default for spend this department approves.",
+                options: { fn: "erp_cost_centres", value: "code", label: ["code", "name"] },
               },
               { kind: "date", name: "p_valid_from", label: "Valid from" },
             ],
@@ -394,12 +466,12 @@ function Organisation() {
                 hint: "Leave empty for the top band.",
               },
               pickPrincipal("p_approver_user_id", "Named approver", false),
-              {
-                kind: "text",
-                name: "p_approver_role_code",
-                label: "Approver role code",
-                hint: "Tried in the department first, then at company level.",
-              },
+              pickRoleCode(
+                "p_approver_role_code",
+                "Approver role",
+                false,
+                "Tried in the department first, then at company level.",
+              ),
               {
                 kind: "choice",
                 name: "p_use_line_manager",
@@ -463,53 +535,37 @@ function Organisation() {
             ],
             invalidates,
           },
+          // One action per subject kind, because the subject picker cannot
+          // follow a kind chosen beside it. ActionBar keys by fn and label, so
+          // the three labels must differ.
           {
-            label: "Assign a named approver",
+            label: "Assign a named approver for a person",
             permission: "administration.configure",
             fn: "erp_assign_named_approver",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_subject_kind",
-                label: "Applies to",
-                required: true,
-                choices: [
-                  { value: "principal", label: "A person" },
-                  { value: "department", label: "A department" },
-                  { value: "role", label: "A role" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_subject_id",
-                label: "Subject identifier",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id of the person, department or role chosen above — copy it from the list on this page.",
-              },
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Object type",
-                required: true,
-                choices: OBJECT_TYPES,
-              },
-              pickPrincipal("p_approver_user_id", "Approver"),
-              {
-                kind: "choice",
-                name: "p_mode",
-                label: "Mode",
-                choices: [
-                  { value: "prepends", label: "Sits in front of the department bands" },
-                  { value: "replaces", label: "Replaces the department bands" },
-                ],
-              },
-              { kind: "money", name: "p_lower_bound_minor", label: "From", currency: "GBP" },
-              { kind: "money", name: "p_upper_bound_minor", label: "Up to", currency: "GBP" },
-              reason(),
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-              { kind: "date", name: "p_valid_to", label: "Valid to" },
-            ],
+            fields: namedApproverFields(
+              { value: "principal", label: "A person" },
+              pickPrincipal("p_subject_id", "Person"),
+            ),
+            invalidates,
+          },
+          {
+            label: "Assign a named approver for a department",
+            permission: "administration.configure",
+            fn: "erp_assign_named_approver",
+            fields: namedApproverFields(
+              { value: "department", label: "A department" },
+              pickDepartment("p_subject_id", "Department"),
+            ),
+            invalidates,
+          },
+          {
+            label: "Assign a named approver for a role",
+            permission: "administration.configure",
+            fn: "erp_assign_named_approver",
+            fields: namedApproverFields(
+              { value: "role", label: "A role" },
+              pickFrom("erp_roles", "role_id", ["code", "name"], "p_subject_id", "Role"),
+            ),
             invalidates,
           },
           {

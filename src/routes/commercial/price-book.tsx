@@ -258,11 +258,11 @@ function PriceBook() {
                       placeholder: "UK standard prices 2026",
                     },
                     {
-                      kind: "text",
+                      kind: "multi",
                       name: "p_currencies",
                       label: ui("Currencies"),
                       required: true,
-                      hint: "Three-letter codes separated by commas, for example GBP, EUR.",
+                      options: { fn: "erp_currencies", value: "code", label: ["code", "name"] },
                     },
                     { kind: "date", name: "p_effective_from", label: ui("Effective from") },
                     {
@@ -273,13 +273,11 @@ function PriceBook() {
                       hint: "Optional. Why this price book exists.",
                     },
                   ]}
-                  mapArgs={(v) => ({
+                  mapArgs={(v, picked) => ({
                     p_code: v["p_code"],
                     p_name: v["p_name"],
-                    p_currencies: (v["p_currencies"] ?? "")
-                      .split(",")
-                      .map((c) => c.trim().toUpperCase())
-                      .filter(Boolean),
+                    // A ticked list arrives in the second argument, not in values.
+                    p_currencies: picked?.lists["p_currencies"] ?? [],
                     p_effective_from: v["p_effective_from"] || null,
                     p_note: v["p_note"] || null,
                   })}

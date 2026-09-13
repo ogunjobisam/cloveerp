@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { GoTo } from "../../components/erp/action";
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, codeField, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -233,12 +233,15 @@ function Adoption() {
               "The same code again replaces the scenario. A completion check the product does not have is refused.",
             fields: [
               {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "GOODS-IN-BASICS",
-                hint: "A short code for this training scenario.",
+                // erp_training_scenarios is the product's scenarios and the
+                // organisation's own together; the upsert only ever writes the
+                // organisation's, so the hint says which kind a pick replaces.
+                ...codeField("p_code", "Code", "GOODS-IN-BASICS", {
+                  fn: "erp_training_scenarios",
+                  value: "code",
+                  label: ["code", "source", "title"],
+                }),
+                hint: "A short code of your own choosing — for example GOODS-IN-BASICS. Picking one of the organisation's own replaces it; picking a product scenario's code starts the organisation's own version beside it.",
               },
               {
                 kind: "text",
@@ -270,11 +273,21 @@ function Adoption() {
                 "Complete when",
               ),
               {
-                kind: "text",
+                // A combo rather than a select: the catalogue door authorises
+                // administration.roles, and a configurer without it must still
+                // be able to type the code rather than face a disabled box.
+                kind: "combo",
                 name: "p_permission_code",
                 label: "Permission",
                 required: true,
+                placeholder: "procurement.receive",
                 hint: "Who may practise it: procurement.receive, inventory.count, and so on.",
+                options: {
+                  fn: "erp_permissions_directory",
+                  path: "permission_catalog",
+                  value: "code",
+                  label: ["code", "module_code"],
+                },
               },
             ],
             invalidates: ["erp_training_scenarios"],
