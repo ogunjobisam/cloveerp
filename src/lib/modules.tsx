@@ -696,7 +696,15 @@ export const INVENTORY: ModuleDef = {
       description: "Ask a counting programme for its next set of tasks.",
       permission: "inventory.count",
       fn: "erp_raise_count_tasks",
-      fields: [codeField("p_programme_code", "Programme", "COUNT-A")],
+      fields: [
+        pickFrom(
+          "erp_count_programmes",
+          "code",
+          ["code", "name", "status"],
+          "p_programme_code",
+          "Programme",
+        ),
+      ],
       invalidates: ["erp_count_tasks", "erp_count_accuracy"],
     },
     {

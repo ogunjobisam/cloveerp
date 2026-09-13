@@ -385,8 +385,8 @@ function Organisation() {
               pickDepartment("p_parent_department_id", "Parent department", false),
               {
                 // A combo: the door stores the code unchecked, so a centre may
-                // be named before finance has created it, and the list behind
-                // it is read with finance.read, which an administrator may lack.
+                // be named before finance has created it. The list behind it
+                // is read under administration.configure as well as finance.read.
                 kind: "combo",
                 name: "p_default_cost_centre",
                 label: "Default cost centre",

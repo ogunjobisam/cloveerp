@@ -141,10 +141,9 @@ export function ApiAccess() {
                 required: true,
                 hint: "Machine accounts only. Create one on Administration → Permissions.",
                 options: {
-                  fn: "erp_permissions_directory",
-                  path: "principals",
-                  value: "id",
-                  label: ["display_name", "kind"],
+                  fn: "erp_service_accounts",
+                  value: "app_user_id",
+                  label: ["display_name", "status"],
                 },
               },
               {
@@ -161,12 +160,7 @@ export function ApiAccess() {
                 label: "Permissions",
                 required: true,
                 hint: "Anything the service account is not granted will be refused.",
-                options: {
-                  fn: "erp_permissions_directory",
-                  path: "permission_catalog",
-                  value: "code",
-                  label: ["code"],
-                },
+                options: { fn: "erp_permission_catalogue", value: "code", label: ["code", "name"] },
               },
               {
                 kind: "date",

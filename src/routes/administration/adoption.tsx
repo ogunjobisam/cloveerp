@@ -273,21 +273,15 @@ function Adoption() {
                 "Complete when",
               ),
               {
-                // A combo rather than a select: the catalogue door authorises
-                // administration.roles, and a configurer without it must still
-                // be able to type the code rather than face a disabled box.
+                // A combo rather than a select: the catalogue is long, and a
+                // code somebody knows is quicker typed than scrolled to.
                 kind: "combo",
                 name: "p_permission_code",
                 label: "Permission",
                 required: true,
                 placeholder: "procurement.receive",
                 hint: "Who may practise it: procurement.receive, inventory.count, and so on.",
-                options: {
-                  fn: "erp_permissions_directory",
-                  path: "permission_catalog",
-                  value: "code",
-                  label: ["code", "module_code"],
-                },
+                options: { fn: "erp_permission_catalogue", value: "code", label: ["code", "name"] },
               },
             ],
             invalidates: ["erp_training_scenarios"],

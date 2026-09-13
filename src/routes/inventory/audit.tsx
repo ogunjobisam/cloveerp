@@ -140,18 +140,16 @@ function StockAudit() {
             description: "Ask a counting programme for its next set of places to count.",
             permission: "inventory.count",
             fn: "erp_raise_count_tasks",
-            // Names a programme that already exists — the door refuses an
-            // unknown one — so this is not a code being created. It stays
-            // typed until a read door lists erp.count_programme.
+            // The door refuses a programme that is not active, so the status
+            // is shown beside the code.
             fields: [
-              {
-                kind: "text",
-                name: "p_programme_code",
-                label: "Programme",
-                required: true,
-                placeholder: "COUNT-A",
-                hint: "The code of an existing counting programme, for example COUNT-A.",
-              },
+              pickFrom(
+                "erp_count_programmes",
+                "code",
+                ["code", "name", "status"],
+                "p_programme_code",
+                "Programme",
+              ),
             ],
             invalidates,
           },

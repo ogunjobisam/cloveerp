@@ -295,10 +295,16 @@ function AccountDetermination() {
                 options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
               },
               {
-                kind: "text",
+                kind: "select",
                 name: "p_legislation_pack_code",
                 label: "Legislation pack",
+                required: false,
                 hint: "Leave empty unless one country posts differently.",
+                options: {
+                  fn: "erp_legislation_packs",
+                  value: "code",
+                  label: ["code", "jurisdiction"],
+                },
               },
               // Typed JSON was sent as a string, and the table's check that
               // dimensions is an object refused every non-empty entry. A row
