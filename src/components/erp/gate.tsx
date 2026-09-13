@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
+import { readJoinArrival } from "../../lib/invitation-email";
 import { clearStoredInvitation, readStoredInvitation } from "../../lib/invitation-token";
 import { usePlatformMe } from "../../lib/platform";
 import { Shell, type Scope } from "./shell";
@@ -30,7 +31,7 @@ import { Wordmark } from "./logo";
  * administrator.
  */
 
-function Centred({ children }: { children: ReactNode }) {
+export function Centred({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">{children}</div>
@@ -57,7 +58,7 @@ function NotConfigured() {
   );
 }
 
-function GoogleGlyph() {
+export function GoogleGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
       <path
@@ -85,9 +86,10 @@ export type SignInProps = {
   /** Said above the form, for a route that knows why the person is here. */
   notice?: ReactNode;
   /**
-   * Where Google sends the browser back to, as a path on this site. The origin
-   * when omitted. It has to be on Supabase Auth's redirect allow-list, or Auth
-   * quietly sends the browser to the Site URL instead.
+   * Where Google sends the browser back to, as a path on this site; the origin
+   * when omitted. Supabase Auth honours a path on its Site URL's own host, or
+   * one on its redirect allow-list, and otherwise quietly sends the browser to
+   * the Site URL instead.
    */
   returnPath?: string;
 };
@@ -270,7 +272,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
       if (which === "create") {
         await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
       } else if (which === "redeem") {
-        await callErp("erp_claim_invitation", { p_token: token.trim() });
+        await callErp("erp_claim_invitation", { p_token: pastedToken(token) });
       } else {
         await callErp("erp_seed_demo");
       }
@@ -299,8 +301,8 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
               <p className="font-medium text-destructive">{refusal.title}</p>
               {refusal.body ? <p className="mt-1 text-muted-foreground">{refusal.body}</p> : null}
               <p className="mt-1 text-muted-foreground">
-                An invitation works once and expires. Ask whoever invited you to send it again, or
-                paste a token below.
+                An invitation works once, expires, and is replaced when a new one is sent. Ask
+                whoever invited you to send it again.
               </p>
             </div>
           ) : null}
@@ -388,7 +390,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
               onChange={(e) => setToken(e.target.value)}
               spellCheck={false}
               autoComplete="off"
-              placeholder="Paste your invitation token"
+              placeholder="Paste your invitation link or token"
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
             />
           </label>
@@ -401,7 +403,7 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
             {busy === "redeem" ? "Redeeming…" : "Redeem invitation"}
           </button>
           <p className="mt-2 text-xs text-muted-foreground">
-            A token works once and then never again.
+            An invitation works once and then never again.
           </p>
         </div>
 
@@ -428,6 +430,17 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   );
 }
 
+/**
+ * What somebody pasted: a bare token, or the join link an inviter copied, whose
+ * token sits after the #. Anything else is passed on as typed, and the
+ * database says what is wrong with it.
+ */
+function pastedToken(pasted: string): string {
+  const value = pasted.trim();
+  const hash = value.indexOf("#");
+  return (hash >= 0 ? readJoinArrival(value.slice(hash)).invitation : null) ?? value;
+}
+
 const SCOPE_KEY = "clove-erp.scope";
 
 function readScope(): Scope {
@@ -452,12 +465,16 @@ function readScope(): Scope {
 export function Gate({
   children,
   bare = false,
-  signIn,
+  signedOut,
 }: {
   children: ReactNode;
   bare?: boolean;
-  /** What the sign-in screen says and where Google returns, when this route has a reason. */
-  signIn?: Omit<SignInProps, "onSignedIn">;
+  /**
+   * What a route shows somebody with no session, in place of the sign-in
+   * screen. /join has its own: the person arrived with an invitation, and the
+   * one thing to offer them is the way in that invitation carries.
+   */
+  signedOut?: ReactNode;
 }) {
   const [authSession, setAuthSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -504,7 +521,7 @@ export function Gate({
         </p>
       </Centred>
     );
-  if (!authSession) return <SignIn {...signIn} />;
+  if (!authSession) return signedOut ?? <SignIn />;
 
   const signOut = () => supabase!.auth.signOut();
 

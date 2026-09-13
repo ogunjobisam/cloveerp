@@ -8,12 +8,29 @@
 
 export type TenantBinding = {
   tenantId: string;
-  /** Must be an erp.app_user with kind = 'service'. */
-  principalId: string;
+  /**
+   * A kind = 'service' erp.app_user named in CLOVEERP_PRINCIPALS, or null for an
+   * organisation erp.dispatch_bindings() listed: a tenant context and no
+   * principal, which is how the minute pass (erp.run_due_jobs_all_tenants) has
+   * always run, and all any claim or settle the drain calls asks for.
+   */
+  principalId: string | null;
+  /** Listed by the database on this pass rather than named in the environment. */
+  discovered: boolean;
 };
 
 export type WorkerConfig = {
   databaseUrl: string;
+  /**
+   * The organisations named in CLOVEERP_TENANTS, each as the service principal
+   * in the same position of CLOVEERP_PRINCIPALS; empty when neither is set.
+   *
+   * Not the whole of what a pass serves. drainOnce() adds every other active
+   * organisation erp.dispatch_bindings() lists, asked afresh each pass, so an
+   * organisation created at noon has its email sent at one minute past without
+   * anybody editing a list. The query lives there and not here: this file still
+   * reads nothing from the database.
+   */
   bindings: TenantBinding[];
   systems: string[];
   pollMs: number;
@@ -64,8 +81,24 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     // any of the parsing or the refusals below.
     (process as { env: Record<string, string | undefined> }).env = env;
 
-    const tenants = list("CLOVEERP_TENANTS");
-    const principals = list("CLOVEERP_PRINCIPALS");
+    // Both or neither. Neither is not "serve nothing": every active organisation
+    // is served anyway (see WorkerConfig.bindings). One without the other is a
+    // list somebody meant to finish, and guessing which half they meant would
+    // run an organisation as nobody or a principal for no organisation.
+    const named = ["CLOVEERP_TENANTS", "CLOVEERP_PRINCIPALS"].filter(
+      (name) => (env[name] ?? "").trim().length > 0,
+    );
+    if (named.length === 1) {
+      const other = named[0] === "CLOVEERP_TENANTS" ? "CLOVEERP_PRINCIPALS" : "CLOVEERP_TENANTS";
+      throw new Error(
+        `${named[0]} is set and ${other} is not. Set both to serve named ` +
+          `organisations as named service principals, or neither: every active ` +
+          `organisation is served either way.`,
+      );
+    }
+
+    const tenants = named.length === 2 ? list("CLOVEERP_TENANTS") : [];
+    const principals = named.length === 2 ? list("CLOVEERP_PRINCIPALS") : [];
 
     if (tenants.length !== principals.length) {
       throw new Error(
@@ -90,9 +123,26 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       );
     }
 
+    // SUPABASE_DB_URL is the project's own connection, injected into every Edge
+    // Function by the platform, so the dispatch function needs no password copied
+    // into a secret by hand; enquiry reads it the same way. An explicit
+    // CLOVEERP_DATABASE_URL still wins, and with neither set this refuses by name.
+    const databaseUrl = env["CLOVEERP_DATABASE_URL"]?.trim() || env["SUPABASE_DB_URL"]?.trim();
+    if (!databaseUrl) {
+      throw new Error(
+        "Neither CLOVEERP_DATABASE_URL nor SUPABASE_DB_URL is set. The worker " +
+          "refuses to start half-configured: a scheduler that silently serves no " +
+          "tenants looks exactly like one with nothing to do.",
+      );
+    }
+
     return {
-      databaseUrl: required("CLOVEERP_DATABASE_URL"),
-      bindings: tenants.map((tenantId, i) => ({ tenantId, principalId: principals[i]! })),
+      databaseUrl,
+      bindings: tenants.map((tenantId, i) => ({
+        tenantId,
+        principalId: principals[i]!,
+        discovered: false,
+      })),
       systems: env["CLOVEERP_SYSTEMS"]
         ? env["CLOVEERP_SYSTEMS"]
             .split(",")

@@ -1,85 +1,229 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
-  RESEND_ENDPOINT,
+  INVITE_DOORS,
+  INVITE_VALID_DAYS,
   escapeHtml,
+  expiryDate,
   invitationEmail,
+  invitationFrom,
+  isInviteDoor,
   joinLink,
   oneLine,
-  redirectKeepsInvitation,
-  sendWithResend,
+  plausibleInvitationToken,
+  readJoinArrival,
+  refusalStatus,
+  verifiedSignInLink,
 } from "./invitation-email";
 
 const TOKEN = "a".repeat(64);
+const SUPABASE = "https://xpzffnnhnhcqyjqcueja.supabase.co";
+const ACTION = `${SUPABASE}/auth/v1/verify?token=pkce_123&type=invite&redirect_to=https://cloveerp.com/join`;
 
-describe("the join link", () => {
-  test("is the origin, /join and the token as its only query", () => {
-    expect(joinLink("https://cloveerp.com", TOKEN)).toBe(
-      `https://cloveerp.com/join?token=${TOKEN}`,
-    );
+describe("the module both runtimes read", () => {
+  const source = readFileSync(new URL("./invitation-email.ts", import.meta.url), "utf8");
+
+  test("imports nothing, so Deno can follow it from the invite function", () => {
+    expect(source).not.toMatch(/^\s*import\s/m);
+    expect(source).not.toMatch(/\brequire\(/);
   });
 
-  test("encodes the token, so nothing in it can add a parameter or a fragment", () => {
-    const link = joinLink("https://cloveerp.com", "a b&next=/evil#x");
-    expect(link).toBe("https://cloveerp.com/join?token=a%20b%26next%3D%2Fevil%23x");
-    const url = new URL(link);
-    expect(url.searchParams.get("token")).toBe("a b&next=/evil#x");
-    expect([...url.searchParams.keys()]).toEqual(["token"]);
-    expect(url.hash).toBe("");
+  test("reaches for no runtime of its own", () => {
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    for (const global of ["process.", "window.", "Deno.", "import.meta", "document."]) {
+      expect(code).not.toContain(global);
+    }
   });
 
-  test("does not double the slash when the configured origin ends in one", () => {
-    expect(joinLink("https://cloveerp.com/", TOKEN)).toBe(
-      `https://cloveerp.com/join?token=${TOKEN}`,
-    );
+  test("names the three doors as literals, which is what app_doors.sh reads", () => {
+    for (const door of INVITE_DOORS) expect(source).toContain(`"${door}"`);
+    expect(isInviteDoor("erp_invite_principal")).toBe(true);
+    expect(isInviteDoor("erp_claim_invitation")).toBe(false);
+    expect(isInviteDoor(null)).toBe(false);
+  });
+
+  test("states an expiry for every door", () => {
+    for (const door of INVITE_DOORS) expect(INVITE_VALID_DAYS[door]).toBeGreaterThan(0);
   });
 });
 
-describe("whether Supabase Auth kept the redirect", () => {
-  const link = joinLink("https://cloveerp.com", TOKEN);
-
-  test("the same page with the same token is kept", () => {
-    expect(redirectKeepsInvitation(link, link)).toBe(true);
+describe("the join link", () => {
+  test("carries the token in the fragment, where no server sees it", () => {
+    const link = joinLink("https://cloveerp.com", TOKEN);
+    expect(link).toBe(`https://cloveerp.com/join#invitation=${TOKEN}`);
+    const url = new URL(link);
+    expect(url.search).toBe("");
+    expect(url.pathname).toBe("/join");
   });
 
-  test("the Site URL it falls back to has lost the token", () => {
-    expect(redirectKeepsInvitation("https://cloveerp.com", link)).toBe(false);
-    expect(redirectKeepsInvitation("https://cloveerp.com/join", link)).toBe(false);
+  test("carries the sign-in link encoded, so it cannot add a parameter of its own", () => {
+    const link = joinLink("https://cloveerp.com/", TOKEN, `${ACTION}&invitation=evil`);
+    expect(link.startsWith(`https://cloveerp.com/join#invitation=${TOKEN}&signin=`)).toBe(true);
+    const arrival = readJoinArrival(new URL(link).hash);
+    expect(arrival.invitation).toBe(TOKEN);
+    expect(arrival.signin).toBe(`${ACTION}&invitation=evil`);
   });
 
-  test("another host, nothing, or rubbish is not the invitation", () => {
-    expect(redirectKeepsInvitation(`https://evil.example/join?token=${TOKEN}`, link)).toBe(false);
-    expect(redirectKeepsInvitation(null, link)).toBe(false);
-    expect(redirectKeepsInvitation("not a url", link)).toBe(false);
+  test("a token with characters in it cannot break out of its parameter", () => {
+    const link = joinLink("https://cloveerp.com", "a b&signin=x#y");
+    expect(link).toBe("https://cloveerp.com/join#invitation=a%20b%26signin%3Dx%23y");
+  });
+});
+
+describe("arriving at /join", () => {
+  test("reads the token and the sign-in link", () => {
+    const arrival = readJoinArrival(`#invitation=${TOKEN}&signin=${encodeURIComponent(ACTION)}`);
+    expect(arrival).toEqual({ invitation: TOKEN, signin: ACTION, failure: null });
+  });
+
+  test("keeps rubbish out rather than holding it as a token", () => {
+    expect(readJoinArrival("#invitation=short").invitation).toBeNull();
+    expect(readJoinArrival("#invitation=%3Cscript%3E").invitation).toBeNull();
+    expect(readJoinArrival("").invitation).toBeNull();
+  });
+
+  test("hears Supabase Auth saying the link expired, in the fragment or the query", () => {
+    const hash =
+      "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired";
+    expect(readJoinArrival(hash).failure).toBe("Email link is invalid or has expired");
+    expect(readJoinArrival("", "?error=access_denied&error_code=otp_expired").failure).toBe(
+      "otp_expired",
+    );
+  });
+
+  test("a session coming back is not a failure and not an invitation", () => {
+    const arrival = readJoinArrival("#access_token=x&refresh_token=y&type=invite");
+    expect(arrival).toEqual({ invitation: null, signin: null, failure: null });
+  });
+});
+
+describe("the sign-in link the page will follow", () => {
+  test("is this project's own verification endpoint", () => {
+    expect(verifiedSignInLink(ACTION, SUPABASE)).toBe(ACTION);
+    expect(verifiedSignInLink(ACTION, `${SUPABASE}/`)).toBe(ACTION);
+  });
+
+  test("nothing else: another host, a lookalike, another path, a script", () => {
+    expect(verifiedSignInLink(ACTION.replace("xpzff", "evil"), SUPABASE)).toBeNull();
+    expect(
+      verifiedSignInLink(`${SUPABASE}.evil.example/auth/v1/verify?token=x`, SUPABASE),
+    ).toBeNull();
+    expect(verifiedSignInLink(`${SUPABASE}@evil.example/auth/v1/verify?x`, SUPABASE)).toBeNull();
+    expect(verifiedSignInLink(`${SUPABASE}/auth/v1/verify/../admin?x`, SUPABASE)).toBeNull();
+    expect(verifiedSignInLink(`${SUPABASE}/auth/v1/user?x`, SUPABASE)).toBeNull();
+    expect(verifiedSignInLink("javascript:alert(1)", SUPABASE)).toBeNull();
+    expect(verifiedSignInLink(`${ACTION}\n`, SUPABASE)).toBeNull();
+    expect(verifiedSignInLink(null, SUPABASE)).toBeNull();
+  });
+});
+
+describe("what a door handed back", () => {
+  test("an organisation's invitation has no email in it, so the argument is used", () => {
+    expect(
+      invitationFrom(
+        "erp_invite_principal",
+        { p_email: "  sam@example.com ", p_display_name: "Sam" },
+        { app_user_id: "u1", token: TOKEN },
+      ),
+    ).toEqual({ appUserId: "u1", email: "sam@example.com", token: TOKEN, organisation: null });
+  });
+
+  test("the platform's names the address it stored", () => {
+    expect(
+      invitationFrom(
+        "erp_platform_invite_admin",
+        { p_email: "Sam@Example.com" },
+        { app_user_id: "u2", email: "sam@example.com", token: TOKEN },
+      ),
+    ).toEqual({ appUserId: "u2", email: "sam@example.com", token: TOKEN, organisation: null });
+  });
+
+  test("onboarding names the organisation it created", () => {
+    expect(
+      invitationFrom(
+        "erp_platform_onboard_company",
+        { p_admin_email: "ada@acme.example" },
+        {
+          tenant_id: "t1",
+          name: "Acme",
+          admin_user_id: "u3",
+          admin_email: "ada@acme.example",
+          admin_token: TOKEN,
+        },
+      ),
+    ).toEqual({ appUserId: "u3", email: "ada@acme.example", token: TOKEN, organisation: "Acme" });
+  });
+
+  test("a result that is not an invitation is null, not a guess", () => {
+    expect(invitationFrom("erp_invite_principal", { p_email: "a@b.c" }, null)).toBeNull();
+    expect(invitationFrom("erp_invite_principal", { p_email: "a@b.c" }, [TOKEN])).toBeNull();
+    expect(
+      invitationFrom("erp_invite_principal", {}, { app_user_id: "u1", token: TOKEN }),
+    ).toBeNull();
+    expect(
+      invitationFrom("erp_platform_onboard_company", {}, { app_user_id: "u", token: TOKEN }),
+    ).toBeNull();
+  });
+});
+
+describe("which refusals the caller reads", () => {
+  test("the database saying no to this person is 403", () => {
+    expect(refusalStatus("42501", "permission denied for function erp_platform_invite_admin")).toBe(
+      403,
+    );
+    expect(refusalStatus("P0001", "CLOVEERP_PERMISSION_DENIED: administration.users")).toBe(403);
+    expect(refusalStatus("P0001", "ERPWARE_PERMISSION_DENIED: administration.users")).toBe(403);
+  });
+
+  test("a refusal written for a person is 400, with or without words after it", () => {
+    expect(refusalStatus("P0001", "CLOVEERP_VALIDATION: an email address is required")).toBe(400);
+    expect(refusalStatus("23503", "ERPWARE_UNKNOWN_TENANT")).toBe(400);
+    expect(refusalStatus("23505", 'duplicate key value violates unique constraint "x"')).toBe(400);
+    expect(refusalStatus("22P02", 'invalid input syntax for type uuid: "nope"')).toBe(400);
+  });
+
+  test("anything else is ours to log, not theirs to read", () => {
+    expect(refusalStatus("PGRST202", "Could not find the function")).toBeNull();
+    expect(refusalStatus("XX000", "internal error")).toBeNull();
+    expect(refusalStatus(undefined, undefined)).toBeNull();
+    expect(refusalStatus("P0002", "CLOVEERP_C1 without its colon")).toBeNull();
   });
 });
 
 describe("the email", () => {
+  const link = joinLink("https://cloveerp.com", TOKEN, ACTION);
   const base = {
     organisation: "Northwind Foods",
     inviter: "Ada Lovelace",
-    inviteeName: "Sam",
-    link: joinLink("https://cloveerp.com", TOKEN),
-    expiresInDays: 7,
+    invitee: "Sam",
+    link,
+    expiresAt: new Date("2026-09-20T16:30:09Z"),
   };
 
   test("names who invited them, to what, and carries the link in both parts", () => {
     const m = invitationEmail(base);
-    expect(m.subject).toBe("Ada Lovelace invited you to Northwind Foods on Clove ERP");
+    expect(m.subject).toBe("Ada Lovelace invited you to join Northwind Foods on Clove ERP");
     expect(m.text).toContain("Hello Sam,");
     expect(m.text).toContain("Ada Lovelace has invited you to join Northwind Foods on Clove ERP.");
-    expect(m.text).toContain(base.link);
-    expect(m.html).toContain(`href="${base.link}"`);
+    expect(m.text).toContain(link);
+    expect(m.html).toContain(`href="${escapeHtml(link)}"`);
   });
 
-  test("says the link works once, when it expires, and what to do if unexpected", () => {
+  test("says the link works once, when the invitation ends, and what to do if unexpected", () => {
     const m = invitationEmail(base);
     for (const part of [m.text, m.html]) {
       expect(part).toContain("works once");
-      expect(part).toContain("expires in 7 days");
-      expect(part).toContain("did not expect this invitation");
+      expect(part).toContain("stays open until 20 September 2026");
+      expect(part).toContain("not expecting this");
     }
-    expect(invitationEmail({ ...base, expiresInDays: 1 }).text).toContain("expires in 1 day.");
+  });
+
+  test("a resent link says so, and names nobody as the inviter", () => {
+    const m = invitationEmail({ ...base, inviter: null, resent: true });
+    expect(m.subject).toBe("Your sign-in link for Northwind Foods on Clove ERP");
+    expect(m.text).toContain("new sign-in link for your invitation to join Northwind Foods");
+    expect(m.text).toContain("did not ask for a new link");
   });
 
   test("escapes what a tenant typed, so a name cannot become markup", () => {
@@ -87,7 +231,7 @@ describe("the email", () => {
       ...base,
       organisation: `<img src=x onerror="alert(1)">`,
       inviter: `Eve & "friends"`,
-      inviteeName: "<b>Sam</b>",
+      invitee: "<b>Sam</b>",
     });
     expect(m.html).not.toContain("<img");
     expect(m.html).not.toContain("<b>");
@@ -97,32 +241,45 @@ describe("the email", () => {
   });
 
   test("escapes the link inside the attribute it sits in", () => {
-    const m = invitationEmail({ ...base, link: `https://cloveerp.com/join?token=x"><script>` });
+    const m = invitationEmail({
+      ...base,
+      link: `https://cloveerp.com/join#invitation=x"><script>`,
+    });
     expect(m.html).not.toContain("<script>");
-    expect(m.html).toContain('href="https://cloveerp.com/join?token=x&quot;&gt;&lt;script&gt;"');
+    expect(m.html).toContain(
+      'href="https://cloveerp.com/join#invitation=x&quot;&gt;&lt;script&gt;"',
+    );
   });
 
   test("keeps a name on one line, so it cannot add a line to the subject", () => {
     const m = invitationEmail({ ...base, organisation: "Acme\r\nBcc: someone@example.com" });
     expect(m.subject).not.toMatch(/[\r\n]/);
     expect(m.subject).toBe(
-      "Ada Lovelace invited you to Acme Bcc: someone@example.com on Clove ERP",
+      "Ada Lovelace invited you to join Acme Bcc: someone@example.com on Clove ERP",
     );
   });
 
-  test("copes with an inviter and an organisation nobody could name", () => {
-    const m = invitationEmail({ ...base, organisation: null, inviter: "  ", inviteeName: null });
-    expect(m.subject).toBe("You are invited to an organisation on Clove ERP");
+  test("copes with an inviter, an organisation and an expiry nobody could name", () => {
+    const m = invitationEmail({
+      ...base,
+      organisation: null,
+      inviter: "  ",
+      invitee: null,
+      expiresAt: "not a date",
+    });
+    expect(m.subject).toBe("You are invited to join an organisation on Clove ERP");
     expect(m.text.startsWith("Hello,\n")).toBe(true);
+    expect(m.text).not.toContain("stays open until");
   });
 
-  test("carries no images and no tracking", () => {
+  test("carries no images, no scripts and no remote assets; every URL is the link", () => {
     const m = invitationEmail(base);
-    expect(m.html).not.toMatch(/<img|<script|<iframe|<link/i);
-    // Every URL in the message is the invitation link itself.
-    const urls = m.html.match(/https?:\/\/[^"<\s]+/g) ?? [];
+    expect(m.html).not.toMatch(/<img|<script|<iframe|<link|url\(/i);
+    const urls = (m.html.match(/https?:\/\/[^"<\s]+/g) ?? []).map((u) =>
+      u.replaceAll("&amp;", "&"),
+    );
     expect(urls.length).toBeGreaterThan(0);
-    expect(new Set(urls)).toEqual(new Set([base.link]));
+    expect(new Set(urls)).toEqual(new Set([link]));
   });
 });
 
@@ -136,82 +293,19 @@ describe("the small helpers", () => {
     expect(oneLine("x".repeat(10), 5)).toBe("xxxx…");
     expect(oneLine(null)).toBe("");
   });
-});
 
-describe("posting to Resend", () => {
-  const message = {
-    apiKey: "re_test_key",
-    from: "Clove ERP <invitations@cloveerp.com>",
-    to: "sam@example.com",
-    subject: "s",
-    text: "t",
-    html: "<p>h</p>",
-  };
-
-  function fake(respond: () => Response | Promise<Response>) {
-    const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
-      calls.push({ url: String(url), init: init ?? {} });
-      return respond();
-    }) as unknown as typeof fetch;
-    return { calls, fetchImpl };
-  }
-
-  test("an id from Resend is a send, and the request is what Resend expects", async () => {
-    const { calls, fetchImpl } = fake(() => Response.json({ id: "email_123" }));
-    const result = await sendWithResend({ ...message, fetchImpl });
-    expect(result).toEqual({ ok: true, id: "email_123" });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe(RESEND_ENDPOINT);
-    expect(calls[0]!.init.method).toBe("POST");
-    const headers = new Headers(calls[0]!.init.headers);
-    expect(headers.get("authorization")).toBe("Bearer re_test_key");
-    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
-      from: message.from,
-      to: ["sam@example.com"],
-      subject: "s",
-      text: "t",
-      html: "<p>h</p>",
-    });
+  test("expiryDate reads a date or a timestamp, and nothing else", () => {
+    expect(expiryDate("2026-09-27T23:30:00+00:00")).toBe("27 September 2026");
+    expect(expiryDate(new Date(Date.UTC(2026, 0, 1)))).toBe("1 January 2026");
+    expect(expiryDate(null)).toBeNull();
+    expect(expiryDate("")).toBeNull();
+    expect(expiryDate("soon")).toBeNull();
   });
 
-  test("a refusal says the status and Resend's message, never the key", async () => {
-    const { fetchImpl } = fake(() =>
-      Response.json(
-        { statusCode: 403, message: "The cloveerp.com domain is not verified." },
-        { status: 403 },
-      ),
-    );
-    const result = await sendWithResend({ ...message, fetchImpl });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toContain("403");
-    expect(result.reason).toContain("The cloveerp.com domain is not verified.");
-    expect(result.reason).not.toContain("re_test_key");
-  });
-
-  test("a body that is not JSON is bounded, not echoed whole", async () => {
-    const { fetchImpl } = fake(() => new Response("x".repeat(5000), { status: 500 }));
-    const result = await sendWithResend({ ...message, fetchImpl });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toContain("500");
-    expect(result.reason.length).toBeLessThan(300);
-  });
-
-  test("accepted without an id is not recorded as sent", async () => {
-    const { fetchImpl } = fake(() => Response.json({}));
-    expect((await sendWithResend({ ...message, fetchImpl })).ok).toBe(false);
-  });
-
-  test("a network failure is an answer, not a throw", async () => {
-    const { fetchImpl } = fake(() => {
-      throw new TypeError("fetch failed");
-    });
-    const result = await sendWithResend({ ...message, fetchImpl });
-    expect(result).toEqual({
-      ok: false,
-      reason: "The email service could not be reached (fetch failed)",
-    });
+  test("a plausible token is long and plain", () => {
+    expect(plausibleInvitationToken(TOKEN)).toBe(true);
+    expect(plausibleInvitationToken("short")).toBe(false);
+    expect(plausibleInvitationToken(`${TOKEN}<`)).toBe(false);
+    expect(plausibleInvitationToken(42)).toBe(false);
   });
 });

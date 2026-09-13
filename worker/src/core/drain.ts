@@ -28,6 +28,22 @@ export type DrainReport = {
   webhooksFailed: number;
   tenantsPurged: number;
   previewsPurged: number;
+  /**
+   * How many organisations the pass served: every one named in CLOVEERP_TENANTS
+   * and every other active one erp.dispatch_bindings() listed.
+   */
+  organisations: number;
+  /**
+   * How many pieces of the pass failed — one organisation's stage, the purge, or
+   * listing the organisations — while the rest carried on. Any failure still
+   * fails the pass: CLOVEERP_ONCE exits non-zero and the dispatch function
+   * answers 500.
+   *
+   * A count and nothing more. erp.dispatch_evidence() prints the last pass's
+   * report to every organisation's administrator, so which organisation failed,
+   * and why, goes to the log (console.error) and never into this report.
+   */
+  failures: number;
   /** What erp.reclaim_stranded_work() returned to the queues before this pass claimed anything. */
   reclaimed: {
     commands: number;
@@ -58,6 +74,8 @@ const empty = (): DrainReport => ({
   webhooksFailed: 0,
   tenantsPurged: 0,
   previewsPurged: 0,
+  organisations: 0,
+  failures: 0,
   reclaimed: { commands: 0, runs: 0, messages: 0, email: 0, webhook: 0 },
 });
 
@@ -335,9 +353,23 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
       (tx) =>
         tx`select * from erp.claim_command_batch(${systemCode}, 20, ${cfg.workerName},
                                                make_interval(secs => ${cfg.leaseSeconds}))`,
-    );
+    ).catch((err: unknown) => {
+      // CLOVEERP_SYSTEMS is one list for the whole process, and an organisation
+      // the database listed need not have every system on it. claim_message_batch
+      // answers nothing for a system an organisation lacks; claim_command_batch
+      // refuses, which for a named organisation is a mistake worth failing on and
+      // for a listed one is simply not its system.
+      if (
+        b.discovered &&
+        err instanceof Error &&
+        /^(?:CLOVEERP|ERPWARE)_UNKNOWN_EXTERNAL_SYSTEM\b/.test(err.message)
+      ) {
+        return null;
+      }
+      throw err;
+    });
 
-    if (claimed.length === 0) continue;
+    if (claimed === null || claimed.length === 0) continue;
     out.commandsClaimed += claimed.length;
 
     const [system] = await asPrincipal(
@@ -421,7 +453,6 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
   }
 }
 
-/** One pass over everything that is due, for every tenant this worker serves. */
 /**
  * Companies whose deletion grace period has elapsed.
  *
@@ -493,18 +524,83 @@ async function sweepExpiredDocumentPreviews(
   out.previewsPurged += paths.length;
 }
 
+/**
+ * The organisations one pass serves.
+ *
+ * Every one named in CLOVEERP_TENANTS, as its named service principal, and every
+ * other active one erp.dispatch_bindings() lists, with a tenant context and no
+ * principal. An organisation nobody named used to have its email queued by the
+ * minute pass and sent by nothing; the list is now the minute pass's own, read
+ * afresh each pass.
+ *
+ * A named organisation keeps its principal when the database lists it too. If
+ * the list cannot be read — the migration that defines it not yet applied, say —
+ * the named organisations are still served and the pass counts the failure, so
+ * a deployment that names its organisations is not stopped by one that does not.
+ */
+async function bindingsFor(sql: Sql, cfg: WorkerConfig, out: DrainReport): Promise<TenantBinding[]> {
+  const bindings = [...cfg.bindings];
+  const named = new Set(cfg.bindings.map((b) => b.tenantId.toLowerCase()));
+  try {
+    const rows = await sql`select b.tenant_id from erp.dispatch_bindings() b`;
+    for (const row of rows) {
+      const tenantId = String(row["tenant_id"]);
+      if (named.has(tenantId.toLowerCase())) continue;
+      named.add(tenantId.toLowerCase());
+      bindings.push({ tenantId, principalId: null, discovered: true });
+    }
+  } catch (err) {
+    out.failures += 1;
+    console.error(
+      `[clove-erp] could not list the organisations to serve (erp.dispatch_bindings()): ` +
+        `${(err as Error).message}; serving the ${cfg.bindings.length} named in CLOVEERP_TENANTS only`,
+    );
+  }
+  return bindings;
+}
+
+/**
+ * One piece of a pass, isolated from the rest.
+ *
+ * Once a pass serves every organisation, one organisation's fault — a principal
+ * deactivated, a system it lacks, a job that raises — must not stop every other
+ * organisation's email. Each stage is caught on its own, counted, and logged
+ * with the organisation it failed for; the report carries only the count, for
+ * the reason given on DrainReport.failures.
+ */
+async function stage(
+  out: DrainReport,
+  name: string,
+  tenantId: string | null,
+  work: () => Promise<void>,
+): Promise<void> {
+  try {
+    await work();
+  } catch (err) {
+    out.failures += 1;
+    console.error(
+      `[clove-erp] ${name} failed${tenantId === null ? "" : ` for organisation ${tenantId}`}: ` +
+        `${(err as Error).message}`,
+    );
+  }
+}
+
+/** One pass over everything that is due, for every organisation this worker serves. */
 export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainReport> {
   const out = empty();
   const startedAt = new Date();
-  await sweepDeletedTenants(sql, out);
-  for (const binding of cfg.bindings) {
-    await reclaimStranded(sql, binding, out);
-    await sweepExpiredDocumentPreviews(sql, binding, cfg, out);
-    await drainJobs(sql, binding, cfg, out);
-    await drainOutbox(sql, binding, cfg, out);
-    await drainCommands(sql, binding, cfg, out);
-    await drainEmail(sql, binding, cfg, out);
-    await drainWebhooks(sql, binding, cfg, out);
+  await stage(out, "purge", null, () => sweepDeletedTenants(sql, out));
+  const bindings = await bindingsFor(sql, cfg, out);
+  out.organisations = bindings.length;
+  for (const binding of bindings) {
+    const t = binding.tenantId;
+    await stage(out, "reclaim", t, () => reclaimStranded(sql, binding, out));
+    await stage(out, "previews", t, () => sweepExpiredDocumentPreviews(sql, binding, cfg, out));
+    await stage(out, "jobs", t, () => drainJobs(sql, binding, cfg, out));
+    await stage(out, "outbox", t, () => drainOutbox(sql, binding, cfg, out));
+    await stage(out, "commands", t, () => drainCommands(sql, binding, cfg, out));
+    await stage(out, "email", t, () => drainEmail(sql, binding, cfg, out));
+    await stage(out, "webhooks", t, () => drainWebhooks(sql, binding, cfg, out));
   }
   // The evidence. A pass that drained nothing is still a pass, and the console
   // reads the last one to say whether anybody is draining at all; a worker that

@@ -54,9 +54,11 @@ Two entrypoints over one core.
 
 Configuration, all from the environment and none of it from the database:
 
-    CLOVEERP_DATABASE_URL   a connection string for a role that bypasses RLS
-    CLOVEERP_TENANTS        comma-separated tenant ids to serve
-    CLOVEERP_PRINCIPALS     matching service principal ids, same order
+    CLOVEERP_DATABASE_URL   a connection string for a role that bypasses RLS (default SUPABASE_DB_URL)
+    CLOVEERP_TENANTS        optional: comma-separated tenant ids to serve as a named principal
+    CLOVEERP_PRINCIPALS     matching service principal ids, same order; both lists or neither.
+                            Every other active organisation erp.dispatch_bindings() lists is
+                            served too, each pass, with a tenant context and no principal
     CLOVEERP_SYSTEMS        comma-separated external system codes to drain
     CLOVEERP_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
     CLOVEERP_WORKER_NAME    the name a claim is recorded under (default clove-erp-worker-<pid>)

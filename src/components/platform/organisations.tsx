@@ -19,12 +19,11 @@ import {
   Users,
 } from "lucide-react";
 
-import { InvitationOutcome } from "../erp/invite-dialog";
+import { InvitationOutcome, sendInvitation, type InvitationSent } from "../erp/invite-dialog";
 import { OfferOwnership } from "../erp/ownership";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
-import { requestInvitation, type InvitationSent } from "../../lib/invitation.functions";
 import {
   atLeast,
   ROLE_BLURB,
@@ -34,7 +33,7 @@ import {
   type PlatformTenant,
   type MyTenancy,
 } from "../../lib/platform";
-import { Card, Fail, TokenNotice, statusTone, INPUT } from "./kit";
+import { Card, Fail, statusTone, INPUT } from "./kit";
 
 /** Organisations, and everything done to one.
  *
@@ -55,11 +54,11 @@ export function Companies({ role }: { role: PlatformRole }) {
     currency: "GBP",
     country: "GB",
   });
-  // An invitation also says whether it was emailed; onboarding does not email yet.
-  const [token, setToken] = useState<{
-    email: string;
-    token: string;
-    delivery: InvitationSent | null;
+  // The last invitation made here: whether it was emailed, and its link. Shown
+  // once, because the database keeps only a digest of the token inside it.
+  const [invitation, setInvitation] = useState<{
+    sent: InvitationSent;
+    onboarded: boolean;
   } | null>(null);
 
   const tenants = useQuery({
@@ -69,11 +68,13 @@ export function Companies({ role }: { role: PlatformRole }) {
 
   const refresh = () => queryClient.invalidateQueries();
 
+  // The invite function calls erp_platform_onboard_company as the signed-in
+  // operator, then emails the first administrator their invitation.
   const onboard = useMutation({
     mutationFn: () =>
-      callErp<{ admin_email: string; admin_token: string; is_live: boolean }>(
-        "erp_platform_onboard_company",
-        {
+      sendInvitation({
+        door: "erp_platform_onboard_company",
+        args: {
           p_code: form.code,
           p_name: form.name,
           p_admin_email: form.admin_email,
@@ -81,9 +82,9 @@ export function Companies({ role }: { role: PlatformRole }) {
           p_base_currency: form.currency,
           p_country_code: form.country,
         },
-      ),
-    onSuccess: (r) => {
-      setToken({ email: r.admin_email, token: r.admin_token, delivery: null });
+      }),
+    onSuccess: (sent) => {
+      setInvitation({ sent, onboarded: true });
       setOpen(false);
       setForm({
         code: "",
@@ -107,18 +108,15 @@ export function Companies({ role }: { role: PlatformRole }) {
     onSuccess: refresh,
   });
 
-  // The server function calls erp_platform_invite_admin as the signed-in
-  // operator, then emails the new administrator their link.
+  // And erp_platform_invite_admin the same way, for a further administrator.
   const invite = useMutation({
     mutationFn: (v: { id: string; email: string; name: string }) =>
-      requestInvitation({
-        kind: "platform",
-        tenantId: v.id,
-        email: v.email,
-        displayName: v.name,
+      sendInvitation({
+        door: "erp_platform_invite_admin",
+        args: { p_tenant_id: v.id, p_email: v.email, p_display_name: v.name },
       }),
-    onSuccess: (r) => {
-      setToken({ email: r.email, token: r.token, delivery: r });
+    onSuccess: (sent) => {
+      setInvitation({ sent, onboarded: false });
       void refresh();
     },
   });
@@ -187,22 +185,20 @@ export function Companies({ role }: { role: PlatformRole }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {token ? (
-        <div className="flex flex-col gap-2">
-          <TokenNotice
-            email={token.email}
-            token={token.token}
-            /* An organisation is handed over in setup, not finished: its first
+      {invitation ? (
+        <InvitationOutcome
+          result={invitation.sent}
+          /* An organisation is handed over in setup, not finished: its first
              administrator is its only one, and nobody may approve their own
              change set once it is live. Saying so here is cheaper than the
              support ticket that asks why nothing can be installed. */
-            note={
-              "The organisation is in setup. It installs and configures freely until it has a " +
-              "second administrator and somebody takes it live."
-            }
-          />
-          {token.delivery ? <InvitationOutcome result={token.delivery} /> : null}
-        </div>
+          note={
+            invitation.onboarded
+              ? "The organisation is in setup. It installs and configures freely until it has a " +
+                "second administrator and somebody takes it live."
+              : undefined
+          }
+        />
       ) : null}
       {busyError ? <Fail error={busyError} /> : null}
 
@@ -297,7 +293,8 @@ export function Companies({ role }: { role: PlatformRole }) {
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">
-              The invitation token appears once, here, when the organisation is created.
+              Its first administrator is emailed an invitation when the organisation is created, and
+              the link appears here once, to copy.
             </p>
           )}
         </Card>

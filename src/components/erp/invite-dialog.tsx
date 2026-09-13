@@ -10,8 +10,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { hasPermission } from "../../lib/erp";
-import { requestInvitation, type InvitationSent } from "../../lib/invitation.functions";
+import { callErp, callInvite, hasPermission, InviteUnreachable } from "../../lib/erp";
+import { invitationFrom, joinLink, type InviteRequest } from "../../lib/invitation-email";
 import { ActionButton, ErrorNote } from "./action";
 import { registerActionOpener } from "./action-registry";
 import { TOUCH } from "./page";
@@ -24,12 +24,12 @@ import { useUnsavedGuard } from "./unsaved";
  * This was an ActionBar action, which called the door and threw away the
  * token it returned — so an invitation was made and nobody was told. It is a
  * form of its own now because what happens after the door is the point: the
- * server function emails the link, and the screen says whether it did and
+ * invite function emails the link, and the screen says whether it did and
  * offers the link to copy either way.
  *
  * The permission check is convenience. erp.invite_principal authorises
- * administration.users itself, and the server function calls it as the
- * signed-in person.
+ * administration.users itself, and the function calls it as the signed-in
+ * person.
  *
  * The words here are plain JSX rather than ui(): a string handed to ui() has
  * to be seeded as a screen string by a migration, and this change has none.
@@ -52,7 +52,10 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
 
   const invite = useMutation({
     mutationFn: () =>
-      requestInvitation({ kind: "organisation", email: email.trim(), displayName: name.trim() }),
+      sendInvitation({
+        door: "erp_invite_principal",
+        args: { p_email: email.trim(), p_display_name: name.trim() },
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["erp_permissions_directory"] });
       onInvited?.();
@@ -85,6 +88,9 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
         <Dialog
           open={open}
           onOpenChange={(next) => {
+            // Never mid-send: the invitation may already exist, and closing
+            // would lose the only place its link is shown.
+            if (!next && invite.isPending) return;
             setOpen(next);
             if (!next) startAgain();
           }}
@@ -96,8 +102,8 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
             <DialogHeader>
               <DialogTitle>Invite a person</DialogTitle>
               <DialogDescription>
-                An email goes to them with a link that works once. Nobody&apos;s password is typed
-                here.
+                They get an email with a link that signs them in and brings them into the
+                organisation. Nobody&apos;s password is typed here.
               </DialogDescription>
             </DialogHeader>
 
@@ -116,7 +122,7 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
                 className="flex flex-col gap-3"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  invite.mutate();
+                  if (!invite.isPending) invite.mutate();
                 }}
               >
                 <label className="flex flex-col gap-1 text-sm font-medium">
@@ -131,7 +137,7 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm font-normal`}
                   />
                   <span className="text-xs font-normal text-muted-foreground">
-                    They sign in with this address.
+                    The invitation goes here, and they sign in with this address.
                   </span>
                 </label>
                 <label className="flex flex-col gap-1 text-sm font-medium">
@@ -152,7 +158,7 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
                 <ErrorNote error={invite.error} />
 
                 <div className="mt-2 flex flex-wrap justify-end gap-2">
-                  <ActionButton variant="secondary" onClick={close}>
+                  <ActionButton variant="secondary" onClick={close} disabled={invite.isPending}>
                     Cancel
                   </ActionButton>
                   <ActionButton type="submit" busy={invite.isPending}>
@@ -168,18 +174,75 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
   );
 }
 
+/** What an invitation became, as a screen shows it. */
+export type InvitationSent = {
+  email: string;
+  /** True only when the email service named the message. */
+  emailed: boolean;
+  /** Why it was not emailed; null when it was. */
+  reason: string | null;
+  /** The plain join link, to copy. Never the one-click sign-in link. */
+  link: string;
+};
+
+/**
+ * Make an invitation and email it, through the invite function.
+ *
+ * A refusal throws the ErpError callInvite built, so the form shows it the way
+ * it shows any other. The function answering at all means it did whatever it
+ * did — so its answer is final and nothing is retried, because each door call
+ * supersedes the token before it.
+ *
+ * Only when the function could not be reached at all — not deployed yet, the
+ * relay down, a network that blocks it — is the door called directly, which is
+ * what the screen did before email existed: the invitation is still made, its
+ * link is still offered, and the reason says why nothing was sent.
+ */
+export async function sendInvitation(request: InviteRequest): Promise<InvitationSent> {
+  try {
+    const answer = await callInvite(request);
+    const link = typeof answer.join_link === "string" ? answer.join_link : "";
+    if (answer.emailed === true) {
+      return { email: answer.email, emailed: true, reason: null, link };
+    }
+    return {
+      email: answer.email,
+      emailed: false,
+      reason: answer.reason || "The email was not sent",
+      link,
+    };
+  } catch (error) {
+    if (!(error instanceof InviteUnreachable)) throw error;
+    const args: Record<string, unknown> = { ...request.args };
+    const made = await callErp<unknown>(request.door, args);
+    const invited = invitationFrom(request.door, args, made);
+    if (!invited) throw new Error("The invitation was not created.");
+    const origin = typeof window === "undefined" ? "" : window.location.origin;
+    return {
+      email: invited.email,
+      emailed: false,
+      reason: error.message,
+      link: joinLink(origin, invited.token),
+    };
+  }
+}
+
 /**
  * What became of an invitation: emailed or not, and its link to copy.
  *
  * The link is offered even when the email went, because "I never got it" is
  * the commonest reply to an invitation and the answer should not be another
- * invitation. The clipboard is not always there — an insecure origin, a
- * browser that refuses — so a failed copy shows the link in a field instead.
+ * invitation. It is shown once: the database keeps only a digest of the token
+ * inside it. The clipboard is not always there — an insecure origin, a browser
+ * that refuses — so a failed copy shows the link in a field instead.
  */
 export function InvitationOutcome({
   result,
+  note,
 }: {
-  result: Pick<InvitationSent, "email" | "emailed" | "reason" | "link">;
+  result: InvitationSent;
+  /** What happens next, where that is not obvious from the invitation. */
+  note?: string | undefined;
 }) {
   const [copy, setCopy] = useState<"idle" | "copied" | "manual">("idle");
 
@@ -198,35 +261,45 @@ export function InvitationOutcome({
       <p className="text-sm font-medium">
         {result.emailed
           ? `Invitation emailed to ${result.email}.`
-          : `Invitation created for ${result.email}, but not emailed.`}
+          : `Invitation made for ${result.email}, but not emailed.`}
       </p>
-      {!result.emailed && result.reason ? (
+      {result.emailed ? (
         <p className="mt-1 text-xs text-muted-foreground">
-          {result.reason.replace(/\.$/, "")}. Copy the link and send it to them yourself.
+          If it does not arrive, copy the link below and send it to them yourself.
         </p>
-      ) : null}
-      <p className="mt-1 text-xs text-muted-foreground">
-        The invitation works once, for whoever uses it first, so send the link only to them.
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void copyLink()}
-          className={`${TOUCH} inline-flex items-center rounded-md border border-input bg-background px-3 text-xs font-medium`}
-        >
-          {copy === "copied" ? "Link copied" : "Copy link"}
-        </button>
-      </div>
-      {copy === "manual" ? (
-        <label className="mt-2 flex flex-col gap-1 text-xs font-medium">
-          The clipboard is not available here. Select the link and copy it:
-          <input
-            readOnly
-            value={result.link}
-            onFocus={(e) => e.currentTarget.select()}
-            className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 font-mono text-xs font-normal`}
-          />
-        </label>
+      ) : (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {(result.reason ?? "The email was not sent").replace(/[.\s]+$/, "")}. Copy the link and
+          send it to them yourself.
+        </p>
+      )}
+      {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
+      {result.link ? (
+        <>
+          <p className="mt-1 text-xs text-muted-foreground">
+            The link is shown once and works for whoever opens it first, so send it only to them.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyLink()}
+              className={`${TOUCH} inline-flex items-center rounded-md border border-input bg-background px-3 text-xs font-medium`}
+            >
+              {copy === "copied" ? "Link copied" : "Copy link"}
+            </button>
+          </div>
+          {copy === "manual" ? (
+            <label className="mt-2 flex flex-col gap-1 text-xs font-medium">
+              The clipboard is not available here. Select the link and copy it:
+              <input
+                readOnly
+                value={result.link}
+                onFocus={(e) => e.currentTarget.select()}
+                className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 font-mono text-xs font-normal`}
+              />
+            </label>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

@@ -24,7 +24,10 @@ name: deploy
 #              looked at nothing; the secret is what makes either of them real.
 #   apply    — on push to main: apply, then prove the result with the same
 #              checks the build runs. A deploy that applied and did not check
-#              is the silent-job problem moved to production.
+#              is the silent-job problem moved to production. Then it schedules
+#              the dispatch function from inside the database and waits for a
+#              drain pass, because a schedule nobody proved fires is the same
+#              problem again, one layer out.
 #
 # One-off: the live project's history table holds the names the connector
 # recorded, not the repository's filenames. Run this workflow by hand with
@@ -140,6 +143,10 @@ jobs:
       cancel-in-progress: false
     env:
       DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      # Where pg_cron posts to drain the queues: the project's own dispatch
+      # function unless a repository variable says otherwise. A URL, not a
+      # secret — the secret the post carries never leaves the database.
+      DISPATCH_URL: ${{ vars.CLOVEERP_DISPATCH_URL || 'https://xpzffnnhnhcqyjqcueja.supabase.co/functions/v1/dispatch' }}
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -440,6 +447,93 @@ jobs:
             exit 1
           fi
 
+      - name: Schedule the dispatch function
+        id: schedule_dispatch
+        # Email leaves only when something posts to the dispatch function, and
+        # nothing did. erp.ensure_platform_schedule() makes that post a pg_cron
+        # job, clove-dispatch, but only when it is given the function's URL, and
+        # the migration that defines it gives none: live's register has said
+        # "no dispatch URL has been given" since the day it was written, and
+        # every email queued since was queued for nobody.
+        #
+        # Two things, both inside the database, neither printed:
+        #
+        #   the secret  the job signs its request with, created in the vault
+        #               when absent, from random bytes the database generates
+        #               itself. It never exists outside the database: not in the
+        #               repository, not in a GitHub secret, not in this log. The
+        #               function reads the same vault entry over its own
+        #               connection, so there is nothing to copy between them.
+        #   the job     rescheduled only when the register, cron.job and this
+        #               URL disagree, or the stored command predates the request
+        #               timeout 20260913110000 gives it. Rescheduling renumbers
+        #               both jobs, which on every deploy would be churn.
+        #
+        # After the scheduler is started again, so the new jobs are not left
+        # paused under ids the resume step never saw; before the proof, so the
+        # proof reads the schedule an operator would find.
+        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
+        run: |
+          set -euo pipefail
+          # Interpolated into SQL below, so its shape is checked first.
+          if ! [[ "$DISPATCH_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~-]+)+$ ]]; then
+            echo "::error::the dispatch URL '${DISPATCH_URL}' is not a plain https URL such as https://<ref>.supabase.co/functions/v1/dispatch; nothing was scheduled."
+            exit 1
+          fi
+
+          missing=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select concat_ws(', ',
+                     case when to_regclass('cron.job') is null then 'pg_cron' end,
+                     case when not exists (select 1 from pg_catalog.pg_extension where extname = 'pg_net') then 'pg_net' end,
+                     case when to_regclass('vault.secrets') is null then 'supabase_vault' end);")
+          if [[ -n "$missing" ]]; then
+            echo "::error::live has no ${missing}, so the dispatch function cannot be scheduled from inside the database and no email can leave. Enable it under Database, Extensions and run this workflow again."
+            exit 1
+          fi
+
+          # What the proof below waits for a drain pass after.
+          echo "DISPATCH_SCHEDULED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
+
+          had=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select exists (select 1 from vault.secrets where name = 'cloveerp_dispatch_secret');")
+          if [[ "$had" == "t" ]]; then
+            secret="already in the vault"
+          else
+            # create_secret answers with the entry's id, not its value, and
+            # even that goes nowhere.
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+              select vault.create_secret(
+                       encode(extensions.gen_random_bytes(32), 'hex'),
+                       'cloveerp_dispatch_secret',
+                       'x-dispatch-secret for the pg_cron job clove-dispatch and the dispatch function. Created inside the database by deploy.yml and never printed.')
+               where not exists (select 1 from vault.secrets where name = 'cloveerp_dispatch_secret');" > /dev/null
+            secret="created in the vault"
+          fi
+
+          agrees=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select exists (
+              select 1
+                from erp_meta.platform_schedule s
+                join cron.job j on j.jobid = s.cron_jobid
+               where s.code = 'clove-dispatch'
+                 and s.is_scheduled
+                 and j.jobname = 'clove-dispatch'
+                 and j.active
+                 and j.command = s.command
+                 and position(quote_literal('${DISPATCH_URL}') in s.command) > 0
+                 and position('timeout_milliseconds' in s.command) > 0);")
+          if [[ "$agrees" == "t" ]]; then
+            result="unchanged: clove-dispatch posts to ${DISPATCH_URL}, and the register, cron.job and the command agree"
+          else
+            result=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.ensure_platform_schedule('${DISPATCH_URL}')::text;")
+          fi
+          echo "secret: ${secret}"
+          echo "schedule: ${result}"
+          {
+            echo "## Dispatch"
+            echo "- secret: ${secret}"
+            echo "- schedule: ${result}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Prove the live database
         # The same checks the build runs, minus the suites: suites create and
         # destroy organisations and do not belong on live. erp.platform_assurance()
@@ -471,3 +565,113 @@ jobs:
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'release ' || left(git_sha, 12) || ' recorded ' || recorded_at || ', ledger at ' || coalesce(migrations_high, '(none)') || ', proved ' || proved from erp.release_report() limit 1;"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove email can leave
+        # A schedule is a promise; a drain pass is the evidence.
+        #
+        # erp.platform_assurance() is green with dispatch unscheduled, and has
+        # to be: a database the build stands up has no URL to give it. So the
+        # proof that live sends email is here, where only live is touched. The
+        # register, cron and the vault must agree, and then a pass must be
+        # recorded in erp_meta.drain_pass after the step above began. A pass is
+        # recorded only if cron fired, pg_net posted, the gateway let the
+        # request through, the function accepted the secret, loaded its
+        # configuration and reached the database: the whole path, in one row.
+        #
+        # always(), so a proof that failed above cannot hide whether email
+        # leaves; and only when the schedule step succeeded, because otherwise
+        # there is nothing scheduled to prove.
+        if: ${{ always() && steps.schedule_dispatch.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          state=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select coalesce((
+              select case
+                       when not s.is_scheduled
+                         then 'the register says it is not scheduled: ' || s.reason
+                       when not exists (select 1 from cron.job j where j.jobid = s.cron_jobid and j.jobname = 'clove-dispatch' and j.active)
+                         then 'the register names job ' || coalesce(s.cron_jobid::text, 'none') || ' and cron.job has no active clove-dispatch under it'
+                       when not exists (select 1 from vault.secrets v where v.name = 'cloveerp_dispatch_secret')
+                         then 'the vault has no cloveerp_dispatch_secret for the job to sign with'
+                       else 'ok'
+                     end
+                from erp_meta.platform_schedule s
+               where s.code = 'clove-dispatch'),
+              'erp_meta.platform_schedule has no clove-dispatch row');")
+          if [[ "$state" != "ok" ]]; then
+            echo "::error::clove-dispatch: ${state}"
+            exit 1
+          fi
+
+          # A tick a minute; four minutes is three chances and a slow one.
+          passes=0
+          for _ in $(seq 1 24); do
+            passes=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select count(*) from erp_meta.drain_pass where finished_at > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
+            if [[ "$passes" -gt 0 ]]; then break; fi
+            sleep 10
+          done
+
+          if [[ "$passes" -eq 0 ]]; then
+            # Diagnosis only from here: nothing below may hide the failure.
+            set +e
+            echo "What pg_net got back since ${DISPATCH_SCHEDULED_AT}, newest first:"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+              select r.created || '  status ' || coalesce(r.status_code::text, 'none')
+                     || '  timed out ' || coalesce(r.timed_out::text, '-')
+                     || '  ' || left(regexp_replace(coalesce(r.error_msg, r.content, ''), '\s+', ' ', 'g'), 200)
+                from net._http_response r
+               where r.created > '${DISPATCH_SCHEDULED_AT}'::timestamptz
+               order by r.created desc
+               limit 5;"
+            echo "What cron recorded for clove-dispatch since then, newest first:"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+              select d.start_time || '  ' || d.status || '  ' || left(coalesce(d.return_message, ''), 200)
+                from cron.job_run_details d
+                join cron.job j on j.jobid = d.jobid
+               where j.jobname = 'clove-dispatch'
+                 and d.start_time > '${DISPATCH_SCHEDULED_AT}'::timestamptz
+               order by d.start_time desc
+               limit 5;"
+            codes=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+              select coalesce(string_agg(distinct coalesce(r.status_code::text, case when r.timed_out then 'timeout' else 'error' end), ' '), '')
+                from net._http_response r
+               where r.created > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
+            set -e
+            diagnosis=""
+            for code in $codes; do
+              case "$code" in
+                401) diagnosis+=" 401: the gateway refused the request before the function ran, so the deployed dispatch function still has verify_jwt = true. supabase/config.toml says false, and the Supabase GitHub integration applies it when it deploys main: check that deploy ran." ;;
+                403) diagnosis+=" 403: the function refused the secret: the header matched neither the vault's cloveerp_dispatch_secret nor CLOVEERP_DISPATCH_SECRET. A warm function keeps what it read from the vault for up to five minutes, so if the entry was just created or changed, run this workflow again." ;;
+                404) diagnosis+=" 404: nothing is deployed at ${DISPATCH_URL}: the function has not been deployed, or vars.CLOVEERP_DISPATCH_URL names the wrong one." ;;
+                500) diagnosis+=" 500: the function ran and could not drain. The body above names the setting (a database URL, CLOVEERP_TENANTS without CLOVEERP_PRINCIPALS) or the error; the function's log has the rest." ;;
+                timeout) diagnosis+=" timed out: pg_net stopped waiting before the function answered, and no pass followed, so the function did not finish either: its log says where it stopped." ;;
+                *) diagnosis+=" ${code}: see the responses above." ;;
+              esac
+            done
+            if [[ -z "${codes// /}" ]]; then
+              diagnosis=" pg_net recorded no response at all: cron has not fired clove-dispatch (the cron rows above say whether it ran and what it returned), or every request is still in flight."
+            fi
+            echo "::error::clove-dispatch is scheduled and no drain pass was recorded in four minutes, so no email is leaving.${diagnosis}"
+            exit 1
+          fi
+
+          last=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select 'last pass ' || p.finished_at || ' by ' || p.worker
+                   || ': ' || coalesce(p.report ->> 'organisations', '?') || ' organisation(s), email sent '
+                   || coalesce(p.report ->> 'emailSent', '0') || ', email failed '
+                   || coalesce(p.report ->> 'emailFailed', '0') || ', failed stages '
+                   || coalesce(p.report ->> 'failures', '0')
+              from erp_meta.drain_pass p
+             order by p.finished_at desc
+             limit 1;")
+          echo "$last"
+          echo "- ${last}" >> "$GITHUB_STEP_SUMMARY"
+          # A stage that failed in one organisation does not stop the others'
+          # email, so it is not this proof's failure; it is still worth a line.
+          failed=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select coalesce(max((p.report ->> 'failures')::int), 0)
+              from erp_meta.drain_pass p
+             where p.finished_at > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::warning::a drain pass since this deploy had ${failed} failed stage(s). Email is leaving; something in at least one organisation is not. The dispatch function's log names the organisation and the stage."
+          fi
