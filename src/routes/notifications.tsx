@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { ActionButton, ErrorNote, useErpAction } from "../components/erp/action";
-import { ActionBar, codeField, pickRoleCode } from "../components/erp/actions-bar";
+import { ActionBar, codeField, pickFrom, pickRoleCode } from "../components/erp/actions-bar";
 import { Gate } from "../components/erp/gate";
 import { PageHeader, TOUCH } from "../components/erp/page";
 import { DataPanel, Pill, Table } from "../components/erp/panel";
@@ -230,11 +230,16 @@ function Notifications() {
                   },
                   pickRoleCode("p_role_code", "Role", false, "Only when the audience is a role."),
                   {
-                    kind: "combo",
-                    name: "p_department_code",
-                    label: "Department code",
+                    ...pickFrom(
+                      "erp_departments",
+                      "code",
+                      ["code", "name"],
+                      "p_department_code",
+                      "Department",
+                      undefined,
+                      false,
+                    ),
                     hint: "Only when the audience is a department.",
-                    options: { fn: "erp_departments", value: "code", label: ["code", "name"] },
                   },
                   {
                     kind: "select",
@@ -258,15 +263,16 @@ function Notifications() {
                     ],
                   },
                   {
-                    kind: "combo",
-                    name: "p_template_code",
-                    label: "Template code",
+                    ...pickFrom(
+                      "erp_output_templates",
+                      "code",
+                      ["code", "kind"],
+                      "p_template_code",
+                      "Template",
+                      undefined,
+                      false,
+                    ),
                     hint: "Optional. The wording used for the message.",
-                    options: {
-                      fn: "erp_output_templates",
-                      value: "code",
-                      label: ["code", "kind"],
-                    },
                   },
                   { kind: "number", name: "p_digest_minutes", label: "Digest every (minutes)" },
                   {
@@ -274,13 +280,12 @@ function Notifications() {
                     name: "p_escalate_after_minutes",
                     label: "Escalate after (minutes)",
                   },
-                  {
-                    kind: "text",
-                    name: "p_escalate_to_role_code",
-                    label: "Escalate to role",
-                    placeholder: "finance-manager",
-                    hint: "Who hears about it if nobody acts in time.",
-                  },
+                  pickRoleCode(
+                    "p_escalate_to_role_code",
+                    "Escalate to role",
+                    false,
+                    "Who hears about it if nobody acts in time.",
+                  ),
                   {
                     kind: "choice",
                     name: "p_is_mandatory",
@@ -299,17 +304,14 @@ function Notifications() {
                 permission: "administration.configure",
                 fn: "erp_set_notification_route_status",
                 fields: [
-                  {
-                    kind: "combo",
-                    name: "p_code",
-                    label: "Route code",
-                    required: true,
-                    options: {
-                      fn: "erp_notification_routes",
-                      value: "code",
-                      label: ["code", "name"],
-                    },
-                  },
+                  // Nothing is created here, so the route is chosen, not typed.
+                  pickFrom(
+                    "erp_notification_routes",
+                    "code",
+                    ["code", "name", "status"],
+                    "p_code",
+                    "Route",
+                  ),
                   {
                     kind: "choice",
                     name: "p_status",
@@ -345,7 +347,11 @@ function Notifications() {
                   p_is_enabled: values["p_is_enabled"] !== "false",
                 }),
                 fields: [
-                  codeField("p_code", "Code", "OPS-WEBHOOK"),
+                  codeField("p_code", "Code", "OPS-WEBHOOK", {
+                    fn: "erp_notification_channels",
+                    value: "code",
+                    label: ["code", "name"],
+                  }),
                   {
                     kind: "text",
                     name: "p_name",

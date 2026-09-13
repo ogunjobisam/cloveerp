@@ -9,6 +9,7 @@ import {
   pickBatch,
   pickChangeSet,
   pickCurrency,
+  pickDocumentType,
   pickItemClass,
   pickFrom,
   pickItem,
@@ -297,7 +298,7 @@ export const INVENTORY: ModuleDef = {
         fedBy: "Receipts appear here once a purchase order is received and posted.",
 
         typeCode: "goods_receipt",
-        partyRole: "provider",
+        partyRole: "supplier",
         createFn: "erp_raise_putaway_tasks",
       },
       {
@@ -476,11 +477,11 @@ export const INVENTORY: ModuleDef = {
           hint: "Leave unchosen to apply the policy at every site.",
         },
         {
-          kind: "text",
+          kind: "select",
           name: "p_device_task_code",
           label: "Device step",
-          placeholder: "Leave blank for all steps",
-          hint: "Limits the policy to one handheld step, such as picking or goods-in.",
+          options: { fn: "erp_device_tasks", value: "code", label: ["code", "name"] },
+          hint: "Leave unchosen to apply at every handheld step.",
         },
         {
           kind: "choice",
@@ -1237,6 +1238,8 @@ export const FINANCE: ModuleDef = {
             { value: "spot", label: "Spot" },
             { value: "average", label: "Average" },
             { value: "closing", label: "Closing" },
+            { value: "budget", label: "Budget" },
+            { value: "fixed", label: "Fixed" },
           ],
         },
         {
@@ -1453,7 +1456,7 @@ export const FINANCE: ModuleDef = {
         pickFrom(
           "erp_documents",
           "document_id",
-          ["document_number", "status"],
+          ["document_number", "state"],
           "p_delivery_id",
           "Delivery",
           // Only deliveries can be invoiced; offering every document invites
@@ -1998,10 +2001,13 @@ export const PLANNING: ModuleDef = {
           "Planned order",
         ),
         {
-          kind: "text",
-          name: "p_document_type_code",
-          label: "Purchase order type",
-          hint: "For a bought item, for example purchase_order. Leave empty for a made item.",
+          ...pickDocumentType(
+            "purchase_order",
+            "p_document_type_code",
+            "Purchase order type",
+            false,
+          ),
+          hint: "Leave unchosen for a made item.",
         },
       ],
       invalidates: ["erp_planned_orders", "erp_documents", "erp_works_orders"],
@@ -2031,7 +2037,11 @@ export const PLANNING: ModuleDef = {
       permission: "planning.forecast",
       fn: "erp_upsert_forecast_event",
       fields: [
-        codeField("p_code", "Event code", "PROMO-EASTER"),
+        codeField("p_code", "Event code", "PROMO-EASTER", {
+          fn: "erp_forecast_events",
+          value: "code",
+          label: ["code", "name"],
+        }),
         {
           kind: "text",
           name: "p_name",
@@ -2817,22 +2827,20 @@ export const QUALITY: ModuleDef = {
           hint: "How serious this is, in your own scheme.",
         },
         {
-          kind: "text",
+          kind: "multi",
           name: "p_batch_ids",
-          label: "Batch ids",
+          label: "Batches",
           required: true,
-          hint: "Comma separated.",
+          hint: "Tick every batch in scope.",
+          options: { fn: "erp_batches", value: "batch_id", label: ["batch_number", "item"] },
         },
       ],
       invalidates: ["erp_recalls"],
-      mapArgs: (v) => ({
+      mapArgs: (v, picked) => ({
         p_title: v["p_title"],
         p_reason: v["p_reason"],
         p_classification: v["p_classification"],
-        p_batch_ids: String(v["p_batch_ids"] ?? "")
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        p_batch_ids: picked?.lists["p_batch_ids"] ?? [],
       }),
     },
     {

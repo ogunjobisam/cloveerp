@@ -157,10 +157,20 @@ function EncryptionKeysPanel() {
     fn: "erp_rotate_tenant_key",
     fields: [
       {
-        kind: "text",
+        // The five purposes tenant_key_purpose_check allows. Not a pick over
+        // erp_tenant_keys, which lists every version of every key.
+        kind: "choice",
         name: "p_purpose",
         label: "Purpose",
-        hint: "Leave as tenant_data unless a separate key is in use.",
+        default: "tenant_data",
+        hint: "Leave as Organisation data unless a separate key is in use.",
+        choices: [
+          { value: "tenant_data", label: "Organisation data — the usual key" },
+          { value: "data", label: "Data" },
+          { value: "storage", label: "Storage" },
+          { value: "export", label: "Export" },
+          { value: "backup", label: "Backup" },
+        ],
       },
       {
         kind: "text",

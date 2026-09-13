@@ -219,11 +219,22 @@ function WarehouseLayout() {
             fn: "erp_block_location",
             fields: [
               pickPlace("Location to block"),
+              // A combo, not a select: the door stores the trimmed text
+              // without validation and the register has no category for
+              // blocking a location yet, so the register is offered and a
+              // reason of your own is still possible.
               {
-                kind: "text",
+                kind: "combo",
                 name: "p_reason_code",
                 label: "Reason",
+                required: false,
                 placeholder: "DAMAGED-RACK",
+                hint: "Pick a reason code from the register, or type one of your own.",
+                options: {
+                  fn: "erp_reason_codes",
+                  value: "code",
+                  label: ["category", "code", "name"],
+                },
               },
             ],
             invalidates,

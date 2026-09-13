@@ -152,13 +152,8 @@ function Devices() {
                 placeholder: "SCAN-LEE-01",
                 hint: "A short code for the handset or terminal.",
               },
-              {
-                kind: "text",
-                name: "p_site_code",
-                label: "Site code",
-                required: true,
-                hint: "The code of the site this device works at.",
-              },
+              // Not pickSite: that sends the site id, and this door takes the code.
+              pickFrom("erp_sites", "code", ["code", "name"], "p_site_code", "Site"),
               {
                 kind: "text",
                 name: "p_name",
@@ -184,17 +179,25 @@ function Devices() {
             fields: [
               pickFrom("erp_device_tasks", "code", ["code", "name"], "p_task_code", "Step"),
               {
-                kind: "text",
+                kind: "multi",
                 name: "p_accepted_symbologies",
                 label: "Accepted symbologies",
                 required: true,
-                hint: "Comma separated codes from the symbology list below, e.g. gs1_128, gs1_datamatrix.",
+                // erp.upsert_scan_rule takes the several as one comma-separated line.
+                join: ",",
+                options: { fn: "erp_symbologies", value: "code", label: ["code", "name"] },
               },
               {
-                kind: "text",
+                kind: "multi",
                 name: "p_mandatory_identifiers",
                 label: "Mandatory identifiers",
-                hint: "Comma separated GS1 application identifiers, e.g. 01, 10, 17. Leave empty when any recognised barcode will do.",
+                hint: "Leave empty when any recognised barcode will do.",
+                join: ",",
+                options: {
+                  fn: "erp_gs1_application_identifiers",
+                  value: "ai",
+                  label: ["ai", "name"],
+                },
               },
               {
                 kind: "choice",
@@ -218,9 +221,15 @@ function Devices() {
             fn: "erp_drain_device_actions",
             fields: [
               {
-                kind: "text",
-                name: "p_device_code",
-                label: "Device code",
+                ...pickFrom(
+                  "erp_devices",
+                  "code",
+                  ["code", "name"],
+                  "p_device_code",
+                  "Device",
+                  undefined,
+                  false,
+                ),
                 hint: "Leave empty to apply your queued actions on every device. Only actions captured under your own session apply; anyone else's are held for them.",
               },
             ],

@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   ActionBar,
   pickBatch,
+  pickCurrency,
   pickFrom,
   pickItem,
   pickLine,
@@ -213,7 +214,8 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "procurement.order",
     fn: "erp_convert_document",
     fields: [
-      pickParty("provider", "p_party_id", "Supplier", true),
+      // erp.party_role_kind has no 'provider'; erp_parties matches the kind exactly.
+      pickParty("supplier", "p_party_id", "Supplier", true),
       pickSite("p_site_id", "Site the goods are for", false),
     ],
     emptyNote:
@@ -262,7 +264,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       pickFrom(
         "erp_documents",
         "document_id",
-        ["document_number", "status"],
+        ["document_number", "state"],
         "p_receipt_id",
         "Receipt",
         { p_limit: 100 },
@@ -281,7 +283,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       pickFrom(
         "erp_documents",
         "document_id",
-        ["document_number", "status"],
+        ["document_number", "state"],
         "p_invoice_id",
         "Invoice",
         { p_limit: 100 },
@@ -391,27 +393,21 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         required: true,
         choices: [{ value: "document", label: "Document" }],
       },
-      {
-        kind: "text",
-        name: "p_object_id",
-        label: "Object id",
-        required: true,
-        placeholder: "0f9c1a2e-…",
-        hint: "The id of the document being routed. Copy it from the document page.",
-      },
+      pickFrom(
+        "erp_documents",
+        "document_id",
+        ["document_number", "document_type", "state"],
+        "p_object_id",
+        "Document",
+        { p_limit: 200 },
+      ),
       {
         kind: "number",
         name: "p_value_minor",
         label: "Value (minor units)",
         required: true,
       },
-      {
-        kind: "combo",
-        name: "p_currency",
-        label: "Currency",
-        required: true,
-        options: { fn: "erp_currencies", value: "code", label: ["code", "name"] },
-      },
+      pickCurrency("p_currency", "Currency", true),
       pickFrom(
         "erp_departments",
         "department_id",
@@ -491,7 +487,7 @@ function Procurement() {
               fedBy: "Requisitions appear here once somebody raises one.",
 
               typeCode: "requisition",
-              partyRole: "provider",
+              partyRole: "supplier",
               recordArg: "p_document_id",
               actionFn: "requisition_submit",
               actionFns: ["erp_stamp_document_approval"],
@@ -524,7 +520,7 @@ function Procurement() {
                 "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
 
               typeCode: "purchase_order",
-              partyRole: "provider",
+              partyRole: "supplier",
               recordArg: "p_document_id",
               actionFn: "erp_set_order_behaviour",
             },
@@ -534,7 +530,7 @@ function Procurement() {
               fedBy: "Receipts appear here once goods are received against a purchase order.",
 
               typeCode: "goods_receipt",
-              partyRole: "provider",
+              partyRole: "supplier",
               recordArg: "p_receipt_id",
               actionFn: "erp_receive_against",
               actionFns: ["erp_bill_from_receipt"],
@@ -583,7 +579,7 @@ function Procurement() {
               fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
               typeCode: "purchase_invoice",
-              partyRole: "provider",
+              partyRole: "supplier",
               recordArg: "p_invoice_id",
               actionFn: "erp_invoice_against",
               createFn: "erp_bill_from_receipt",

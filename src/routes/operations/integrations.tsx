@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { ApiAccess } from "../../components/erp/api-access";
 import { Gate } from "../../components/erp/gate";
 
@@ -128,11 +128,18 @@ function Integrations() {
             fn: "erp_replay_message",
             fields: [
               {
-                kind: "number",
+                // The backlog mixes commands and messages and takes no filter, so
+                // the label leads with the kind; only a message replays.
+                kind: "select",
                 name: "p_message_id",
-                label: "Message id",
+                label: "Message",
                 required: true,
-                hint: "The number shown against the message in the backlog below.",
+                hint: "Pick a message, not a command; a command is reconciled or cancelled instead.",
+                options: {
+                  fn: "erp_integration_backlog",
+                  value: "reference",
+                  label: ["kind", "system_code", "operation", "status"],
+                },
               },
               {
                 kind: "text",
@@ -212,14 +219,13 @@ function Integrations() {
             permission: "administration.integrate",
             fn: "erp_submit_command",
             fields: [
-              {
-                kind: "text",
-                name: "p_system_code",
-                label: "System",
-                required: true,
-                placeholder: "WMS",
-                hint: "The short code of the connected system, as it appears in the backlog.",
-              },
+              pickFrom(
+                "erp_integration_health",
+                "system_code",
+                ["system_code", "system_status"],
+                "p_system_code",
+                "System",
+              ),
               {
                 kind: "text",
                 name: "p_operation_code",

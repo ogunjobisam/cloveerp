@@ -300,11 +300,33 @@ function AccountDetermination() {
                 label: "Legislation pack",
                 hint: "Leave empty unless one country posts differently.",
               },
+              // Typed JSON was sent as a string, and the table's check that
+              // dimensions is an object refused every non-empty entry. A row
+              // per dimension, both halves chosen from their registers.
               {
-                kind: "text",
+                kind: "rows",
                 name: "p_dimensions",
-                label: "Dimensions (JSON)",
-                hint: 'For example {"cost_centre":"OPS"}. The account and its analysis come from one rule.',
+                label: "Dimensions",
+                addLabel: "Add a dimension",
+                hint: "One row per dimension: the dimension and the value a posting under this rule is stamped with. The account and its analysis come from one rule.",
+                columns: [
+                  {
+                    name: "dimension",
+                    label: "Dimension",
+                    kind: "select",
+                    options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
+                  },
+                  {
+                    name: "value",
+                    label: "Value",
+                    kind: "select",
+                    options: {
+                      fn: "erp_dimension_values",
+                      value: "code",
+                      label: ["dimension", "code", "name"],
+                    },
+                  },
+                ],
               },
               {
                 kind: "text",
@@ -314,6 +336,18 @@ function AccountDetermination() {
               },
               { kind: "date", name: "p_valid_from", label: "Valid from" },
             ],
+            // mapArgs replaces buildArgs, so an untouched field's "" is
+            // dropped here rather than sent. No rows leaves p_dimensions out,
+            // which on an amendment keeps what the rule already carries.
+            mapArgs: (v, picked) => {
+              const entries = (picked?.rows["p_dimensions"] ?? [])
+                .filter((row) => row["dimension"] && row["value"])
+                .map((row) => [row["dimension"], row["value"]]);
+              return {
+                ...Object.fromEntries(Object.entries(v).filter(([, value]) => value !== "")),
+                ...(entries.length > 0 ? { p_dimensions: Object.fromEntries(entries) } : {}),
+              };
+            },
             invalidates,
           },
           {
@@ -336,13 +370,17 @@ function AccountDetermination() {
             permission: "finance.post",
             fn: "erp_override_posting_account",
             fields: [
+              // No schema constraint pins this; the two kinds an override can
+              // attach to are the UI's contract.
               {
-                kind: "text",
+                kind: "choice",
                 name: "p_object_type",
                 label: "Object type",
                 required: true,
-                placeholder: "document",
-                hint: "What is being overridden, for example document or journal.",
+                choices: [
+                  { value: "document", label: "Document" },
+                  { value: "journal", label: "Journal" },
+                ],
               },
               {
                 kind: "text",

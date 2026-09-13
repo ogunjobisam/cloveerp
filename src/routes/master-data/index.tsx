@@ -3,7 +3,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
-import { ActionBar, codeField, pickCountry, reason } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  codeField,
+  pickCountry,
+  pickItem,
+  pickParty,
+  reason,
+} from "../../components/erp/actions-bar";
 import { AutoPanel } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
@@ -104,7 +111,18 @@ type ItemSupplier = {
   min_order_quantity: number | null;
 };
 
-const ROLES = ["customer", "supplier", "carrier", "manufacturer", "broker", "consignee", "agent"];
+/** Every erp.party_role_kind, so the picker can create any partner the doors accept. */
+const ROLES = [
+  "customer",
+  "supplier",
+  "carrier",
+  "manufacturer",
+  "broker",
+  "consignee",
+  "agent",
+  "internal",
+  "regulator",
+];
 
 const LIMIT = 200;
 
@@ -198,42 +216,47 @@ function MasterData() {
             ],
             invalidates: ["erp_parties"],
           },
+          // One action per kind of record, because a picker cannot change its
+          // door on the strength of a sibling field: the survivor and the
+          // duplicate are chosen from the business partners or from the
+          // products, never typed as ids.
           {
-            label: "Merge duplicate records",
+            label: "Merge duplicate business partners",
             description:
               "Every reference to the duplicate is moved to the survivor; the duplicate is withdrawn, not deleted.",
             permission: "master_data.write",
             fn: "erp_merge_master_record",
             fields: [
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Kind of record",
-                required: true,
-                choices: [
-                  { value: "party", label: "Business partner" },
-                  { value: "item", label: "Product" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_survivor_id",
-                label: "Record being kept",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id of the record everything should point at afterwards.",
-              },
-              {
-                kind: "text",
-                name: "p_duplicate_id",
-                label: "Record being withdrawn",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id of the duplicate. Both ids are shown in the duplicate candidates list.",
-              },
+              pickParty(undefined, "p_survivor_id", "Record being kept"),
+              pickParty(undefined, "p_duplicate_id", "Record being withdrawn"),
               reason("p_reason", "Reason", true),
             ],
-            invalidates: ["erp_parties", "erp_items"],
+            mapArgs: (v) => ({
+              p_object_type: "party",
+              p_survivor_id: v["p_survivor_id"],
+              p_duplicate_id: v["p_duplicate_id"],
+              p_reason: v["p_reason"],
+            }),
+            invalidates: ["erp_parties"],
+          },
+          {
+            label: "Merge duplicate products",
+            description:
+              "Every reference to the duplicate is moved to the survivor; the duplicate is withdrawn, not deleted.",
+            permission: "master_data.write",
+            fn: "erp_merge_master_record",
+            fields: [
+              pickItem("p_survivor_id", "Record being kept"),
+              pickItem("p_duplicate_id", "Record being withdrawn"),
+              reason("p_reason", "Reason", true),
+            ],
+            mapArgs: (v) => ({
+              p_object_type: "item",
+              p_survivor_id: v["p_survivor_id"],
+              p_duplicate_id: v["p_duplicate_id"],
+              p_reason: v["p_reason"],
+            }),
+            invalidates: ["erp_items"],
           },
           {
             label: "Create a unit of measure",
@@ -260,13 +283,15 @@ function MasterData() {
                 name: "p_uom_class",
                 label: "Class",
                 required: true,
+                // The values of erp.uom_class, which erp_create_uom casts to.
                 choices: [
                   { value: "quantity", label: "Quantity" },
-                  { value: "weight", label: "Weight" },
+                  { value: "mass", label: "Mass (weight)" },
                   { value: "volume", label: "Volume" },
                   { value: "length", label: "Length" },
                   { value: "area", label: "Area" },
                   { value: "time", label: "Time" },
+                  { value: "packaging", label: "Packaging" },
                 ],
               },
               { kind: "number", name: "p_decimals", label: "Decimal places", required: true },

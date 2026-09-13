@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar } from "../../components/erp/actions-bar";
+import { ActionBar, pickItem, pickParty } from "../../components/erp/actions-bar";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
 
@@ -61,7 +61,7 @@ function Governance() {
                 label: "Mass change id",
                 required: true,
                 placeholder: "0f9c1a2e-…",
-                hint: "Copy the id from the mass change listed on this page.",
+                hint: "The id returned when the mass change was opened; mass changes are not listed on this page yet.",
               },
             ],
             invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
@@ -78,7 +78,7 @@ function Governance() {
                 label: "Mass change id",
                 required: true,
                 placeholder: "0f9c1a2e-…",
-                hint: "Copy the id from the mass change listed on this page.",
+                hint: "The id returned when the mass change was opened; mass changes are not listed on this page yet.",
               },
             ],
             invalidates: ["erp_change_requests", "erp_items", "erp_parties"],
@@ -98,13 +98,16 @@ function Governance() {
                   { value: "party", label: "Business partner" },
                 ],
               },
+              // A picker's source is fixed, so it cannot follow the object type;
+              // one picker per kind, and mapArgs sends whichever matches.
               {
-                kind: "text",
-                name: "p_object_id",
-                label: "Record id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id of the product or business partner being changed — copy it from Master data.",
+                ...pickItem("p_item_id", "Product"),
+                required: false,
+                hint: "Only when the object is a product.",
+              },
+              {
+                ...pickParty(undefined, "p_party_id", "Business partner", false),
+                hint: "Only when the object is a business partner.",
               },
               {
                 kind: "text",
@@ -124,7 +127,8 @@ function Governance() {
             invalidates: ["erp_change_requests", "erp_my_approvals"],
             mapArgs: (v) => ({
               p_object_type: v["p_object_type"],
-              p_object_id: v["p_object_id"],
+              p_object_id:
+                (v["p_object_type"] === "item" ? v["p_item_id"] : v["p_party_id"]) || null,
               p_proposed: JSON.parse(v["p_proposed"] ?? "{}"),
               ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
             }),
