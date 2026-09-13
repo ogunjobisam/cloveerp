@@ -218,7 +218,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     ],
     emptyNote:
       "Only an approved requisition converts. Submit it and have it approved at this step first.",
-    invalidates: ["erp_documents", "erp_commitments"],
+    invalidates: ["erp_documents"],
     submitLabel: "Create the purchase order",
   },
   {

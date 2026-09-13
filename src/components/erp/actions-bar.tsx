@@ -278,7 +278,7 @@ export const pickDocument = (
 /** A draft change set, chosen rather than remembered. */
 export const pickChangeSet = (
   name = "p_change_set_id",
-  label = "Change set",
+  label = "Proposed change",
   required = true,
 ): Field => ({
   kind: "select",
