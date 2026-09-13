@@ -1,7 +1,7 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
@@ -291,11 +291,17 @@ function isRateLimited(error: {
  * about you.
  *
  * Somebody who arrived through an invitation link has already said which of
- * the two they are, so theirs comes first and is redeemed without asking. The
- * rest of the screen stays: a refused invitation (expired, already used)
- * leaves them a paste box and the choice to start their own organisation.
+ * the two they are, so theirs comes first — but it is redeemed only when they
+ * press Join, on a card that names the account about to join. A sign-in joins
+ * one organisation for good, and a held token does not say whose it is: the
+ * link may have been opened in a browser already signed in to another account,
+ * with the wrong Google account picked, or planted in this tab by somebody
+ * else entirely. Only the person signed in can tell, so they are asked, and
+ * "Not you?" signs them out with the invitation still held for the right
+ * account. The rest of the screen stays: a refused invitation (expired, already
+ * used) leaves them a paste box and the choice to start their own organisation.
  */
-function Onboarding({ onSignOut }: { onSignOut: () => void }) {
+function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
   const queryClient = useQueryClient();
   const platform = usePlatformMe();
   const [name, setName] = useState("");
@@ -307,31 +313,21 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
   // Read once: the card stays up with its refusal even after a failed attempt.
   const [invitation] = useState<string | null>(readStoredInvitation);
   const [joinError, setJoinError] = useState<unknown>(null);
-  const attempted = useRef(false);
 
-  const join = useCallback(
-    async (stored: string) => {
-      setBusy("join");
-      setJoinError(null);
-      try {
-        await callErp("erp_claim_invitation", { p_token: stored });
-        clearStoredInvitation();
-        await queryClient.invalidateQueries();
-      } catch (e) {
-        setJoinError(e);
-      } finally {
-        setBusy(null);
-      }
-    },
-    [queryClient],
-  );
-
-  // Once per mount, and only once even when effects run twice in development.
-  useEffect(() => {
-    if (!invitation || attempted.current) return;
-    attempted.current = true;
-    void join(invitation);
-  }, [invitation, join]);
+  // Only ever from the Join button. Nothing claims on arrival.
+  async function join(stored: string) {
+    setBusy("join");
+    setJoinError(null);
+    try {
+      await callErp("erp_claim_invitation", { p_token: stored });
+      clearStoredInvitation();
+      await queryClient.invalidateQueries();
+    } catch (e) {
+      setJoinError(e);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const refusal = joinError ? friendlyError(joinError) : null;
 
@@ -363,7 +359,15 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
           <h2 className="text-lg font-semibold">You have been invited to join an organisation</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Joining brings this account into the organisation that invited you, with the roles it
-            has given you.
+            has given you. An account can belong to only one organisation, so check this is the
+            account the invitation was meant for.
+          </p>
+          <p className="mt-3 text-sm">
+            You are signed in as{" "}
+            <span className="font-medium break-all">
+              {email ?? "an account with no email address"}
+            </span>
+            .
           </p>
 
           {refusal ? (
@@ -381,10 +385,21 @@ function Onboarding({ onSignOut }: { onSignOut: () => void }) {
             type="button"
             onClick={() => void join(invitation)}
             disabled={busy !== null}
-            className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            className="mt-4 w-full break-all rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
-            {busy === "join" ? "Joining…" : "Join now"}
+            {busy === "join" ? "Joining…" : email ? `Join as ${email}` : "Join with this account"}
           </button>
+          <p className="mt-3 text-center text-sm text-muted-foreground">
+            Not you?{" "}
+            <button
+              type="button"
+              onClick={onSignOut}
+              disabled={busy !== null}
+              className="font-medium underline underline-offset-2 disabled:opacity-60"
+            >
+              Sign out
+            </button>
+          </p>
         </section>
       ) : null}
 
@@ -620,7 +635,9 @@ export function Gate({
     );
   }
 
-  if (!data?.tenant_id) return <Onboarding onSignOut={signOut} />;
+  if (!data?.tenant_id) {
+    return <Onboarding email={authSession.user.email ?? null} onSignOut={signOut} />;
+  }
 
   return (
     <ErpSessionContext.Provider value={{ session: data, scope }}>

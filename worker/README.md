@@ -58,7 +58,9 @@ Configuration, all from the environment and none of it from the database:
     CLOVEERP_TENANTS        optional: comma-separated tenant ids to serve as a named principal
     CLOVEERP_PRINCIPALS     matching service principal ids, same order; both lists or neither.
                             Every other active organisation erp.dispatch_bindings() lists is
-                            served too, each pass, with a tenant context and no principal
+                            served too, each pass, with a tenant context and no principal —
+                            its email, webhooks and queues only: no jobs (the minute pass runs
+                            its SQL jobs) and no credential_ref resolved
     CLOVEERP_SYSTEMS        comma-separated external system codes to drain
     CLOVEERP_POLL_MS        loop interval for the long-lived entrypoint (default 5000)
     CLOVEERP_WORKER_NAME    the name a claim is recorded under (default clove-erp-worker-<pid>)
@@ -67,15 +69,23 @@ Configuration, all from the environment and none of it from the database:
     CLOVEERP_ONCE           1 to run a single pass and exit (what the build does)
     CLOVEERP_RESEND_ENDPOINT where email is posted instead of Resend (the build's stub)
     RESEND_API_KEY          the send credential for the email handler
-    <REF>                   the value a credential_ref names — see below
+    CLOVEERP_CREDENTIAL_<NAME> the value a credential_ref names — see below
 
 These were `ERPWARE_*` until 20260904980000 renamed the product's prefix. There
 is no compatibility shim: `required()` throws by name, so a half-done rename
 stops the worker rather than degrading it quietly.
 
 A `credential_ref` is a URI and only `env://` is implemented. The name after
-the scheme is read from the environment **exactly as written** — `env://SMTP_PW`
-reads `SMTP_PW`, with no prefix of any kind. This file said `ERPWARE_SECRET_<REF>`
-for months, which no code has ever read.
+the scheme must match `^CLOVEERP_CREDENTIAL_[A-Z0-9_]{1,100}$`, and is read from
+the environment as written — `env://CLOVEERP_CREDENTIAL_SMTP_PW` reads
+`CLOVEERP_CREDENTIAL_SMTP_PW`. Any other name is refused, by the database when the
+reference is written and by the worker when it is read: the same environment
+holds `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL` and `RESEND_API_KEY`, and a
+reference an administrator writes must not be able to name them.
+
+A reference is resolved only for an organisation named in `CLOVEERP_TENANTS`.
+One an operator did not name is refused before the environment is read, because
+nobody decided which credentials are its to use; its webhook with no reference
+still posts.
 
 A credential is read here and used here. It is never written back.

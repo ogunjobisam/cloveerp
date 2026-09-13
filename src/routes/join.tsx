@@ -26,13 +26,16 @@ import {
  *
  *   signed out     one button, which follows the sign-in link to Supabase
  *                  Auth. Auth signs the person in and sends them back here,
- *                  where the gate's onboarding screen redeems the held token
- *                  and the desk opens. A link that has expired — they last an
+ *                  where the gate's onboarding screen asks them to join as the
+ *                  account they are signed in with, and the desk opens once
+ *                  they press Join. A link that has expired — they last an
  *                  hour or so, the invitation a week or two — comes back as an
  *                  error, and the page offers to email a new one, or Google, or
  *                  a password. So does a link an inviter copied, which never
  *                  had a sign-in part.
- *   no organisation the onboarding screen redeems the held token.
+ *   no organisation the onboarding screen offers the held invitation, naming the
+ *                  signed-in account, and redeems it only when Join is pressed:
+ *                  a token in this tab does not say whose sign-in it is for.
  *   inside one     a sign-in belongs to one organisation, so this one cannot
  *                  accept somebody else's invitation: the page says so and
  *                  offers to sign out, or, with nothing held, opens the desk.
@@ -136,8 +139,7 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
         returnPath="/join"
         notice={
           <Notice>
-            Sign in with the address your invitation was sent to, and you will be brought into the
-            organisation.{" "}
+            Sign in with the address your invitation was sent to, then join the organisation.{" "}
             <button
               type="button"
               onClick={() => setPassword(false)}
@@ -181,8 +183,8 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
         {arrival.failure
           ? "A sign-in link works once and only for a short while, so it runs out long before the invitation does. Your invitation is still here."
           : signin
-            ? "You have been invited to Clove ERP. Continue to sign in with the address the invitation was sent to, and you will be brought straight into the organisation that invited you."
-            : "You have been invited to Clove ERP. Sign in with the address the invitation was sent to, and you will be brought into the organisation that invited you."}
+            ? "You have been invited to Clove ERP. Continue to sign in with the address the invitation was sent to, then join the organisation that invited you."
+            : "You have been invited to Clove ERP. Sign in with the address the invitation was sent to, then join the organisation that invited you."}
       </p>
 
       {signin ? (
@@ -214,8 +216,9 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
           {resend === "not-sent" ? (
             <p role="alert" className="mt-3 text-sm text-muted-foreground">
               No link could be sent. The invitation may have been used, replaced by a newer one or
-              expired, in which case whoever invited you can send it again. If you asked a moment
-              ago, wait a minute and try once more.
+              expired, in which case whoever invited you can send it again. A new link can be sent
+              only every few minutes and only a few times, so if one was sent recently, use the
+              newest email from Clove ERP or try again later.
             </p>
           ) : null}
         </>
@@ -251,7 +254,8 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
         </button>
       </p>
       <p className="mt-2 text-center text-xs text-muted-foreground">
-        Not expecting an invitation? Close this page; nothing happens unless you sign in.
+        Not expecting an invitation? Close this page; nothing happens unless you sign in and choose
+        to join.
       </p>
     </Card>
   );

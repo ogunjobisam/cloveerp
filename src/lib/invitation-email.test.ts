@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
+  INVITATION_SUBJECT,
   INVITE_DOORS,
   INVITE_VALID_DAYS,
   escapeHtml,
@@ -203,7 +204,7 @@ describe("the email", () => {
 
   test("names who invited them, to what, and carries the link in both parts", () => {
     const m = invitationEmail(base);
-    expect(m.subject).toBe("Ada Lovelace invited you to join Northwind Foods on Clove ERP");
+    expect(m.subject).toBe("You have been invited to Clove ERP");
     expect(m.text).toContain("Hello Sam,");
     expect(m.text).toContain("Ada Lovelace has invited you to join Northwind Foods on Clove ERP.");
     expect(m.text).toContain(link);
@@ -230,7 +231,7 @@ describe("the email", () => {
 
   test("a resent link says so, and names nobody as the inviter", () => {
     const m = invitationEmail({ ...base, inviter: null, resent: true });
-    expect(m.subject).toBe("Your sign-in link for Northwind Foods on Clove ERP");
+    expect(m.subject).toBe(INVITATION_SUBJECT);
     expect(m.text).toContain("new sign-in link for your invitation to join Northwind Foods");
     expect(m.text).toContain("did not ask for a new link");
   });
@@ -260,12 +261,30 @@ describe("the email", () => {
     );
   });
 
-  test("keeps a name on one line, so it cannot add a line to the subject", () => {
+  test("keeps a name on one line, so it cannot add a line or a paragraph to the body", () => {
     const m = invitationEmail({ ...base, organisation: "Acme\r\nBcc: someone@example.com" });
     expect(m.subject).not.toMatch(/[\r\n]/);
-    expect(m.subject).toBe(
-      "Ada Lovelace invited you to join Acme Bcc: someone@example.com on Clove ERP",
+    expect(m.text).toContain(
+      "Ada Lovelace has invited you to join Acme Bcc: someone@example.com on Clove ERP.",
     );
+  });
+
+  test("puts nothing a tenant typed in the subject, whatever they typed", () => {
+    const typed = {
+      organisation: "Payment failed, call +1 800 555 0100",
+      inviter: "Your bank's security team",
+      invitee: "Urgent: verify your account",
+    };
+    for (const resent of [false, true]) {
+      const m = invitationEmail({ ...base, ...typed, resent });
+      expect(m.subject).toBe("You have been invited to Clove ERP");
+      for (const words of Object.values(typed)) expect(m.subject).not.toContain(words);
+      expect(m.html).toContain(`<title>${INVITATION_SUBJECT}</title>`);
+    }
+    // The names are still there to read, in the body.
+    const m = invitationEmail({ ...base, ...typed });
+    expect(m.text).toContain("Payment failed, call +1 800 555 0100");
+    expect(m.text).toContain("Your bank's security team has invited you");
   });
 
   test("copes with an inviter, an organisation and an expiry nobody could name", () => {
@@ -276,7 +295,8 @@ describe("the email", () => {
       invitee: null,
       expiresAt: "not a date",
     });
-    expect(m.subject).toBe("You are invited to join an organisation on Clove ERP");
+    expect(m.subject).toBe(INVITATION_SUBJECT);
+    expect(m.text).toContain("You have been invited to join an organisation on Clove ERP.");
     expect(m.text.startsWith("Hello,\n")).toBe(true);
     expect(m.text).not.toContain("stays open until");
   });

@@ -15,9 +15,10 @@
  * what the person invited reads and what the page they land on accepts.
  *
  * The organisation name and both people's names are typed by a tenant, so
- * all of them are treated as hostile: squeezed onto one line for the subject
- * and escaped for the HTML. The message carries no images, no tracking and no
- * remote assets; the only URL in it is the one the person should open.
+ * all of them are treated as hostile: kept out of the subject altogether,
+ * squeezed onto one line and escaped for the HTML. The message carries no
+ * images, no tracking and no remote assets; the only URL in it is the one the
+ * person should open.
  */
 
 /**
@@ -343,6 +344,18 @@ export type InvitationEmailInput = {
 
 export type InvitationEmail = { subject: string; text: string; html: string };
 
+/**
+ * Every invitation email's subject, whoever sent it and into what.
+ *
+ * Fixed, because the subject is the line a person reads before deciding
+ * anything, in a list beside mail from their bank. Anybody with a Google account
+ * can create an organisation and name it, and name themselves, whatever they
+ * like — "Payment failed, call …" included — and a subject carrying either would
+ * put those words on a line from Clove ERP's own address. The names stay in the
+ * body, where they read as who is inviting rather than as what the mail is.
+ */
+export const INVITATION_SUBJECT = "You have been invited to Clove ERP";
+
 // The site's palette as hex, as supabase/functions/enquiry/index.ts has it:
 // src/styles.css defines these in oklch, which most mail clients do not read.
 const BRAND = "#36312B";
@@ -362,14 +375,7 @@ export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
   const until = expiryDate(input.expiresAt);
   const resent = input.resent === true;
 
-  const subject = oneLine(
-    resent
-      ? `Your sign-in link for ${organisation} on Clove ERP`
-      : inviter
-        ? `${inviter} invited you to join ${organisation} on Clove ERP`
-        : `You are invited to join ${organisation} on Clove ERP`,
-    200,
-  );
+  const subject = INVITATION_SUBJECT;
   const greeting = invitee ? `Hello ${invitee},` : "Hello,";
   const lead = resent
     ? `Here is a new sign-in link for your invitation to join ${organisation} on Clove ERP.`

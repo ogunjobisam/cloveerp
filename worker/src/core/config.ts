@@ -15,7 +15,15 @@ export type TenantBinding = {
    * always run, and all any claim or settle the drain calls asks for.
    */
   principalId: string | null;
-  /** Listed by the database on this pass rather than named in the environment. */
+  /**
+   * Listed by the database on this pass rather than named in the environment.
+   *
+   * Such an organisation has its queues drained and nothing more that an
+   * operator has not chosen to give it: no credential_ref is resolved for it
+   * (resolveCredential) and no job is run for it here (drainOnce), because the
+   * minute pass already runs every active organisation's SQL jobs and a handler
+   * only TypeScript implements is platform work.
+   */
   discovered: boolean;
 };
 
@@ -163,16 +171,44 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 }
 
 /**
+ * The only environment names a credential_ref may point at.
+ *
+ * One process environment serves every organisation, and it also holds what the
+ * process runs on: SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL with its password,
+ * RESEND_API_KEY, CLOVEERP_DISPATCH_SECRET. An administrator writes the
+ * reference, so a reference that could name any variable would let a webhook
+ * channel post the service key to an address its organisation chose. A name
+ * under this prefix is one an operator put there to be handed out, and nothing
+ * else is. The database refuses the same rule when the reference is written;
+ * this is the half that holds for a row written before it did.
+ */
+export const CREDENTIAL_NAME = /^CLOVEERP_CREDENTIAL_[A-Z0-9_]{1,100}$/;
+
+/**
  * Resolving a credential_ref.
  *
- * The reference is a URI like `env://ACME_API_TOKEN` or `vault://path/to/key`.
- * Only the env scheme is implemented, because that is the only store this
- * process has been given. An unresolvable reference is an error rather than an
- * empty string: sending an unauthenticated request to a supplier and recording
- * the rejection as a business failure is worse than not sending it.
+ * The reference is a URI like `env://CLOVEERP_CREDENTIAL_ACME_API_TOKEN` or
+ * `vault://path/to/key`. Only the env scheme is implemented, because that is the
+ * only store this process has been given. An unresolvable reference is an error
+ * rather than an empty string: sending an unauthenticated request to a supplier
+ * and recording the rejection as a business failure is worse than not sending it.
+ *
+ * Only for an organisation an operator named in CLOVEERP_TENANTS. An organisation
+ * erp.dispatch_bindings() listed chose its own references, and nobody decided
+ * which of this environment's credentials are its to use: under one shared
+ * prefix it could still name another organisation's token. So a listed
+ * organisation's reference is refused before the environment is read at all,
+ * and its webhooks without one still post.
+ *
+ * No refusal carries a value. The text goes into a failure column somebody
+ * reads on a screen.
  */
-export function resolveCredential(ref: string | null): string | null {
+export function resolveCredential(ref: string | null, binding: TenantBinding): string | null {
   if (!ref) return null;
+
+  if (binding.discovered) {
+    throw new Error("credentials are resolved only for organisations named in CLOVEERP_TENANTS");
+  }
 
   const match = /^([a-z][a-z0-9+.-]*):\/\/(.+)$/i.exec(ref);
   if (!match) {
@@ -185,6 +221,14 @@ export function resolveCredential(ref: string | null): string | null {
       `credential_ref scheme "${scheme}" is not supported by this worker. ` +
         `Implement it here, where the secret store is reachable — never by ` +
         `putting the value in the database.`,
+    );
+  }
+
+  if (!CREDENTIAL_NAME.test(rest!)) {
+    throw new Error(
+      "credential_ref names an environment variable this worker does not hand out: " +
+        "an env:// reference must name CLOVEERP_CREDENTIAL_ followed by 1 to 100 " +
+        "capital letters, digits or underscores",
     );
   }
 

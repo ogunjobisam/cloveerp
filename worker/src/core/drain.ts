@@ -307,7 +307,10 @@ async function drainOutbox(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: D
     );
 
     const endpoint = endpointOf(system?.["connection"]);
-    const credential = resolveCredential((system?.["credential_ref"] ?? null) as string | null);
+    const credential = resolveCredential(
+      (system?.["credential_ref"] ?? null) as string | null,
+      b,
+    );
 
     for (const message of claimed) {
       const id = message["id"] as string;
@@ -381,7 +384,10 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
     );
 
     const endpoint = endpointOf(system?.["connection"]);
-    const credential = resolveCredential((system?.["credential_ref"] ?? null) as string | null);
+    const credential = resolveCredential(
+      (system?.["credential_ref"] ?? null) as string | null,
+      b,
+    );
     const timeoutMs = timeoutFor(system?.["connection"], cfg);
 
     for (const command of claimed) {
@@ -531,7 +537,8 @@ async function sweepExpiredDocumentPreviews(
  * other active one erp.dispatch_bindings() lists, with a tenant context and no
  * principal. An organisation nobody named used to have its email queued by the
  * minute pass and sent by nothing; the list is now the minute pass's own, read
- * afresh each pass.
+ * afresh each pass. A listed organisation gets its queues drained and no more:
+ * no jobs stage and no credentials, for the reasons on TenantBinding.discovered.
  *
  * A named organisation keeps its principal when the database lists it too. If
  * the list cannot be read — the migration that defines it not yet applied, say —
@@ -596,7 +603,16 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
     const t = binding.tenantId;
     await stage(out, "reclaim", t, () => reclaimStranded(sql, binding, out));
     await stage(out, "previews", t, () => sweepExpiredDocumentPreviews(sql, binding, cfg, out));
-    await stage(out, "jobs", t, () => drainJobs(sql, binding, cfg, out));
+    // Only for an organisation an operator named. The minute pass
+    // (erp.run_due_jobs_all_tenants) already runs every active organisation's
+    // SQL jobs, in the same tenant context with no principal, so a listed
+    // organisation loses nothing here. What it would gain is the rest:
+    // handlers only TypeScript implements, which the minute pass never runs
+    // and which are platform work — platform.poll_dependency_status declares
+    // incidents for every organisation from whatever feed its job names.
+    if (!binding.discovered) {
+      await stage(out, "jobs", t, () => drainJobs(sql, binding, cfg, out));
+    }
     await stage(out, "outbox", t, () => drainOutbox(sql, binding, cfg, out));
     await stage(out, "commands", t, () => drainCommands(sql, binding, cfg, out));
     await stage(out, "email", t, () => drainEmail(sql, binding, cfg, out));

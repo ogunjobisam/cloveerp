@@ -14,9 +14,11 @@
  *                    bearer token, so erp.authorise(), erp_meta.require_platform()
  *                    and row security decide exactly as they do from any screen;
  *                    this file widens nothing. Only after the door has said yes
- *                    does it do the two things the caller could not: ask
- *                    Supabase Auth for a one-time sign-in link to the address
- *                    the door accepted, and post the email through Resend.
+ *                    does it do what the caller could not: ask the database
+ *                    whether this organisation may send another invitation
+ *                    now, ask Supabase Auth for a one-time sign-in link to the
+ *                    address the door accepted, and post the email through
+ *                    Resend.
  *
  *   { resend_token } The page an invitation opens (/join) asks for a new
  *                    sign-in link when the one in the email has expired, or
@@ -25,6 +27,27 @@
  *                    still open, and the link goes to the invited address and
  *                    nowhere else — never back in the response, which says
  *                    { sent } and nothing about whether the token was good.
+ *
+ * How often. Anybody with a Google account can create an organisation and
+ * invite from it, so the sender is the verified cloveerp.com address in the
+ * hands of whoever asks, and the Resend key is the one every other email Clove
+ * sends depends on. erp.invitation_send_allowance() says whether a send may go —
+ * a gap between one person's invitations and between their sign-in links, a
+ * most for the links, and an hourly and a daily cap for the organisation, tighter
+ * for one that is not live or is new; the figures live there. It is asked over
+ * this function's own connection, after the invitation exists and before any
+ * link is made, and erp.note_invitation_link_sent() records each send it
+ * allowed. A refusal is not a failure of the invitation: the inviter is told why
+ * and given the join link to copy, and a resend answers { sent: false } as for
+ * any other reason. The per-isolate gap below stays as a first filter in front
+ * of the database.
+ *
+ * A password nobody holds. An 'invite' link can be issued for an account
+ * somebody registered with a password and never confirmed; following the link
+ * confirms that account and keeps the password, so whoever typed it would sign
+ * in as the person invited. So the moment Supabase Auth makes an invite link,
+ * the account's password is replaced with a random one nobody is told, and if
+ * that cannot be done the link is not sent.
  *
  * What never leaves this file: the sign-in link, its hashed token and OTP, the
  * service key and the Resend key. None is logged and none is returned. The
@@ -50,7 +73,9 @@
  *       function that cannot make a sign-in link refuses rather than making an
  *       invitation it cannot deliver.
  *   SUPABASE_DB_URL (or CLOVEERP_DATABASE_URL)
- *       injected; used only for a resend, whose lookup is trusted-only.
+ *       injected; the send allowance, the record of a link sent and a resend's
+ *       lookup are all trusted-only. Read before any door is called, like the
+ *       keys: without it nothing could say whether an email may go.
  *   RESEND_API_KEY
  *       without it the invitation is still made, and the screen says it was
  *       not emailed and offers the link to copy.
@@ -60,7 +85,7 @@
  * The imports carry explicit .ts extensions because Deno requires them, and
  * src/lib/invitation-email.ts imports nothing so that Deno can follow it.
  */
-import { connect } from "../../../worker/src/core/db.ts";
+import { connect, type Sql } from "../../../worker/src/core/db.ts";
 import { sendViaResend } from "../../../worker/src/core/resend.ts";
 import {
   INVITE_VALID_DAYS,
@@ -181,6 +206,53 @@ function reply(req: Request, status: number, body: unknown): Response {
   });
 }
 
+// ─── the database's say on sending ───────────────────────────────────────────
+
+type Allowance = { allowed: boolean; reason: string | null };
+
+/**
+ * Whether one more email may go for this person's invitation, as
+ * erp.invitation_send_allowance() decides: 'invite' counts the invitation the
+ * door just made, 'resend' the links already sent for it. Anything but an
+ * explicit yes is a no.
+ */
+async function sendAllowance(
+  sql: Sql,
+  appUserId: string,
+  kind: "invite" | "resend",
+): Promise<Allowance> {
+  const rows = (await sql`
+    select allowed, reason
+      from erp.invitation_send_allowance(${appUserId}::uuid, ${kind}::text)
+  `) as unknown as { allowed: unknown; reason: unknown }[];
+  const row = rows[0];
+  return { allowed: row?.allowed === true, reason: textOf(row?.reason) };
+}
+
+/**
+ * The link has gone; the next allowance counts it. The email has already left,
+ * so a failure here is logged and nothing more: telling the inviter it was not
+ * sent would have them invite again.
+ */
+async function noteLinkSent(sql: Sql, appUserId: string): Promise<void> {
+  try {
+    await sql`select erp.note_invitation_link_sent(${appUserId}::uuid)`;
+  } catch (err) {
+    console.error(
+      `invite: a sent link could not be recorded: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** Closing the connection is tidying up, and must not turn an answer into a 500. */
+async function close(sql: Sql | undefined): Promise<void> {
+  try {
+    await sql?.end({ timeout: 5 });
+  } catch {
+    /* the isolate reclaims it */
+  }
+}
+
 // ─── Supabase, over plain fetch ─────────────────────────────────────────────
 
 function bearerOf(req: Request): string | null {
@@ -248,12 +320,59 @@ async function asCaller(
 
 type SignInLink = { link: string } | { reason: string };
 
+const PASSWORD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/**
+ * Sixty-four characters nobody is ever told, with a lower-case letter, a capital
+ * and a digit, which is what the project's password rules ask for. Bytes of 248
+ * and over are skipped: 248 is the largest multiple of 62 below 256, so every
+ * character is equally likely.
+ */
+function passwordNobodyHolds(): string {
+  for (;;) {
+    let out = "";
+    for (const byte of crypto.getRandomValues(new Uint8Array(128))) {
+      if (byte >= 248) continue;
+      out += PASSWORD_ALPHABET.charAt(byte % 62);
+      if (out.length === 64) break;
+    }
+    if (out.length === 64 && /[a-z]/.test(out) && /[A-Z]/.test(out) && /[0-9]/.test(out)) {
+      return out;
+    }
+  }
+}
+
+/**
+ * Replace the password on the account an invite link was just made for.
+ *
+ * Supabase Auth makes an 'invite' link only for an address with no confirmed
+ * account, and nobody can sign in with the password of an unconfirmed one: for
+ * a new address this does what Auth would have done when the link was
+ * followed, and for one somebody registered earlier and never confirmed it
+ * takes away the password they typed. The link just made is untouched. The password is sent once, to
+ * Auth, and is never logged or kept.
+ */
+async function replacePassword(url: string, serviceKey: string, userId: unknown): Promise<boolean> {
+  if (typeof userId !== "string" || !/^[0-9A-Fa-f-]{36}$/.test(userId)) return false;
+  const response = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
+    method: "PUT",
+    headers: { ...serviceHeaders(serviceKey), "content-type": "application/json" },
+    body: JSON.stringify({ password: passwordNobodyHolds() }),
+  });
+  await response.body?.cancel();
+  if (!response.ok) {
+    console.error(`invite: the invited account's password could not be replaced (${response.status})`);
+  }
+  return response.ok;
+}
+
 /**
  * A one-time link that signs the invited address in and lands on /join.
  *
- * 'invite' for an address Supabase Auth has never seen; 'magiclink' when it
- * already has an account, which is what email_exists means. Nothing is mailed
- * by Supabase here — generate_link only makes the link — so the one email the
+ * 'invite' for an address Supabase Auth has no confirmed account for, whose
+ * password is then replaced (replacePassword); 'magiclink' when it already has a
+ * confirmed account, which is what email_exists means. Nothing is mailed by
+ * Supabase here — generate_link only makes the link — so the one email the
  * person gets is ours.
  */
 async function signInLink(
@@ -285,9 +404,14 @@ async function signInLink(
     }
     if (response.ok) {
       const action = body["action_link"];
-      return typeof action === "string" && /^https?:\/\//.test(action)
-        ? { link: action }
-        : { reason: "Supabase Auth made no sign-in link for this address" };
+      if (typeof action !== "string" || !/^https?:\/\//.test(action)) {
+        return { reason: "Supabase Auth made no sign-in link for this address" };
+      }
+      // generate_link answers with the account it acted on, id and all.
+      if (type === "invite" && !(await replacePassword(url, serviceKey, body["id"]))) {
+        return { reason: "The sign-in link could not be made safe to send, so no email went" };
+      }
+      return { link: action };
     }
     const code = body["code"] ?? body["error_code"];
     if (type === "invite" && (code === "email_exists" || code === "user_already_exists")) continue;
@@ -371,6 +495,7 @@ async function invite(req: Request, body: Record<string, unknown>): Promise<Resp
   const url = required("SUPABASE_URL").replace(/\/+$/, "");
   const anonKey = projectKey("SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS");
   const serviceKey = projectKey("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
+  const connection = databaseUrl();
   const origin = appOrigin();
   const from = env("CLOVEERP_INVITE_FROM") ?? DEFAULT_FROM;
   const apiKey = env("RESEND_API_KEY");
@@ -427,8 +552,17 @@ async function invite(req: Request, body: Record<string, unknown>): Promise<Resp
       join_link: plain,
     });
 
+  let sql: Sql | undefined;
   try {
     if (!apiKey) return notEmailed("Email is not set up for this site yet");
+
+    // Before any link exists: a refused send makes no sign-in link and touches
+    // no account.
+    sql = connect(connection);
+    const allowance = await sendAllowance(sql, invited.appUserId, "invite");
+    if (!allowance.allowed) {
+      return notEmailed(allowance.reason ?? "Too many invitations have been sent just now");
+    }
 
     const names = await namesFor(
       (name) => asCaller(url, anonKey, bearer, name, {}),
@@ -462,6 +596,7 @@ async function invite(req: Request, body: Record<string, unknown>): Promise<Resp
       return notEmailed(`The email service did not take the message (${providerRefusal(err)})`);
     }
 
+    await noteLinkSent(sql, invited.appUserId);
     return reply(req, 200, {
       app_user_id: invited.appUserId,
       email: invited.email,
@@ -476,6 +611,8 @@ async function invite(req: Request, body: Record<string, unknown>): Promise<Resp
       }`,
     );
     return notEmailed("The email could not be sent just now");
+  } finally {
+    await close(sql);
   }
 }
 
@@ -500,6 +637,7 @@ async function tooSoon(token: string): Promise<boolean> {
 }
 
 type ResendRow = {
+  app_user_id: string;
   email: string;
   display_name: string | null;
   tenant_name: string | null;
@@ -519,7 +657,7 @@ async function resend(req: Request, token: unknown): Promise<Response> {
   const nothing = () => reply(req, 200, { sent: false });
   if (!plausibleInvitationToken(token)) return nothing();
 
-  let sql: ReturnType<typeof connect> | undefined;
+  let sql: Sql | undefined;
   try {
     const url = required("SUPABASE_URL").replace(/\/+$/, "");
     const serviceKey = projectKey("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
@@ -534,11 +672,16 @@ async function resend(req: Request, token: unknown): Promise<Response> {
     // asks for; the function it reaches answers only for a pending invitation.
     sql = connect(connection);
     const rows = (await sql`
-      select email, display_name, tenant_name, expires_at
+      select app_user_id, email, display_name, tenant_name, expires_at
         from erp.invitation_for_resend(${token}::text)
     `) as unknown as ResendRow[];
     const row = rows[0];
-    if (!row || !row.email) return nothing();
+    if (!row || !row.email || !row.app_user_id) return nothing();
+
+    // The database's gap and count, which every isolate shares; the map above
+    // is only this isolate's.
+    const allowance = await sendAllowance(sql, String(row.app_user_id), "resend");
+    if (!allowance.allowed) return nothing();
 
     const link = await signInLink(url, serviceKey, row.email, `${origin}/join`);
     if ("reason" in link) {
@@ -563,6 +706,7 @@ async function resend(req: Request, token: unknown): Promise<Response> {
       from_address: from,
       reply_to: null,
     });
+    await noteLinkSent(sql, String(row.app_user_id));
     return reply(req, 200, { sent: true });
   } catch (err) {
     console.error(
@@ -570,7 +714,7 @@ async function resend(req: Request, token: unknown): Promise<Response> {
     );
     return nothing();
   } finally {
-    await sql?.end({ timeout: 5 });
+    await close(sql);
   }
 }
 
