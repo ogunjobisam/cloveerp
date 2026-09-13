@@ -3746,11 +3746,11 @@ export const EXTRA_TILES: TileDef[] = [
     path: "/administration/onboarding",
     titleKey: "nav.administration_onboarding",
     title: "Onboarding interview",
+    // "Change", not "change set": erp_ref.vocabulary marks the latter an
+    // internal model term, and assert_vocabulary_aligned() keeps internal
+    // words off the surface.
     blurb:
-      // "Change", not "change set": erp_ref.vocabulary marks the latter an
-      // internal model term, and assert_vocabulary_aligned() keeps internal
-      // words off the surface.
-      "Questions about how this organisation works, turned into a proposed change for each configuration surface.",
+      "Questions about how this organisation works, a section at a time with likely answers; your answers become changes you accept.",
     permission: "administration.configure",
     group: "people",
   },
