@@ -369,7 +369,9 @@ export function ApiAccess() {
                     choices: [
                       { value: "active", label: "Active" },
                       { value: "paused", label: "Paused" },
-                      { value: "disabled", label: "Disabled" },
+                      // The third state the door accepts. There is no way back
+                      // from it, which the label says.
+                      { value: "revoked", label: "Revoked — final, cannot be resumed" },
                     ],
                   },
                 ],

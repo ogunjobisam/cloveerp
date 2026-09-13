@@ -160,12 +160,20 @@ function Dimensions() {
                 required: true,
                 placeholder: "Leeds warehouse",
               },
+              // The door resolves the parent within the dimension chosen
+              // above; the picker cannot narrow to it, so every value is
+              // offered with its dimension named.
               {
-                kind: "text",
+                kind: "select",
                 name: "p_parent_code",
-                label: "Parent value code",
-                placeholder: "CC-1",
-                hint: "Optional. Use it to group values into a tree.",
+                label: "Parent value",
+                required: false,
+                hint: "Optional. Groups values into a tree. Choose a value of the same dimension.",
+                options: {
+                  fn: "erp_dimension_values",
+                  value: "code",
+                  label: ["dimension", "code", "name"],
+                },
               },
               { kind: "date", name: "p_valid_from", label: "Valid from" },
               { kind: "date", name: "p_valid_to", label: "Valid to" },
@@ -190,15 +198,21 @@ function Dimensions() {
             fields: [
               pickAccount(),
               {
-                kind: "text",
+                kind: "multi",
                 name: "p_dimension_codes",
-                label: "Dimension codes",
-                hint: "Comma separated. Empty removes every requirement.",
+                label: "Dimensions",
+                hint: "Tick every dimension a line to this account must carry. None ticked removes every requirement.",
+                join: ", ",
+                options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
               },
             ],
-            mapArgs: (v) => ({
+            // The door takes the several as one comma-separated line and has
+            // no default, so the key is always sent — an empty string is the
+            // instruction to remove every requirement. Field.join is honoured
+            // by buildArgs only, so the joining is done here.
+            mapArgs: (v, picked) => ({
               p_account_id: v["p_account_id"],
-              p_dimension_codes: v["p_dimension_codes"] ?? "",
+              p_dimension_codes: (picked?.lists["p_dimension_codes"] ?? []).join(", "),
             }),
             invalidates: ["erp_accounts"],
           },

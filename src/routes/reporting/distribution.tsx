@@ -8,6 +8,7 @@ import {
   ErrorNote,
   GoTo,
   useErpAction,
+  type Field,
 } from "../../components/erp/action";
 import {
   ActionBar,
@@ -151,6 +152,27 @@ type Contract = {
 function when(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
+
+/**
+ * A governed view, chosen from the contract rather than typed.
+ *
+ * The door refuses an unknown code, and the contract verbs refuse one that is
+ * not exposed; the list cannot be narrowed to exposed views, so the hint says
+ * which the form wants.
+ */
+const pickGovernedView = (hint: string): Field => ({
+  kind: "select",
+  name: "p_view_code",
+  label: "View",
+  required: true,
+  hint,
+  options: {
+    fn: "erp_analytics_contract",
+    path: "views",
+    value: "code",
+    label: ["code", "name", "module_code"],
+  },
+});
 
 function Distribution() {
   const { ui } = useT();
@@ -354,16 +376,7 @@ function Distribution() {
             label: "Expose a governed view",
             permission: "administration.integrate",
             fn: "erp_expose_governed_view",
-            fields: [
-              {
-                kind: "text",
-                name: "p_view_code",
-                label: "View code",
-                required: true,
-                placeholder: "sales_by_month",
-                hint: "The governed view outside tools will read.",
-              },
-            ],
+            fields: [pickGovernedView("The governed view outside tools will read.")],
             invalidates: ["erp_analytics_contract"],
           },
           {
@@ -371,14 +384,7 @@ function Distribution() {
             permission: "administration.integrate",
             fn: "erp_revise_analytics_contract",
             fields: [
-              {
-                kind: "text",
-                name: "p_view_code",
-                label: "View code",
-                required: true,
-                placeholder: "sales_by_month",
-                hint: "The exposed view being changed.",
-              },
+              pickGovernedView("The exposed view being changed."),
               {
                 kind: "text",
                 name: "p_deprecation_notice",
@@ -401,14 +407,7 @@ function Distribution() {
             permission: "administration.integrate",
             fn: "erp_retire_analytics_contract",
             fields: [
-              {
-                kind: "text",
-                name: "p_view_code",
-                label: "View code",
-                required: true,
-                placeholder: "sales_by_month",
-                hint: "The exposed view being retired.",
-              },
+              pickGovernedView("The exposed view being retired."),
               { kind: "number", name: "p_version", label: "Version", required: true },
             ],
             invalidates: ["erp_analytics_contract"],
@@ -419,12 +418,16 @@ function Distribution() {
             fn: "erp_revoke_analytics_credential",
             fields: [
               {
-                kind: "text",
+                kind: "select",
                 name: "p_credential_id",
-                label: "Credential id",
+                label: "Credential",
                 required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "Copy it from the credential listed on this page.",
+                options: {
+                  fn: "erp_analytics_contract",
+                  path: "credentials",
+                  value: "id",
+                  label: ["label", "expires_at"],
+                },
               },
               {
                 kind: "text",
@@ -701,10 +704,16 @@ function AnalyticsContract({ contract, error }: { contract: Contract | null; err
                   hint: "Name it for the tool that will hold it.",
                 },
                 {
-                  kind: "text",
+                  kind: "multi",
                   name: "p_view_codes",
-                  label: "View codes",
-                  hint: "Comma separated. Leave empty for every exposed view.",
+                  label: "Views",
+                  hint: "Tick none for every exposed view.",
+                  options: {
+                    fn: "erp_analytics_contract",
+                    path: "views",
+                    value: "code",
+                    label: ["code", "name"],
+                  },
                 },
                 {
                   kind: "date",
@@ -713,16 +722,17 @@ function AnalyticsContract({ contract, error }: { contract: Contract | null; err
                   hint: "Defaults to a year.",
                 },
               ]}
-              mapArgs={(v) => ({
-                p_label: v["p_label"],
-                p_view_codes: v["p_view_codes"]
-                  ? v["p_view_codes"]
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean)
-                  : null,
-                p_expires_at: v["p_expires_at"] ? new Date(v["p_expires_at"]).toISOString() : null,
-              })}
+              mapArgs={(v, picked) => {
+                // A ticked list arrives in the second argument, not in values.
+                const views = picked?.lists["p_view_codes"] ?? [];
+                return {
+                  p_label: v["p_label"],
+                  p_view_codes: views.length > 0 ? views : null,
+                  p_expires_at: v["p_expires_at"]
+                    ? new Date(v["p_expires_at"]).toISOString()
+                    : null,
+                };
+              }}
               invalidates={["erp_analytics_contract"]}
               submitLabel="Issue"
               onDone={(result) => {

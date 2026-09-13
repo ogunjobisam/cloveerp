@@ -236,12 +236,16 @@ function Classification() {
                 required: true,
                 hint: "What the code template uses for this value.",
               },
+              // Optional: a top-level value has no parent, and the door
+              // defaults p_parent_value_id to null.
               pickFrom(
                 "erp_classification_values",
                 "value_id",
                 ["axis_code", "code", "name"],
                 "p_parent_value_id",
                 "Parent value",
+                undefined,
+                false,
               ),
             ],
             invalidates,
@@ -317,8 +321,16 @@ function Classification() {
             label: "Create a classified product",
             permission: "master_data.write",
             fn: "erp_create_classified_item",
+            // mapArgs replaces buildArgs, so the form's "" for an untouched
+            // field would otherwise be sent as a value; only what was answered
+            // goes, and the boolean choice goes as a boolean.
             mapArgs: (values, picked) => ({
-              ...values,
+              p_template_id: values["p_template_id"],
+              p_name: values["p_name"],
+              p_item_class: values["p_item_class"],
+              ...(values["p_is_batch_controlled"]
+                ? { p_is_batch_controlled: values["p_is_batch_controlled"] === "true" }
+                : {}),
               p_classification: Object.fromEntries(
                 (picked?.rows["p_classification"] ?? [])
                   .filter((row) => row["axis"] && row["value"])
@@ -345,10 +357,30 @@ function Classification() {
                 name: "p_classification",
                 label: "Classification",
                 addLabel: "Add an answer",
-                hint: "One row per axis: the axis code and the value code chosen for it.",
+                hint: "One row per axis: the axis and the value chosen for it. The value must belong to the axis on the same row.",
+                // Both chosen by code. A row cannot narrow the value list to
+                // its own axis, so every value is offered with its axis named.
                 columns: [
-                  { name: "axis", label: "Axis code", kind: "text", placeholder: "FAMILY" },
-                  { name: "value", label: "Value code", kind: "text", placeholder: "WIDGET" },
+                  {
+                    name: "axis",
+                    label: "Axis",
+                    kind: "select",
+                    options: {
+                      fn: "erp_classification_axes",
+                      value: "code",
+                      label: ["code", "name"],
+                    },
+                  },
+                  {
+                    name: "value",
+                    label: "Value",
+                    kind: "select",
+                    options: {
+                      fn: "erp_classification_values",
+                      value: "code",
+                      label: ["axis_code", "code", "name"],
+                    },
+                  },
                 ],
               },
               {

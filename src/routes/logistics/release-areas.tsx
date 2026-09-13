@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   ActionBar,
+  pickDocumentType,
   pickFrom,
   pickItem,
   pickItemClasses,
@@ -152,10 +153,7 @@ function ReleaseAreas() {
                 hint: "Leave empty to serve every channel.",
               },
               {
-                kind: "text",
-                name: "p_order_type_code",
-                label: "Order type",
-                placeholder: "sales_order",
+                ...pickDocumentType(undefined, "p_order_type_code", "Order type", false),
                 hint: "Leave empty to serve every order type.",
               },
               pickItemClasses(

@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
 import { ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
+import { pickCurrency } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
@@ -298,12 +299,19 @@ function Quotes() {
                   fn="erp_open_commercial_quote"
                   fields={[
                     {
-                      kind: "text",
+                      // Both halves: an existing customer is offered, a new one typed.
+                      kind: "combo",
                       name: "p_party_code",
                       label: ui("Business partner code"),
                       required: true,
                       placeholder: "CUST-COOP",
                       hint: "The customer's code. It is created if it does not exist yet.",
+                      options: {
+                        fn: "erp_parties",
+                        args: { p_role_kind: "customer" },
+                        value: "code",
+                        label: ["code", "name"],
+                      },
                     },
                     {
                       kind: "text",
@@ -327,13 +335,7 @@ function Quotes() {
                       choices: TERMS,
                     },
                     { kind: "number", name: "p_term_months", label: ui("Term months") },
-                    {
-                      kind: "text",
-                      name: "p_currency",
-                      label: "Currency",
-                      required: true,
-                      hint: "GBP, EUR…",
-                    },
+                    pickCurrency("p_currency", "Currency", true),
                     { kind: "number", name: "p_valid_days", label: ui("Valid for days") },
                     {
                       kind: "text",

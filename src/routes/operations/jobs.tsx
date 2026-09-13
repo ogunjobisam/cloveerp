@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickTimezone } from "../../components/erp/actions-bar";
+import { ActionBar, pickFrom, pickTimeOfDay, pickTimezone } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -134,17 +134,23 @@ function Jobs() {
                 label: "Interval (seconds)",
                 hint: "For an interval schedule. At least 30.",
               },
+              { ...pickTimeOfDay("p_at_time", "At", false), hint: "Daily, weekly or monthly." },
               {
-                kind: "text",
-                name: "p_at_time",
-                label: "At (HH:MM)",
-                hint: "Daily, weekly or monthly.",
-              },
-              {
-                kind: "text",
+                kind: "multi",
                 name: "p_days_of_week",
                 label: "Days of week",
-                hint: "Weekly only. ISO numbers, 1 = Monday, comma separated.",
+                hint: "Weekly only.",
+                // erp.upsert_job splits the line on ',' and casts each part to smallint.
+                join: ",",
+                choices: [
+                  { value: "1", label: "Monday" },
+                  { value: "2", label: "Tuesday" },
+                  { value: "3", label: "Wednesday" },
+                  { value: "4", label: "Thursday" },
+                  { value: "5", label: "Friday" },
+                  { value: "6", label: "Saturday" },
+                  { value: "7", label: "Sunday" },
+                ],
               },
               { kind: "number", name: "p_day_of_month", label: "Day of month" },
               pickTimezone("p_timezone", "Time zone", false),
@@ -156,17 +162,16 @@ function Jobs() {
             permission: "administration.jobs",
             fn: "erp_trigger_job",
             fields: [
-              {
-                kind: "combo",
-                name: "p_job_code",
-                label: "Job code",
-                required: true,
-                options: {
-                  fn: "erp_silent_jobs",
-                  value: "job_code",
-                  label: ["job_code", "handler_code"],
-                },
-              },
+              // erp_silent_jobs lists only jobs overdue against their schedule, so
+              // on a healthy system the old picker offered nothing. erp_job_health
+              // is one row per job.
+              pickFrom(
+                "erp_job_health",
+                "job_code",
+                ["job_code", "last_outcome"],
+                "p_job_code",
+                "Job",
+              ),
               {
                 kind: "text",
                 name: "p_reason",
