@@ -147,7 +147,8 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
     label: "Decide an approval waiting on me",
     description: "The approval tasks assigned to you or to a role you hold, decided one at a time.",
-    permission: "procurement.approve",
+    // No permission: the door gates on the task being assigned to the caller,
+    // and a code here would hide it from an assignee who lacks that code.
     fn: "erp_decide_approval",
     fields: [
       pickFrom(
@@ -383,7 +384,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     label: "Route an approval by value",
     description:
       "Stamp which chain a value in a currency would route to, for a department, before raising the document.",
-    permission: "procurement.order",
+    permission: "administration.configure",
     fn: "erp_stamp_approval_routing",
     fields: [
       {
