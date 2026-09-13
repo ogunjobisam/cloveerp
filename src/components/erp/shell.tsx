@@ -28,7 +28,9 @@ import { ContextHelp } from "./context-help";
 import { BrandMark } from "./logo";
 import { Breadcrumbs } from "./breadcrumbs";
 import { UnsavedChangesProvider } from "./unsaved";
+import { WalkthroughButton } from "./walkthrough";
 import { TOUCH } from "./page";
+import { PageHeaderExtras } from "./page-extras";
 import { UserMenu } from "./user-menu";
 
 /**
@@ -572,7 +574,9 @@ export function Shell({
 
           <main id="main" tabIndex={-1} className={MAIN_AREA}>
             <Breadcrumbs />
-            {children}
+            <PageHeaderExtras.Provider value={WalkthroughButton}>
+              {children}
+            </PageHeaderExtras.Provider>
           </main>
         </div>
       </div>
