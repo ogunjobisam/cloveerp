@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { Gate } from "../components/erp/gate";
 import { SettingsLaunchpad } from "../components/erp/launchpad";
+import { SetupOverview } from "../components/erp/walkthrough";
 import { PageHeader } from "../components/erp/page";
 import { useErpSession } from "../components/erp/session-context";
 import { useT } from "../lib/i18n";
@@ -39,6 +40,7 @@ function Settings() {
         {session.tenant?.name ?? ""}
       </PageHeader>
 
+      <SetupOverview />
       <SettingsLaunchpad />
     </div>
   );

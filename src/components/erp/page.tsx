@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { WalkthroughButton } from "./walkthrough";
 
 /**
  * The pieces every screen inside the shell shares.
@@ -93,7 +94,10 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
         <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
         {children ? <Prose className="mt-1 text-sm text-muted-foreground">{children}</Prose> : null}
       </div>
-      <RefreshButton />
+      <div className="flex shrink-0 items-center gap-2">
+        <WalkthroughButton />
+        <RefreshButton />
+      </div>
     </div>
   );
 }

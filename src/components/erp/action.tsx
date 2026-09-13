@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -18,6 +18,7 @@ import { friendlyError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "./currencies";
+import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 import { useUnsavedGuard } from "./unsaved";
@@ -710,6 +711,8 @@ export function ActionDialog({
   const { ui } = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  // The walkthrough opens this form by the door it drives.
+  useEffect(() => registerActionOpener(fn, () => setOpen(true)), [fn]);
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(fields));
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
