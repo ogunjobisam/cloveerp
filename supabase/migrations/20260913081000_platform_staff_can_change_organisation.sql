@@ -8,8 +8,14 @@
 -- caller is staff. A signed-in caller has had no USAGE on erp_meta since
 -- 20260830024837, and 20260904720000 asserts it stays that way, so the door
 -- cannot name the question it opens with. The refusal the door means to give
--- a non-staff caller, ERPWARE_TENANT_FIXED, was never reached either; the wall
--- answered first.
+-- a non-staff caller, CLOVEERP_TENANT_FIXED (renamed from its ERPWARE_ form by
+-- 20260904980000), was never reached either; the wall answered first.
+--
+-- This file was first pushed as 20260913080000. Its suite matched the
+-- refusals by their retired ERPWARE_ spelling and failed. The failed assertion
+-- rolled that migration back, and a pull request's deploy run is a dry run only,
+-- so version 20260913080000 was never recorded anywhere. It is replaced here,
+-- under a new version, rather than repaired.
 --
 -- The fix is the one 20260904720000 gave erp_platform_run_check and
 -- 20260904620000 gave erp_platform_generate_invoices: the door runs as its
@@ -179,7 +185,7 @@ begin
       perform public.erp_set_active_tenant(rc.tenant_id);
       v_ok := false; v_msg := 'an organisation the staff member holds no principal in was accepted';
     exception when others then
-      v_ok := sqlerrm like 'ERPWARE_NOT_A_MEMBER%'; v_msg := left(sqlerrm, 160);
+      v_ok := sqlerrm like 'CLOVEERP_NOT_A_MEMBER%'; v_msg := left(sqlerrm, 160);
     end;
     v_now := erp.current_tenant_id();
     execute format('set local role %I', v_owner);
@@ -196,7 +202,7 @@ begin
       perform public.erp_set_active_tenant(rb.tenant_id);
       v_ok := false; v_msg := 'a caller who is not platform staff changed organisation';
     exception when others then
-      v_ok := sqlerrm like 'ERPWARE_TENANT_FIXED%'; v_msg := left(sqlerrm, 160);
+      v_ok := sqlerrm like 'CLOVEERP_TENANT_FIXED%'; v_msg := left(sqlerrm, 160);
     end;
     execute format('set local role %I', v_owner);
     return query select 'a caller who is not platform staff is refused, even between two organisations they belong to',
@@ -259,3 +265,4 @@ select erp.assert_invoker_doors_executable();
 select erp.assert_governed_views_are_safe();
 select erp.assert_ci_coverage();
 select erp.assert_suite_verdicts_strict();
+select erp.assert_no_legacy_refusal_prefix();
