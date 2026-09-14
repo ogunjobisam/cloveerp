@@ -79,6 +79,8 @@ type Item = {
   legislation_pack_code: string | null;
   support_severity_code: string | null;
   description: string | null;
+  /** For a plan tier: the full users its price includes. */
+  included_users: number | null;
   rates: Rate[];
   costs: Cost[];
 };
@@ -109,6 +111,8 @@ type PriceBookReport = {
 const KINDS = [
   { value: "plan_tier", label: "Plan tier" },
   { value: "capability_addon", label: "Feature add-on" },
+  { value: "full_user", label: "Extra full user, per plan" },
+  { value: "light_user", label: "Light user, per plan" },
   { value: "user_band", label: "User band" },
   { value: "company_band", label: "Company band" },
   { value: "site_band", label: "Site band" },
@@ -221,6 +225,38 @@ function PriceBook() {
                 </li>
               ))}
             </ul>
+          ) : null}
+
+          {q.data.items.length === 0 && mayPrice ? (
+            <Section
+              title={ui("Start from Clove ERP's price list")}
+              action={
+                <ActionDialog
+                  trigger={
+                    <span
+                      className={`${TOUCH} inline-flex items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground`}
+                    >
+                      {ui("Load the price list")}
+                    </span>
+                  }
+                  title={ui("Load the price list")}
+                  description={ui(
+                    "Adds every item on the list that is not on the book yet, installs quoting if it is not installed, and opens the CLOVE-LIST price book in pounds. Nothing already on the book is changed.",
+                  )}
+                  permission="sales.price"
+                  fn="erp_set_up_selling"
+                  fields={[]}
+                  invalidates={["erp_price_book"]}
+                  submitLabel={ui("Load the price list")}
+                />
+              }
+            >
+              <Prose className="text-sm text-muted-foreground">
+                {ui(
+                  "The plans, extra and light users, extra companies and sites, onboarding, the pilot and Priority support, each with an annual, monthly and multi-year rate and a cost beside it. You can change any of them afterwards.",
+                )}
+              </Prose>
+            </Section>
           ) : null}
 
           <Section
@@ -568,6 +604,11 @@ function PriceBook() {
                         {KINDS.find((k) => k.value === item.kind)?.label ?? item.kind}
                       </Pill>
                       {item.plan_code ? <Pill tone="ok">{item.plan_code}</Pill> : null}
+                      {item.included_users != null ? (
+                        <Pill tone="muted">
+                          {item.included_users} {ui("full users included")}
+                        </Pill>
+                      ) : null}
                       {item.capability_code ? <Pill tone="ok">{item.capability_code}</Pill> : null}
                       {item.entitlement_code ? (
                         <Pill tone="ok">

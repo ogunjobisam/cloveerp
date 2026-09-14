@@ -2273,6 +2273,7 @@ export type Database = {
         }
         Returns: string
       }
+      erp_set_up_selling: { Args: never; Returns: Json }
       erp_set_user_roles: {
         Args: {
           p_app_user_id: string
