@@ -27,6 +27,7 @@ import {
 import { useT } from "../../lib/i18n";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { permissionName } from "../../lib/permission-name";
+import { actionOutcome, documentOutcome, planningOutcome } from "../../lib/plain-words";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
@@ -66,7 +67,11 @@ export function ActionButton({
   children: ReactNode;
   onClick?: () => void;
   type?: "button" | "submit";
-  variant?: "primary" | "secondary";
+  /**
+   * `danger` is a way out — cancelling a document — drawn so it is not the
+   * button the eye lands on, and not mistaken for the way forward.
+   */
+  variant?: "primary" | "secondary" | "danger";
   busy?: boolean;
   disabled?: boolean;
   // `| undefined` explicitly: the root tsconfig sets exactOptionalPropertyTypes,
@@ -76,7 +81,9 @@ export function ActionButton({
   const look =
     variant === "primary"
       ? "bg-primary text-primary-foreground font-semibold disabled:opacity-60"
-      : "border border-input font-medium disabled:opacity-50";
+      : variant === "danger"
+        ? "border border-destructive/40 text-destructive font-medium hover:bg-destructive/5 disabled:opacity-50"
+        : "border border-input font-medium disabled:opacity-50";
 
   return (
     <button
@@ -231,6 +238,14 @@ export type OptionSource = {
    * the receivables it could be matched to; a picker offers that line's.
    */
   within?: { field: string; key: string; path: string };
+  /**
+   * The words for one option, when joining its keys would not say it: a
+   * warehouse task reads "FG-5000 Acme widget from Goods in to Bulk store,
+   * 100", not "putaway — FG-5000 — RECV — BULK". `label` stays the fallback.
+   */
+  describe?: (row: Record<string, unknown>) => string;
+  /** Only the rows worth offering, when the door lists more: open tasks, not done ones. */
+  keep?: (row: Record<string, unknown>) => boolean;
 };
 
 export type Field =
@@ -386,15 +401,23 @@ function useOptions(source: OptionSource | undefined, values: Record<string, str
   // label. A row keeps its record, so a picker can say more than its label
   // about what was chosen.
   const rows: { value: string; label: string; record?: Record<string, unknown> }[] = source
-    ? (Array.isArray(list) ? (list as Record<string, unknown>[]) : []).map((row) =>
-        typeof row === "string" || typeof row === "number"
-          ? { value: String(row), label: String(row) }
-          : {
-              value: String(row[source.value] ?? ""),
-              label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
-              record: row,
-            },
-      )
+    ? (Array.isArray(list) ? (list as Record<string, unknown>[]) : [])
+        .filter(
+          (row) =>
+            !source.keep || typeof row === "string" || typeof row === "number" || source.keep(row),
+        )
+        .map((row) =>
+          typeof row === "string" || typeof row === "number"
+            ? { value: String(row), label: String(row) }
+            : {
+                value: String(row[source.value] ?? ""),
+                label:
+                  source.describe?.(row) ||
+                  optionLabel(row, source.label) ||
+                  String(row[source.value] ?? ""),
+                record: row,
+              },
+        )
     : [];
 
   return { rows, isPending: Boolean(source) && !waiting && isPending, error, waiting };
@@ -536,14 +559,17 @@ export function MultiField({
   field,
   value,
   onChange,
+  formValues,
 }: {
   field: Extract<Field, { kind: "multi" }>;
   value: string[];
   onChange: (v: string[]) => void;
+  /** The form's other answers, for a list that follows one of them. */
+  formValues?: Record<string, string>;
 }) {
-  const fetched = useOptions(field.options);
+  const fetched = useOptions(field.options, formValues);
   const rows = field.choices ?? fetched.rows;
-  const { isPending, error } = fetched;
+  const { isPending, error, waiting } = fetched;
 
   return (
     <>
@@ -567,7 +593,7 @@ export function MultiField({
           </label>
         ))}
       </div>
-      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} />
+      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} waiting={waiting} />
     </>
   );
 }
@@ -761,33 +787,40 @@ export const EMPTY_BY_FN: Record<string, string> = {
 };
 
 /**
- * What just happened, in a sentence.
- *
- * Several of these routines answer with a count of the rows they raised, and a
- * count of nought is the commonest confusion in the product: the form closes,
- * nothing appears in the next step, and it looks broken when in fact there was
- * nothing standing there to move. So say so.
+ * What just happened, in a sentence: the document made and its number, what a
+ * count of rows means, or that a run found nothing to raise. The wording is
+ * src/lib/plain-words.ts's actionOutcome, where it is tested.
  */
-export function outcomeOf(label: string, result: unknown, emptyNote?: string): string {
-  const count =
-    typeof result === "number"
-      ? result
-      : Array.isArray(result)
-        ? result.length
-        : typeof result === "object" &&
-            result !== null &&
-            typeof (result as Record<string, unknown>)["created"] === "number"
-          ? ((result as Record<string, unknown>)["created"] as number)
-          : null;
-
-  if (count === 0)
-    return emptyNote
-      ? `${label}: nothing was raised — ${emptyNote} Change the site or the dates and try again.`
-      : `${label}: nothing was raised — there was no work waiting to be moved on. Check the step, the site and the dates you chose.`;
-  if (count !== null && count > 0)
-    return `${label}: ${count} ${count === 1 ? "record" : "records"} created.`;
-  return `${label} — done.`;
+export function outcomeOf(label: string, result: unknown, emptyNote?: string, fn?: string): string {
+  return actionOutcome(label, result, emptyNote, fn);
 }
+
+/**
+ * Routines that answer with the id of what they made, whose outcome is read
+ * from it. A planning run returns its id; its row says how many planned orders
+ * and exceptions it raised, and "Run planning — done." said neither.
+ */
+const FOLLOW_UP_BY_FN: Record<
+  string,
+  (result: unknown, args: Record<string, unknown>, label: string) => Promise<string | null>
+> = {
+  erp_run_planning: async (result, args, label) => {
+    if (typeof result !== "string") return null;
+    const runs = await callErp<unknown>("erp_planning_runs", {
+      p_site_id: args["p_site_id"] ?? null,
+      p_limit: 20,
+    });
+    const run = Array.isArray(runs)
+      ? (runs as unknown[]).find(
+          (r) =>
+            typeof r === "object" &&
+            r !== null &&
+            (r as Record<string, unknown>)["run_id"] === result,
+        )
+      : undefined;
+    return planningOutcome(label, run);
+  },
+};
 
 export function ActionDialog({
   trigger,
@@ -888,6 +921,14 @@ export function ActionDialog({
       for (const f of followers) next[f] = "";
       return next;
     });
+    // Ticks follow the choice too: the deliveries of one site are not the
+    // deliveries of the next.
+    if (followers.length > 0)
+      setLists((prev) => {
+        const next = { ...prev };
+        for (const f of followers) delete next[f];
+        return next;
+      });
     setRows((prev) => dropSeededRows(fields, clearDependentCells(fields, prev, name), name));
   }
 
@@ -928,17 +969,32 @@ export function ActionDialog({
   const { currencies, error: currencyError } = useCurrencies(takesMoney);
 
   const action = useMutation({
-    mutationFn: (extra: Record<string, unknown> = {}) => callErp<unknown>(fn, buildArgs(extra)),
-    onSuccess: (result) => {
+    mutationFn: async (extra: Record<string, unknown> = {}) => {
+      const args = buildArgs(extra);
+      return { result: await callErp<unknown>(fn, args), args };
+    },
+    onSuccess: ({ result, args }) => {
       invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
       setValues(initialValues(fields));
       setLists({});
       setRows({});
       setOpen(false);
-      toast(
-        outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn]),
-        context ? { description: context } : undefined,
-      );
+
+      // A toast that names the document it made needs no second line saying
+      // what the form acted on.
+      const plain = outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn], fn);
+      const say = (message: string) =>
+        toast(
+          message,
+          context && documentOutcome(result) === null ? { description: context } : undefined,
+        );
+      const followUp = FOLLOW_UP_BY_FN[fn];
+      if (followUp)
+        void followUp(result, args, ui(title)).then(
+          (message) => say(message ?? plain),
+          () => say(plain),
+        );
+      else say(plain);
 
       onDone?.(result);
     },
@@ -1050,6 +1106,7 @@ export function ActionDialog({
                   field={f}
                   value={lists[f.name] ?? []}
                   onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
+                  formValues={formValues}
                 />
               ) : f.kind === "rows" ? (
                 <RowsField
@@ -1074,7 +1131,7 @@ export function ActionDialog({
                   aria-label={ui(f.label)}
                   required={f.required ?? false}
                   value={values[f.name] ?? ""}
-                  onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                  onChange={(e) => choose(f.name, e.target.value)}
                   className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
                 >
                   <option value="">Choose…</option>

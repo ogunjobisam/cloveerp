@@ -77,11 +77,93 @@ describe("D34: a registered refusal names the next action", () => {
     expect(f.hint).toBe("Ring the account manager.");
   });
 
-  test("an unregistered token still shows the engine's own words, never a blank", () => {
+  test("an unregistered token still shows the engine's own words, as a sentence, never a blank", () => {
     setRefusalResources(dictionary);
     const f = friendlyError(refusal("CLOVEERP_SOMETHING_ELSE: the thing is not allowed here"));
     expect(f.title).toBe("This is not allowed right now.");
-    expect(f.body).toBe("the thing is not allowed here");
+    expect(f.body).toBe("The thing is not allowed here.");
+  });
+});
+
+/**
+ * 14 September, on the live desk: invoicing a delivery you despatched yourself
+ * showed "This is not allowed right now. you despatched DN-000255 and cannot
+ * also invoice it B1 has carried sales.despatch and sales.invoice as separate
+ * permissions since it was written; …". A sentence from the database starts
+ * with a capital letter, and a note written for the engine's maintainers never
+ * reaches the person who was refused.
+ */
+describe("a refusal speaks to the person who was refused", () => {
+  const selfInvoice = () =>
+    new ErpError(
+      "CLOVEERP_SEGREGATION_OF_DUTIES: you despatched DN-000255 and cannot also invoice it",
+      {
+        code: "42501",
+        hint: "B1 has carried sales.despatch and sales.invoice as separate permissions since it was written; this is the first thing to require that they be held by different people.",
+      },
+    );
+
+  test("unregistered, the engine's sentence is capitalised and its internal hint is dropped", () => {
+    setRefusalResources({});
+    const f = friendlyError(selfInvoice());
+    expect(f.title).toBe("This is not allowed right now.");
+    expect(f.body).toBe("You despatched DN-000255 and cannot also invoice it.");
+    expect(f.hint).toBeNull();
+    // Kept, folded away, for whoever supports the customer.
+    expect(f.technical).toContain("you despatched DN-000255");
+  });
+
+  test("registered, the register's next action stands in for the hint it dropped", () => {
+    setRefusalResources({
+      "refusal.cloveerp_segregation_of_duties.refused":
+        "Doing both halves of a job the organisation keeps for two people.",
+      "refusal.cloveerp_segregation_of_duties.why": "The organisation keeps the two steps apart.",
+      "refusal.cloveerp_segregation_of_duties.next_action":
+        "Ask a colleague who may do this step to do it.",
+    });
+    const f = friendlyError(selfInvoice());
+    expect(f.title).toBe("Doing both halves of a job the organisation keeps for two people.");
+    expect(f.body).toBe("The organisation keeps the two steps apart.");
+    expect(f.hint).toBe("Ask a colleague who may do this step to do it.");
+  });
+
+  test("an engine sentence that is all identifiers is not shown; the technical detail keeps it", () => {
+    setRefusalResources({});
+    const f = friendlyError(refusal("CLOVEERP_SOMETHING_ELSE: p_transition_code is null"));
+    expect(f.body).toBe(
+      "A rule in this organisation stopped it. The technical detail below names the rule.",
+    );
+    expect(f.technical).toContain("p_transition_code");
+  });
+
+  test("a register row an organisation wrote in lower case is still a sentence", () => {
+    setRefusalResources({
+      ...dictionary,
+      "refusal.cloveerp_quote_not_accepted.next_action": "ring the account manager",
+    });
+    const f = friendlyError(refusal("CLOVEERP_QUOTE_NOT_ACCEPTED: the quote is issued"));
+    expect(f.hint).toBe("Ring the account manager.");
+  });
+
+  test("a denied object is never named on the screen", () => {
+    setRefusalResources({});
+    const f = friendlyError(
+      new ErpError("permission denied for schema erp_meta", { code: "42501" }),
+    );
+    expect(f.title).toBe("You do not have permission to do this.");
+    expect(f.body).toBe(
+      "An administrator can grant the missing permission under People and permissions.",
+    );
+  });
+
+  test("an unrecognised failure shows its words only when they are words", () => {
+    setRefusalResources({});
+    expect(friendlyError(new Error("the printer is out of paper")).body).toBe(
+      "The printer is out of paper.",
+    );
+    expect(friendlyError(new Error('column "is_committed" does not exist')).body).toBe(
+      "The technical detail below says what went wrong.",
+    );
   });
 });
 
@@ -143,7 +225,7 @@ describe("the retired prefix, for one release", () => {
     const f = friendlyError(refusal("CLOVEERP_C1_SUITE_FAILED: 2 of 40 cases"));
     // Truncating at the C left "1_SUITE_FAILED: 2 of 40 cases" on the screen.
     expect(f.title).toBe("This is not allowed right now.");
-    expect(f.body).toBe("2 of 40 cases");
+    expect(f.body).toBe("2 of 40 cases.");
   });
 });
 

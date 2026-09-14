@@ -1,3 +1,5 @@
+import { prettifyField } from "../../lib/friendly";
+import { byTone, transitionTone } from "../../lib/plain-words";
 import { ActionButton, ErrorNote, useErpAction } from "./action";
 import { manualTransitions, type Transition } from "./available-transitions";
 
@@ -27,6 +29,10 @@ import { manualTransitions, type Transition } from "./available-transitions";
  * performs the requisition's move to Ordered and raises the order with it.
  * `quiet` says nothing when nothing is offered, for a screen that says it
  * itself.
+ *
+ * The way forward is the one dark button. A way back (reject, send back) is a
+ * plain one and a way out (cancel) is drawn in the destructive colour, last:
+ * the owner found Cancel beside Submit looking exactly like it.
  */
 export function DocumentTransitions({
   documentId,
@@ -50,7 +56,9 @@ export function DocumentTransitions({
   });
 
   const manual = manualTransitions(documentType, transitions);
-  const offered = manual.filter((t) => t.permitted && !t.is_automatic && !exclude.includes(t.code));
+  const offered = byTone(
+    manual.filter((t) => t.permitted && !t.is_automatic && !exclude.includes(t.code)),
+  );
 
   if (offered.length === 0) {
     // Every move left is one a door makes, and the screen offers that door by
@@ -73,12 +81,18 @@ export function DocumentTransitions({
         {offered.map((t) => (
           <ActionButton
             key={t.code}
-            variant={t.guard_passes ? "primary" : "secondary"}
+            variant={
+              transitionTone(t) === "out"
+                ? "danger"
+                : transitionTone(t) === "back" || !t.guard_passes
+                  ? "secondary"
+                  : "primary"
+            }
             disabled={!t.guard_passes}
             busy={act.isPending}
             title={
               t.guard_passes
-                ? `Moves this document to ${t.to_state}.`
+                ? `Moves this document to ${prettifyField(t.to_state).toLowerCase()}.`
                 : "This document does not yet satisfy the condition on this transition."
             }
             onClick={() => act.mutate({ p_document_id: documentId, p_transition_code: t.code })}

@@ -36,6 +36,7 @@ export const SETTLED: ReadonlySet<string> = new Set([
   "completed",
   "posted",
   "closed",
+  "permanently_closed",
   "cancelled",
   "canceled",
   "rejected",
