@@ -551,6 +551,7 @@ export const INVENTORY: ModuleDef = {
       label: "Commit an allocation",
       description:
         "Turn a reservation into a pick from one location and batch, under the site's allocation policy.",
+      permission: "sales.despatch",
       fn: "erp_commit_allocation",
       fields: [
         {
@@ -835,7 +836,7 @@ export const INVENTORY: ModuleDef = {
       label: "Raise putaway tasks",
       description:
         "Ask the warehouse to move what is standing in goods-in. A task is raised for each pallet sitting in a receiving location at that site; if nothing is standing there, nothing is raised.",
-      permission: "inventory.adjust",
+      permission: "inventory.move",
       fields: [pickSite()],
       fn: "erp_raise_putaway_tasks",
       invalidates: ["erp_warehouse_tasks"],
@@ -843,14 +844,14 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Raise replenishment tasks",
       description: "Top the pick faces up from reserve where demand exceeds what is there.",
-      permission: "inventory.adjust",
+      permission: "inventory.move",
       fn: "erp_raise_replenishment_tasks",
       fields: [pickSite()],
       invalidates: ["erp_warehouse_tasks"],
     },
     {
       label: "Complete a warehouse task",
-      permission: "inventory.adjust",
+      permission: "inventory.move",
       fn: "erp_complete_warehouse_task",
       fields: [
         pickFrom(
