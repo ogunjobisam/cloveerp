@@ -392,7 +392,7 @@ describe("a way out does not look like the way forward", () => {
 
 describe("the refusal texts this change registers are plain", () => {
   const migration = readFileSync(
-    join(ROOT, "supabase", "migrations", "20260914075000_refusals_and_toasts_speak_plainly.sql"),
+    join(ROOT, "supabase", "migrations", "20260914075500_refusals_and_toasts_speak_plainly.sql"),
     "utf8",
   );
 

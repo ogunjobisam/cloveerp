@@ -3497,7 +3497,7 @@ export const LOGISTICS: ModuleDef = {
           // Only posted ones from the site chosen above, from the last thirty
           // days, that no shipment carries yet: the list offered two hundred
           // deliveries, most of them sent months before
-          // (public.erp_deliveries_to_ship, 20260914075000).
+          // (public.erp_deliveries_to_ship, 20260914075500).
           kind: "multi",
           name: "p_delivery_ids",
           label: "Deliveries",
