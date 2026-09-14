@@ -1468,8 +1468,10 @@ export const FINANCE: ModuleDef = {
           "p_delivery_id",
           "Delivery",
           // Only deliveries can be invoiced; offering every document invites
-          // the failure rather than preventing it.
-          { p_type_code: "delivery", p_limit: 100 },
+          // the failure rather than preventing it. Only posted ones:
+          // erp.invoice_from_delivery refuses a delivery that moved no stock,
+          // and posted is terminal, so p_actionable would offer none.
+          { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
         ),
         {
           kind: "choice",
@@ -3078,6 +3080,8 @@ export const LOGISTICS: ModuleDef = {
         {
           // Nothing that names an existing record is typed. Deliveries are
           // ticked from the list of deliveries, not copied in as identifiers.
+          // Only posted ones: the logistics suite plans a shipment for a posted
+          // delivery, and a draft or cancelled one has nothing to carry.
           kind: "multi",
           name: "p_delivery_ids",
           label: "Deliveries",
@@ -3085,7 +3089,7 @@ export const LOGISTICS: ModuleDef = {
           hint: "Tick every delivery travelling on this shipment.",
           options: {
             fn: "erp_documents",
-            args: { p_type_code: "delivery", p_limit: 200 },
+            args: { p_type_code: "delivery", p_limit: 200, p_states: ["posted"] },
             value: "document_id",
             label: ["document_number", "document_date", "party"],
           },

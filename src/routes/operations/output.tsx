@@ -224,13 +224,15 @@ function Output() {
             fn: "erp_render_output_template",
             fields: [
               pickFrom("erp_output_templates", "code", ["code", "kind"], "p_code", "Template"),
+              // Any document but a cancelled one: what is rendered is mostly
+              // posted or closed, so p_actionable would hide it.
               pickFrom(
                 "erp_documents",
                 "document_id",
                 ["document_number", "document_type"],
                 "p_document_id",
                 "Document",
-                { p_limit: 200 },
+                { p_limit: 200, p_exclude_cancelled: true },
               ),
               {
                 ...pickLocale("p_locale", "Locale", false),
@@ -328,13 +330,15 @@ function Output() {
               ),
               pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
               {
+                // Any document but a cancelled one: a label is printed for
+                // goods that are posted as often as for ones still moving.
                 ...pickFrom(
                   "erp_documents",
                   "document_id",
                   ["document_number", "document_type"],
                   "p_document_id",
                   "Document",
-                  { p_limit: 200 },
+                  { p_limit: 200, p_exclude_cancelled: true },
                   false,
                 ),
                 hint: "Optional; a label for a document carries its number.",
