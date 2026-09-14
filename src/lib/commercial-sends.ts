@@ -2,7 +2,7 @@
  * What the console says about an order form or invoice on its way to the
  * customer.
  *
- * Issuing either one queues it for every recipient (20260914097000), and
+ * Issuing either one queues it for every recipient (20260914097200), and
  * public.erp_platform_commercial_emails() reads back who it goes to and every
  * send so far. This file turns that into the words beside the document: "Sent
  * to Dana Buyer <dana@okafor.example> at 14 Sep 2026, 10:15", "No customer
