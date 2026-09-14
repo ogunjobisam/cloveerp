@@ -288,9 +288,14 @@ function PlatformConsole() {
       right={
         <span className="hidden items-center gap-2 text-xs text-muted-foreground sm:inline-flex">
           {me.data.email}
-          <Pill tone={role === "owner" ? "ok" : role === "operator" ? "warn" : "muted"}>
-            {role}
-          </Pill>
+          {/* What the role may do, on the role itself: it read as a second
+              sentence of Today's subtitle, run on from the section's own. */}
+          <span title={ROLE_BLURB[role]} className="inline-flex">
+            <Pill tone={role === "owner" ? "ok" : role === "operator" ? "warn" : "muted"}>
+              {role}
+            </Pill>
+            <span className="sr-only">. {ROLE_BLURB[role]}</span>
+          </span>
         </span>
       }
     >
@@ -324,9 +329,7 @@ function PlatformConsole() {
         <div className="min-w-0 flex-1">
           <div className="mb-5">
             <h1 className="font-display text-2xl font-semibold tracking-tight">{section.label}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {section.blurb} {section.key === "today" ? ROLE_BLURB[role] : ""}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{section.blurb}</p>
           </div>
 
           {/* A second level only where a section genuinely holds more than one
