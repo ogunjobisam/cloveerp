@@ -29,6 +29,8 @@ type Row = Record<string, unknown>;
 const PERMISSION_MODULES =
   "administration|commercial|documents?|finance|governance|inventory|logistics|master_data|operations|planning|platform|procurement|production|quality|reporting|sales";
 
+const PERMISSION_CODE = `\\b(?:${PERMISSION_MODULES})\\.[a-z][a-z_]*\\b`;
+
 /**
  * Wording that belongs to the people who build the product, not the people
  * who use it. supabase/migrations/20260914075000 holds the same patterns over
@@ -42,7 +44,7 @@ export const INTERNAL_WORDING: readonly RegExp[] = [
   /\bPart \d{1,2}\b/,
   /\bv\d+\.\d+\b/,
   // A permission code.
-  new RegExp(`\\b(?:${PERMISSION_MODULES})\\.[a-z][a-z_]*\\b`),
+  new RegExp(PERMISSION_CODE),
   // A function, table or schema: erp.invoice_from_delivery, erp_ref.refusal.
   /\b(?:erp|erp_meta|erp_ref|erp_test|erp_ai|public|pg_catalog)\.[a-z_]+/,
   /\berp_[a-z0-9_]+/,
@@ -93,6 +95,25 @@ export function asSentence(text: string): string {
 export function plainSentence(text: string | null | undefined): string | null {
   const t = (text ?? "").trim();
   if (t === "" || soundsInternal(t)) return null;
+  return asSentence(t);
+}
+
+/**
+ * The engine's hint, fit to show the person it refused — or null.
+ *
+ * As plainSentence(), except that a hint may name the permission to ask for.
+ * "Ask an administrator to grant inventory.read." is the next thing to do, and
+ * the administrator finds the permission by that code; e2e/desk.spec.ts holds
+ * the screen to showing it. Everything else written for the people who
+ * maintain the engine is still kept out, so the hint shown on 14 September —
+ * a section of the specification and the history of the code — still is.
+ * The refusal register's own wording stays stricter: 20260914075000 refuses a
+ * permission code there, where the product writes the words.
+ */
+export function plainHint(text: string | null | undefined): string | null {
+  const t = (text ?? "").trim();
+  if (t === "" || soundsInternal(t.replace(new RegExp(PERMISSION_CODE, "g"), "permission")))
+    return null;
   return asSentence(t);
 }
 

@@ -16,6 +16,7 @@ import {
   movedOnWord,
   orderPeriods,
   periodRank,
+  plainHint,
   plainSentence,
   planningOutcome,
   soundsInternal,
@@ -99,6 +100,21 @@ describe("a sentence from the database", () => {
     }
     expect(plainSentence("   ")).toBeNull();
     expect(plainSentence(null)).toBeNull();
+  });
+
+  test("a hint may name the permission to ask for, and nothing else internal", () => {
+    expect(plainHint("Ask an administrator to grant inventory.read.")).toBe(
+      "Ask an administrator to grant inventory.read.",
+    );
+    expect(plainHint("grant master_data.write to them")).toBe("Grant master_data.write to them.");
+    expect(
+      plainHint(
+        "B1 has carried sales.despatch and sales.invoice as separate permissions since it was written; this is the first thing to require that they be held by different people.",
+      ),
+    ).toBeNull();
+    expect(plainHint("Call erp_invoice_from_delivery again.")).toBeNull();
+    expect(plainHint("The document is pending_approval.")).toBeNull();
+    expect(plainHint("")).toBeNull();
   });
 });
 

@@ -1,5 +1,5 @@
 import { ErpError, InviteOutcomeUnknown } from "./erp";
-import { asSentence, plainSentence } from "./plain-words";
+import { asSentence, plainHint, plainSentence } from "./plain-words";
 
 /**
  * Plain-language failures.
@@ -156,7 +156,7 @@ export function friendlyError(error: unknown): FriendlyError {
   const erp = error instanceof ErpError ? error : null;
   const technical = [raw, erp?.details].filter(Boolean).join(" — ") || null;
   // The engine's hint, when it is written for the person who was refused.
-  const hint = plainSentence(erp?.hint);
+  const hint = plainHint(erp?.hint);
   const out = (title: string, body: string | null = null): FriendlyError => ({
     title,
     body,
