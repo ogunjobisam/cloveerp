@@ -2,11 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { useCurrencies } from "../../components/erp/currencies";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { formatMinor, minorUnitsOf } from "../../lib/money";
+import { statementCurrency } from "../../lib/report-figures";
 
 export const Route = createFileRoute("/finance/statements")({
   head: () => ({
@@ -68,18 +71,24 @@ type TrialLine = {
   account: string;
   name: string;
   account_type: string;
+  entity?: string | null;
+  currency: string | null;
   debit_minor: number;
   credit_minor: number;
   balance_minor: number;
 };
 
-const money = (minor: number | null | undefined) =>
-  minor === null || minor === undefined
-    ? "—"
-    : new Intl.NumberFormat(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(minor / 100);
+type Money = (minor: number | null | undefined) => string;
+
+/**
+ * Minor units as money in a currency, or a dash for no figure. The statements
+ * printed 1,234.56 with no symbol and divided by a hundred whatever the
+ * currency; the lines say which currency the ledger reports in.
+ */
+const moneyIn =
+  (code: string, minorUnits: number): Money =>
+  (minor) =>
+    minor === null || minor === undefined ? "—" : formatMinor(minor, code, minorUnits);
 
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -89,11 +98,13 @@ function Section({
   lines,
   total,
   totalLabel,
+  money,
 }: {
   title: string;
   lines: Line[];
   total: number;
   totalLabel: string;
+  money: Money;
 }) {
   const { ui } = useT();
   if (lines.length === 0) return null;
@@ -140,6 +151,7 @@ function Statements() {
   const [detail, setDetail] = useState(false);
 
   const cc = costCentre === "" ? null : costCentre;
+  const { currencies } = useCurrencies();
 
   const centres = useQuery({
     queryKey: ["erp_cost_centres"],
@@ -181,6 +193,12 @@ function Statements() {
 
   const of = (type: string) => (pl.data?.lines ?? []).filter((l) => l.account_type === type);
   const bsOf = (type: string) => (bs.data?.lines ?? []).filter((l) => l.account_type === type);
+
+  // Each statement in the currency its ledger reports in; a row of the account
+  // detail in its own.
+  const inCurrency = (code: string) => moneyIn(code, minorUnitsOf(currencies, code));
+  const plMoney = inCurrency(statementCurrency(pl.data?.lines ?? []));
+  const bsMoney = inCurrency(statementCurrency(bs.data?.lines ?? []));
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -258,12 +276,14 @@ function Statements() {
               lines={of("income")}
               total={pl.data?.income_minor ?? 0}
               totalLabel={ui("Total income")}
+              money={plMoney}
             />
             <Section
               title={ui("Cost of sales and expenses")}
               lines={of("expense")}
               total={pl.data?.expense_minor ?? 0}
               totalLabel={ui("Total expense")}
+              money={plMoney}
             />
             <div className="flex items-baseline justify-between border-t border-border pt-3">
               <span className="text-sm font-semibold">{ui("Result for the period")}</span>
@@ -272,7 +292,7 @@ function Statements() {
                   (pl.data?.result_minor ?? 0) < 0 ? "text-destructive" : "text-emerald-600"
                 }`}
               >
-                {money(pl.data?.result_minor)}
+                {plMoney(pl.data?.result_minor)}
               </span>
             </div>
           </>
@@ -290,7 +310,7 @@ function Statements() {
               <Pill tone={bs.data.balances ? "ok" : "bad"}>
                 {bs.data.balances
                   ? ui("Balances")
-                  : `${ui("Out by")} ${money(bs.data.difference_minor)}`}
+                  : `${ui("Out by")} ${bsMoney(bs.data.difference_minor)}`}
               </Pill>
             ) : null}
           </div>
@@ -309,23 +329,26 @@ function Statements() {
               lines={bsOf("asset")}
               total={bs.data?.assets_minor ?? 0}
               totalLabel={ui("Total assets")}
+              money={bsMoney}
             />
             <Section
               title={ui("Liabilities")}
               lines={bsOf("liability")}
               total={bs.data?.liabilities_minor ?? 0}
               totalLabel={ui("Total liabilities")}
+              money={bsMoney}
             />
             <Section
               title={ui("Equity")}
               lines={bsOf("equity")}
               total={bs.data?.equity_minor ?? 0}
               totalLabel={ui("Total equity")}
+              money={bsMoney}
             />
             <div className="flex items-baseline justify-between border-t border-border pt-3">
               <span className="text-sm font-semibold">{ui("Result to date")}</span>
               <span className="text-lg font-semibold tabular-nums">
-                {money(bs.data?.result_minor)}
+                {bsMoney(bs.data?.result_minor)}
               </span>
             </div>
           </>
@@ -352,24 +375,30 @@ function Statements() {
                 ui("Balance"),
               ]}
             >
-              {(trial.data ?? []).map((r) => (
-                <tr key={r.account} className="border-b border-border/60 last:border-0">
-                  <td className="whitespace-nowrap py-1.5 pr-4 font-mono text-xs">{r.account}</td>
-                  <td className="max-w-[20rem] truncate py-1.5 pr-4">{r.name}</td>
-                  <td className="whitespace-nowrap py-1.5 pr-4 text-xs text-muted-foreground">
-                    {r.account_type}
-                  </td>
-                  <td className="whitespace-nowrap py-1.5 pr-4 text-right tabular-nums">
-                    {money(r.debit_minor)}
-                  </td>
-                  <td className="whitespace-nowrap py-1.5 pr-4 text-right tabular-nums">
-                    {money(r.credit_minor)}
-                  </td>
-                  <td className="whitespace-nowrap py-1.5 text-right tabular-nums">
-                    {money(r.balance_minor)}
-                  </td>
-                </tr>
-              ))}
+              {(trial.data ?? []).map((r) => {
+                const money = inCurrency(r.currency ?? statementCurrency([]));
+                return (
+                  <tr
+                    key={`${r.entity ?? ""}-${r.account}-${r.currency ?? ""}`}
+                    className="border-b border-border/60 last:border-0"
+                  >
+                    <td className="whitespace-nowrap py-1.5 pr-4 font-mono text-xs">{r.account}</td>
+                    <td className="max-w-[20rem] truncate py-1.5 pr-4">{r.name}</td>
+                    <td className="whitespace-nowrap py-1.5 pr-4 text-xs text-muted-foreground">
+                      {r.account_type}
+                    </td>
+                    <td className="whitespace-nowrap py-1.5 pr-4 text-right tabular-nums">
+                      {money(r.debit_minor)}
+                    </td>
+                    <td className="whitespace-nowrap py-1.5 pr-4 text-right tabular-nums">
+                      {money(r.credit_minor)}
+                    </td>
+                    <td className="whitespace-nowrap py-1.5 text-right tabular-nums">
+                      {money(r.balance_minor)}
+                    </td>
+                  </tr>
+                );
+              })}
             </Table>
           )}
         </section>

@@ -1,8 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 
+import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { allTiles } from "../../lib/modules";
+import { documentIdInPath } from "../../lib/plain-words";
 import { useConfirmLeave } from "./unsaved";
 
 /**
@@ -35,7 +38,12 @@ function titleise(segment: string): string {
 
 type Crumb = { to: string; label: string };
 
-function trailFor(pathname: string): Crumb[] {
+/**
+ * `names` labels a segment the path spells as an identifier: a document's page
+ * is /documents/<uuid>, and its crumb is the document's number, not the first
+ * eight characters of a UUID titled like a word.
+ */
+function trailFor(pathname: string, names: Readonly<Record<string, string>> = {}): Crumb[] {
   const crumbs: Crumb[] = [];
   const tiles = allTiles();
   const settings = pathname === "/settings" || pathname.startsWith("/settings/");
@@ -62,7 +70,7 @@ function trailFor(pathname: string): Crumb[] {
   let walked = covered === "/" ? "" : covered;
   for (const segment of rest) {
     walked = `${walked}/${segment}`;
-    const named = EXTRA_NAMES[walked];
+    const named = names[walked] ?? EXTRA_NAMES[walked];
     crumbs.push({ to: walked, label: named ?? titleise(segment) });
   }
 
@@ -75,7 +83,23 @@ export function Breadcrumbs() {
   const confirmLeave = useConfirmLeave();
   const { ui } = useT();
 
-  const crumbs = trailFor(pathname);
+  // The document page's own read, shared through its query key, so the crumb
+  // costs nothing the page does not already ask for.
+  const documentId = documentIdInPath(pathname);
+  const { data: opened } = useQuery({
+    queryKey: ["erp_document", { p_document_id: documentId ?? "" }],
+    queryFn: () =>
+      callErp<{ document: { document_number?: string } | null }>("erp_document", {
+        p_document_id: documentId,
+      }),
+    enabled: documentId !== null,
+  });
+  const documentNumber = opened?.document?.document_number;
+  const names: Record<string, string> = documentId
+    ? { [`/documents/${documentId}`]: documentNumber ?? "Document" }
+    : {};
+
+  const crumbs = trailFor(pathname, names);
   if (crumbs.length < 2) return null;
 
   const go = async (to: string) => {

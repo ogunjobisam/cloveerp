@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { actionKey, stageActionKeys } from "../../lib/flow-actions";
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
 import {
@@ -59,6 +60,12 @@ export type StageList = {
   /** What one of these is called, in the empty state and the footer. */
   noun: string;
   nounPlural: string;
+  /**
+   * The order the rows are worked in, and any the step holds back until
+   * "Show finished" is ticked. The door lists accounting periods newest
+   * first, a year ahead; the Close step opens on the current one.
+   */
+  arrange?: (rows: Row[], showFinished: boolean) => Row[];
 };
 
 export type Stage = {
@@ -76,6 +83,8 @@ export type Stage = {
    * the same rows, and "Show finished" brings back the ones that are done.
    */
   states?: string[];
+  /** The words on the history toggle, where "Show finished" is not all it brings back. */
+  showFinishedLabel?: string;
   /**
    * The states a verb that is not a transition is offered in, keyed as the
    * verb is named. Converting applies to an approved requisition and billing
@@ -164,7 +173,8 @@ function useStageRows(stage: Stage, showFinished = false) {
   });
 
   const read = Array.isArray(query.data) ? query.data : [];
-  const rows = rowsAtStage(read, { states: stage.states, statusKey: source?.status }, showFinished);
+  const held = rowsAtStage(read, { states: stage.states, statusKey: source?.status }, showFinished);
+  const rows = source?.arrange ? source.arrange(held, showFinished) : held;
   return {
     source,
     rows,
@@ -235,7 +245,7 @@ function StageAction({
       <ActionButton
         variant="secondary"
         disabled
-        title={`This record is already ${settled}, so this cannot be done again.`}
+        title={`This record is already ${prettifyField(settled).toLowerCase()}, so this cannot be done again.`}
       >
         {ui(action.label)}
       </ActionButton>
@@ -329,7 +339,7 @@ function StageList({
                 setPage(0);
               }}
             />
-            {ui("Show finished")}
+            {stage.showFinishedLabel ? ui(stage.showFinishedLabel) : ui("Show finished")}
           </label>
         ) : null}
       </div>
@@ -538,7 +548,7 @@ function StageRecord({
             ) : null}
             {settled ? (
               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-sans text-[11px] font-medium text-muted-foreground">
-                Already {settled}
+                Already {prettifyField(settled).toLowerCase()}
               </span>
             ) : null}
           </p>
@@ -639,12 +649,10 @@ function StageRecord({
           />
         ) : null}
         {createAction ? (
-          <StageAction
-            action={createAction}
-            prefill={{}}
-            permitted={permitted(createAction)}
-            context={`${ui(stage.label)} — ${ui(stage.hint)}`}
-          />
+          // No record is chosen, so the form acts on nothing yet: no "Acting
+          // on" box repeating the step's description, and no second line on
+          // the toast saying it again.
+          <StageAction action={createAction} prefill={{}} permitted={permitted(createAction)} />
         ) : null}
         {stage.to ? (
           <Link

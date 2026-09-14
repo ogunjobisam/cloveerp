@@ -132,6 +132,66 @@ export function dropSeededRows(
   return Object.fromEntries(Object.entries(rows).filter(([key]) => !dropped.has(key)));
 }
 
+/**
+ * The answer a field arrives holding, read from a door.
+ *
+ * Turning a requisition into a purchase order asked for the supplier and the
+ * site with nothing chosen, when the requisition already says both, or every
+ * product on it is bought from the same supplier. The door that knows answers
+ * with one record; the field takes that record's `key` once the choice it
+ * follows is made, and stays the person's to change. What the person chose is
+ * never replaced, until the choice it follows changes.
+ */
+export type FieldDefault = DependentSource & {
+  fn: string;
+  /** The key of the door's record that the field takes. */
+  key: string;
+};
+
+/**
+ * The form's answers, each field with a default that the person has not
+ * answered taking the door's. `answers` holds each such field's door answer by
+ * field name; a field the person has answered — even with nothing — is theirs.
+ */
+export function defaultedValues(
+  fields: ReadonlyArray<{ name: string; defaultFrom?: FieldDefault }>,
+  values: Record<string, string>,
+  answers: Record<string, unknown>,
+): Record<string, string> {
+  let next = values;
+  for (const f of fields) {
+    if (!f.defaultFrom || f.name in values) continue;
+    const answer = answers[f.name];
+    const record =
+      typeof answer === "object" && answer !== null && !Array.isArray(answer)
+        ? (answer as Record<string, unknown>)
+        : null;
+    const value = asCell(record?.[f.defaultFrom.key]);
+    if (value === "") continue;
+    next = { ...next, [f.name]: value };
+  }
+  return next;
+}
+
+/**
+ * The form's answers less those of fields whose default follows `name`: the
+ * supplier of the requisition chosen before is not the default of the one
+ * chosen now, so the field takes the new one's.
+ */
+export function dropDefaultedValues(
+  fields: ReadonlyArray<{ name: string; defaultFrom?: FieldDefault }>,
+  values: Record<string, string>,
+  name: string,
+): Record<string, string> {
+  const dropped = new Set(
+    fields
+      .filter((f) => f.name !== name && f.name in values && followsField(f.defaultFrom, name))
+      .map((f) => f.name),
+  );
+  if (dropped.size === 0) return values;
+  return Object.fromEntries(Object.entries(values).filter(([key]) => !dropped.has(key)));
+}
+
 /** Whether a picker's list follows the field `name`. */
 export function followsField(source: DependentSource | undefined, name: string): boolean {
   if (!source) return false;

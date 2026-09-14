@@ -9,6 +9,7 @@ import {
   pickLine,
   pickParty,
   pickSite,
+  pickWarehouseTask,
   type ActionSpec,
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
@@ -17,8 +18,9 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow } from "../../components/erp/process-flow";
-import { GOODS_IN_LIST, PURCHASING_KPIS } from "../../lib/modules";
+import { GOODS_IN_LIST, PURCHASING_KPIS, RECEIVE_AN_ORDER } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
+import { approvalSubject } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/procurement/")({
   head: () => ({
@@ -74,6 +76,13 @@ const pickRequisition = (transition?: string): ReturnType<typeof pickFrom> =>
       ...(transition ? { p_transition_code: transition } : {}),
     },
   );
+
+/** What converting a requisition takes when nothing is chosen, read for the form. */
+const CONVERSION_DEFAULTS = (key: string) => ({
+  fn: "erp_conversion_defaults",
+  argsFrom: { p_document_id: "p_document_id" },
+  key,
+});
 
 const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
@@ -162,13 +171,22 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     // and a code here would hide it from an assignee who lacks that code.
     fn: "erp_decide_approval",
     fields: [
-      pickFrom(
-        "erp_my_approvals",
-        "task_id",
-        ["object_type", "requested_by", "requested_at"],
-        "p_task_id",
-        "Approval waiting on me",
-      ),
+      {
+        kind: "select",
+        name: "p_task_id",
+        label: "Approval waiting on me",
+        required: true,
+        // "PO-000057 · Purchase order — Northwind — Sam", not "document — Sam".
+        options: {
+          fn: "erp_my_approvals",
+          value: "task_id",
+          label: ["document_number", "partner", "requested_by"],
+          describe: (row) =>
+            [approvalSubject(row), row["partner"], row["requested_by"]]
+              .filter((x) => typeof x === "string" && x !== "" && x !== "—")
+              .join(" — "),
+        },
+      },
       {
         kind: "choice",
         name: "p_approve",
@@ -205,13 +223,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "inventory.move",
     fn: "erp_complete_warehouse_task",
     fields: [
-      pickFrom(
-        "erp_warehouse_tasks",
-        "task_id",
-        ["kind", "item", "from_location", "to_location"],
-        "p_task_id",
-        "Task",
-      ),
+      pickWarehouseTask("putaway"),
       { kind: "number", name: "p_quantity", label: "Quantity", hint: "Blank means all of it." },
     ],
     invalidates: ["erp_warehouse_tasks", "erp_goods_in", "erp_stock_health"],
@@ -230,9 +242,36 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "procurement.order",
     fn: "erp_convert_document",
     fields: [
-      // erp.party_role_kind has no 'provider'; erp_parties matches the kind exactly.
-      pickParty("supplier", "p_party_id", "Supplier", true),
-      pickSite("p_site_id", "Site the goods are for", false),
+      // Only a requisition that can be ordered. A step that has chosen one fills
+      // this and does not ask again.
+      pickRequisition("order"),
+      // Both arrive holding what the conversion would take if nothing were
+      // chosen — the requisition's supplier, or the default supplier every
+      // product on it is bought from, and its site — and stay the person's to
+      // change. erp.conversion_defaults answers both the form and the door.
+      {
+        kind: "select",
+        name: "p_party_id",
+        label: "Supplier",
+        required: true,
+        hint: "The requisition's supplier, or the default supplier every product on it is bought from. Change it to order from someone else.",
+        // erp.party_role_kind has no 'provider'; erp_parties matches the kind exactly.
+        options: {
+          fn: "erp_parties",
+          args: { p_role_kind: "supplier" },
+          value: "party_id",
+          label: ["code", "name"],
+        },
+        defaultFrom: CONVERSION_DEFAULTS("party_id"),
+      },
+      {
+        kind: "site",
+        name: "p_site_id",
+        label: "Site the goods are for",
+        required: false,
+        hint: "The requisition's site. Change it to deliver somewhere else.",
+        defaultFrom: CONVERSION_DEFAULTS("site_id"),
+      },
     ],
     emptyNote:
       "Only an approved requisition converts. Submit it and have it approved at this step first.",
@@ -274,6 +313,9 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       "erp_payables_ageing",
     ],
   },
+  // Raised from the order, holding what is left on each line; posting it moves
+  // the order to partially received or received.
+  RECEIVE_AN_ORDER,
   {
     label: "Receive against an order",
     permission: "procurement.receive",
@@ -628,7 +670,8 @@ function Procurement() {
             {
               label: "Goods receipt",
               hint: "What arrived. Posting a receipt is what puts stock into goods-in and raises the accrual.",
-              fedBy: "Receipts appear here once goods are received against a purchase order.",
+              fedBy:
+                "Receipts appear here once goods are received against a purchase order. Receive an order is on this step.",
 
               typeCode: "goods_receipt",
               // A receipt still being counted in. Posted, its stock is in goods-in
@@ -643,6 +686,8 @@ function Procurement() {
               recordArg: "p_receipt_id",
               actionFn: "erp_receive_against",
               actionFns: ["erp_bill_from_receipt"],
+              // The receipt comes from its order, chosen on the form.
+              createFn: "erp_create_receipt_from_order",
             },
             {
               label: "Goods in",

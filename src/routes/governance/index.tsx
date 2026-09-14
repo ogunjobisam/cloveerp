@@ -1,12 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ActionBar, pickFrom, pickItem, pickParty } from "../../components/erp/actions-bar";
 import { RpcButton } from "../../components/erp/rpc-button";
-import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
+import { AutoPanel, StatusPill, moneyCell, shortDate } from "../../components/erp/auto";
 
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { useT } from "../../lib/i18n";
+import { approvalStep, approvalSubject } from "../../lib/plain-words";
 
 /** One picker for the four doors that take a mass change; the status is shown
  *  because applying wants a previewed one and reversing an applied one. */
@@ -184,10 +185,28 @@ function Governance() {
         empty="Nothing is waiting on you. Requests appear here when an approval band routes one to you."
         rowKey={(r) => String(r["task_id"])}
         columns={[
-          { header: "Object", cell: "object_type" },
+          // What is being approved: the document by its number, linked to it,
+          // with its type, partner and value. It said OBJECT "document".
+          {
+            header: "Approving",
+            cell: (r) =>
+              typeof r["document_id"] === "string" ? (
+                <Link
+                  to="/documents/$documentId"
+                  params={{ documentId: r["document_id"] }}
+                  className="underline underline-offset-2"
+                >
+                  {approvalSubject(r)}
+                </Link>
+              ) : (
+                approvalSubject(r)
+              ),
+          },
+          { header: "Business partner", cell: "partner" },
+          { header: "Value", cell: moneyCell("value_minor", "currency"), numeric: true },
           { header: "Requested by", cell: "requested_by" },
           { header: "Requested", cell: (r) => shortDate(r["requested_at"]) },
-          { header: "Step", cell: "step_code" },
+          { header: "Step", cell: (r) => approvalStep(r) },
           { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
           {
             header: "Decide",
