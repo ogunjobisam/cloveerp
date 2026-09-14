@@ -4,11 +4,11 @@
  *
  * Two runtimes read this file. The invite Edge Function imports it as
  * ../../../src/lib/invitation-email.ts under Deno, and the desk imports it as
- * any other module under Vite and Bun. So it imports nothing, and it touches no
- * process, window, Deno or import.meta — only the language itself, URL,
- * URLSearchParams and Intl, which every one of those has. Deno also wants the
- * .ts extension on anything relative, which is a reason to have nothing
- * relative to import.
+ * any other module under Vite and Bun. So it touches no process, window, Deno
+ * or import.meta — only the language itself, URL, URLSearchParams and Intl,
+ * which every one of those has — and it imports one module, the shared email
+ * layout, which keeps the same rule. Deno wants the .ts extension on anything
+ * relative, so the import carries it.
  *
  * Pure on purpose. Nothing here decides who may invite: the function calls the
  * door as the signed-in person and the database decides. This decides only
@@ -20,6 +20,11 @@
  * images, no tracking and no remote assets; the only URL in it is the one the
  * person should open.
  */
+
+import { escapeHtml, oneLine, renderEmail } from "./email/layout.ts";
+
+// Re-exported: this module was their home before every email shared a layout.
+export { escapeHtml, oneLine };
 
 /**
  * The doors that make an invitation, by name.
@@ -286,31 +291,6 @@ export function verifiedSignInLink(
 /* The message.                                                               */
 /* -------------------------------------------------------------------------- */
 
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c);
-}
-
-/**
- * One line, bounded. Control characters and line breaks become spaces, so a
- * name cannot start a second header line or a second paragraph.
- */
-export function oneLine(value: string | null | undefined, max = 120): string {
-  const flat = [...(value ?? "")]
-    .map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c))
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
-  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
-}
-
 /** "20 September 2026", or null for nothing or nonsense. UTC, so it says one day everywhere. */
 export function expiryDate(expiresAt: Date | string | null | undefined): string | null {
   if (expiresAt === null || expiresAt === undefined || expiresAt === "") return null;
@@ -356,20 +336,9 @@ export type InvitationEmail = { subject: string; text: string; html: string };
  */
 export const INVITATION_SUBJECT = "You have been invited to Clove ERP";
 
-// The site's palette as hex, as supabase/functions/enquiry/index.ts has it:
-// src/styles.css defines these in oklch, which most mail clients do not read.
-const BRAND = "#36312B";
-const SURFACE = "#F6F4F0";
-const CARD = "#FEFDFA";
-const SOFT = "#E9E6DE";
-const LINE = "#DCD7CE";
-const INK = "#403B36";
-const MUTED = "#67625D";
-const ACCENT = "#A2591E";
-const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-
 export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
   const organisation = oneLine(input.organisation) || "an organisation";
+  const named = oneLine(input.organisation);
   const inviter = oneLine(input.inviter);
   const invitee = oneLine(input.invitee);
   const until = expiryDate(input.expiresAt);
@@ -377,6 +346,11 @@ export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
 
   const subject = INVITATION_SUBJECT;
   const greeting = invitee ? `Hello ${invitee},` : "Hello,";
+  const heading = resent
+    ? "Your new sign-in link"
+    : named
+      ? `You are invited to join ${named}`
+      : "You are invited to join Clove ERP";
   const lead = resent
     ? `Here is a new sign-in link for your invitation to join ${organisation} on Clove ERP.`
     : inviter
@@ -398,62 +372,22 @@ export function invitationEmail(input: InvitationEmailInput): InvitationEmail {
     : "If you were not expecting this, you can ignore this email. Nobody is added to " +
       "anything unless the link is used.";
 
-  const text = [
+  const { html, text } = renderEmail({
+    organisation: named || null,
+    title: subject,
+    preheader: lead,
     greeting,
-    "",
-    lead,
-    "",
-    `${action}:`,
-    input.link,
-    "",
-    lasts ? `${how} ${lasts}` : how,
-    "",
-    after,
-    "",
-    unexpected,
-    "",
-  ].join("\n");
-
-  const href = escapeHtml(input.link);
-  const paragraph = (words: string, size = 15, colour = INK) =>
-    `<p style="margin:0 0 16px;color:${colour};font-family:${SANS};font-size:${size}px;` +
-    `line-height:1.55;word-break:break-word;">${escapeHtml(words)}</p>`;
-
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="color-scheme" content="light" />
-<title>${escapeHtml(subject)}</title>
-</head>
-<body style="margin:0;padding:0;background:${SURFACE};">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:${SURFACE};font-size:1px;line-height:1px;">${escapeHtml(lead)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${SURFACE};">
-<tr><td align="center" style="padding:32px 16px;">
-  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:${CARD};border:1px solid ${LINE};border-radius:14px;">
-    <tr><td style="padding:20px 28px;background:${BRAND};border-radius:14px 14px 0 0;color:#FFFFFF;font-family:Georgia,'Times New Roman',serif;font-size:18px;letter-spacing:0.02em;">Clove&nbsp;ERP</td></tr>
-    <tr><td style="padding:28px 28px 8px;">
-      ${paragraph(greeting)}
-      ${paragraph(lead)}
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;"><tr>
-        <td style="background:${BRAND};border-radius:8px;">
-          <a href="${href}" style="display:inline-block;padding:12px 22px;color:#FFFFFF;font-family:${SANS};font-size:15px;font-weight:600;text-decoration:none;">${escapeHtml(action)}</a>
-        </td>
-      </tr></table>
-      ${paragraph(how, 13, MUTED)}
-      ${lasts ? paragraph(lasts, 13, MUTED) : ""}
-      ${paragraph(after, 13, MUTED)}
-      <p style="margin:0 0 16px;color:${MUTED};font-family:${SANS};font-size:13px;line-height:1.55;">If the button does not work, open this address:<br /><a href="${href}" style="color:${ACCENT};word-break:break-all;">${href}</a></p>
-    </td></tr>
-    <tr><td style="padding:16px 28px;border-top:1px solid ${SOFT};border-radius:0 0 14px 14px;">
-      ${paragraph(unexpected, 12, MUTED)}
-    </td></tr>
-  </table>
-</td></tr>
-</table>
-</body>
-</html>`;
+    heading,
+    intro: lead,
+    details: [
+      { label: "Organisation", value: named },
+      { label: "Invited by", value: resent ? "" : inviter },
+      { label: "Invitation open until", value: until ?? "" },
+    ],
+    primary: { label: action, url: input.link },
+    note: [lasts ? `${how} ${lasts}` : how, after],
+    reason: unexpected,
+  });
 
   return { subject, text, html };
 }

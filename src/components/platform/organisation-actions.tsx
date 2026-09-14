@@ -197,6 +197,7 @@ export function OrganisationActions({
               description="Every row belonging to it is removed and cannot be recovered. Export first if anybody wants the data."
               code={t.code}
               submitLabel="Purge permanently"
+              busyLabel="Purging… this can take up to a minute"
               run={(typed, reason) =>
                 callErp<{ code: string }>("erp_platform_purge_tenant", {
                   p_tenant_id: t.id,

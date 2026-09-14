@@ -246,6 +246,7 @@ export function ConfirmCodeDialog({
   description,
   code,
   submitLabel,
+  busyLabel,
   run,
   onDone,
 }: {
@@ -254,6 +255,7 @@ export function ConfirmCodeDialog({
   description: ReactNode;
   code: string;
   submitLabel: string;
+  busyLabel?: string;
   run: (typed: string, reason: string) => Promise<unknown>;
   onDone?: () => void;
 }) {
@@ -266,6 +268,7 @@ export function ConfirmCodeDialog({
       title={title}
       description={description}
       submitLabel={submitLabel}
+      {...(busyLabel ? { busyLabel } : {})}
       danger
       ready={matches && reason.trim() !== ""}
       run={() => run(typed.trim(), reason.trim())}

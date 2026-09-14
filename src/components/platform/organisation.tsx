@@ -6,17 +6,22 @@ import {
   FileSignature,
   Receipt,
   Settings2,
+  ShieldCheck,
+  UserRound,
   Users,
 } from "lucide-react";
 
 import { Pill, Table } from "../erp/panel";
 import { callErp } from "../../lib/erp";
 import { formatMinorWhole } from "../../lib/money";
-import type {
-  MyTenancy,
-  PlatformRole,
-  PlatformTenant,
-  TenantConfiguration,
+import {
+  atLeast,
+  type MyTenancy,
+  type OrganisationPerson,
+  type PlatformRole,
+  type PlatformTenant,
+  type SupportWindow,
+  type TenantConfiguration,
 } from "../../lib/platform";
 import { isDemoCode } from "../../lib/platform-console";
 import { Card, ConsoleLink, Fail, LINK_BUTTON, statusLabel, statusTone } from "./kit";
@@ -146,6 +151,11 @@ export function OrganisationPage({ code, role }: { code: string; role: PlatformR
           )}{" "}
           On Clove ERP since {day(t.provisioned_at ?? t.created_at)}.
           {t.pending_transfer_to ? ` An offer to hand it to ${t.pending_transfer_to} is open.` : ""}
+          {t.deleted_at
+            ? t.status === "deleted"
+              ? ` Marked ended on ${day(t.deleted_at)}.`
+              : ` Deletion was requested on ${day(t.deleted_at)}.`
+            : ""}
         </p>
         <div className="mt-4">
           <OrganisationActions tenant={t} role={role} inside={inside} size="full" />
@@ -156,6 +166,8 @@ export function OrganisationPage({ code, role }: { code: string; role: PlatformR
         <People tenant={t} inside={inside} />
         <Subscription code={t.code} />
       </div>
+
+      {atLeast(role, "operator") ? <PeopleList tenantId={t.id} /> : null}
 
       <Setup tenantId={t.id} />
       <Contract code={t.code} />
@@ -196,6 +208,104 @@ function People({ tenant: t, inside }: { tenant: PlatformTenant; inside: boolean
           You are inside this organisation, and hold a role there until you leave.
         </p>
       ) : null}
+      <SupportWindows tenantId={t.id} />
+    </Card>
+  );
+}
+
+/**
+ * Support windows open in this organisation, from the same read Today makes.
+ * Who is inside, why, and until when: the customer sees the same session from
+ * their side, so the console should never know less than they do.
+ */
+function SupportWindows({ tenantId }: { tenantId: string }) {
+  const q = useQuery({
+    queryKey: ["erp_platform_support_windows"],
+    queryFn: () => callErp<SupportWindow[]>("erp_platform_support_windows"),
+  });
+  if (q.error) return <Fail error={q.error} />;
+  const now = Date.now();
+  const open = (q.data ?? []).filter(
+    (w) => w.tenant_id === tenantId && new Date(w.expires_at).getTime() > now,
+  );
+  if (open.length === 0) return null;
+  return (
+    <div className="mt-4 border-t border-border/60 pt-3">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <ShieldCheck className="size-3.5" />
+        Support {open.length === 1 ? "window" : "windows"} open
+      </h3>
+      <ul className="mt-2 flex flex-col gap-2">
+        {open.map((w) => (
+          <li key={w.access_id} className="text-sm">
+            <span className="text-foreground">{w.staff_email}</span>
+            <span className="text-muted-foreground">
+              {" "}
+              ({w.staff_role}
+              {w.is_write_access ? ", can make changes" : ", read only"}) until{" "}
+              {new Date(w.expires_at).toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </span>
+            <p className="text-xs text-muted-foreground">{w.reason}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function signedIn(value: string | null): string {
+  return value
+    ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : "Never";
+}
+
+/**
+ * Who the people are, what each may do, and when each last signed in. Names
+ * people, so operators and owners only; the door refuses support staff too.
+ */
+function PeopleList({ tenantId }: { tenantId: string }) {
+  const q = useQuery({
+    queryKey: ["erp_platform_people", tenantId],
+    queryFn: () => callErp<OrganisationPerson[]>("erp_platform_people", { p_tenant_id: tenantId }),
+  });
+  return (
+    <Card title="People" icon={<UserRound className="size-4 text-primary" />}>
+      {q.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : q.error ? (
+        <Fail error={q.error} />
+      ) : (q.data ?? []).length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nobody belongs to this organisation yet.</p>
+      ) : (
+        <Table columns={["Name", "Roles", "Last signed in", "Status"]}>
+          {(q.data ?? []).map((p) => (
+            <tr key={p.principal_id} className="border-b border-border/60 last:border-0">
+              <td className="py-2 pr-4">
+                <div className="text-foreground">{p.display_name ?? p.email ?? "—"}</div>
+                {p.display_name && p.email ? (
+                  <div className="text-xs text-muted-foreground">{p.email}</div>
+                ) : null}
+              </td>
+              <td className="py-2 pr-4 text-muted-foreground">
+                {p.roles.length > 0 ? p.roles.join(", ") : "No role"}
+              </td>
+              <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-muted-foreground">
+                {signedIn(p.last_sign_in_at)}
+              </td>
+              <td className="py-2 pr-4">
+                <Pill
+                  tone={p.status === "active" ? "ok" : p.status === "invited" ? "warn" : "muted"}
+                >
+                  {p.status}
+                </Pill>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
     </Card>
   );
 }
