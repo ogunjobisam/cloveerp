@@ -85,6 +85,11 @@ export type EmailInput = {
   quote?: string | null;
   primary: EmailAction;
   secondary?: EmailAction | null;
+  /**
+   * Further places to go, shown as plain links under the buttons rather than as
+   * buttons: where the buttons decide, these only look.
+   */
+  links?: readonly EmailAction[] | null;
   note?: string | readonly string[] | null;
   /** Why this person received this email. */
   reason: string | readonly string[];
@@ -298,6 +303,7 @@ function renderHtml(input: EmailInput, words: LayoutWords): string {
   const lang = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.lang ?? "") ? input.lang : "en";
   const details = (input.details ?? []).filter((d) => d.value.trim() !== "");
   const actions = [input.primary, ...(input.secondary ? [input.secondary] : [])];
+  const links = input.links ?? [];
   const mandatory = mandatoryWords(input, words);
 
   const greeting = input.greeting ? p(oneLine(input.greeting, 160), 15, PALETTE.ink, "ce-ink") : "";
@@ -312,13 +318,27 @@ function renderHtml(input: EmailInput, words: LayoutWords): string {
       : "";
   const quote = input.quote && input.quote.trim() !== "" ? quoteBlock(input.quote) : "";
   const buttons = `<div style="margin:8px 0 8px;">${actions.map((a, i) => button(a, i === 0)).join("")}</div>`;
+  const further =
+    links.length > 0
+      ? `<p class="ce-ink" style="margin:0 0 16px;color:${PALETTE.ink};font-family:${SANS};font-size:14px;line-height:1.7;">` +
+        links
+          .map(
+            (a) =>
+              `<a class="ce-link" href="${escapeHtml(a.url)}" style="color:${PALETTE.accent};text-decoration:underline;">` +
+              `${escapeHtml(oneLine(a.label, 60))}</a>`,
+          )
+          .join(
+            `<span class="ce-muted" style="color:${PALETTE.muted};">&nbsp;&nbsp;·&nbsp;&nbsp;</span>`,
+          ) +
+        `</p>`
+      : "";
   const note = paragraphsOf(input.note)
     .map((x) => p(x, 13, PALETTE.muted, "ce-muted"))
     .join("");
   const plain =
     `<p class="ce-muted" style="margin:8px 0 6px;color:${PALETTE.muted};font-family:${SANS};font-size:13px;line-height:1.55;">` +
     `${escapeHtml(words.fallback)}</p>` +
-    actions
+    [...actions, ...links]
       .map(
         (a) =>
           `<p class="ce-muted" style="margin:0 0 8px;color:${PALETTE.muted};font-family:${SANS};font-size:13px;line-height:1.55;word-break:break-all;">` +
@@ -373,6 +393,7 @@ function renderHtml(input: EmailInput, words: LayoutWords): string {
       ${facts}
       ${quote}
       ${buttons}
+      ${further}
       ${note}
       ${plain}
     </td></tr>
@@ -406,7 +427,11 @@ function textDetail(d: EmailDetail): string {
 
 function renderText(input: EmailInput, words: LayoutWords): string {
   const details = (input.details ?? []).filter((d) => d.value.trim() !== "");
-  const actions = [input.primary, ...(input.secondary ? [input.secondary] : [])];
+  const actions = [
+    input.primary,
+    ...(input.secondary ? [input.secondary] : []),
+    ...(input.links ?? []),
+  ];
   const mandatory = mandatoryWords(input, words);
   const sections: string[] = [];
 

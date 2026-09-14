@@ -59,7 +59,10 @@ export async function drainEmail(
     b,
     // The claim carries this worker's name and takes a lease, so a message
     // abandoned mid-send is visibly held and reclaimable, not stuck for ever.
-    // It also returns the context, the organisation's name and the reader's.
+    // It also returns the context, the organisation's name and the reader's,
+    // and for an approval task a decision link's token (20260914096000). That
+    // token is the only copy there is: it goes into the email and nowhere else,
+    // and nothing here logs a row.
     (tx) => tx`select * from erp.claim_email_batch(50, ${cfg.workerName})`,
   )) as unknown as Array<EmailRow & ClaimedNotification>;
 

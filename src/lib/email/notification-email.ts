@@ -64,7 +64,25 @@ export type ClaimedNotification = {
   context?: unknown;
   organisation_name?: string | null;
   recipient_name?: string | null;
+  /**
+   * The decision link's token, when the claim minted one (20260914096000): only
+   * for an approval task still waiting on the reader. Returned once and never
+   * stored, so it goes into the email and nowhere else — never into a log.
+   */
+  action_token?: string | null;
 };
+
+/** What a decision link's token looks like: 32 random bytes, as hex. */
+const ACTION_TOKEN = /^[0-9a-f]{64}$/;
+
+/**
+ * The page a decision button opens, with the token and the decision in the
+ * fragment. A fragment is never sent to a server, so the token reaches no
+ * access log, no proxy and no link scanner; src/lib/email-action.ts reads it.
+ */
+export function actionLink(origin: string, token: string, decision: "approve" | "reject"): string {
+  return `${origin.replace(/\/+$/, "")}/act#t=${encodeURIComponent(token)}&d=${decision}`;
+}
 
 export type NotificationEmail = { subject: string; text: string; html: string };
 
@@ -387,6 +405,18 @@ export function renderNotificationEmail(
   const secondaryUrl = link(origin, c.links["secondary"]);
   const preferencesUrl = link(origin, c.links["preferences"]);
 
+  // Approve and Reject, when the claim minted a link and the context carries
+  // their words. They open a page where the person signs in and confirms: the
+  // email decides nothing. The task and the document become plain links below.
+  const token =
+    c.kind === "approval" &&
+    typeof row.action_token === "string" &&
+    ACTION_TOKEN.test(row.action_token)
+      ? row.action_token
+      : null;
+  const acting =
+    token !== null && c.words["approve"] !== undefined && c.words["reject"] !== undefined;
+
   const subject = oneLine(need("subject"), 150);
   const input: EmailInput = {
     organisation: row.organisation_name ?? null,
@@ -398,12 +428,25 @@ export function renderNotificationEmail(
     intro: need("intro"),
     details: shape.details,
     quote: shape.quote,
-    primary: { label: need("primary"), url: primaryUrl },
+    primary:
+      acting && token
+        ? { label: need("approve"), url: actionLink(origin, token, "approve") }
+        : { label: need("primary"), url: primaryUrl },
     secondary:
-      secondaryUrl && c.words["secondary"] !== undefined
-        ? { label: need("secondary"), url: secondaryUrl }
-        : null,
-    note: maybe("note"),
+      acting && token
+        ? { label: need("reject"), url: actionLink(origin, token, "reject") }
+        : secondaryUrl && c.words["secondary"] !== undefined
+          ? { label: need("secondary"), url: secondaryUrl }
+          : null,
+    links: acting
+      ? [
+          { label: maybe("open_task") ?? need("primary"), url: primaryUrl },
+          ...(secondaryUrl && c.words["secondary"] !== undefined
+            ? [{ label: need("secondary"), url: secondaryUrl }]
+            : []),
+        ]
+      : null,
+    note: acting ? (maybe("note_actions") ?? maybe("note")) : maybe("note"),
     reason: need("reason"),
     preferencesUrl,
     mandatory: c.mandatory ? need("mandatory") : null,

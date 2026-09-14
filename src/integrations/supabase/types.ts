@@ -660,6 +660,10 @@ export type Database = {
         Args: { p_approve: boolean; p_comment?: string; p_task_id: string }
         Returns: Json
       }
+      erp_decide_approval_from_email: {
+        Args: { p_approve: boolean; p_comment?: string; p_token: string }
+        Returns: Json
+      }
       erp_delegate_approval: {
         Args: {
           p_delegate_user_id: string
@@ -774,6 +778,7 @@ export type Database = {
         Args: { p_limit?: number; p_parent_entity_id: string }
         Returns: Json
       }
+      erp_email_action_peek: { Args: { p_token: string }; Returns: Json }
       erp_email_readiness: { Args: never; Returns: Json }
       erp_email_suppressions: { Args: never; Returns: Json }
       erp_end_approval_delegation: {

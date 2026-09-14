@@ -39,6 +39,9 @@ export const ROUTES: readonly RouteUnderTest[] = [
   // to the desk for somebody already inside an organisation with no invitation
   // held, which is the state this suite renders it in.
   { path: "/join", kind: "desk", file: "join.tsx" },
+  // An approval email's Approve and Reject land here. With no link in the
+  // address, as this suite renders it, the desk says there is nothing to decide.
+  { path: "/act", kind: "desk", file: "act.tsx" },
   { path: "/profile", kind: "desk", file: "profile.tsx" },
   { path: "/settings", kind: "desk", file: "settings.tsx" },
   { path: "/notifications", kind: "desk", file: "notifications.tsx" },
