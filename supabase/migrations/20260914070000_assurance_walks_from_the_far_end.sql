@@ -932,7 +932,7 @@ begin
     )
     select (select count(*) from new_rows),
            (select string_agg(x.door || ': ' || x.finding, '; ') from (select * from new_rows except all select * from old_rows) x),
-           (select string_agg(x.door || ': ' || x.finding, '; ') from (select * from old_rows except all select * from new_rows_rows) x),
+           (select string_agg(x.door || ': ' || x.finding, '; ') from (select * from old_rows except all select * from new_rows) x),
            (select string_agg(n.door || ' ' || substring(n.finding from 'reaches (\S+)\(\)'), '; ' order by n.door, n.finding)
               from new_rows n where n.door like 'public.erp\_zz\_aw\_%')
       into v_ad_new, v_ad_only_new, v_ad_only_old, v_ad_fixtures;
@@ -1005,7 +1005,7 @@ begin
            (select string_agg(format('%s via %s reads %s', x.door, x.via, x.internal_table), '; ')
               from (select * from new_rows except all select * from old_rows) x),
            (select string_agg(format('%s via %s reads %s', x.door, x.via, x.internal_table), '; ')
-              from (select * from old_rows except all select * from new_rows_rows) x),
+              from (select * from old_rows except all select * from new_rows) x),
            (select string_agg(distinct format('%s via %s', n.door, n.via), '; ' order by format('%s via %s', n.door, n.via))
               from new_rows n where n.door like 'erp\_zz\_cw\_%')
       into v_cr_new, v_cr_only_new, v_cr_only_old, v_cr_fixtures;
@@ -1095,7 +1095,7 @@ begin
     )
     select (select count(*) from new_rows),
            (select string_agg(x.reference || ' ' || x.detail, '; ') from (select * from new_rows except all select * from old_rows) x),
-           (select string_agg(x.reference || ' ' || x.detail, '; ') from (select * from old_rows except all select * from new_rows_rows) x),
+           (select string_agg(x.reference || ' ' || x.detail, '; ') from (select * from old_rows except all select * from new_rows) x),
            (select string_agg(n.reference || ' ' || n.detail, '; ' order by n.reference, n.detail)
               from new_rows n where n.reference like 'erp.zz\_ib\_%')
       into v_ib_new, v_ib_only_new, v_ib_only_old, v_ib_fixtures;
