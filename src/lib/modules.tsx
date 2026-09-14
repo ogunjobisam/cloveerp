@@ -21,7 +21,7 @@ import {
   type ActionSpec,
 } from "../components/erp/actions-bar";
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
-import { localIsoDate, orderPeriods } from "./plain-words";
+import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -1964,17 +1964,23 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Tax report",
-      description: "Net and tax by code for the current period.",
+      description: "Taxable amount and tax by code, for this calendar quarter so far.",
       fn: "erp_tax_report",
+      // erp_tax_report(p_from, p_to) has no default period, and the panel asked
+      // with neither date, so it never answered. It also read net_minor, which
+      // the report calls taxable_minor. Read when the page loads.
+      args: quarterToDate(),
       empty:
-        "No taxable transactions in this period. Change the period, or post a document that carries tax.",
-      rowKey: (r, i) => String(r["tax_code"] ?? i),
+        "No taxable transactions this quarter. A document that carries tax appears here once it is posted.",
+      rowKey: (r, i) =>
+        `${String(r["jurisdiction"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
       columns: [
+        { header: "Jurisdiction", cell: "jurisdiction" },
         { header: "Code", cell: "tax_code" },
         { header: "Rate %", cell: "rate_pct", numeric: true },
-        { header: "Net", cell: "net_minor", numeric: true },
-        { header: "Tax", cell: "tax_minor", numeric: true },
-        { header: "Currency", cell: "currency" },
+        { header: "Taxable", cell: moneyCell("taxable_minor", "currency"), numeric: true },
+        { header: "Tax", cell: moneyCell("tax_minor", "currency"), numeric: true },
+        { header: "Transactions", cell: "transactions", numeric: true },
       ],
     },
     {

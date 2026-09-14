@@ -43,10 +43,10 @@ export type EmailRow = {
   /**
    * An HTML alternative, when the caller has one.
    *
-   * Optional, and absent for everything the queue in email.ts sends: those
-   * bodies come out of erp.notification_template and are text. The enquiry
-   * function sets it, so the person reading a lead gets something laid out
-   * rather than a wall of lines.
+   * Optional. The queue in email.ts sets it for a notification whose context
+   * renders (src/lib/email/notification-email.ts), and the enquiry and invite
+   * functions set it for theirs, all in the one layout; a notification without
+   * a context goes as text.
    *
    * body stays required when this is set, and stays the whole message rather
    * than a stub pointing at the HTML. A text part that says "view this in a

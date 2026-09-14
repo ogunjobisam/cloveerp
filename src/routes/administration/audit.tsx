@@ -118,7 +118,8 @@ function AuditLog() {
           <span className="font-medium text-foreground">
             <PermissionName code="administration.audit_read" />
           </span>
-          , so the audit trail is not offered. Absence of a grant is a refusal, not a default.
+          , so the audit trail is not offered. An administrator in your organisation can give it to
+          you.
         </p>
       </div>
     );

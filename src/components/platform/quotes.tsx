@@ -14,6 +14,7 @@ import {
   lineFor,
   money,
   oneOffItems,
+  orderFormTotal,
   partyCodeFor,
   planItems,
   quotePlan,
@@ -1391,14 +1392,7 @@ function DiscountInput({
 function OrderForm({ content }: { content: unknown }) {
   const record =
     typeof content === "object" && content !== null ? (content as Record<string, unknown>) : {};
-  const margin =
-    typeof record["margin"] === "object" && record["margin"] !== null
-      ? (record["margin"] as Record<string, unknown>)
-      : null;
-  const totals =
-    margin && typeof margin["totals"] === "object" && margin["totals"] !== null
-      ? (margin["totals"] as Record<string, unknown>)
-      : null;
+  const total = orderFormTotal(content);
   const fact = (label: string, value: unknown) =>
     value == null || value === "" ? null : (
       <div key={label} className="flex justify-between gap-3">
@@ -1420,7 +1414,7 @@ function OrderForm({ content }: { content: unknown }) {
         "Valid until",
         typeof record["valid_until"] === "string" ? day(record["valid_until"]) : null,
       )}
-      {fact("Total", totals ? money(Number(totals["quoted_minor"])) : null)}
+      {fact("Total", total == null ? null : money(total))}
     </dl>
   );
 }

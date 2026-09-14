@@ -119,7 +119,8 @@ function Permissions() {
           <span className="font-medium text-foreground">
             <PermissionName code="administration.roles" />
           </span>
-          , so the directory is not offered. Absence of a grant is a refusal, not a default.
+          , so the directory is not offered. An administrator in your organisation can give it to
+          you.
         </p>
       </div>
     );

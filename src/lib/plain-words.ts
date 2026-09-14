@@ -346,6 +346,16 @@ export function localIsoDate(now: Date = new Date()): string {
 }
 
 /**
+ * The calendar quarter so far, as the dates a tax read asks for: the first day
+ * of the quarter today falls in, and today. A VAT return covers a quarter, so
+ * that is the period a person opening the tax report most often means.
+ */
+export function quarterToDate(now: Date = new Date()): { p_from: string; p_to: string } {
+  const first = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+  return { p_from: localIsoDate(first), p_to: localIsoDate(now) };
+}
+
+/**
  * Where an accounting period stands for somebody closing the books.
  *
  *   0  the current period, the one today falls in
