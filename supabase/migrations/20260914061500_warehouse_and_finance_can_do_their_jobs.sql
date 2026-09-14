@@ -123,7 +123,7 @@ declare
 $n$;
   v_r   text := $r$        -- A content pack meeting a role this organisation already holds, and
         -- did not get from that pack's template, adds what the template
-        -- grants and takes nothing away (20260914061000). The first
+        -- grants and takes nothing away (20260914061500). The first
         -- administrator is why: provisioning gives it every permission, the
         -- base pack's administrator template carries the eight administration
         -- codes, and replacing the grant set left the organisation's first
@@ -195,7 +195,7 @@ $n$;
      -- A role the organisation holds that did not come from this item's
      -- template (the administrator provisioning made, or a role the
      -- organisation built) is added to on promotion and never replaced
-     -- (erp.apply_change_set_item, 20260914061000). It is missing only while
+     -- (erp.apply_change_set_item, 20260914061500). It is missing only while
      -- it lacks a permission the template grants: its name, its other grants
      -- and its template mark are not the pack's to change.
      and not (i.object_kind = 'role'
@@ -226,7 +226,7 @@ declare
   v_def text := pg_get_functiondef('erp_test.starter_pack_acceptance_suite()'::regprocedure);
   v_n   text := $n$    (res ->> 'items')::integer = 346
 $n$;
-  v_r   text := $r$    -- 345, not 346, since 20260914061000: the administrator provisioning
+  v_r   text := $r$    -- 345, not 346, since 20260914061500: the administrator provisioning
     -- made already holds every permission the pack's administrator template
     -- grants, and a pack adds to a role it did not make rather than replacing
     -- it, so that item is no longer planned.
@@ -265,12 +265,12 @@ begin
       v_n := $n$  perform erp.authorise('inventory.adjust', null, t.site_id, null, 'warehouse_task', t.id);$n$;
       v_r := $r$  -- A warehouse task is a putaway or a replenishment, and either moves stock
   -- within its site: inventory.move, as the warehouse holds it
-  -- (20260914061000). Correcting the books stays with inventory.adjust.
+  -- (20260914061500). Correcting the books stays with inventory.adjust.
   perform erp.authorise('inventory.move', null, t.site_id, null, 'warehouse_task', t.id);$r$;
     else
       v_n := $n$  perform erp.authorise('inventory.adjust', null, p_site_id, null, 'site', p_site_id);$n$;
       v_r := $r$  -- Raising the tasks that move stock within a site is the warehouse's:
-  -- inventory.move, as it holds it (20260914061000). Correcting the books
+  -- inventory.move, as it holds it (20260914061500). Correcting the books
   -- stays with inventory.adjust.
   perform erp.authorise('inventory.move', null, p_site_id, null, 'site', p_site_id);$r$;
     end if;
@@ -290,11 +290,38 @@ begin
 end
 $warehouse$;
 
+-- Replenishment never ran where a pick face held stock: its pick CTE took
+-- min(a.location_id), and PostgreSQL 17 has no min(uuid), so the door failed
+-- with "function min(uuid) does not exist" for anyone who reached a pickable
+-- balance. The first case to raise replenishment as a signed-in person found
+-- it. The lowest location by its text form is the same choice min() meant.
+do $replenish$
+declare
+  v_sig text := 'erp.raise_replenishment_tasks(uuid)';
+  v_def text;
+  v_n   text := 'min(a.location_id) as location_id';
+  v_r   text := '(array_agg(a.location_id order by a.location_id::text))[1] as location_id';
+begin
+  v_def := pg_get_functiondef(v_sig::regprocedure);
+  if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
+    raise exception 'CLOVEERP_REPLENISHMENT_DOOR_UNRECOGNISED: % does not choose its pick location the way this migration patches', v_sig
+      using hint = 'A later migration changed the function. Read pg_get_functiondef() of it and patch that body.';
+  end if;
+  execute replace(v_def, v_n, v_r);
+
+  v_def := pg_get_functiondef(v_sig::regprocedure);
+  if position('min(a.location_id)' in v_def) > 0 then
+    raise exception 'CLOVEERP_REPLENISHMENT_DOOR_UNRECOGNISED: % still takes min() of a uuid', v_sig
+      using hint = 'The replacement did not land. Compare the needle with pg_get_functiondef() of the function.';
+  end if;
+end
+$replenish$;
+
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('erp', 'raise_putaway_tasks',
    'Reads stock standing in receiving locations and raises a putaway task for '
    'each. Scoped to erp.require_tenant_id() throughout and gated on '
-   'inventory.move for the site before it writes anything (20260914061000).'),
+   'inventory.move for the site before it writes anything (20260914061500).'),
   ('erp', 'raise_replenishment_tasks',
    'Compares pick-location cover against its minimum and raises replenishment '
    'tasks. Same tenant scope and the same inventory.move gate as putaway.'),
@@ -316,7 +343,7 @@ declare
   v_r   text := $r$  -- Reserving is the order desk's, under sales.order, and the despatcher's,
   -- under sales.despatch: picking an order reserves whatever nobody reserved
   -- yet (erp.pick_document), and whoever may despatch an order may hold its
-  -- stock for it (20260914061000). A caller with neither is refused naming
+  -- stock for it (20260914061500). A caller with neither is refused naming
   -- sales.order, as before.
   if erp.has_permission('sales.despatch', d.entity_id, d.site_id) then
     perform erp.authorise('sales.despatch', d.entity_id, d.site_id, null,
@@ -347,9 +374,9 @@ begin
      set rationale = v.rationale
     from (values
       ('erp_reserve_for_line',
-       'Reserves stock for an order line under sales.order, or under sales.despatch for whoever may despatch the order (20260914061000), using the promoted allocation policy rather than an argument.'),
+       'Reserves stock for an order line under sales.order, or under sales.despatch for whoever may despatch the order (20260914061500), using the promoted allocation policy rather than an argument.'),
       ('erp_pick_document',
-       'Reserves and picks a sales order in one press. Gated on sales.despatch inside erp.pick_document(); each reservation it makes is authorised again inside erp.reserve_for_line(), which accepts sales.despatch as well as sales.order (20260914061000).')
+       'Reserves and picks a sales order in one press. Gated on sales.despatch inside erp.pick_document(); each reservation it makes is authorised again inside erp.reserve_for_line(), which accepts sales.despatch as well as sales.order (20260914061500).')
     ) as v(function_name, rationale)
    where a.function_name = v.function_name;
   get diagnostics v_n = row_count;
@@ -386,14 +413,14 @@ begin
        'Starter Content Packs §3.2. Holds adjust and write_off; §3.3''s seventh '
        'conflict refuses the same person approving the adjustment. Receives against '
        'an order, and picks and despatches a sales order, because that is where the '
-       'goods are (20260914061000).'),
+       'goods are (20260914061500).'),
       ('warehouse_operative',
        array['inventory.read','inventory.move','inventory.count','procurement.read',
              'procurement.receive','sales.read','sales.despatch','logistics.read',
              'logistics.despatch'],
        'Starter Content Packs §3.2. Counts but does not adjust: a variance is a '
        'finding for somebody else to accept. Receives against an order, and picks and '
-       'despatches a sales order, because that is where the goods are (20260914061000).')
+       'despatches a sales order, because that is where the goods are (20260914061500).')
     ) as v(code, perms, why)
    where pi.pack_code = 'base' and pi.object_kind = 'role' and pi.object_key = v.code;
   get diagnostics v_n = row_count;
@@ -450,7 +477,7 @@ as $$
         when 'master_data' then array['reporting.read','document.template_manage']
         -- Goods arrive at the warehouse, so receiving against an order is the
         -- warehouse's, and so is reading the order it is received against
-        -- (20260914061000). Approving that order is not.
+        -- (20260914061500). Approving that order is not.
         when 'warehouse'   then array[
                                 'inventory.read','inventory.move','inventory.count',
                                 'logistics.read','logistics.despatch',
