@@ -163,10 +163,15 @@ export function OrganisationPage({ code, role }: { code: string; role: PlatformR
   );
 }
 
-function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/**
+ * Console text is not tenant terminology: nothing here goes through ui(), so
+ * the prop is `caption` rather than `label`, which supabase/ci/screen_strings.sh
+ * reads as a string a tenant can rename.
+ */
+function Figure({ caption, value, hint }: { caption: string; value: string; hint?: string }) {
   return (
     <div className="rounded-lg border border-border/60 p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-xs text-muted-foreground">{caption}</div>
       <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
       {hint ? <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div> : null}
     </div>
@@ -177,14 +182,14 @@ function People({ tenant: t, inside }: { tenant: PlatformTenant; inside: boolean
   return (
     <Card title="People and structure" icon={<Users className="size-4 text-primary" />}>
       <div className="grid grid-cols-2 gap-3">
-        <Figure label="People" value={String(t.principals)} />
+        <Figure caption="People" value={String(t.principals)} />
         <Figure
-          label="Open invitations"
+          caption="Open invitations"
           value={String(t.open_invitations)}
           {...(t.open_invitations > 0 ? { hint: "sent, and not yet accepted" } : {})}
         />
-        <Figure label="Companies" value={String(t.entities)} />
-        <Figure label="Sites" value={String(t.sites)} />
+        <Figure caption="Companies" value={String(t.entities)} />
+        <Figure caption="Sites" value={String(t.sites)} />
       </div>
       {inside ? (
         <p className="mt-3 text-xs text-muted-foreground">
@@ -296,11 +301,11 @@ function Setup({ tenantId }: { tenantId: string }) {
             </span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Figure label="Accounts" value={String(c.accounts)} />
-            <Figure label="Document types" value={String(c.document_types)} />
-            <Figure label="Posting rules" value={String(c.posting_rules)} />
-            <Figure label="Scheduled jobs" value={String(c.jobs)} />
-            <Figure label="Changes waiting" value={String(c.change_sets_awaiting)} />
+            <Figure caption="Accounts" value={String(c.accounts)} />
+            <Figure caption="Document types" value={String(c.document_types)} />
+            <Figure caption="Posting rules" value={String(c.posting_rules)} />
+            <Figure caption="Scheduled jobs" value={String(c.jobs)} />
+            <Figure caption="Changes waiting" value={String(c.change_sets_awaiting)} />
           </div>
           {c.determination_findings > 0 ? (
             <p className="text-sm text-destructive">

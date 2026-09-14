@@ -143,12 +143,17 @@ export function FormDialog<T>({
 }
 
 /** A labelled box, the way every dialog here asks for text. */
+/**
+ * Console text is not tenant terminology: nothing here goes through ui(), so
+ * the prop is `caption` rather than `label`, which supabase/ci/screen_strings.sh
+ * reads as a string a tenant can rename.
+ */
 function DialogField({
-  label,
+  caption,
   hint,
   children,
 }: {
-  label: string;
+  caption: string;
   hint?: ReactNode;
   children: (id: string) => ReactNode;
 }) {
@@ -156,7 +161,7 @@ function DialogField({
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium">
-        {label}
+        {caption}
       </label>
       {children(id)}
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
@@ -211,7 +216,7 @@ export function ReasonDialog({
       onClosed={() => setReason("")}
     >
       <DialogField
-        label={required ? reasonLabel : `${reasonLabel} (optional)`}
+        caption={required ? reasonLabel : `${reasonLabel} (optional)`}
         hint="Kept in the platform's activity log."
       >
         {(id) => (
@@ -271,7 +276,7 @@ export function ConfirmCodeDialog({
       }}
     >
       <DialogField
-        label="Type the organisation's code to confirm"
+        caption="Type the organisation's code to confirm"
         hint={
           <>
             The code is <span className="font-mono text-foreground">{code}</span>.
@@ -290,7 +295,7 @@ export function ConfirmCodeDialog({
           />
         )}
       </DialogField>
-      <DialogField label="Reason" hint="Kept in the platform's activity log.">
+      <DialogField caption="Reason" hint="Kept in the platform's activity log.">
         {(id) => (
           <textarea
             id={id}

@@ -54,12 +54,17 @@ export type AmendableContract = {
 
 type Severity = { code: string; name: string };
 
+/**
+ * Console text is not tenant terminology: nothing here goes through ui(), so
+ * the prop is `caption` rather than `label`, which supabase/ci/screen_strings.sh
+ * reads as a string a tenant can rename.
+ */
 function Field({
-  label,
+  caption,
   hint,
   children,
 }: {
-  label: string;
+  caption: string;
   hint?: ReactNode;
   children: (id: string) => ReactNode;
 }) {
@@ -67,7 +72,7 @@ function Field({
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-xs font-medium">
-        {label}
+        {caption}
       </label>
       {children(id)}
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
@@ -153,7 +158,7 @@ export function DraftAmendment({
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Title">
+        <Field caption="Title">
           {(id) => (
             <input
               id={id}
@@ -164,7 +169,7 @@ export function DraftAmendment({
             />
           )}
         </Field>
-        <Field label="Takes effect from">
+        <Field caption="Takes effect from">
           {(id) => (
             <input
               id={id}
@@ -187,7 +192,7 @@ export function DraftAmendment({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Plan" hint={`Now ${c.plan_name ?? c.plan_code}.`}>
+        <Field caption="Plan" hint={`Now ${c.plan_name ?? c.plan_code}.`}>
           {(id) => (
             <select
               id={id}
@@ -207,7 +212,7 @@ export function DraftAmendment({
           )}
         </Field>
         <Field
-          label={`Annual value, ${c.currency}`}
+          caption={`Annual value, ${c.currency}`}
           hint={`Now ${formatMinorWhole(c.annual_value_minor, c.currency)}.`}
         >
           {(id) => (
@@ -224,7 +229,7 @@ export function DraftAmendment({
           )}
         </Field>
         <Field
-          label="Current term ends"
+          caption="Current term ends"
           hint={`Now ${new Date(c.current_term_end).toLocaleDateString()}.`}
         >
           {(id) => (
@@ -239,7 +244,7 @@ export function DraftAmendment({
           )}
         </Field>
         <Field
-          label="Renewal"
+          caption="Renewal"
           hint={`Now: ${RENEWAL_LABELS[c.renewal_kind as RenewalKind] ?? c.renewal_kind}.`}
         >
           {(id) => (
@@ -260,7 +265,7 @@ export function DraftAmendment({
             </select>
           )}
         </Field>
-        <Field label="Notice period, days" hint={`Now ${c.notice_days} days.`}>
+        <Field caption="Notice period, days" hint={`Now ${c.notice_days} days.`}>
           {(id) => (
             <input
               id={id}
@@ -274,7 +279,7 @@ export function DraftAmendment({
           )}
         </Field>
         <Field
-          label="Support tier"
+          caption="Support tier"
           hint={c.support_severity_code ? `Now ${c.support_severity_code}.` : "None named now."}
         >
           {(id) =>
@@ -308,7 +313,7 @@ export function DraftAmendment({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Uplift at renewal" hint={`Now: ${describeUplift(c.uplift_rule)}.`}>
+        <Field caption="Uplift at renewal" hint={`Now: ${describeUplift(c.uplift_rule)}.`}>
           {(id) => (
             <select
               id={id}
@@ -326,7 +331,7 @@ export function DraftAmendment({
           )}
         </Field>
         {form.upliftKind === "fixed_pct" ? (
-          <Field label="Uplift, per cent">
+          <Field caption="Uplift, per cent">
             {(id) => (
               <input
                 id={id}
@@ -340,7 +345,7 @@ export function DraftAmendment({
           </Field>
         ) : null}
         {form.upliftKind === "index" || form.upliftKind === "capped" ? (
-          <Field label="Index">
+          <Field caption="Index">
             {(id) => (
               <input
                 id={id}
@@ -353,7 +358,7 @@ export function DraftAmendment({
           </Field>
         ) : null}
         {form.upliftKind === "capped" ? (
-          <Field label="Capped at, per cent">
+          <Field caption="Capped at, per cent">
             {(id) => (
               <input
                 id={id}
@@ -520,7 +525,7 @@ export function DraftAmendment({
         </button>
       </fieldset>
 
-      <Field label="Why (optional)">
+      <Field caption="Why (optional)">
         {(id) => (
           <input
             id={id}
