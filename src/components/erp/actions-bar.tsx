@@ -447,7 +447,9 @@ export const pickRoleCode = (
   label,
   required,
   hint,
-  options: { fn: "erp_roles", value: "code", label: ["code", "name"] },
+  // The role's name only: "administrator — Administrator" said the same thing
+  // twice, once in the database's words.
+  options: { fn: "erp_roles", value: "code", label: ["name"] },
 });
 
 /**

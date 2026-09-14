@@ -9,6 +9,7 @@ import { PageHeader, TOUCH } from "../components/erp/page";
 import { DataPanel, Pill, Table } from "../components/erp/panel";
 import { useErpSession } from "../components/erp/session-context";
 import { callErp, hasPermission } from "../lib/erp";
+import { prettifyField } from "../lib/friendly";
 import { useT } from "../lib/i18n";
 
 /**
@@ -111,6 +112,73 @@ type ChannelRow = {
 };
 
 const CHANNELS = ["email", "sms", "push", "webhook"];
+const SEVERITIES = ["info", "low", "medium", "high", "critical"];
+
+type Words = (text: string) => string;
+
+/** A channel as a person says it, never the database's code. */
+function channelWord(kind: string, ui: Words): string {
+  switch (kind) {
+    case "email":
+      return ui("Email");
+    case "sms":
+      return ui("Text message");
+    case "push":
+      return ui("Push notification");
+    case "webhook":
+      return ui("Webhook");
+    case "in_app":
+      return ui("In app");
+    default:
+      return prettifyField(kind);
+  }
+}
+
+/** How urgent a notification is, in words. */
+function severityWord(severity: string, ui: Words): string {
+  switch (severity) {
+    case "info":
+      return ui("Information");
+    case "low":
+      return ui("Low");
+    case "medium":
+      return ui("Medium");
+    case "high":
+      return ui("High");
+    case "critical":
+      return ui("Critical");
+    default:
+      return prettifyField(severity);
+  }
+}
+
+/** Where a message has got to. */
+function deliveryWord(status: string, ui: Words): string {
+  switch (status) {
+    case "pending":
+      return ui("Waiting");
+    case "held":
+      return ui("Held for quiet hours");
+    case "digested":
+      return ui("In a digest");
+    case "queued":
+      return ui("Queued");
+    case "sending":
+      return ui("Sending");
+    case "sent":
+      return ui("Sent");
+    case "delivered":
+      return ui("Delivered");
+    case "read":
+      return ui("Read");
+    case "failed":
+      return ui("Failed");
+    case "suppressed":
+      return ui("Suppressed");
+    default:
+      return prettifyField(status);
+  }
+}
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const FIELD = `${TOUCH} mt-1 w-full rounded-md border border-input bg-background px-3 text-sm`;
 
@@ -211,10 +279,13 @@ function Notifications() {
                     name: "p_severity",
                     label: "Severity",
                     required: true,
-                    choices: ["info", "low", "medium", "high", "critical"].map((s) => ({
-                      value: s,
-                      label: s,
-                    })),
+                    choices: [
+                      { value: "info", label: "Information" },
+                      { value: "low", label: "Low" },
+                      { value: "medium", label: "Medium" },
+                      { value: "high", label: "High" },
+                      { value: "critical", label: "Critical" },
+                    ],
                   },
                   {
                     kind: "choice",
@@ -413,7 +484,7 @@ function Notifications() {
                   <tr key={c.id} className="border-b border-border/50 last:border-0">
                     <td className="py-2 pr-4 font-mono text-xs">{c.code}</td>
                     <td className="py-2 pr-4">{c.name}</td>
-                    <td className="py-2 pr-4">{c.kind}</td>
+                    <td className="py-2 pr-4">{channelWord(c.kind, ui)}</td>
                     <td className="py-2 pr-4 text-xs text-muted-foreground">
                       {String(c.settings?.["url"] ?? "—")}
                     </td>
@@ -447,7 +518,7 @@ function Notifications() {
                     <td className="py-2 pr-4 text-sm">
                       {r.name}
                       <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                        {r.code} · {r.severity}
+                        {r.code} · {severityWord(r.severity, ui)}
                       </div>
                     </td>
                     <td className="py-2 pr-4 font-mono text-xs">{r.event_pattern}</td>
@@ -455,11 +526,11 @@ function Notifications() {
                       {r.audience_kind}: {r.audience}
                     </td>
                     <td className="py-2 pr-4 text-xs">
-                      {r.channel_kind}
+                      {channelWord(r.channel_kind, ui)}
                       {r.template_code ? ` · ${r.template_code}` : ""}
                       {r.is_mandatory ? (
                         <div className="mt-1">
-                          <Pill tone="warn">mandatory</Pill>
+                          <Pill tone="warn">{ui("Mandatory")}</Pill>
                         </div>
                       ) : null}
                     </td>
@@ -470,7 +541,9 @@ function Notifications() {
                         : ""}
                     </td>
                     <td className="py-2">
-                      <Pill tone={r.status === "active" ? "ok" : "muted"}>{r.status}</Pill>
+                      <Pill tone={r.status === "active" ? "ok" : "muted"}>
+                        {r.status === "active" ? ui("On") : ui("Off")}
+                      </Pill>
                     </td>
                   </tr>
                 ))}
@@ -501,7 +574,7 @@ function Notifications() {
               >
                 {rows.map((h) => (
                   <tr key={h.channel_kind} className="border-b border-border/50 last:border-0">
-                    <td className="py-2 pr-4 text-sm">{h.channel_kind}</td>
+                    <td className="py-2 pr-4 text-sm">{channelWord(h.channel_kind, ui)}</td>
                     <td className="py-2 pr-4 text-xs tabular-nums">
                       {h.pending}
                       {h.oldest_pending_minutes ? ` (${h.oldest_pending_minutes} min)` : ""}
@@ -530,11 +603,10 @@ function Inbox() {
     invalidates: ["erp_my_notifications", "erp_my_notification_settings"],
   });
   return (
+    // Titled on its own: the page heading above already says what the page is
+    // for, and the panel repeated it word for word.
     <DataPanel<Notification>
-      title={ui("Notifications")}
-      description={ui(
-        "What the product told you, what it held for your quiet hours, and what it could not deliver another way. In-app is the channel that always works; nothing addressed to you is lost because another channel failed.",
-      )}
+      title={ui("Inbox")}
       fn="erp_my_notifications"
       empty={ui("Nothing has been sent to you.")}
     >
@@ -546,8 +618,12 @@ function Inbox() {
                 <span className={`text-sm ${n.status === "read" ? "" : "font-semibold"}`}>
                   {n.subject}
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">{n.severity}</span>
-                <span className="text-xs text-muted-foreground">{n.channel_kind}</span>
+                <span className="text-xs text-muted-foreground">
+                  {severityWord(n.severity, ui)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {channelWord(n.channel_kind, ui)}
+                </span>
                 {n.is_escalation ? <Pill tone="bad">{ui("Escalated")}</Pill> : null}
                 {n.digest_of > 0 ? <Pill tone="muted">{ui("Digest")}</Pill> : null}
                 <Pill
@@ -559,7 +635,7 @@ function Inbox() {
                         : "ok"
                   }
                 >
-                  {n.status}
+                  {deliveryWord(n.status, ui)}
                 </Pill>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{n.body}</p>
@@ -642,11 +718,11 @@ function Preferences({ settings }: { settings: Settings | null }) {
                   setPref.mutate({ p_channel_kind: c, p_is_enabled: e.target.checked })
                 }
               />
-              {c}
+              {channelWord(c, ui)}
             </label>
           ))}
           <span className={`${TOUCH} flex items-center gap-2 text-sm text-muted-foreground`}>
-            in_app · always on
+            {ui("In app · always on")}
           </span>
         </div>
         {setPref.error ? <ErrorNote error={setPref.error} /> : null}
@@ -722,9 +798,9 @@ function Preferences({ settings }: { settings: Settings | null }) {
                 value={override}
                 onChange={(e) => setOverride(e.target.value)}
               >
-                {["low", "medium", "high", "critical"].map((s) => (
+                {SEVERITIES.filter((s) => s !== "info").map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {severityWord(s, ui)}
                   </option>
                 ))}
               </select>
