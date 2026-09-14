@@ -2237,6 +2237,10 @@ export type Database = {
         Args: { p_discount_pct: number; p_line_id: string }
         Returns: undefined
       }
+      erp_set_quote_programme: {
+        Args: { p_document_id: string; p_programme: string }
+        Returns: string
+      }
       erp_set_rate: {
         Args: {
           p_amount_minor: number

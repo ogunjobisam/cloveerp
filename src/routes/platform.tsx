@@ -32,6 +32,7 @@ import { Queue } from "../components/platform/queue";
 import { Deployment } from "../components/platform/deployment";
 import { Incidents } from "../components/platform/incidents";
 import { Contracts } from "../components/platform/contracts";
+import { Quotes } from "../components/platform/quotes";
 import { Revenue } from "../components/platform/revenue";
 
 /**
@@ -118,6 +119,7 @@ const AREAS: {
       "Contracts with the organisations on this deployment, what each provisions, and what they add up to.",
     icon: <FileSignature className="size-4" />,
     views: [
+      { key: "quotes", label: "Quotes" },
       { key: "contracts", label: "Contracts" },
       { key: "revenue", label: "Revenue and renewals" },
       { key: "enquiries", label: "Enquiries" },
@@ -376,6 +378,7 @@ function PlatformConsole() {
           {currentView === "activity" ? <Activity /> : null}
           {currentView === "decisions" ? <Decisions /> : null}
           {currentView === "plans" ? <Plans /> : null}
+          {currentView === "quotes" ? <Quotes role={role} /> : null}
           {currentView === "contracts" ? <Contracts role={role} /> : null}
           {currentView === "revenue" ? <Revenue role={role} /> : null}
           {currentView === "enquiries" ? <Enquiries role={role} /> : null}
