@@ -182,7 +182,8 @@ function OrderAction({ row, type }: { row: ForecastRow; type: DocType | undefine
           },
         ],
       })}
-      alsoSubmit={{ label: ui("Create and send"), args: { p_transition: "auto" } }}
+      // The same forward move, and the same words, as the New document form.
+      alsoSubmit={{ label: ui("Create and move on"), args: { p_transition: "auto" } }}
       invalidates={["erp_documents", "erp_document", "erp_stock_forecast"]}
       submitLabel={ui("Create")}
     />

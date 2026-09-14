@@ -1,6 +1,8 @@
 import { ActionButton, ErrorNote } from "./action";
 import { useErpAction } from "./action";
 import { hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
+import { permissionName } from "../../lib/permission-name";
 import { useErpSession } from "./session-context";
 
 /**
@@ -30,6 +32,7 @@ export function RpcButton({
 }) {
   const { session } = useErpSession();
   const action = useErpAction({ fn, invalidates });
+  const { resources } = useT();
 
   const allowed = !permission || hasPermission(session, permission);
 
@@ -39,7 +42,9 @@ export function RpcButton({
         variant={variant}
         busy={action.isPending}
         disabled={!allowed}
-        title={allowed ? undefined : `Requires ${permission}`}
+        title={
+          allowed || !permission ? undefined : `Requires ${permissionName(permission, resources)}`
+        }
         onClick={() => {
           if (confirm && !window.confirm(confirm)) return;
           action.mutate(args);

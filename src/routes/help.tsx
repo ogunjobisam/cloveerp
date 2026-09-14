@@ -52,8 +52,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
           Home
         </Link>
         . Your first steps are listed there in the order to take them, and the ? button on any
-        screen explains that screen. To explore without touching anything real, seed a demo
-        organisation from Home and practise there.
+        screen explains that screen. To practise without touching anything real, see the question
+        about trying something without it counting, below.
       </>
     ),
   },
@@ -87,15 +87,17 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     q: "Can I try something without it counting?",
     a: (
       <>
-        Yes. Training scenarios run in a demo organisation where nothing is real: seed one from{" "}
-        <Link to="/" className="underline">
-          Home
-        </Link>
-        , then open{" "}
+        Yes, before your organisation goes live: start a training scenario from{" "}
         <Link to="/administration/adoption" className="underline">
           Guidance and adoption
+        </Link>
+        , and the check tells you whether the task was done. Once the organisation is live,
+        scenarios are refused on purpose, because practice belongs where nothing is real. To keep
+        practising after that, or to train people before they touch real records,{" "}
+        <Link to="/contact" className="underline">
+          ask Clove
         </Link>{" "}
-        and start a scenario. A live organisation refuses scenarios on purpose.
+        for a practice organisation of your own.
       </>
     ),
   },

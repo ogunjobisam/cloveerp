@@ -7,7 +7,7 @@ import { hasStoredSession } from "../lib/erp";
 import { Launchpad } from "../components/erp/launchpad";
 import { useErpSession, useScope } from "../components/erp/session-context";
 import { PageHeader, Prose } from "../components/erp/page";
-import { SeedDemoAction } from "../components/erp/seed";
+import { SeedDemoAction, useMaySeedDemo } from "../components/erp/seed";
 import { useT } from "../lib/i18n";
 
 /**
@@ -91,9 +91,15 @@ function Fork() {
  * viewer principal, and the caller's administrator grant — and makes it the
  * working context, because the newest principal wins. Calling it again
  * returns the same tenant rather than piling up copies.
+ *
+ * Only for the people the demo doors serve: platform operators and owners, or
+ * anybody while self-service sign-up is open. A customer's Home does not carry
+ * a card about demo data they cannot make.
  */
 function DemoSeed() {
   const { ui } = useT();
+  const maySeed = useMaySeedDemo();
+  if (!maySeed) return null;
   return (
     <section className="rounded-2xl border border-dashed border-accent/40 bg-accent/5 p-4 sm:p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

@@ -1,10 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { callErp } from "../../lib/erp";
-import { atLeast, usePlatformMe } from "../../lib/platform";
-import { selfServiceIsOpen } from "../../lib/self-service";
+import { isPlatformOperator, usePlatformMe } from "../../lib/platform";
+import { maySeedDemo } from "../../lib/self-service";
 import { ActionButton, ErrorNote } from "./action";
 import { useErpSession } from "./session-context";
+
+/**
+ * Whether demo data is offered to this viewer at all.
+ *
+ * Demo data is created by platform operators and owners, or by anybody while
+ * the owner has opened self-service sign-up. The database refuses everyone
+ * else; offering a button that can only fail is not help, and neither is a
+ * card that talks about demo data with no button on it. So the button and
+ * everything around it ask this one question.
+ */
+export function useMaySeedDemo(): boolean {
+  const platform = usePlatformMe();
+  const staff = isPlatformOperator(platform.data);
+  const open = useQuery({
+    queryKey: ["erp_self_service_organisations_open"],
+    queryFn: () => callErp<unknown>("erp_self_service_organisations_open"),
+    enabled: platform.isSuccess && !staff,
+  });
+  return maySeedDemo({ staff, open: open.data });
+}
 
 /**
  * The one action that turns an empty operational screen into a populated one.
@@ -27,19 +47,10 @@ export function SeedDemoAction({ label = "Explore with demo data" }: { label?: s
     onSuccess: () => queryClient.invalidateQueries(),
   });
 
-  // Demo data is created by platform operators and owners, or by anybody while
-  // the owner has opened self-service sign-up. The database refuses everyone
-  // else; offering a button that can only fail is not help.
-  const platform = usePlatformMe();
-  const staff = Boolean(platform.data?.is_staff) && atLeast(platform.data?.role, "operator");
-  const open = useQuery({
-    queryKey: ["erp_self_service_organisations_open"],
-    queryFn: () => callErp<unknown>("erp_self_service_organisations_open"),
-    enabled: platform.isSuccess && !staff,
-  });
+  const maySeed = useMaySeedDemo();
 
   if (session.tenant?.code.startsWith("demo-")) return null;
-  if (!staff && !selfServiceIsOpen(open.data)) return null;
+  if (!maySeed) return null;
 
   return (
     <div className="flex flex-col gap-2">

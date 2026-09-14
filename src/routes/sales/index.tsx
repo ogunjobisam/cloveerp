@@ -19,7 +19,7 @@ import { Gate } from "../../components/erp/gate";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow } from "../../components/erp/process-flow";
-import { SALES_KPIS } from "../../lib/modules";
+import { DELIVER_AN_ORDER, DELIVER_THIS_ORDER, SALES_KPIS } from "../../lib/modules";
 
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — Clove ERP" }] }),
@@ -116,6 +116,9 @@ const SALES_ACTIONS: ActionSpec[] = [
     ],
     invalidates: ["erp_documents", "erp_document"],
   },
+  // Raised from the order, holding what is left on each line; posting it counts
+  // what went on the order and moves the order on once all of it has gone.
+  DELIVER_AN_ORDER,
   {
     label: "Release a credit hold",
     permission: "sales.credit_release",
@@ -199,7 +202,9 @@ function Sales() {
 
               typeCode: "sales_order",
               partyRole: "customer",
-              recordArg: "p_document_id",
+              // The chosen order is the one the delivery is created from.
+              recordArg: "p_order_id",
+              actionFn: "deliver_this_order",
               createFn: "erp_promise_date",
             },
             {
@@ -210,8 +215,10 @@ function Sales() {
             {
               label: "Delivery",
               hint: "Goods leaving. Posting a delivery is what takes the stock off the shelf.",
+              // Not a verb of this step: a step whose only verb needs
+              // sales.despatch would be greyed for everybody who only reads.
               fedBy:
-                "Deliveries appear here once stock has been reserved and picked against an order.",
+                "Deliveries appear here once one is created from a confirmed sales order: choose the order on the sales order step.",
 
               typeCode: "delivery",
               partyRole: "customer",
@@ -238,7 +245,7 @@ function Sales() {
             },
           ],
         }}
-        actions={SALES_ACTIONS}
+        actions={[...SALES_ACTIONS, DELIVER_THIS_ORDER]}
       />
 
       <ActionBar
@@ -368,7 +375,7 @@ function Sales() {
         description="Goods leaving. Posting one is what takes the stock off the shelf."
         baseType="delivery"
         partyRole="customer"
-        empty="No deliveries yet. A delivery is raised against a sales order, and posting it is what takes the stock off the shelf."
+        empty="No deliveries yet. Create a delivery from a confirmed sales order, and post it when the goods leave: posting is what takes the stock off the shelf."
       />
 
       {/* An invoice raised from a delivery had nowhere to be read: it exists as

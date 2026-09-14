@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { friendlyError } from "@/lib/errors";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { permissionName } from "../../lib/permission-name";
 import {
   completeCount,
   nextScreen,
@@ -217,7 +218,7 @@ function StepCard({
   next: WalkthroughStep | null;
   onOpened: () => void;
 }) {
-  const { ui } = useT();
+  const { ui, resources } = useT();
   const state = stepState(step, next);
   const mark = useErpAction({ fn: "erp_mark_setup_step", invalidates: INVALIDATES });
   const dismiss = useErpAction({ fn: "erp_dismiss_setup_step", invalidates: INVALIDATES });
@@ -284,7 +285,8 @@ function StepCard({
 
           {!step.permitted ? (
             <p className="mt-1 text-xs text-muted-foreground">
-              {ui("Not yours to take")} · <span className="font-mono">{step.permission_code}</span>
+              {ui("Not yours to take")} ·{" "}
+              <span className="font-medium">{permissionName(step.permission_code, resources)}</span>
             </p>
           ) : null}
 

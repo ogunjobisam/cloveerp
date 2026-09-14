@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { GoTo } from "../../components/erp/action";
+import { GoTo, PermissionName } from "../../components/erp/action";
 import { ActionBar, codeField, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose } from "../../components/erp/page";
@@ -125,11 +125,12 @@ function Adoption() {
         </Prose>
         {!isDemo ? (
           <p className="mt-3 rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-xs">
-            This organisation is not a demo. Starting a scenario here is refused once it is live;{" "}
-            <Link to="/" className="underline">
-              seed a demo organisation from Home
-            </Link>{" "}
-            and practise there.
+            This organisation is not a demo. Starting a scenario here is refused once it is live; to
+            keep practising after that,{" "}
+            <Link to="/contact" className="underline">
+              ask Clove for a practice organisation
+            </Link>
+            .
           </p>
         ) : null}
       </section>
@@ -171,7 +172,9 @@ function Adoption() {
                       invalidates={["erp_training_runs", "erp_adoption_signals"]}
                     />
                   ) : (
-                    <span className="text-xs text-muted-foreground">needs {s.permission_code}</span>
+                    <span className="text-xs text-muted-foreground">
+                      needs <PermissionName code={s.permission_code} />
+                    </span>
                   )}
                 </td>
               </tr>

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  maySeedDemo,
   onboardingView,
   pastedToken,
   readSelfServiceChange,
@@ -18,6 +19,21 @@ describe("the switch's answer", () => {
   test("is closed for anything else, including what a stub or an old schema sends", () => {
     for (const answer of [false, null, undefined, [], {}, "true", 1, [true], { open: true }]) {
       expect(selfServiceIsOpen(answer)).toBe(false);
+    }
+  });
+});
+
+describe("whether demo data is offered", () => {
+  test("to platform operators and owners, whatever the switch says", () => {
+    for (const open of [undefined, true, false, null]) {
+      expect(maySeedDemo({ staff: true, open })).toBe(true);
+    }
+  });
+
+  test("to anybody else only while self-service sign-up is open", () => {
+    expect(maySeedDemo({ staff: false, open: true })).toBe(true);
+    for (const open of [undefined, false, null, "true", { open: true }]) {
+      expect(maySeedDemo({ staff: false, open })).toBe(false);
     }
   });
 });

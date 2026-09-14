@@ -109,7 +109,7 @@ function registeredRefusal(
 const REFUSAL_MESSAGES: Record<string, { title: string; body: string }> = {
   CLOVEERP_PERMISSION_DENIED: {
     title: "You do not have permission to do this.",
-    body: "An administrator can grant the missing permission on the Permissions screen.",
+    body: "An administrator can grant the missing permission under People and permissions.",
   },
   CLOVEERP_TENANT_FROZEN: {
     title: "This tenant is frozen.",
@@ -188,8 +188,8 @@ export function friendlyError(error: unknown): FriendlyError {
     return out(
       "You do not have permission to do this.",
       obj
-        ? `Your role cannot reach ${obj}. An administrator can grant the missing permission on the Permissions screen.`
-        : "An administrator can grant the missing permission on the Permissions screen.",
+        ? `Your role cannot reach ${obj}. An administrator can grant the missing permission under People and permissions.`
+        : "An administrator can grant the missing permission under People and permissions.",
     );
   }
 

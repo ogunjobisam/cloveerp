@@ -84,6 +84,26 @@ describe("pickLine", () => {
     ).toBe(false);
   });
 
+  test("names the document states when the action needs them, and never an empty list", () => {
+    const field = pickLine("purchase_order", "p_order_line_id", "Order line", {
+      openOnly: true,
+      states: ["sent", "partially_received"],
+    });
+    expect(argsOf(field, "erp_document_lines")).toEqual({
+      p_type_code: "purchase_order",
+      p_limit: 200,
+      p_open_only: true,
+      p_document_states: ["sent", "partially_received"],
+    });
+    expect(
+      "p_document_states" in
+        argsOf(
+          pickLine("purchase_order", "p_order_line_id", "Order line", { states: [] }),
+          "erp_document_lines",
+        ),
+    ).toBe(false);
+  });
+
   test("asks for open lines when the action acts on one", () => {
     const field = pickLine("sales_order", "p_line_id", "Sales order line", { openOnly: true });
     expect(field.name).toBe("p_line_id");

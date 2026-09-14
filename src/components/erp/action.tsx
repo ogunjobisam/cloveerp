@@ -15,8 +15,18 @@ import {
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
+import {
+  clearDependentCells,
+  dependentFields,
+  dropSeededRows,
+  optionArgs,
+  optionList,
+  seededRows,
+  type RowSeed,
+} from "../../lib/dependent-options";
 import { useT } from "../../lib/i18n";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
+import { permissionName } from "../../lib/permission-name";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
@@ -148,10 +158,22 @@ export function ErrorNote({ error }: { error: unknown }) {
 export function PermissionNote({ code }: { code: string }) {
   return (
     <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
-      This account does not hold <code className="font-mono text-xs">{code}</code>, so that is not
-      offered here. Absence of a grant is a refusal, not a default.
+      This account does not hold the permission{" "}
+      <span className="font-medium text-foreground">
+        <PermissionName code={code} />
+      </span>
+      , so that is not offered here. Absence of a grant is a refusal, not a default.
     </p>
   );
+}
+
+/**
+ * A permission by the name a person reads — "Change configuration", not
+ * `administration.configure` — renamed wherever the organisation renamed it.
+ */
+export function PermissionName({ code }: { code: string }) {
+  const { resources } = useT();
+  return <>{permissionName(code, resources)}</>;
 }
 
 /**
@@ -196,6 +218,19 @@ export type OptionSource = {
    * carries `views` and `credentials`, and a picker asks for one of them.
    */
   path?: string;
+  /**
+   * Arguments taken from other fields on the same form: door argument to field
+   * name. The picker waits until each is chosen, and follows the choice when it
+   * changes — the buckets of the forecast version chosen above, not every
+   * bucket of every version. See src/lib/dependent-options.ts.
+   */
+  argsFrom?: Record<string, string>;
+  /**
+   * A list inside one record of the list: the record whose `key` is the value
+   * chosen in `field`, and its `path`. A settlement statement's line carries
+   * the receivables it could be matched to; a picker offers that line's.
+   */
+  within?: { field: string; key: string; path: string };
 };
 
 export type Field =
@@ -239,6 +274,12 @@ export type Field =
        * being typed rather than after it has been saved.
        */
       total?: { quantity: string; price: string; currency: string };
+      /**
+       * The rows the editor arrives holding, read from a door once the choice
+       * it follows is made — the open lines of the order chosen above, each at
+       * what is left of it. Still editable; see RowSeed. One per form.
+       */
+      seed?: RowSeed;
     } & FieldBase);
 
 /**
@@ -322,21 +363,23 @@ function optionLabel(row: Record<string, unknown>, keys: string[]): string {
     .join(" — ");
 }
 
-function useOptions(source: OptionSource | undefined) {
+function useOptions(source: OptionSource | undefined, values: Record<string, string> = {}) {
+  // Null while a choice this picker follows has not been made: there is
+  // nothing to ask for yet.
+  const args = source ? optionArgs(source, values) : {};
+  const waiting = Boolean(source) && args === null;
   const { data, isPending, error } = useQuery({
-    queryKey: [source?.fn ?? "none", source?.args ?? {}],
+    queryKey: [source?.fn ?? "none", args ?? {}],
     queryFn: () =>
       source
-        ? callErp<unknown>(source.fn, source.args ?? {})
+        ? callErp<unknown>(source.fn, args ?? {})
         : Promise.resolve([] as Record<string, unknown>[]),
-    enabled: Boolean(source),
+    enabled: Boolean(source) && !waiting,
   });
 
-  // A door that answers with several named lists is asked for one of them.
-  const list =
-    source?.path && data && typeof data === "object" && !Array.isArray(data)
-      ? (data as Record<string, unknown>)[source.path]
-      : data;
+  // A door that answers with several named lists is asked for one of them, and
+  // a list inside the record chosen above is taken from that record.
+  const list = source ? optionList(source, data, values) : data;
 
   // Most reference reads return a row per option. A few — the time zone list
   // is one — return plain strings, which are their own value and their own
@@ -354,7 +397,7 @@ function useOptions(source: OptionSource | undefined) {
       )
     : [];
 
-  return { rows, isPending: Boolean(source) && isPending, error };
+  return { rows, isPending: Boolean(source) && !waiting && isPending, error, waiting };
 }
 
 /** Said once, because four controls need to say it. */
@@ -362,12 +405,17 @@ function PickerNote({
   isPending,
   error,
   empty,
+  waiting = false,
 }: {
   isPending: boolean;
   error: unknown;
   empty: boolean;
+  waiting?: boolean;
 }) {
   if (error) return <span className="text-xs text-destructive">{friendlyError(error).title}</span>;
+  // A list that follows another choice has nothing to say until that is made.
+  if (waiting)
+    return <span className="text-xs text-muted-foreground">Make the choice above first.</span>;
   // An empty picker is a fact worth stating: it usually means the master data
   // does not exist yet, not that the screen is broken.
   if (!isPending && empty)
@@ -383,12 +431,15 @@ export function SelectField({
   field,
   value,
   onChange,
+  formValues,
 }: {
   field: Extract<Field, { kind: "select" }>;
   value: string;
   onChange: (v: string, pick?: OptionPick) => void;
+  /** The form's other answers, for a picker whose list follows one of them. */
+  formValues?: Record<string, string>;
 }) {
-  const { rows, isPending, error } = useOptions(field.options);
+  const { rows, isPending, error, waiting } = useOptions(field.options, formValues);
   const [filter, setFilter] = useState("");
 
   // A hundred products in a dropdown is a list you scroll, not one you use.
@@ -420,7 +471,7 @@ export function SelectField({
             previous: rows.find((r) => r.value === value)?.record,
           });
         }}
-        disabled={isPending || Boolean(error)}
+        disabled={waiting || isPending || Boolean(error)}
         className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60`}
       >
         <option value="">{isPending ? "Loading…" : "Choose…"}</option>
@@ -430,7 +481,7 @@ export function SelectField({
           </option>
         ))}
       </select>
-      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} />
+      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} waiting={waiting} />
     </>
   );
 }
@@ -526,10 +577,12 @@ function RowCell({
   column,
   value,
   onChange,
+  formValues,
 }: {
   column: RowColumn;
   value: string;
   onChange: (v: string, pick?: OptionPick) => void;
+  formValues?: Record<string, string>;
 }) {
   if (column.kind === "select" && column.options)
     return (
@@ -542,6 +595,7 @@ function RowCell({
         }}
         value={value}
         onChange={onChange}
+        {...(formValues ? { formValues } : {})}
       />
     );
 
@@ -577,12 +631,19 @@ function RowsField({
   value,
   onChange,
   currencies,
+  formValues,
+  seedState,
 }: {
   field: Extract<Field, { kind: "rows" }>;
   value: Record<string, string>[];
   onChange: (v: Record<string, string>[]) => void;
   currencies: Currency[] | undefined;
+  /** The form's other answers, for a column whose picker follows one of them. */
+  formValues?: Record<string, string>;
+  /** Where the rows the editor arrives holding have got to, when it has a seed. */
+  seedState?: { isPending: boolean; error: unknown; waiting: boolean; untouched: boolean };
 }) {
+  const { ui } = useT();
   const total = field.total;
   const sum = total
     ? value.reduce(
@@ -594,6 +655,22 @@ function RowsField({
 
   return (
     <div className="flex flex-col gap-2">
+      {seedState ? (
+        <PickerNote
+          isPending={seedState.isPending}
+          error={seedState.error}
+          empty={false}
+          waiting={seedState.waiting}
+        />
+      ) : null}
+      {seedState?.untouched &&
+      field.seed?.empty &&
+      value.length === 0 &&
+      !seedState.isPending &&
+      !seedState.waiting &&
+      !seedState.error ? (
+        <span className="text-xs text-muted-foreground">{ui(field.seed.empty)}</span>
+      ) : null}
       {value.map((row, index) => (
         <div
           key={index}
@@ -607,6 +684,7 @@ function RowsField({
               </span>
               <RowCell
                 column={c}
+                {...(formValues ? { formValues } : {})}
                 value={row[c.name] ?? ""}
                 onChange={(v, pick) =>
                   onChange(
@@ -768,7 +846,7 @@ export function ActionDialog({
   /**
    * A second way to finish.
    *
-   * "Create" leaves a draft; "Create and send" does the same work and moves the
+   * "Create" leaves a draft; "Create and move on" does the same work and moves the
    * document on. Two buttons on one form beat one button and a second visit.
    */
   alsoSubmit?: { label: string; args: Record<string, unknown> };
@@ -789,6 +867,48 @@ export function ActionDialog({
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(fields));
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
+
+  // What a picker that follows another choice reads: the record the screen
+  // already chose, and what has been chosen on the form.
+  const formValues = useMemo(() => {
+    const known: Record<string, string> = {};
+    for (const [k, v] of Object.entries(prefill ?? {}))
+      if (typeof v === "string" || typeof v === "number") known[k] = String(v);
+    return { ...known, ...values };
+  }, [prefill, values]);
+
+  // A choice another picker follows takes that picker's answer with it: the
+  // bucket of the old version is not a bucket of the new one. A line editor
+  // seeded from that choice starts again from what the new choice holds.
+  function choose(name: string, value: string) {
+    if ((values[name] ?? "") === value) return;
+    const followers = dependentFields(fields, name);
+    setValues((prev) => {
+      const next = { ...prev, [name]: value };
+      for (const f of followers) next[f] = "";
+      return next;
+    });
+    setRows((prev) => dropSeededRows(fields, clearDependentCells(fields, prev, name), name));
+  }
+
+  // The line editor that arrives holding rows, read once the choice it follows
+  // is made. Until the person changes a row, the rows shown and sent are the
+  // door's; the first change makes them the person's.
+  const seeded = fields.find(
+    (f): f is Extract<Field, { kind: "rows" }> => f.kind === "rows" && f.seed !== undefined,
+  );
+  const seed = seeded?.seed;
+  const seedArgs = seed ? optionArgs(seed, formValues) : null;
+  const seedQuery = useQuery({
+    queryKey: [seed?.fn ?? "no-seed", seedArgs ?? {}],
+    queryFn: () =>
+      seed && seedArgs ? callErp<unknown>(seed.fn, seedArgs) : Promise.resolve(null as unknown),
+    enabled: open && seed !== undefined && seedArgs !== null,
+  });
+  const heldRows: Record<string, Record<string, string>[]> =
+    seeded && seed && seedArgs !== null && rows[seeded.name] === undefined && seedQuery.data
+      ? { ...rows, [seeded.name]: seededRows(seed, seedQuery.data, formValues) }
+      : rows;
 
   // An open form with something typed into it is work in progress, and
   // leaving the screen must ask before it is thrown away.
@@ -825,7 +945,8 @@ export function ActionDialog({
   });
 
   function buildArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
-    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}), ...extra };
+    if (mapArgs)
+      return { ...mapArgs(values, { lists, rows: heldRows }), ...(prefill ?? {}), ...extra };
     const args: Record<string, unknown> = {};
 
     for (const f of fields) {
@@ -836,7 +957,7 @@ export function ActionDialog({
       }
       if (f.kind === "rows") {
         const declared = f.columns;
-        const filled = (rows[f.name] ?? [])
+        const filled = (heldRows[f.name] ?? [])
           .map((row) => {
             const out: Record<string, unknown> = {};
             for (const c of declared) {
@@ -915,7 +1036,8 @@ export function ActionDialog({
                 <SelectField
                   field={f}
                   value={values[f.name] ?? ""}
-                  onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+                  onChange={(v) => choose(f.name, v)}
+                  formValues={formValues}
                 />
               ) : f.kind === "combo" ? (
                 <ComboField
@@ -932,9 +1054,20 @@ export function ActionDialog({
               ) : f.kind === "rows" ? (
                 <RowsField
                   field={f}
-                  value={rows[f.name] ?? []}
+                  value={heldRows[f.name] ?? []}
                   onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
                   currencies={currencies}
+                  formValues={formValues}
+                  {...(f.seed
+                    ? {
+                        seedState: {
+                          isPending: seedArgs !== null && seedQuery.isPending,
+                          error: seedQuery.error,
+                          waiting: seedArgs === null,
+                          untouched: rows[f.name] === undefined,
+                        },
+                      }
+                    : {})}
                 />
               ) : f.kind === "choice" || f.kind === "site" ? (
                 <select

@@ -93,7 +93,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     label: "Work out who approves",
     title: "Route this requisition for approval",
     description:
-      "Stamps the chain the value and the department resolve to, and raises the approval tasks that go with it.",
+      "Records the approval chain the value and the department resolve to. It asks nobody to approve.",
     permission: "procurement.requisition",
     fn: "erp_stamp_document_approval",
     fields: [pickRequisition()],
@@ -281,9 +281,13 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         // A goods receipt still being built: not another kind of document.
         { p_type_code: "goods_receipt", p_limit: 100, p_actionable: true },
       ),
-      // Open lines only: not on a closed or cancelled order, not received and
-      // invoiced in full.
-      pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
+      // Open lines on orders sent to the supplier: the database refuses a
+      // receipt against a draft, an order waiting on approval, or one approved
+      // and not sent, and against one already received in full.
+      pickLine("purchase_order", "p_order_line_id", "Order line", {
+        openOnly: true,
+        states: ["sent", "partially_received"],
+      }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       pickBatch(),
     ],
@@ -304,14 +308,20 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         { p_type_code: "purchase_invoice", p_limit: 100, p_actionable: true },
       ),
       // Open lines only, as for receiving: a line received in full but not yet
-      // invoiced stays, because that is the line this matches.
-      pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
+      // invoiced stays, because that is the line this matches. And only on an
+      // order the supplier has been sent: nothing else can be billed.
+      pickLine("purchase_order", "p_order_line_id", "Order line", {
+        openOnly: true,
+        states: ["sent", "partially_received", "received"],
+      }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       {
-        kind: "number",
+        kind: "money",
         name: "p_unit_price_minor",
         label: "Unit price",
-        hint: "In minor units — pence, cents.",
+        currency: "GBP",
+        placeholder: "1.85",
+        hint: "Leave empty to take the order line's price.",
       },
     ],
     invalidates: ["erp_match_workbench", "erp_grni"],
@@ -357,16 +367,40 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
       ),
       {
-        kind: "text",
+        kind: "rows",
         name: "p_lines",
         label: "Lines",
         required: true,
-        hint: 'JSON: [{"line_id": "…", "quantity": 10, "required_date": "2026-10-01"}]. The Blanket position question lists the line ids.',
+        addLabel: "Add a line",
+        hint: "The lines of the blanket order chosen above being called off, and how much of each.",
+        columns: [
+          {
+            name: "line_id",
+            label: "Blanket line",
+            kind: "select",
+            // The lines of the chosen blanket, not every purchase order line.
+            options: {
+              fn: "erp_document_lines",
+              args: { p_limit: 200 },
+              argsFrom: { p_document_id: "p_blanket_id" },
+              value: "line_id",
+              label: ["line_no", "item", "description", "quantity"],
+            },
+          },
+          { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
+          { name: "required_date", label: "Required by", kind: "date" },
+        ],
       },
     ],
-    mapArgs: (v) => ({
+    mapArgs: (v, picked) => ({
       p_blanket_id: v["p_blanket_id"],
-      p_lines: JSON.parse(v["p_lines"] ?? "[]"),
+      p_lines: (picked?.rows["p_lines"] ?? [])
+        .filter((row) => (row["line_id"] ?? "") !== "")
+        .map((row) => ({
+          line_id: row["line_id"],
+          quantity: Number(row["quantity"] ?? 0),
+          ...(row["required_date"] ? { required_date: row["required_date"] } : {}),
+        })),
     }),
     invalidates: ["erp_documents"],
   },
