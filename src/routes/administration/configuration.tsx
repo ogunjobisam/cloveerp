@@ -123,6 +123,14 @@ type Module = {
   name: string;
   blurb: string;
   param?: Param;
+  /**
+   * The permission the installer asks for on top of administration.configure,
+   * which this whole screen already needs. The database refuses without it
+   * whatever the card offers; the card says so first, and says who holds it.
+   */
+  permission?: string;
+  /** Who can install it, shown to a reader who does not hold that permission. */
+  whoCan?: string;
 };
 
 /**
@@ -136,6 +144,12 @@ const MODULES: Module[] = [
     blurb:
       "Ledger, chart of accounts, fiscal periods and the posting rules documents post through.",
     param: { name: "p_fiscal_year", label: "Fiscal year", initial: "" },
+    // erp.configure_finance() authorises finance.configure, and the change set
+    // it raises authorises administration.configure: installing finance takes
+    // both, and keeping the set-up of the ledger with finance is deliberate.
+    permission: "finance.configure",
+    whoCan:
+      "Installing finance needs finance.configure as well as administration.configure, held by the same person. The finance manager role carries finance.configure, so an administrator who also holds that role can install finance.",
   },
   {
     fn: "erp_configure_master_data",
@@ -582,6 +596,9 @@ function ModulesPanel({ onDone }: { onDone: () => void }) {
 }
 
 function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void }) {
+  const { session } = useErpSession();
+  // Convenience only: the database refuses inside the installer whatever this says.
+  const permitted = m.permission === undefined || hasPermission(session, m.permission);
   const [value, setValue] = useState(m.param?.initial ?? "");
   const [error, setError] = useState<unknown>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -645,11 +662,16 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
             install.mutate();
           }}
           busy={install.isPending}
+          disabled={!permitted}
+          title={permitted ? undefined : `Requires ${m.permission ?? ""}`}
         >
           {install.isPending ? "Installing…" : "Install"}
         </ActionButton>
       </div>
 
+      {!permitted && m.whoCan ? (
+        <p className="mt-2 text-xs text-muted-foreground">{m.whoCan}</p>
+      ) : null}
       {outcome ? <p className="mt-2 text-xs text-muted-foreground">{outcome}</p> : null}
       {/* configure_sales refuses with CLOVEERP_NO_LEDGER and a hint naming
           erp.configure_finance(). That hint is the whole answer, and the old
