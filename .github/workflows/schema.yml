@@ -509,6 +509,58 @@ jobs:
         # ledger, a stock ledger, a subledger and a genealogy to disagree with.
         run: $PSQL -f supabase/ci/seed_demo.sql
 
+      - name: What live assurance costs, check by check
+        # The deploy proves live with erp.platform_assurance(): every registered
+        # assertion, in one statement, under a 55-second statement_timeout. On
+        # 14 September it took 63.3 s on live, and nothing said which check the
+        # time went on. The catalogue below runs each check in its own psql
+        # session, which measures the session as much as the check.
+        #
+        # So this runs it the way the deploy does, once, before the suites have
+        # touched anything, and prints what erp.run_diagnostic() says each check
+        # took, slowest first. It is not a second verdict: the catalogue is the
+        # verdict. It refuses only what would refuse the deploy, a check that
+        # is not green inside the definer function, which the catalogue calls
+        # directly and cannot see (20260913010000 is what that looks like).
+        #
+        # The warning is a rule of thumb: live took two to four times the
+        # build's time for the same checks on 14 September, and 35 s is the
+        # most live should spend of its 55.
+        run: |
+          set -euo pipefail
+          assurance="$RUNNER_TEMP/assurance.json"
+          started=$(date +%s%N)
+          $PSQL -tAc "select erp.platform_assurance();" > "$assurance"
+          wall_ms=$(( ($(date +%s%N) - started) / 1000000 ))
+
+          jq -r '
+            map(select(.elapsed_ms != null)) | sort_by(-.elapsed_ms) | .[]
+            | "\(.elapsed_ms | tostring | " " * ([0, 9 - length] | max) + .) ms  \(.code)"
+          ' "$assurance"
+          checks_ms=$(jq '[.[] | .elapsed_ms // 0] | add | floor' "$assurance")
+          ran=$(jq '[.[] | select(.ok != null)] | length' "$assurance")
+          skipped=$(jq '[.[] | select(.ok == null)] | length' "$assurance")
+          echo "platform_assurance: ${ran} check(s) in ${checks_ms} ms, ${wall_ms} ms with the session; ${skipped} need an organisation and were not run"
+
+          {
+            echo "## Live assurance, on the build"
+            echo "${ran} checks in ${checks_ms} ms (${wall_ms} ms with the session). The ten slowest:"
+            echo '```'
+            jq -r 'map(select(.elapsed_ms != null)) | sort_by(-.elapsed_ms) | .[:10][] | "\(.elapsed_ms) ms  \(.code)"' "$assurance"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if (( wall_ms > 9000 )); then
+            echo "::warning::erp.platform_assurance() took ${wall_ms} ms on the build. Live has taken two to four times as long, and 35 s is its budget: look at the slowest checks above."
+          fi
+
+          bad=$(jq -r '.[] | select(.ok == false) | "\(.code): \((.detail // "")[0:200])"' "$assurance")
+          if [[ -n "$bad" ]]; then
+            echo "::error::erp.platform_assurance() is not green on the build, so it would not be green on live:"
+            echo "$bad"
+            exit 1
+          fi
+
       - name: Every check in the catalogue
         # No list. erp.ci_check_catalogue() reads pg_proc and returns every
         # erp.assert_* and erp_test.assert_* the build can call, in order:
