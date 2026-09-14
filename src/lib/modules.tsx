@@ -16,10 +16,12 @@ import {
   pickLocation,
   pickParty,
   pickSite,
+  pickWarehouseTask,
   reason,
   type ActionSpec,
 } from "../components/erp/actions-bar";
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
+import { localIsoDate, orderPeriods } from "./plain-words";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -738,11 +740,19 @@ export const INVENTORY: ModuleDef = {
       fn: "erp_commit_allocation",
       fields: [
         {
-          kind: "text",
+          // Chosen, not typed: the reservations sales order lines hold and
+          // nobody has picked yet, as erp_allocations lists them.
+          kind: "select",
           name: "p_allocation_id",
-          label: "Allocation id",
+          label: "Reservation",
           required: true,
-          hint: "The reservation the sales line holds; leave location and batch empty to let the policy choose.",
+          hint: "A sales order line's reservation not yet picked. Leave location and batch empty to let the policy choose.",
+          options: {
+            fn: "erp_allocations",
+            args: { p_status: "reserved", p_limit: 200 },
+            value: "allocation_id",
+            label: ["document_number", "item", "quantity"],
+          },
         },
         pickLocation("p_location_id", "Location", false),
         pickBatch("p_batch_id", "Batch", false),
@@ -1012,13 +1022,7 @@ export const INVENTORY: ModuleDef = {
       permission: "inventory.move",
       fn: "erp_complete_warehouse_task",
       fields: [
-        pickFrom(
-          "erp_warehouse_tasks",
-          "task_id",
-          ["kind", "item", "from_location", "to_location"],
-          "p_task_id",
-          "Task",
-        ),
+        pickWarehouseTask(),
         { kind: "number", name: "p_quantity", label: "Quantity", hint: "Blank means all of it." },
       ],
       invalidates: ["erp_warehouse_tasks", "erp_stock_health"],
@@ -1302,10 +1306,15 @@ export const FINANCE: ModuleDef = {
           status: "status",
           noun: "period",
           nounPlural: "periods",
+          // The current period first, then the open ones already ended, oldest
+          // first. Periods not yet started wait behind the toggle: a calendar
+          // runs a year ahead, and the step opened on December next year.
+          arrange: (rows, showFinished) => orderPeriods(rows, localIsoDate(), showFinished),
         },
-        // A period still being worked or reopenable; permanently closed years
-        // are history, reached through Show finished.
+        // A period still being worked or reopenable; periods not yet started
+        // and permanently closed years are reached through the toggle.
         states: ["future", "open", "closing", "closed"],
+        showFinishedLabel: "Show future and finished periods",
         recordArg: "p_fiscal_period_id",
         actionFns: [
           "erp_open_period_close",
@@ -1711,15 +1720,27 @@ export const FINANCE: ModuleDef = {
           // and posted is terminal, so p_actionable would offer none.
           { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
         ),
+        // Invoicing goods you despatched yourself is an exception to the
+        // separation of duties. Once the organisation is live it needs a reason
+        // and somebody who may promote configuration, so only they are asked.
         {
           kind: "choice",
           name: "p_allow_self_invoice",
           label: "Allow self-invoice",
+          permission: "administration.promote",
           boolean: true,
           choices: [
             { value: "false", label: "No" },
             { value: "true", label: "Yes" },
           ],
+          hint: "Only when you despatched these goods yourself and nobody else can invoice them. Once the organisation is live it needs a reason.",
+        },
+        {
+          kind: "text",
+          name: "p_self_invoice_reason",
+          label: "Reason for invoicing your own delivery",
+          permission: "administration.promote",
+          hint: "Why nobody else can invoice these goods, and what checks the invoice instead. At least twenty characters once the organisation is live; kept on the invoice.",
         },
       ],
       invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
@@ -3627,16 +3648,18 @@ export const LOGISTICS: ModuleDef = {
         {
           // Nothing that names an existing record is typed. Deliveries are
           // ticked from the list of deliveries, not copied in as identifiers.
-          // Only posted ones: the logistics suite plans a shipment for a posted
-          // delivery, and a draft or cancelled one has nothing to carry.
+          // Only posted ones from the site chosen above, from the last thirty
+          // days, that no shipment carries yet: the list offered two hundred
+          // deliveries, most of them sent months before
+          // (public.erp_deliveries_to_ship, 20260914075000).
           kind: "multi",
           name: "p_delivery_ids",
           label: "Deliveries",
           required: true,
-          hint: "Tick every delivery travelling on this shipment.",
+          hint: "Posted deliveries from the site above, from the last 30 days, that are not on a shipment yet. Tick every one travelling on this shipment.",
           options: {
-            fn: "erp_documents",
-            args: { p_type_code: "delivery", p_limit: 200, p_states: ["posted"] },
+            fn: "erp_deliveries_to_ship",
+            argsFrom: { p_site_id: "p_site_id" },
             value: "document_id",
             label: ["document_number", "document_date", "party"],
           },

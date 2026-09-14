@@ -1,4 +1,5 @@
 import { ErpError, InviteOutcomeUnknown } from "./erp";
+import { asSentence, plainSentence } from "./plain-words";
 
 /**
  * Plain-language failures.
@@ -8,6 +9,14 @@ import { ErpError, InviteOutcomeUnknown } from "./erp";
  * person who pressed Install. Every screen renders through here, so a failure
  * arrives as a sentence about what happened and what to do, with the raw
  * database text kept — folded away — for whoever needs it.
+ *
+ * A sentence the database wrote reaches a customer only through
+ * plainSentence(): capitalised, ended with a stop, and not at all when it is
+ * written for the people who maintain the engine — a raise's hint citing a
+ * section of the specification, a permission code or a table. On 14 September
+ * a refusal showed a customer "you despatched DN-000255 and cannot also
+ * invoice it" followed by "B1 has carried sales.despatch and sales.invoice as
+ * separate permissions since it was written".
  */
 export type FriendlyError = {
   /** One short sentence: what happened. */
@@ -23,13 +32,6 @@ export type FriendlyError = {
 /** `duplicate key ... constraint "x_y_key"` → `x_y_key`. */
 function constraintName(message: string): string | null {
   return /unique constraint "([^"]+)"/.exec(message)?.[1] ?? null;
-}
-
-/** `permission denied for schema erp_meta` → `erp_meta`. */
-function deniedObject(message: string): string | null {
-  return (
-    /permission denied for (?:schema|table|function|relation) ([\w.]+)/.exec(message)?.[1] ?? null
-  );
 }
 
 /**
@@ -153,7 +155,8 @@ export function friendlyError(error: unknown): FriendlyError {
   const raw = error instanceof Error ? error.message : String(error);
   const erp = error instanceof ErpError ? error : null;
   const technical = [raw, erp?.details].filter(Boolean).join(" — ") || null;
-  const hint = erp?.hint ?? null;
+  // The engine's hint, when it is written for the person who was refused.
+  const hint = plainSentence(erp?.hint);
   const out = (title: string, body: string | null = null): FriendlyError => ({
     title,
     body,
@@ -168,9 +171,9 @@ export function friendlyError(error: unknown): FriendlyError {
     // wording where it has overridden the product's. The engine's hint, when
     // the raise carried one, is more specific than the register and wins.
     return {
-      title: registered.refused,
-      body: registered.why,
-      hint: hint ?? registered.nextAction,
+      title: asSentence(registered.refused),
+      body: registered.why ? asSentence(registered.why) : null,
+      hint: hint ?? asSentence(registered.nextAction),
       technical,
     };
   }
@@ -179,17 +182,21 @@ export function friendlyError(error: unknown): FriendlyError {
     return out(builtIn.title, builtIn.body);
   }
   if (token) {
-    // An engine rule we have no wording for: show its own words, minus the token.
-    return out("This is not allowed right now.", raw.replace(token, "").replace(/^[:\s-]+/, ""));
+    // An engine rule with no wording in the register: its own words, minus the
+    // token, when they are words a customer can read.
+    return out(
+      "This is not allowed right now.",
+      plainSentence(raw.replace(token, "").replace(/^[:\s-]+/, "")) ??
+        "A rule in this organisation stopped it. The technical detail below names the rule.",
+    );
   }
 
   if (erp?.isPermissionDenied || /permission denied/i.test(raw)) {
-    const obj = deniedObject(raw);
+    // Never the object the engine names: "Your role cannot reach erp_meta" is
+    // the database's business, and the technical detail keeps it.
     return out(
       "You do not have permission to do this.",
-      obj
-        ? `Your role cannot reach ${obj}. An administrator can grant the missing permission under People and permissions.`
-        : "An administrator can grant the missing permission under People and permissions.",
+      "An administrator can grant the missing permission under People and permissions.",
     );
   }
 
@@ -258,5 +265,8 @@ export function friendlyError(error: unknown): FriendlyError {
   }
 
   // Nothing matched: the message is likely an engine sentence already.
-  return out("This did not work.", raw);
+  return out(
+    "This did not work.",
+    plainSentence(raw) ?? "The technical detail below says what went wrong.",
+  );
 }

@@ -9,6 +9,7 @@ import {
   pickLine,
   pickParty,
   pickSite,
+  pickWarehouseTask,
   type ActionSpec,
 } from "../../components/erp/actions-bar";
 import { DocumentPanel } from "../../components/erp/documents";
@@ -19,6 +20,7 @@ import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow } from "../../components/erp/process-flow";
 import { GOODS_IN_LIST, PURCHASING_KPIS, RECEIVE_AN_ORDER } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
+import { approvalSubject } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/procurement/")({
   head: () => ({
@@ -169,13 +171,22 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     // and a code here would hide it from an assignee who lacks that code.
     fn: "erp_decide_approval",
     fields: [
-      pickFrom(
-        "erp_my_approvals",
-        "task_id",
-        ["object_type", "requested_by", "requested_at"],
-        "p_task_id",
-        "Approval waiting on me",
-      ),
+      {
+        kind: "select",
+        name: "p_task_id",
+        label: "Approval waiting on me",
+        required: true,
+        // "PO-000057 · Purchase order — Northwind — Sam", not "document — Sam".
+        options: {
+          fn: "erp_my_approvals",
+          value: "task_id",
+          label: ["document_number", "partner", "requested_by"],
+          describe: (row) =>
+            [approvalSubject(row), row["partner"], row["requested_by"]]
+              .filter((x) => typeof x === "string" && x !== "" && x !== "—")
+              .join(" — "),
+        },
+      },
       {
         kind: "choice",
         name: "p_approve",
@@ -212,13 +223,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "inventory.move",
     fn: "erp_complete_warehouse_task",
     fields: [
-      pickFrom(
-        "erp_warehouse_tasks",
-        "task_id",
-        ["kind", "item", "from_location", "to_location"],
-        "p_task_id",
-        "Task",
-      ),
+      pickWarehouseTask("putaway"),
       { kind: "number", name: "p_quantity", label: "Quantity", hint: "Blank means all of it." },
     ],
     invalidates: ["erp_warehouse_tasks", "erp_goods_in", "erp_stock_health"],

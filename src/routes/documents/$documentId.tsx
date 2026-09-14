@@ -7,6 +7,7 @@ import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import {
   DELIVER_THIS_ORDER,
@@ -104,6 +105,26 @@ type Payload = {
   available_transitions: Transition[];
 };
 
+type DocType = { code: string; name: string; base_type_code: string };
+
+/**
+ * The organisation's own names for its document types, read as the New
+ * document form reads them and under the same key. The page said
+ * "purchase_order"; the organisation calls it a purchase order, or whatever it
+ * renamed it to.
+ */
+function useDocumentTypeNames() {
+  const { data } = useQuery({
+    queryKey: ["erp_document_types", { p_base_type_code: "" }],
+    queryFn: () => callErp<DocType[]>("erp_document_types", {}),
+  });
+  return {
+    ofType: (code: string) => data?.find((t) => t.code === code)?.name ?? prettifyField(code),
+    ofBase: (base: string) =>
+      data?.find((t) => t.base_type_code === base)?.name ?? prettifyField(base),
+  };
+}
+
 function Document() {
   const { documentId } = Route.useParams();
 
@@ -115,6 +136,7 @@ function Document() {
   // them, but a guard can change under the reader's feet — a line added, an
   // approval decided — and this read is the one the buttons follow.
   const live = useAvailableTransitions(documentId);
+  const typeNames = useDocumentTypeNames();
 
   const { currencies } = useCurrencies();
 
@@ -145,7 +167,7 @@ function Document() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={doc.document_number}>
-        {doc.document_type} · {doc.party ?? "no party"} · {doc.document_date}
+        {typeNames.ofType(doc.document_type)} · {doc.party ?? "no party"} · {doc.document_date}
       </PageHeader>
 
       <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -203,7 +225,7 @@ function Document() {
       <ApprovalChain documentId={documentId} />
 
       {data.lineage.length > 0 ? (
-        <LineagePanel lineage={data.lineage} documentId={documentId} />
+        <LineagePanel lineage={data.lineage} documentId={documentId} typeName={typeNames.ofBase} />
       ) : null}
     </div>
   );
@@ -575,7 +597,15 @@ function Lines({
  * Already in the payload — `erp.document_lineage()` walks the relation graph
  * recursively — and rendered nowhere until now.
  */
-function LineagePanel({ lineage, documentId }: { lineage: Lineage[]; documentId: string }) {
+function LineagePanel({
+  lineage,
+  documentId,
+  typeName,
+}: {
+  lineage: Lineage[];
+  documentId: string;
+  typeName: (base: string) => string;
+}) {
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -651,7 +681,7 @@ function LineagePanel({ lineage, documentId }: { lineage: Lineage[]; documentId:
             >
               {r.document_number}
             </Link>{" "}
-            <span className="text-xs text-muted-foreground">{r.base_type}</span>
+            <span className="text-xs text-muted-foreground">{typeName(r.base_type)}</span>
           </li>
         ))}
       </ul>

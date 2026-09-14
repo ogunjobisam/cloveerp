@@ -124,20 +124,57 @@ const SALES_ACTIONS: ActionSpec[] = [
   // what went on the order and moves the order on once all of it has gone.
   DELIVER_AN_ORDER,
   {
+    label: "Set a customer's credit limit",
+    description:
+      "The most this customer may owe across open orders and unpaid invoices, and whether their orders are held. An order over the limit, or for a customer on hold, is not picked or delivered until somebody releases it.",
+    permission: "sales.credit_release",
+    fn: "erp_set_credit_limit",
+    fields: [
+      pickParty("customer", "p_party_id", "Customer"),
+      {
+        kind: "money",
+        name: "p_credit_limit_minor",
+        label: "Credit limit",
+        currency: "GBP",
+        hint: "In pounds. Leave empty for no limit.",
+      },
+      {
+        kind: "choice",
+        name: "p_on_hold",
+        label: "Hold this customer's orders",
+        boolean: true,
+        default: "false",
+        choices: [
+          { value: "false", label: "No" },
+          { value: "true", label: "Yes" },
+        ],
+        hint: "Yes holds every order for this customer until the hold is lifted here. No lifts a hold.",
+      },
+      {
+        ...reason("p_reason", "Reason", true),
+        hint: "Why the limit or the hold is changing. Kept with the customer's terms.",
+      },
+    ],
+    invalidates: ["erp_credit_position", "erp_release_sequence", "erp_documents"],
+  },
+  {
     label: "Release a credit hold",
     permission: "sales.credit_release",
     fn: "erp_release_credit_hold",
     fields: [
+      // A hold stops a confirmed order at picking and delivery, so those are
+      // the orders a release is for.
       pickFrom(
         "erp_documents",
         "document_id",
         ["document_number", "state"],
         "p_document_id",
-        "Document",
-        { p_limit: 100, p_actionable: true },
+        "Confirmed sales order",
+        { p_type_code: "sales_order", p_limit: 100, p_states: ["confirmed", "picking"] },
       ),
       reason("p_reason", "Reason", true),
     ],
+    invalidates: ["erp_documents", "erp_release_sequence"],
   },
   {
     label: "Raise a customer return",
@@ -319,8 +356,14 @@ function Sales() {
             permission: "sales.order",
             fn: "erp_set_line_stock_identity",
             fields: [
-              // Open lines only: not on a closed or cancelled order.
-              pickLine("sales_order", "p_line_id", "Sales order line", { openOnly: true }),
+              // Lines of an order still being prepared. Once an order is
+              // confirmed its reservations and picks say where the stock comes
+              // from, and the door refuses a line of a committed, cancelled or
+              // finished order.
+              pickLine("sales_order", "p_line_id", "Sales order line", {
+                openOnly: true,
+                states: ["draft", "pending_approval"],
+              }),
               pickBatch("p_batch_id", "Batch", false),
               pickLocation("p_location_id", "Location", false),
               {

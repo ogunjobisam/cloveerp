@@ -1,4 +1,5 @@
 import { useT } from "../../lib/i18n";
+import { describeWarehouseTask } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, type Field } from "./action";
 import { Prose } from "./page";
 
@@ -238,6 +239,31 @@ export const pickLine = (
     },
     value: "line_id",
     label: ["document_number", "item", "quantity"],
+  },
+});
+
+/**
+ * An open warehouse task, said the way the floor says it: "FG-5000 Acme widget
+ * from Goods in to Bulk store, 100". The picker read "putaway — FG-5000 — RECV
+ * — BULK" and offered tasks already done. Given a kind, only that kind is
+ * listed and the kind is not repeated on every option.
+ */
+export const pickWarehouseTask = (
+  kind?: "putaway" | "replenishment",
+  name = "p_task_id",
+  label = "Task",
+): Field => ({
+  kind: "select",
+  name,
+  label,
+  required: true,
+  options: {
+    fn: "erp_warehouse_tasks",
+    ...(kind ? { args: { p_kind: kind } } : {}),
+    value: "task_id",
+    label: ["item", "from_location", "to_location", "quantity"],
+    describe: (row) => describeWarehouseTask(row, !kind),
+    keep: (row) => row["status"] === "open",
   },
 });
 
