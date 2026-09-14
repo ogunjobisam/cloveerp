@@ -16,7 +16,7 @@ import { Card, Fail } from "./kit";
  * kind that no function counts, a subscription on a plan that is gone.
  */
 
-type PlatformPlans = {
+export type PlatformPlans = {
   plans: {
     code: string;
     name: string;
