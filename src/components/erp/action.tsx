@@ -173,7 +173,7 @@ export function PermissionNote({ code }: { code: string }) {
       <span className="font-medium text-foreground">
         <PermissionName code={code} />
       </span>
-      , so that is not offered here. Absence of a grant is a refusal, not a default.
+      , so that is not offered here. An administrator in your organisation can give it to you.
     </p>
   );
 }
