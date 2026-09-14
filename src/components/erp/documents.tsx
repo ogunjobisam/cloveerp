@@ -5,7 +5,7 @@ import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
-import { useErpSession } from "./session-context";
+import { useErpSession, useScope } from "./session-context";
 import { Prose } from "./page";
 import { Pill, Table } from "./panel";
 
@@ -67,7 +67,8 @@ export function DocumentPanel({
   typeCode?: string;
   empty: string;
 }) {
-  const { session, scope } = useErpSession();
+  const { session } = useErpSession();
+  const scope = useScope();
 
   const {
     data: types,
@@ -194,7 +195,8 @@ export function NewDocumentAction({
   partyRole?: string;
   label?: string;
 }) {
-  const { session, scope } = useErpSession();
+  const { session } = useErpSession();
+  const scope = useScope();
   const { currencies } = useCurrencies();
 
   return (

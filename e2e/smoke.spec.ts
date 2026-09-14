@@ -52,10 +52,13 @@ test.describe("signed in, no organisation", () => {
     await page.goto("/inventory");
     // Authenticated, but the JWT subject resolves to no erp.app_user row, so
     // current_tenant_id() is null. Its own screen, deliberately: an empty
-    // dashboard here sends a person looking for a bug in the data.
-    await expect(page.getByRole("heading", { name: "Create your organisation" })).toBeVisible({
+    // dashboard here sends a person looking for a bug in the data. And since
+    // organisations come by invitation, what that screen asks an ordinary
+    // account for is an invitation.
+    await expect(page.getByRole("heading", { name: "You need an invitation" })).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByRole("heading", { name: "Create your organisation" })).toBeHidden();
   });
 });
 

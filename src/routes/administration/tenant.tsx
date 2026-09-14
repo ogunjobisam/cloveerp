@@ -11,6 +11,7 @@ import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { callErp, hasPermission } from "../../lib/erp";
+import { atLeast, usePlatformMe } from "../../lib/platform";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/administration/tenant")({
@@ -83,7 +84,7 @@ function TenantLifecycle() {
 
       <EncryptionKeysPanel />
 
-      <DemoHistoryPanel />
+      <DemoHistoryGate />
 
       <ExportPanel />
 
@@ -257,6 +258,19 @@ type DemoHistoryStep = {
   built?: number;
   notes?: unknown;
 };
+
+/**
+ * Months of demonstration history belong in a demo organisation, built by
+ * platform operators and owners. A real organisation's administrator is never
+ * offered it; the database refuses them regardless.
+ */
+function DemoHistoryGate() {
+  const { session } = useErpSession();
+  const platform = usePlatformMe();
+  const staff = Boolean(platform.data?.is_staff) && atLeast(platform.data?.role, "operator");
+  if (!staff || !session.tenant?.code.startsWith("demo-")) return null;
+  return <DemoHistoryPanel />;
+}
 
 function DemoHistoryPanel() {
   const queryClient = useQueryClient();

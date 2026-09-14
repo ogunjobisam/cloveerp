@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, Check, Circle, Compass, EyeOff, Lock, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { friendlyError } from "@/lib/errors";
-import { callErp } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import {
   completeCount,
@@ -19,6 +19,7 @@ import {
 import { useErpAction } from "./action";
 import { hasActionOpener, openAction } from "./action-registry";
 import { TOUCH } from "./page";
+import { ErpSessionContext } from "./session-context";
 
 /**
  * The Settings walkthrough (specification Part 22).
@@ -37,9 +38,24 @@ import { TOUCH } from "./page";
  *
  * Ticks and "not for us" belong to the organisation, because a company either
  * exists or it does not, whoever is looking.
+ *
+ * Both the button and the Settings home's overview are for the people who
+ * configure the organisation: erp_setup_walkthrough and erp_setup_progress
+ * refuse anybody without administration.configure. So neither renders, nor
+ * asks, for anybody else. That is the convenience; the refusal is the
+ * database's.
  */
 
 const INVALIDATES = ["erp_setup_walkthrough", "erp_setup_progress"];
+
+/**
+ * Whether the signed-in person may configure the organisation. Read without
+ * throwing: outside the shell there is no session, and nothing to walk through.
+ */
+function useMayConfigure(): boolean {
+  const context = useContext(ErpSessionContext);
+  return hasPermission(context?.session ?? null, "administration.configure");
+}
 
 function useWalkthrough(path: string | null, enabled: boolean) {
   return useQuery({
@@ -54,6 +70,7 @@ export function WalkthroughButton() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tile = tileFor(pathname);
   const { ui } = useT();
+  const mayConfigure = useMayConfigure();
   const [open, setOpen] = useState(false);
   // The setup order names two Work-area screens as well (common data is
   // where units and business partners are made), so a tile outside Settings
@@ -62,12 +79,12 @@ export function WalkthroughButton() {
     queryKey: ["erp_setup_progress"],
     queryFn: () => callErp<SetupScreenProgress[]>("erp_setup_progress"),
     staleTime: 5 * 60 * 1000,
-    enabled: tile !== null && !tile.settings,
+    enabled: mayConfigure && tile !== null && !tile.settings,
   });
   const inOrder =
     tile !== null &&
     (tile.settings || (order.data?.some((p) => p.screen_path === tile.path) ?? false));
-  const path = inOrder && tile ? tile.path : null;
+  const path = mayConfigure && inOrder && tile ? tile.path : null;
   const walk = useWalkthrough(path, open);
 
   if (!path) return null;
@@ -332,11 +349,14 @@ function StepCard({
 /** The Settings home: every screen in the order, how far along, and what is next. */
 export function SetupOverview() {
   const { ui } = useT();
+  const mayConfigure = useMayConfigure();
   const progress = useQuery({
     queryKey: ["erp_setup_progress"],
     queryFn: () => callErp<SetupScreenProgress[]>("erp_setup_progress"),
+    enabled: mayConfigure,
   });
 
+  if (!mayConfigure) return null;
   if (progress.isPending) {
     return (
       <p role="status" className="text-sm text-muted-foreground">

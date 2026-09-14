@@ -10,6 +10,12 @@
  *
  * So the no-tenant account is never seeded, by construction. It is not a
  * fixture anyone has to remember to leave alone; it is a second row.
+ *
+ * Organisations come by invitation, so seeding a demo is for platform staff
+ * while self-service sign-up is closed. On a fresh stack the demo account
+ * claims the platform's ownership through the console before it seeds (see
+ * auth.setup.ts); the no-tenant account never does, and stays an ordinary
+ * person asked for an invitation.
  */
 
 export const NO_TENANT = {
