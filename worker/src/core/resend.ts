@@ -69,6 +69,50 @@ type ResendAccepted = { id?: string };
 export class PermanentSendFailure extends Error {}
 
 /**
+ * A sender address as a setting may hold it, made into one Resend accepts.
+ *
+ * On 4 September two enquiries failed with Resend's 422 "Invalid `from`
+ * field": CLOVEERP_ENQUIRY_FROM is documented as
+ * CLOVEERP_ENQUIRY_FROM='Clove ERP <hello@cloveerp.com>', and pasted into a
+ * dashboard rather than a shell those quotes stay in the value. Surrounding
+ * whitespace and one pair of matching quotes are taken off; nothing else is
+ * guessed at.
+ */
+export function normaliseSender(value: string): string {
+  const trimmed = value.trim();
+  const quoted = /^(['"])(.*)\1$/s.exec(trimmed);
+  return (quoted?.[2] ?? trimmed).trim();
+}
+
+const ADDRESS = "[^\\s@<>\"']+@[^\\s@<>\"']+\\.[^\\s@<>\"']+";
+const BARE = new RegExp(`^${ADDRESS}$`);
+const NAMED = new RegExp(`^(.*\\S)\\s*<${ADDRESS}>$`);
+
+/** A display name: either wholly in double quotes, or with no quote at either end. */
+function nameIsWhole(name: string): boolean {
+  if (/^"[^"]+"$/.test(name)) return true;
+  return !/^["']|["']$/.test(name) && !name.includes('"') && !/[<>]/.test(name);
+}
+
+/**
+ * Why a sender address would be refused, in words for the screen that shows
+ * the failure, or null when it is one of the two shapes Resend takes:
+ * email@example.com or Name <email@example.com>.
+ *
+ * Checked before the request, so a malformed setting fails with a reason that
+ * names the setting's shape instead of a provider's validation error, and
+ * without spending a request on a message that could never be sent.
+ */
+export function senderProblem(from: string): string | null {
+  const value = from.trim();
+  if (value === "") return "no sender address is set";
+  if (BARE.test(value)) return null;
+  const named = NAMED.exec(value);
+  if (named && nameIsWhole((named[1] ?? "").trim())) return null;
+  return `the sender address ${JSON.stringify(value)} is neither "email@example.com" nor "Name <email@example.com>"; correct the setting that supplies it`;
+}
+
+/**
  * Post one message and return the provider's id for it.
  *
  * text always, html as well when the row carries one: Resend accepts both and
@@ -87,6 +131,11 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
   if (!row.from_address) {
     throw new PermanentSendFailure("no sender identity resolved for this organisation");
   }
+  const from = normaliseSender(row.from_address);
+  const problem = senderProblem(from);
+  if (problem) {
+    throw new PermanentSendFailure(problem);
+  }
 
   const response = await fetch(RESEND_ENDPOINT, {
     method: "POST",
@@ -95,7 +144,7 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      from: row.from_address,
+      from,
       to: [row.to_address],
       subject: row.subject ?? "(no subject)",
       text: row.body ?? "",
