@@ -8,48 +8,55 @@
 --   CLOVEERP_NO_TENANT_CONTEXT: operation attempted outside a tenant context
 --
 -- erp.claim_invitation_email() (20260913120000) is trusted-only and resolves
--- the organisation itself, from the person the door just invited. Every count
--- it takes reads fine without an organisation context, because a trusted
--- session is not filtered by row security. The row that ends the claim is a
--- write to erp.invitation_email_log, a tenant table, and the triggers every
--- tenant table carries ask erp.require_tenant_id() which organisation is
--- writing. The invite function calls over its own database connection, which
--- has no organisation and no principal, so that question had no answer.
+-- the organisation itself, from the person the door just invited. It then asks
+-- erp.tenant_is_live(t.id) of that organisation and of others, and the row
+-- that ends the claim is a write to erp.invitation_email_log, a tenant table
+-- whose guards ask erp.require_tenant_id() which organisation is writing.
+-- tenant_is_live(p) filters on coalesce(p, erp.require_tenant_id()), and the
+-- planner, estimating that filter before it knows p, evaluates the stable
+-- fallback: so the question is asked, and refused, on a connection that names
+-- no organisation, even though p is given. The invite function calls over its
+-- own database connection, which names none.
+--
+-- A first version of this file (20260914010000, never merged) declared the
+-- organisation only before the write. Its own suite refused on the earlier
+-- read, which is how the planner's part was found.
 --
 -- The suites never saw it: their fixtures declare the organisation with
 -- erp.set_job_tenant() before they claim, so every claim they made already
 -- had the context the function's never does.
 --
--- So the claim declares the organisation it has just resolved, with
+-- So the claim declares the organisation as soon as it has resolved it and
+-- found an invitation to email, before any read that could ask, with
 -- erp.set_job_tenant(): transaction-local, trusted-only, the same declaration
 -- the drain makes for an organisation it serves. The suite below claims the
 -- way the function does, with no organisation, no principal and no signed-in
 -- caller, and also asks the two reads the function makes in that same state.
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 1. The claim declares its organisation before the row that ends it
+-- 1. The claim declares its organisation as soon as it knows it
 -- ═════════════════════════════════════════════════════════════════════════════
 
 do $claim$
 declare
   v_sig    text := 'erp.claim_invitation_email(uuid,text,uuid)';
   v_def    text := pg_get_functiondef('erp.claim_invitation_email(uuid,text,uuid)'::regprocedure);
-  v_needle text := E'  insert into erp.invitation_email_log\n';
+  v_needle text := E'  if v_pending is null then\n    return query select false, \'no such invitation\'::text;\n    return;\n  end if;\n';
   v_new    text;
 begin
   if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
-    raise exception 'CLOVEERP_BODY_UNRECOGNISED: % does not write its log row exactly once, so it is not the 20260913120000 body', v_sig;
+    raise exception 'CLOVEERP_BODY_UNRECOGNISED: % does not answer ''no such invitation'' exactly once, so it is not the 20260913120000 body', v_sig;
   end if;
   if position('set_job_tenant' in v_def) > 0 then
     raise exception 'CLOVEERP_BODY_UNRECOGNISED: % already declares its organisation', v_sig;
   end if;
-  v_new := replace(v_def, v_needle,
-    E'  -- The log is a tenant table, and what guards every tenant table asks which\n'
- || E'  -- organisation is writing. The invite function claims over a connection\n'
- || E'  -- that names none, so the claim names the one it resolved, for this\n'
- || E'  -- transaction only.\n'
- || E'  perform erp.set_job_tenant(v_tenant);\n\n'
- || v_needle);
+  v_new := replace(v_def, v_needle, v_needle ||
+    E'\n  -- Named before anything below reads. erp.tenant_is_live() falls back to\n'
+ || E'  -- the organisation in context, the planner evaluates that fallback while\n'
+ || E'  -- estimating even when an organisation is passed, and the log row is a\n'
+ || E'  -- tenant table''s write. The invite function''s connection names none, so\n'
+ || E'  -- the claim names this one, for this transaction only.\n'
+ || E'  perform erp.set_job_tenant(v_tenant);\n');
   execute v_new;
   if position('perform erp.set_job_tenant(v_tenant);' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
     raise exception 'CLOVEERP_BODY_UNRECOGNISED: % was re-emitted without its organisation', v_sig;
