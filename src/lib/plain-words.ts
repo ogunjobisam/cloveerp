@@ -33,7 +33,7 @@ const PERMISSION_CODE = `\\b(?:${PERMISSION_MODULES})\\.[a-z][a-z_]*\\b`;
 
 /**
  * Wording that belongs to the people who build the product, not the people
- * who use it. supabase/migrations/20260914075000 holds the same patterns over
+ * who use it. supabase/migrations/20260914075500 holds the same patterns over
  * the refusal register, so a registered refusal cannot say what a screen
  * would hide.
  */
@@ -107,7 +107,7 @@ export function plainSentence(text: string | null | undefined): string | null {
  * the screen to showing it. Everything else written for the people who
  * maintain the engine is still kept out, so the hint shown on 14 September —
  * a section of the specification and the history of the code — still is.
- * The refusal register's own wording stays stricter: 20260914075000 refuses a
+ * The refusal register's own wording stays stricter: 20260914075500 refuses a
  * permission code there, where the product writes the words.
  */
 export function plainHint(text: string | null | undefined): string | null {
