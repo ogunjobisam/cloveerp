@@ -164,6 +164,11 @@ export type Chart = {
   value: (row: Row) => number;
   /** Suffix shown after each bar's value, e.g. "%". */
   unit?: string;
+  /**
+   * The row's currency, when `value` is an amount in minor units: each bar is
+   * then that currency's money, and a label is never added across currencies.
+   */
+  money?: (row: Row) => string;
 };
 
 /**
@@ -272,6 +277,22 @@ const date = (header: string, field: string): Column<Row> => ({
   header,
   cell: (r) => shortDate(r[field]),
 });
+
+/**
+ * Receivables ageing, as public.erp_receivables_ageing answers it: the customer
+ * as party_name, and each band an amount in the row's currency. Every band is
+ * money, never a count of pence.
+ */
+export const RECEIVABLES_AGEING_COLUMNS: Column<Row>[] = [
+  { header: "Customer", cell: "party_name" },
+  { header: "Currency", cell: "currency" },
+  { header: "Current", cell: moneyCell("current_minor", "currency"), numeric: true },
+  { header: "1–30", cell: moneyCell("days_1_30", "currency"), numeric: true },
+  { header: "31–60", cell: moneyCell("days_31_60", "currency"), numeric: true },
+  { header: "61–90", cell: moneyCell("days_61_90", "currency"), numeric: true },
+  { header: "90+", cell: moneyCell("days_over_90", "currency"), numeric: true },
+  { header: "Total", cell: moneyCell("total_minor", "currency"), numeric: true },
+];
 
 /** A yes/no the form sends as a boolean, never as the words. */
 const yesNo = (name: string, label: string, hint?: string): Field => ({
@@ -1791,8 +1812,11 @@ export const FINANCE: ModuleDef = {
     fn: "erp_receivables_ageing",
     empty:
       "Nothing outstanding to profile. Customer invoices land here as they are posted, banded by how overdue they are.",
-    label: (r) => String(r["party"] ?? "—"),
-    value: (r) => num(r["total_minor"]) / 100,
+    // erp_receivables_ageing names the customer party_name. Read as party, every
+    // customer fell under one bar labelled with a dash.
+    label: (r) => String(r["party_name"] ?? "—"),
+    value: (r) => num(r["total_minor"]),
+    money: (r) => String(r["currency"] ?? "GBP"),
   },
   worklists: [
     {
@@ -1820,12 +1844,14 @@ export const FINANCE: ModuleDef = {
       fn: "erp_dunning_worklist",
       empty:
         "Nobody needs chasing. Every customer is inside their terms, or has nothing outstanding at all.",
-      rowKey: (r, i) => String(r["party"] ?? i),
+      // The names erp_dunning_worklist answers with: party_name, overdue_minor,
+      // oldest_days and level_code.
+      rowKey: (r, i) => String(r["party_id"] ?? i),
       columns: [
-        { header: "Customer", cell: "party" },
-        { header: "Overdue", cell: "overdue_minor", numeric: true },
-        date("Oldest", "oldest_due_date"),
-        { header: "Stage", cell: "dunning_stage" },
+        { header: "Customer", cell: "party_name" },
+        { header: "Overdue", cell: moneyCell("overdue_minor"), numeric: true },
+        { header: "Days overdue", cell: "oldest_days", numeric: true },
+        { header: "Level", cell: "level_code" },
       ],
     },
     {
@@ -1856,12 +1882,12 @@ export const FINANCE: ModuleDef = {
       columns: [
         { header: "Supplier", cell: "party" },
         { header: "Currency", cell: "currency" },
-        { header: "Not due", cell: moneyCell("not_due_minor"), numeric: true },
-        { header: "1–30", cell: moneyCell("days_1_30_minor"), numeric: true },
-        { header: "31–60", cell: moneyCell("days_31_60_minor"), numeric: true },
-        { header: "61–90", cell: moneyCell("days_61_90_minor"), numeric: true },
-        { header: "90+", cell: moneyCell("days_90_plus_minor"), numeric: true },
-        { header: "Total", cell: moneyCell("total_minor"), numeric: true },
+        { header: "Not due", cell: moneyCell("not_due_minor", "currency"), numeric: true },
+        { header: "1–30", cell: moneyCell("days_1_30_minor", "currency"), numeric: true },
+        { header: "31–60", cell: moneyCell("days_31_60_minor", "currency"), numeric: true },
+        { header: "61–90", cell: moneyCell("days_61_90_minor", "currency"), numeric: true },
+        { header: "90+", cell: moneyCell("days_90_plus_minor", "currency"), numeric: true },
+        { header: "Total", cell: moneyCell("total_minor", "currency"), numeric: true },
       ],
     },
 
@@ -1878,25 +1904,31 @@ export const FINANCE: ModuleDef = {
         { header: "Name", cell: "item_name" },
         { header: "Age band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
-        { header: "Value (minor)", cell: "value_minor", numeric: true },
+        { header: "Value", cell: moneyCell("value_minor"), numeric: true },
         { header: "Provision %", cell: "provision_pct", numeric: true },
-        { header: "Provision (minor)", cell: "provision_minor", numeric: true },
+        { header: "Provision", cell: moneyCell("provision_minor"), numeric: true },
       ],
     },
     {
       title: "Trial balance",
-      description: "Every nominal account with a movement, by ledger.",
+      description: "Every nominal account with a movement in the general ledger, to date.",
       fn: "erp_trial_balance",
+      // The general ledger. Asked for every ledger, the read added the
+      // commitment ledger to it and was the one report on the tab that never
+      // loaded; it now answers per company and ledger either way.
+      args: { p_ledger: "GL" },
       empty: "Nothing posted yet. A trial balance is built from documents that have been posted.",
-      rowKey: (r, i) => `${String(r["ledger"] ?? i)}-${String(r["account"] ?? i)}`,
+      rowKey: (r, i) =>
+        `${String(r["entity"] ?? i)}-${String(r["ledger"] ?? i)}-${String(r["account"] ?? i)}-${String(r["currency"] ?? i)}`,
       columns: [
+        { header: "Company", cell: "entity" },
         { header: "Ledger", cell: "ledger" },
         { header: "Nominal account", cell: "account" },
         { header: "Name", cell: "name" },
         { header: "Type", cell: "account_type" },
-        { header: "Debit", cell: "debit_minor", numeric: true },
-        { header: "Credit", cell: "credit_minor", numeric: true },
-        { header: "Balance", cell: "balance_minor", numeric: true },
+        { header: "Debit", cell: moneyCell("debit_minor", "currency"), numeric: true },
+        { header: "Credit", cell: moneyCell("credit_minor", "currency"), numeric: true },
+        { header: "Balance", cell: moneyCell("balance_minor", "currency"), numeric: true },
       ],
     },
     {
@@ -1904,16 +1936,10 @@ export const FINANCE: ModuleDef = {
       description: "What is outstanding, and for how long.",
       fn: "erp_receivables_ageing",
       empty: "Nothing outstanding. Every customer invoice posted so far has been settled.",
-      rowKey: (r, i) => String(r["party"] ?? i),
-      columns: [
-        { header: "Customer", cell: "party" },
-        { header: "Currency", cell: "currency" },
-        { header: "Current", cell: "current_minor", numeric: true },
-        { header: "1–30", cell: "days_1_30_minor", numeric: true },
-        { header: "31–60", cell: "days_31_60_minor", numeric: true },
-        { header: "60+", cell: "days_60_plus_minor", numeric: true },
-        { header: "Total", cell: "total_minor", numeric: true },
-      ],
+      // The names erp_receivables_ageing answers with. The panel read party and
+      // *_minor bands the read never had, so every customer and band was a dash.
+      rowKey: (r, i) => `${String(r["party_id"] ?? i)}-${String(r["currency"] ?? i)}`,
+      columns: RECEIVABLES_AGEING_COLUMNS,
     },
     {
       title: "Tax report",
@@ -1935,13 +1961,14 @@ export const FINANCE: ModuleDef = {
       description: "The register as at today.",
       fn: "erp_fixed_asset_register",
       empty: "No fixed assets recorded. An asset is capitalised from a posted purchase invoice.",
-      rowKey: (r, i) => String(r["asset_code"] ?? i),
+      // erp_fixed_asset_register answers code and depreciation_minor.
+      rowKey: (r, i) => String(r["code"] ?? i),
       columns: [
-        { header: "Asset", cell: "asset_code" },
+        { header: "Asset", cell: "code" },
         { header: "Name", cell: "name" },
-        { header: "Cost", cell: "cost_minor", numeric: true },
-        { header: "Depreciation", cell: "accumulated_depreciation_minor", numeric: true },
-        { header: "Net book value", cell: "net_book_value_minor", numeric: true },
+        { header: "Cost", cell: moneyCell("cost_minor"), numeric: true },
+        { header: "Depreciation", cell: moneyCell("depreciation_minor"), numeric: true },
+        { header: "Net book value", cell: moneyCell("net_book_value_minor"), numeric: true },
       ],
     },
     {
@@ -1957,9 +1984,9 @@ export const FINANCE: ModuleDef = {
         { header: "Provider", cell: "provider" },
         { header: "Statement", cell: "statement_ref" },
         date("Date", "statement_date"),
-        { header: "Gross", cell: "gross_minor", numeric: true },
-        { header: "Fees", cell: "fee_minor", numeric: true },
-        { header: "Net", cell: "net_minor", numeric: true },
+        { header: "Gross", cell: moneyCell("gross_minor", "currency"), numeric: true },
+        { header: "Fees", cell: moneyCell("fee_minor", "currency"), numeric: true },
+        { header: "Net", cell: moneyCell("net_minor", "currency"), numeric: true },
         { header: "Lines", cell: "lines", numeric: true },
         { header: "Unmatched", cell: "unmatched", numeric: true },
         pill("status"),
@@ -1973,11 +2000,14 @@ export const FINANCE: ModuleDef = {
         "No intercompany balances. This appears once two companies in the organisation trade with each other.",
       rowKey: (r, i) => `${String(r["from_entity"] ?? i)}-${String(r["to_entity"] ?? i)}-${i}`,
       columns: [
+        // erp_intercompany_position answers each side and the gap, and matched.
         { header: "From", cell: "from_entity" },
         { header: "To", cell: "to_entity" },
         { header: "Currency", cell: "currency" },
-        { header: "Balance", cell: "balance_minor", numeric: true },
-        { header: "Matched", cell: "is_matched" },
+        { header: "Receivable", cell: moneyCell("receivable_minor", "currency"), numeric: true },
+        { header: "Payable", cell: moneyCell("payable_minor", "currency"), numeric: true },
+        { header: "Difference", cell: moneyCell("difference_minor", "currency"), numeric: true },
+        { header: "Matched", cell: "matched" },
       ],
     },
     {
@@ -3403,6 +3433,130 @@ export const DELIVER_THIS_ORDER: ActionSpec = {
   code: "deliver_this_order",
   label: "Create a delivery from this order",
   title: "Create a delivery from this order",
+};
+
+/**
+ * A goods receipt, raised against the purchase order the goods answer.
+ *
+ * Receiving took two steps: New goods receipt asked for a supplier and a site
+ * with no lines, and Receive against an order then took one order line at a
+ * time. This raises the receipt from the order instead — its supplier, company,
+ * site and prices — holding what is left to receive on each line, with a place
+ * and a batch for each, and receives every line the way receiving one always
+ * has, so posting it moves the order on. The picker offers orders sent to the
+ * supplier; the database refuses the rest, and a quantity more than is left, by
+ * name. Goods beyond the order are still received a line at a time, where the
+ * receipt tolerance decides.
+ */
+export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
+  pickFrom(
+    "erp_documents",
+    "document_id",
+    ["document_number", "party", "state_name"],
+    "p_order_id",
+    "Purchase order",
+    { p_type_code: "purchase_order", p_limit: 200, p_states: ["sent", "partially_received"] },
+  ),
+  {
+    kind: "rows",
+    name: "p_lines",
+    label: "Lines to receive",
+    addLabel: "Add a line",
+    hint: "Each line with something left to receive arrives holding what is left. Lower a quantity to receive part of a line, remove a line to leave it for a later delivery, or add the same line twice for two batches. A batch-controlled product needs its batch before the receipt posts.",
+    columns: [
+      {
+        name: "line_id",
+        label: "Order line",
+        kind: "select",
+        // The open lines of the order chosen above, not every purchase order line.
+        options: {
+          fn: "erp_receivable_lines",
+          argsFrom: { p_order_id: "p_order_id" },
+          value: "line_id",
+          label: ["line_no", "item", "description", "open_quantity"],
+        },
+      },
+      { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
+      {
+        name: "location_id",
+        label: "Location",
+        kind: "select",
+        options: { fn: "erp_locations", value: "location_id", label: ["site", "code", "name"] },
+      },
+      {
+        name: "batch_id",
+        label: "Batch",
+        kind: "select",
+        options: { fn: "erp_batches", value: "batch_id", label: ["batch_number", "item"] },
+      },
+    ],
+    seed: {
+      fn: "erp_receivable_lines",
+      argsFrom: { p_order_id: "p_order_id" },
+      fill: { line_id: "line_id", quantity: "open_quantity" },
+      empty:
+        "Nothing is left to receive on this order: every line has been received or is on a goods receipt already.",
+    },
+  },
+];
+
+/**
+ * What the receipt door is sent. Lines the person never touched are sent as
+ * none, which the door reads as every open line in full; a row whose quantity
+ * was cleared is sent without one, which the door reads as the rest of that
+ * line. A location or batch left empty is not sent: receiving finds the
+ * site's goods-in, and a product with no batches needs none.
+ */
+export function receiptFromOrderArgs(
+  values: Record<string, string>,
+  picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
+): Record<string, unknown> {
+  const rows = picked?.rows["p_lines"];
+  const filled = (row: Record<string, string>, key: string) =>
+    (row[key] ?? "") !== "" ? { [key]: row[key] } : {};
+  return {
+    p_order_id: values["p_order_id"],
+    p_lines:
+      rows === undefined
+        ? null
+        : rows
+            .filter((row) => (row["line_id"] ?? "") !== "")
+            .map((row) => ({
+              line_id: row["line_id"],
+              ...((row["quantity"] ?? "") !== "" ? { quantity: Number(row["quantity"]) } : {}),
+              ...filled(row, "location_id"),
+              ...filled(row, "batch_id"),
+            })),
+  };
+}
+
+/** On Purchasing's goods receipt step and bar, where the order is chosen on the form. */
+export const RECEIVE_AN_ORDER: ActionSpec = {
+  label: "Receive an order",
+  title: "Receive goods against a purchase order",
+  description:
+    "A draft goods receipt for the order's supplier and site, holding what is left to receive on each line at the order's price. Post it once the goods are counted in.",
+  permission: "procurement.receive",
+  fn: "erp_create_receipt_from_order",
+  fields: RECEIPT_FROM_ORDER_FIELDS,
+  mapArgs: receiptFromOrderArgs,
+  invalidates: [
+    "erp_documents",
+    "erp_document",
+    "erp_receivable_lines",
+    "erp_grni",
+    "erp_match_workbench",
+    "erp_goods_in",
+  ],
+  submitLabel: "Create the goods receipt",
+};
+
+/** On a purchase order that is already chosen. Keyed apart, so a step can name it. */
+export const RECEIVE_THIS_ORDER: ActionSpec = {
+  ...RECEIVE_AN_ORDER,
+  code: "receive_this_order",
+  label: "Receive this order",
+  title: "Receive this order",
 };
 
 export const LOGISTICS: ModuleDef = {

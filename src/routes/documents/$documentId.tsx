@@ -12,6 +12,9 @@ import {
   DELIVER_THIS_ORDER,
   DELIVERY_FROM_ORDER_FIELDS,
   deliveryFromOrderArgs,
+  RECEIPT_FROM_ORDER_FIELDS,
+  RECEIVE_THIS_ORDER,
+  receiptFromOrderArgs,
 } from "../../lib/modules";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "../../components/erp/currencies";
@@ -171,6 +174,17 @@ function Document() {
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
         ) : null}
+
+        {/* An order the supplier has been sent is where its goods receipt comes
+            from. Offered on the states erp.create_receipt_from_order accepts;
+            the database refuses anything else by name. */}
+        {doc.document_type === "purchase_order" &&
+        (doc.state === "sent" || doc.state === "partially_received") ? (
+          <ReceiveThisOrder
+            documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
       </section>
 
       {/* A sales invoice is issued here: its permanent number and the PDF the
@@ -229,6 +243,54 @@ function DeliverThisOrder({ documentId, context }: { documentId: string; context
           "erp_available_transitions",
         ]}
         submitLabel="Create the delivery"
+        onDone={(result) => {
+          const made =
+            typeof result === "object" && result !== null
+              ? (result as Record<string, unknown>)["document_id"]
+              : undefined;
+          if (typeof made === "string")
+            void navigate({ to: "/documents/$documentId", params: { documentId: made } });
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Receive the goods against the order on this page.
+ *
+ * The order is already chosen, so the form asks only for the lines, and it
+ * arrives holding what is left to receive on each, with a place and a batch
+ * for each line. Created, the goods receipt opens on its own page, where it is
+ * posted — or it is created and posted in one press with Create and move on,
+ * which moves the order to partially received or received.
+ */
+function ReceiveThisOrder({ documentId, context }: { documentId: string; context: string }) {
+  const { ui } = useT();
+  const navigate = useNavigate();
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <ActionDialog
+        trigger={<ActionButton variant="secondary">{ui("Receive this order")}</ActionButton>}
+        title="Receive this order"
+        {...(RECEIVE_THIS_ORDER.description ? { description: RECEIVE_THIS_ORDER.description } : {})}
+        permission="procurement.receive"
+        fn="erp_create_receipt_from_order"
+        fields={RECEIPT_FROM_ORDER_FIELDS}
+        mapArgs={receiptFromOrderArgs}
+        prefill={{ p_order_id: documentId }}
+        context={context}
+        alsoSubmit={{ label: "Create and move on", args: { p_transition: "auto" } }}
+        invalidates={[
+          "erp_document",
+          "erp_documents",
+          "erp_receivable_lines",
+          "erp_available_transitions",
+          "erp_grni",
+          "erp_goods_in",
+        ]}
+        submitLabel="Create the goods receipt"
         onDone={(result) => {
           const made =
             typeof result === "object" && result !== null

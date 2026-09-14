@@ -6,6 +6,7 @@ import { friendlyError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { formatMinorTotals, minorUnitsOf } from "../../lib/money";
 import type { Chart, Kpi, KpiContext, Row } from "../../lib/modules";
+import { chartBars } from "../../lib/report-figures";
 import { useCurrencies } from "./currencies";
 
 /**
@@ -125,19 +126,16 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
  */
 export function MiniBars({ chart }: { chart: Chart }) {
   const { ui } = useT();
+  const { currencies } = useCurrencies(Boolean(chart.money));
   const { data, isPending, error } = useQuery({
     queryKey: [chart.fn, chart.args ?? {}],
     queryFn: () => callErp<Row[]>(chart.fn, chart.args ?? {}),
     refetchInterval: 60_000,
   });
 
-  const grouped = new Map<string, number>();
-  for (const row of data ?? []) {
-    const label = chart.label(row);
-    grouped.set(label, (grouped.get(label) ?? 0) + chart.value(row));
-  }
-  const bars = [...grouped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const max = bars.reduce((m, [, v]) => Math.max(m, v), 0);
+  // A money chart reads as money in each row's currency; see chartBars.
+  const bars = chartBars(data ?? [], chart, (code) => minorUnitsOf(currencies, code));
+  const max = bars.reduce((m, b) => Math.max(m, b.value), 0);
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
@@ -160,19 +158,16 @@ export function MiniBars({ chart }: { chart: Chart }) {
           <p className="text-sm text-muted-foreground">{ui(chart.empty)}</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {bars.map(([label, value]) => (
-              <li key={label} className="grid grid-cols-[8rem_1fr_4rem] items-center gap-3">
-                <span className="truncate text-xs text-muted-foreground">{label}</span>
+            {bars.map((bar) => (
+              <li key={bar.key} className="grid grid-cols-[8rem_1fr_5rem] items-center gap-3">
+                <span className="truncate text-xs text-muted-foreground">{bar.label}</span>
                 <span className="h-2 rounded-full bg-muted">
                   <span
                     className="block h-2 rounded-full bg-primary"
-                    style={{ width: `${max === 0 ? 0 : Math.max(2, (value / max) * 100)}%` }}
+                    style={{ width: `${max === 0 ? 0 : Math.max(2, (bar.value / max) * 100)}%` }}
                   />
                 </span>
-                <span className="text-right text-xs tabular-nums">
-                  {Math.round(value).toLocaleString()}
-                  {chart.unit ?? ""}
-                </span>
+                <span className="text-right text-xs tabular-nums">{bar.shown}</span>
               </li>
             ))}
           </ul>

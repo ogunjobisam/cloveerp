@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -17,11 +17,14 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
 import {
   clearDependentCells,
+  defaultedValues,
   dependentFields,
+  dropDefaultedValues,
   dropSeededRows,
   optionArgs,
   optionList,
   seededRows,
+  type FieldDefault,
   type RowSeed,
 } from "../../lib/dependent-options";
 import { useT } from "../../lib/i18n";
@@ -246,9 +249,13 @@ export type Field =
       /** Send `true`/`false` rather than the string. */
       boolean?: boolean;
     } & FieldBase)
-  /** The sites this session can see, from the session itself. */
-  | ({ kind: "site" } & FieldBase)
-  | ({ kind: "select"; options: OptionSource } & FieldBase)
+  /**
+   * The sites this session can see, from the session itself. `defaultFrom`, on
+   * this and on a select, is the answer the field arrives holding, read from a
+   * door once the choice it follows is made; see FieldDefault.
+   */
+  | ({ kind: "site"; defaultFrom?: FieldDefault } & FieldBase)
+  | ({ kind: "select"; options: OptionSource; defaultFrom?: FieldDefault } & FieldBase)
   /** Pick an existing value or type a new one. For codes, which are both. */
   | ({ kind: "combo"; options: OptionSource } & FieldBase)
   /** Several of a thing. Sent as an array. Either a list read or a fixed set. */
@@ -881,10 +888,15 @@ export function ActionDialog({
   // bucket of the old version is not a bucket of the new one. A line editor
   // seeded from that choice starts again from what the new choice holds.
   function choose(name: string, value: string) {
-    if ((values[name] ?? "") === value) return;
+    // Untouched, a field may be showing its default, and choosing nothing there
+    // is still a choice.
+    if (name in values && values[name] === value) return;
     const followers = dependentFields(fields, name);
     setValues((prev) => {
-      const next = { ...prev, [name]: value };
+      const next: Record<string, string> = {
+        ...dropDefaultedValues(fields, prev, name),
+        [name]: value,
+      };
       for (const f of followers) next[f] = "";
       return next;
     });
@@ -909,6 +921,29 @@ export function ActionDialog({
     seeded && seed && seedArgs !== null && rows[seeded.name] === undefined && seedQuery.data
       ? { ...rows, [seeded.name]: seededRows(seed, seedQuery.data, formValues) }
       : rows;
+
+  // The fields that arrive holding a door's answer, read once the choice each
+  // follows is made. Until the person answers one, the value shown and sent is
+  // the door's; fields asking the same door with the same choice share a read.
+  const defaulted = fields.flatMap((f) =>
+    (f.kind === "select" || f.kind === "site") && f.defaultFrom
+      ? [{ name: f.name, source: f.defaultFrom, args: optionArgs(f.defaultFrom, formValues) }]
+      : [],
+  );
+  const defaultQueries = useQueries({
+    queries: defaulted.map((d) => ({
+      queryKey: [d.source.fn, d.args ?? {}],
+      queryFn: () => callErp<unknown>(d.source.fn, d.args ?? {}),
+      enabled: open && d.args !== null,
+    })),
+  });
+  const heldValues = defaultedValues(
+    fields,
+    values,
+    Object.fromEntries(
+      defaulted.map((d, i) => [d.name, d.args === null ? undefined : defaultQueries[i]?.data]),
+    ),
+  );
 
   // An open form with something typed into it is work in progress, and
   // leaving the screen must ask before it is thrown away.
@@ -946,7 +981,7 @@ export function ActionDialog({
 
   function buildArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
     if (mapArgs)
-      return { ...mapArgs(values, { lists, rows: heldRows }), ...(prefill ?? {}), ...extra };
+      return { ...mapArgs(heldValues, { lists, rows: heldRows }), ...(prefill ?? {}), ...extra };
     const args: Record<string, unknown> = {};
 
     for (const f of fields) {
@@ -977,7 +1012,7 @@ export function ActionDialog({
 
         continue;
       }
-      const raw = values[f.name] ?? "";
+      const raw = heldValues[f.name] ?? "";
       if (raw === "") continue;
       if (f.kind === "number") args[f.name] = Number(raw);
       else if (f.kind === "money")
@@ -1035,7 +1070,7 @@ export function ActionDialog({
               {f.kind === "select" ? (
                 <SelectField
                   field={f}
-                  value={values[f.name] ?? ""}
+                  value={heldValues[f.name] ?? ""}
                   onChange={(v) => choose(f.name, v)}
                   formValues={formValues}
                 />
@@ -1073,7 +1108,7 @@ export function ActionDialog({
                 <select
                   aria-label={ui(f.label)}
                   required={f.required ?? false}
-                  value={values[f.name] ?? ""}
+                  value={heldValues[f.name] ?? ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
                   className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
                 >
