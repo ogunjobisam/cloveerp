@@ -85,6 +85,13 @@ type Contract = {
 type InvoiceLine =
   | { kind: "subscription"; net_minor: number; description: string }
   | {
+      kind: "one_off";
+      item_code: string;
+      description: string;
+      quantity: number;
+      net_minor: number;
+    }
+  | {
       kind: "overage";
       entitlement_code: string;
       unit: string;
@@ -144,6 +151,7 @@ type Agreement = {
     status: string;
     issued_at: string | null;
     paid_at: string | null;
+    tax_statement: string | null;
     lines: InvoiceLine[];
   }[];
   renewal: {
@@ -631,10 +639,11 @@ function Commercial() {
                               <Table columns={["Line", "Used", "Limit", "Over", "Unit", "Net"]}>
                                 {i.lines.map((l, n) => (
                                   <tr key={n} className="border-b border-border/50 last:border-0">
-                                    {l.kind === "subscription" ? (
+                                    {l.kind === "subscription" || l.kind === "one_off" ? (
                                       <>
                                         <td className="py-1.5 pr-4 text-xs" colSpan={5}>
                                           {l.description}
+                                          {l.kind === "one_off" ? " · charged once" : ""}
                                         </td>
                                         <td className="py-1.5 text-sm tabular-nums">
                                           {money(l.net_minor, i.currency)}
@@ -672,6 +681,11 @@ function Commercial() {
                                 ))}
                               </Table>
                             )}
+                            {i.tax_statement ? (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {i.tax_statement}
+                              </p>
+                            ) : null}
                           </td>
                         </tr>
                       ) : null}
