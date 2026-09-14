@@ -231,8 +231,8 @@ declare v_fail int; v_all int; v_detail text;
 begin
   create temp table if not exists _enq_handled on commit drop as
     select * from erp_test.enquiry_handled_suite();
-  select count(*), count(*) filter (where not passed),
-         string_agg(format('  %s — %s', case_name, detail), E'\n') filter (where not passed)
+  select count(*), count(*) filter (where not coalesce(passed, false)),
+         string_agg(format('  %s — %s', case_name, detail), E'\n') filter (where not coalesce(passed, false))
     into v_all, v_fail, v_detail from _enq_handled;
   if v_all <> 6 then
     raise exception 'CLOVEERP_SUITE_SHRANK: enquiry_handled_suite ran % cases, expected 6', v_all;
