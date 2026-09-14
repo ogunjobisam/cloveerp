@@ -2,7 +2,7 @@
  * An issued order form or contract invoice, as the email the customer receives.
  *
  * Issuing either one queues a row per recipient in erp_meta.commercial_email
- * (20260914097200). The dispatch drain claims them with
+ * (20260914097300). The dispatch drain claims them with
  * erp.claim_commercial_email_batch(), which returns everything an email needs
  * as a payload: for an order form its number, customer, lines with discount
  * and net, totals, term and validity; for an invoice its reference, lines,

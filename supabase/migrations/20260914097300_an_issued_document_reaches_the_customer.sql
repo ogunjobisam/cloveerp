@@ -669,7 +669,7 @@ declare
    where id = q.id;$n$,
           $n$  update erp.commercial_quote set order_form_render_id = v_render_id, order_form_issued_at = now(), updated_at = now()
    where id = q.id;
-  -- The order form goes to the customer the moment it is issued (20260914097200).
+  -- The order form goes to the customer the moment it is issued (20260914097300).
   v_emails := erp.queue_commercial_email('order_form', p_document_id);$n$],
     array[$n$'checksum', md5(v_content), 'version', q.version);$n$,
           $n$'checksum', md5(v_content), 'version', q.version, 'emails_queued', v_emails);$n$]];
@@ -699,7 +699,7 @@ declare
   v_needle constant text := $n$   where id = p_invoice_id;
   perform erp_meta.act_in_tenant(c.tenant_id);$n$;
   v_new    constant text := $n$   where id = p_invoice_id;
-  -- The invoice goes to the customer the moment it is issued (20260914097200).
+  -- The invoice goes to the customer the moment it is issued (20260914097300).
   perform erp.queue_commercial_email('contract_invoice', p_invoice_id);
   perform erp_meta.act_in_tenant(c.tenant_id);$n$;
 begin
@@ -1078,7 +1078,7 @@ declare
   v_sig    constant text := 'erp.my_agreement()';
   v_def    text := pg_get_functiondef('erp.my_agreement()'::regprocedure);
   v_needle constant text := $n$    'sub_processors', coalesce(($n$;
-  v_new    constant text := $n$    -- Where the invoices ask to be paid (20260914097200).
+  v_new    constant text := $n$    -- Where the invoices ask to be paid (20260914097300).
     'payment_details', erp.platform_payment_details(),
     'sub_processors', coalesce(($n$;
 begin

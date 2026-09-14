@@ -11,7 +11,7 @@ import { PermanentSendFailure, sendViaResend } from "./resend.ts";
  * Issued order forms and contract invoices, on their way to the customer.
  *
  * Issuing either one queues a row per recipient in erp_meta.commercial_email
- * (20260914097200). Those rows belong to the platform, not to any one
+ * (20260914097300). Those rows belong to the platform, not to any one
  * organisation, so this stage runs once a pass, outside the loop over
  * organisations, over the drain's own trusted connection:
  * erp.claim_commercial_email_batch() refuses anybody else, sets the platform

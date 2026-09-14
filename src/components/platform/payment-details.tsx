@@ -11,7 +11,7 @@ import { Card, Fail, INPUT } from "./kit";
 /**
  * Where contract invoices ask to be paid.
  *
- * Every invoice is emailed to the customer when it is issued (20260914097200),
+ * Every invoice is emailed to the customer when it is issued (20260914097300),
  * and the email and the invoice the customer reads both carry these details.
  * Until they are set, an invoice says payment details will follow from the
  * accounts team, and Today asks for them. Everybody on the staff can read

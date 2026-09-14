@@ -16,7 +16,7 @@ import { Card, Fail, INPUT } from "./kit";
 /**
  * An issued order form or invoice on its way to the customer.
  *
- * Issuing sends it (20260914097200); these say who it went to and what became
+ * Issuing sends it (20260914097300); these say who it went to and what became
  * of each send, and let an operator send it again. They read one door,
  * public.erp_platform_commercial_emails(), for a quote or for a contract, so
  * the quote builder and the contract page show the same sends. The words are
