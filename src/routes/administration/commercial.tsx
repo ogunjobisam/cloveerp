@@ -290,7 +290,7 @@ function Commercial() {
       {!allowed ? (
         <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
           This account does not hold <code className="font-mono text-xs">administration.read</code>,
-          so the agreement is not offered. Absence of a grant is a refusal, not a default.
+          so the agreement is not offered. An administrator in your organisation can give it to you.
         </p>
       ) : isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
