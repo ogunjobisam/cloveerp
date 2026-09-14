@@ -84,6 +84,15 @@
 --   vocabulary_aligned. Each locale's bundle is asked for once. The door asks
 --   for the organisation once per call rather than once per row.
 --
+-- The narrowing is only real if the planner cannot undo it. Each set of
+-- candidates is materialized, or searched in a subquery kept from being
+-- flattened, before the expensive test is asked of it. Written as plain joins
+-- (20260914071000 on the build, never applied anywhere), the planner put the
+-- pattern first: authorising_doors still took 4.8 s and intelligence_boundary
+-- 4.4. And the build of 14800bc, the pull request that brought
+-- 20260914065000, spent 154 s on the old caller_reachable_internals where
+-- main spent 3.3: that is how far a plan can wander.
+--
 -- The suite below does not take that on trust. It keeps the old queries as
 -- they were written and compares every row with the new ones, over the whole
 -- catalogue with fixtures added that each report must find: a door that
@@ -91,8 +100,10 @@
 -- whitespace before the bracket and inside a longer word; a table read by the
 -- door, one and two invoker hops away, and through a LIKE wildcard; a
 -- transaction path that reaches erp_ai at depth 2 and round a cycle at every
--- even depth to 12. It runs at the end of this file, so on live it compares
--- them on live's own catalogue before anything is committed.
+-- even depth to 12. It runs in the build's catalogue and not at the end of
+-- this file: the old walks it keeps are the cost this file takes out of live,
+-- 25 s of them on the build, and a deploy has no business spending a minute or
+-- two on live proving what the build proved of the same functions.
 --
 -- NOTHING MOVED TO THE BUILD ONLY
 --
@@ -150,21 +161,29 @@ as $$
   -- Every name a door's code calls. A body matching 'schema\.name\s*\(' has
   -- '.name', whitespace and a bracket in it, which this reads with one
   -- expression; the per-name pattern below is then asked only of those names.
-  called as (
+  called as materialized (
     select distinct d.oid, m[1] as proname
       from door d
      cross join lateral regexp_matches(d.code, '\.(\w+)\s*\(', 'g') m
+  ),
+  -- The pairs, before any pattern is asked. Materialized because otherwise the
+  -- planner is free to match every door against every reaching function first
+  -- and join the names afterwards, which is the old cost with extra steps: the
+  -- first version of this file did exactly that on the build.
+  candidate as materialized (
+    select d.qname, d.code, d.provolatile, d.oid, r.qname as reach, r.what
+      from called c
+      join door d on d.oid = c.oid
+      join reaches r on r.proname = c.proname
   )
-  select d.qname || '(' || pg_get_function_identity_arguments(d.oid) || ')',
-         case d.provolatile when 's' then 'stable' else 'immutable' end,
-         'a public door reaches ' || r.qname || '(), which ' || r.what
+  select k.qname || '(' || pg_get_function_identity_arguments(k.oid) || ')',
+         case k.provolatile when 's' then 'stable' else 'immutable' end,
+         'a public door reaches ' || k.reach || '(), which ' || k.what
            || ', but is declared '
-           || case d.provolatile when 's' then 'stable' else 'immutable' end
+           || case k.provolatile when 's' then 'stable' else 'immutable' end
            || ', so PostgREST runs it in a read-only transaction and the call fails'
-    from door d
-    join called c on c.oid = d.oid
-    join reaches r on r.proname = c.proname
-   where d.code ~ (replace(r.qname, '.', '\.') || '\s*\(')
+    from candidate k
+   where k.code ~ (replace(k.reach, '.', '\.') || '\s*\(')
    group by 1, 2, 3
    order by 1;
 $$;
@@ -210,18 +229,21 @@ begin
     union
     select f.qname, f.proname from fn f join writer w on f.prosrc ~ (replace(w.qname, '.', '\.') || '\s*\(')
   ),
-  called as (
+  called as materialized (
     select distinct f.oid, m[1] as proname
       from fn f
      cross join lateral regexp_matches(f.prosrc, '\.(\w+)\s*\(', 'g') m
      where f.sch = 'public'
+  ),
+  candidate as materialized (
+    select f.qname, f.prosrc, r.qname as reach
+      from called c
+      join fn f on f.oid = c.oid
+      join reaches r on r.proname = c.proname
   )
-  select count(distinct f.qname) into v_reach
-    from fn f
-    join called c on c.oid = f.oid
-    join reaches r on r.proname = c.proname
-   where f.sch = 'public'
-     and f.prosrc ~ (replace(r.qname, '.', '\.') || '\s*\(');
+  select count(distinct k.qname) into v_reach
+    from candidate k
+   where k.prosrc ~ (replace(k.reach, '.', '\.') || '\s*\(');
 
   return format('doors: %s public entry points, %s reach a writer within one call and every one of those is volatile',
                 v_doors, v_reach);
@@ -312,25 +334,40 @@ as $$
   -- Everything that can reach the intelligence layer at any distance: erp_ai,
   -- then whatever names one of those, and so on. A caller is found once, when
   -- it is new.
+  --
+  -- The callers of one function at a time, in a subquery the planner may not
+  -- flatten (offset 0): flattened, it is free to search every function's body
+  -- for every function's name and filter to the set afterwards, which the first
+  -- version of this file let it do on the build.
   upstream (oid) as (
     select f.oid from fn f where f.ns = 'erp_ai'
     union
-    select caller.oid
+    select c.caller
       from upstream u
-      join fn callee on callee.oid = u.oid
-      join fn caller
-        on caller.oid <> callee.oid
-       and position(callee.ns || '.' || callee.proname || '(' in caller.prosrc) > 0
+     cross join lateral (
+       select caller.oid as caller
+         from fn callee
+         join fn caller
+           on caller.oid <> callee.oid
+          and position(callee.ns || '.' || callee.proname || '(' in caller.prosrc) > 0
+        where callee.oid = u.oid
+       offset 0
+     ) c
   ),
   -- The calls into that set. Every step of a walk that ends in erp_ai lands on
   -- something that reaches erp_ai, so these are all the edges such a walk uses.
   edge as materialized (
-    select caller.oid as caller, callee.oid as callee
+    select c.caller, u.oid as callee
       from upstream u
-      join fn callee on callee.oid = u.oid
-      join fn caller
-        on caller.oid <> callee.oid
-       and position(callee.ns || '.' || callee.proname || '(' in caller.prosrc) > 0
+     cross join lateral (
+       select caller.oid as caller
+         from fn callee
+         join fn caller
+           on caller.oid <> callee.oid
+          and position(callee.ns || '.' || callee.proname || '(' in caller.prosrc) > 0
+        where callee.oid = u.oid
+       offset 0
+     ) c
   ),
   root as (
     select distinct f.oid, f.ns, f.proname
@@ -1289,8 +1326,6 @@ select erp.apply_attribution_triggers();
 select erp.apply_audit_coverage();
 select erp.apply_live_config_guards();
 select erp.apply_execute_grants();
-
-select erp_test.assert_assurance_walks_suite();
 
 select erp.assert_authorising_doors_are_volatile();
 select erp.assert_no_caller_reachable_internals();
