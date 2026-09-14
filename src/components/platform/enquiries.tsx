@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Mail } from "lucide-react";
 
 import { Pill, Table } from "../erp/panel";
 import { callErp } from "../../lib/erp";
 import { atLeast, type PlatformRole } from "../../lib/platform";
+import { ReasonDialog } from "./dialogs";
 import { Card, Fail } from "./kit";
 
 /**
@@ -39,24 +40,12 @@ export function Enquiries({ role }: { role: PlatformRole }) {
     queryFn: () => callErp<Enquiry[]>("erp_platform_enquiries", { p_limit: 200 }),
   });
 
-  const erase = useMutation({
-    mutationFn: (v: { id: string; reason: string }) =>
-      callErp("erp_platform_erase_enquiry", { p_id: v.id, p_reason: v.reason }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["erp_platform_enquiries"] }),
-  });
-
   return (
     <Card
       title="Enquiries"
       icon={<Mail className="size-4 text-primary" />}
       description="What the website has collected, and whether each one reached you. Newest first."
     >
-      {erase.error ? (
-        <div className="mb-4">
-          <Fail error={erase.error} />
-        </div>
-      ) : null}
-
       {rows.isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : rows.error ? (
@@ -103,17 +92,30 @@ export function Enquiries({ role }: { role: PlatformRole }) {
                 ) : null}
               </td>
               <td className="py-3 pr-0">
-                {mayErase ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const reason = window.prompt("Erase this enquiry? Reason:");
-                      if (reason) erase.mutate({ id: e.id, reason });
-                    }}
-                    className="rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
-                  >
-                    Erase
-                  </button>
+                {mayErase && e.status !== "erased" ? (
+                  <ReasonDialog
+                    trigger={
+                      <button
+                        type="button"
+                        className="rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
+                      >
+                        Erase
+                      </button>
+                    }
+                    title={`Erase the enquiry from ${e.full_name ?? e.email ?? "this person"}`}
+                    description="Their name, email, organisation and message are removed for good. The enquiry stays in the list, marked erased, with your reason."
+                    reasonLabel="Why is it being erased?"
+                    placeholder="For example: they asked us to delete their details"
+                    submitLabel="Erase"
+                    busyLabel="Erasing…"
+                    danger
+                    run={(reason) =>
+                      callErp("erp_platform_erase_enquiry", { p_id: e.id, p_reason: reason })
+                    }
+                    onDone={() =>
+                      void queryClient.invalidateQueries({ queryKey: ["erp_platform_enquiries"] })
+                    }
+                  />
                 ) : null}
               </td>
             </tr>
