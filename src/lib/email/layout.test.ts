@@ -147,6 +147,28 @@ describe("the HTML", () => {
     expect(m).toContain(">New paragraph</p>");
   });
 
+  test("further links sit under the buttons as plain links, and are repeated with their addresses", () => {
+    const m = renderEmail({
+      ...base,
+      links: [
+        { label: "Review in Clove ERP", url: "https://cloveerp.com/governance?task=t1" },
+        { label: "Open the document", url: "https://cloveerp.com/documents/d1" },
+      ],
+    });
+    const buttons = m.html.match(/<td class="ce-button[^"]*"[^>]*>/g) ?? [];
+    expect(buttons).toHaveLength(2);
+    expect(m.html).toContain(
+      '<a class="ce-link" href="https://cloveerp.com/governance?task=t1" style="color:#A2591E;text-decoration:underline;">Review in Clove ERP</a>',
+    );
+    expect(m.html.indexOf(">Review in Clove ERP</a>")).toBeGreaterThan(
+      m.html.indexOf("ce-button-outline"),
+    );
+    expect(m.html).toContain("Review in Clove ERP: <a");
+    expect(m.text).toContain(
+      "Open the document: https://cloveerp.com/documents/d1\nReview in Clove ERP: https://cloveerp.com/governance?task=t1\nOpen the document: https://cloveerp.com/documents/d1",
+    );
+  });
+
   test("the header copes with no organisation", () => {
     const m = renderEmail({ ...base, organisation: null }).html;
     expect(m).not.toContain('align="right"');

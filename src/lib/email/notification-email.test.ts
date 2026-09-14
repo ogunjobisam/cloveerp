@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   DEFAULT_APP_ORIGIN,
+  actionLink,
   appOrigin,
   composeNotificationEmail,
   fill,
@@ -13,17 +14,18 @@ import {
 } from "./notification-email.ts";
 
 /*
- * The words, as the migration that introduced them writes them. Reading them
- * from the file rather than copying them here is what proves that every
+ * The words, as the migrations that introduced them write them. Reading them
+ * from the files rather than copying them here is what proves that every
  * {placeholder} the database's words ask for is one this sender fills.
  */
-const MIGRATION = readFileSync(
-  new URL(
-    "../../../supabase/migrations/20260914094000_every_email_says_what_is_asked.sql",
-    import.meta.url,
-  ),
-  "utf8",
-);
+const MIGRATION = [
+  "20260914094000_every_email_says_what_is_asked.sql",
+  "20260914096000_an_approval_can_be_given_from_the_email.sql",
+]
+  .map((file) =>
+    readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), "utf8"),
+  )
+  .join("\n");
 
 function wordsFromMigration(locale: "en" | "de"): Map<string, string> {
   const out = new Map<string, string>();
@@ -85,6 +87,10 @@ function approvalContext(
       primary: pick("primary"),
       ...(doc ? { secondary: pick("secondary") } : {}),
       note: pick("note"),
+      approve: pick("approve"),
+      reject: pick("reject"),
+      open_task: pick("open_task"),
+      note_actions: pick("note_actions"),
       reason: pick(esc ? "reason_escalated" : "reason"),
     },
     labels: part(words, "approval.label"),
@@ -425,6 +431,115 @@ describe("the other kinds", () => {
     expect(m.text).toContain("14 September 2026, 08:00 UTC: Receipt outside tolerance");
     expect(m.text).toContain("And 3 more in Clove ERP.");
     expect(m.text).toContain(`Open notifications: ${ORIGIN}/notifications`);
+  });
+});
+
+describe("an approval email with a decision link", () => {
+  const TOKEN = "ab".repeat(32);
+  const task = `${ORIGIN}/governance?task=11111111-1111-4111-8111-111111111111`;
+  const doc = `${ORIGIN}/documents/22222222-2222-4222-8222-222222222222`;
+  const email = renderNotificationEmail(
+    claimed(approvalContext(EN), { action_token: TOKEN }),
+    ORIGIN,
+  );
+
+  test("leads with Approve and Reject, each opening the decision page with the token in the fragment", () => {
+    const approve = actionLink(ORIGIN, TOKEN, "approve");
+    const reject = actionLink(ORIGIN, TOKEN, "reject");
+    expect(approve).toBe(`${ORIGIN}/act#t=${TOKEN}&d=approve`);
+    expect(new URL(approve).search).toBe("");
+    expect(email.text).toContain(`Approve: ${approve}\nReject: ${reject}`);
+    expect(email.html).toMatch(
+      /class="ce-button"[^>]*><a class="ce-button-text" href="https:\/\/cloveerp\.com\/act#t=/,
+    );
+    expect(email.html).toContain('class="ce-button-outline"');
+    expect(email.html).toContain(">Reject</a>");
+  });
+
+  test("keeps the task and the document as plain links below", () => {
+    expect(email.text).toContain(`Review in Clove ERP: ${task}\nOpen the document: ${doc}`);
+    expect(email.html).toContain(`>Review in Clove ERP</a>`);
+    expect(email.html).not.toContain(">Review and approve</a>");
+  });
+
+  test("says that nothing is decided until they sign in and confirm", () => {
+    expect(email.text).toContain("where you sign in and confirm");
+    expect(email.text).not.toContain("Nothing is approved until you decide in Clove ERP");
+  });
+
+  test("puts the token in the links and nowhere else, and never in the subject", () => {
+    expect(email.subject).not.toContain(TOKEN);
+    const outsideLinks = email.text.replace(/https:\/\/\S+/g, "");
+    expect(outsideLinks).not.toContain(TOKEN);
+  });
+
+  test("reads in German too", () => {
+    const m = renderNotificationEmail(
+      claimed(approvalContext(DE, { locale: "de" }), { action_token: TOKEN }),
+      ORIGIN,
+    );
+    expect(m.text).toContain(`Genehmigen: ${ORIGIN}/act#t=${TOKEN}&d=approve`);
+    expect(m.text).toContain(`Ablehnen: ${ORIGIN}/act#t=${TOKEN}&d=reject`);
+  });
+
+  test("without a token, or with one that is not a token, it stays Review and approve", () => {
+    for (const action_token of [null, undefined, "not-a-token", `${TOKEN}0`, TOKEN.toUpperCase()]) {
+      const m = renderNotificationEmail(
+        claimed(approvalContext(EN), { action_token: action_token ?? null }),
+        ORIGIN,
+      );
+      expect(m.text).toContain(`Review and approve: ${task}`);
+      expect(m.text).not.toContain("/act#");
+    }
+  });
+
+  test("a context from before the decision words still sends Review and approve", () => {
+    const old = approvalContext(EN) as { words: Record<string, string> };
+    delete old.words["approve"];
+    delete old.words["reject"];
+    const m = renderNotificationEmail(claimed(old, { action_token: TOKEN }), ORIGIN);
+    expect(m.text).toContain(`Review and approve: ${task}`);
+    expect(m.text).not.toContain(TOKEN);
+  });
+
+  test("a token on any other kind of email is ignored", () => {
+    const w = part(EN, "digest");
+    const m = renderNotificationEmail(
+      claimed(
+        {
+          kind: "digest",
+          locale: "en",
+          time_zone: "UTC",
+          words: {
+            ...part(EN, "common"),
+            subject: word(EN, "email.digest.subject_one"),
+            preheader: w["preheader_one"],
+            heading: w["heading_one"],
+            intro: w["intro"],
+            primary: w["primary"],
+            reason: w["reason"],
+            approve: "Approve",
+            reject: "Reject",
+          },
+          labels: {},
+          links: { primary: "/notifications", preferences: "/notifications" },
+          fields: { count: 1, more: 0, items: [] },
+        },
+        { action_token: TOKEN },
+      ),
+      ORIGIN,
+    );
+    expect(m.text).not.toContain(TOKEN);
+    expect(m.text).toContain(`Open notifications: ${ORIGIN}/notifications`);
+  });
+
+  test("a fallback reason never carries the token", () => {
+    const broken = approvalContext(EN);
+    delete (broken.fields as Record<string, unknown>)["document_number"];
+    const out = composeNotificationEmail(claimed(broken, { action_token: TOKEN }), ORIGIN);
+    expect(out.html).toBeNull();
+    expect(out.fallback).not.toContain(TOKEN);
+    expect(out.body).not.toContain(TOKEN);
   });
 });
 
