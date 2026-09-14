@@ -46,10 +46,11 @@ export const CONSOLE_SECTIONS = [
   {
     key: "sales",
     label: "Sales",
-    blurb: "Who has asked about Clove ERP, and the contracts that came of it.",
+    blurb:
+      "Who has asked about Clove ERP, the quotes they were sent, and the contracts that came of it.",
     views: [
       { key: "enquiries", label: "Enquiries" },
-      // Quotes goes here, between the enquiry and the contract it becomes.
+      { key: "quotes", label: "Quotes" },
       { key: "contracts", label: "Contracts" },
     ],
   },
