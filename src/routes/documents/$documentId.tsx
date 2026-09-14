@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
+import {
+  DELIVER_THIS_ORDER,
+  DELIVERY_FROM_ORDER_FIELDS,
+  deliveryFromOrderArgs,
+} from "../../lib/modules";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "../../components/erp/currencies";
 
@@ -163,6 +169,17 @@ function Document() {
           transitions={live.data ?? data.available_transitions}
           committed={doc.is_committed}
         />
+
+        {/* An order that can still be despatched is where its delivery comes
+            from. Offered on the states erp.create_delivery_from_order accepts;
+            the database refuses anything else by name. */}
+        {doc.document_type === "sales_order" &&
+        (doc.state === "confirmed" || doc.state === "picking") ? (
+          <DeliverThisOrder
+            documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
       </section>
 
       <Lines
@@ -179,6 +196,53 @@ function Document() {
       {data.lineage.length > 0 ? (
         <LineagePanel lineage={data.lineage} documentId={documentId} />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Create a delivery from the order on this page.
+ *
+ * The order is already chosen, so the form asks only for the lines, and it
+ * arrives holding what is left to deliver on each. Created, the delivery opens
+ * on its own page, where it is posted — or it is created and posted in one
+ * press with Create and move on.
+ */
+function DeliverThisOrder({ documentId, context }: { documentId: string; context: string }) {
+  const { ui } = useT();
+  const navigate = useNavigate();
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <ActionDialog
+        trigger={
+          <ActionButton variant="secondary">{ui("Create a delivery from this order")}</ActionButton>
+        }
+        title="Create a delivery from this order"
+        {...(DELIVER_THIS_ORDER.description ? { description: DELIVER_THIS_ORDER.description } : {})}
+        permission="sales.despatch"
+        fn="erp_create_delivery_from_order"
+        fields={DELIVERY_FROM_ORDER_FIELDS}
+        mapArgs={deliveryFromOrderArgs}
+        prefill={{ p_order_id: documentId }}
+        context={context}
+        alsoSubmit={{ label: "Create and move on", args: { p_transition: "auto" } }}
+        invalidates={[
+          "erp_document",
+          "erp_documents",
+          "erp_deliverable_lines",
+          "erp_available_transitions",
+        ]}
+        submitLabel="Create the delivery"
+        onDone={(result) => {
+          const made =
+            typeof result === "object" && result !== null
+              ? (result as Record<string, unknown>)["document_id"]
+              : undefined;
+          if (typeof made === "string")
+            void navigate({ to: "/documents/$documentId", params: { documentId: made } });
+        }}
+      />
     </div>
   );
 }

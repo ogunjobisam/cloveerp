@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { clearDependentCells, dependentFields, optionArgs, optionList } from "./dependent-options";
+import {
+  clearDependentCells,
+  dependentFields,
+  dropSeededRows,
+  optionArgs,
+  optionList,
+  seededRows,
+} from "./dependent-options";
 
 const buckets = {
   args: { p_limit: 500 },
@@ -119,5 +126,51 @@ describe("a line editor whose picker follows a choice", () => {
   test("is left alone by a change to anything else", () => {
     const rows = { p_lines: [{ line_id: "a", quantity: "10" }] };
     expect(clearDependentCells(fields, rows, "p_note")).toBe(rows);
+  });
+});
+
+describe("a line editor that arrives holding rows", () => {
+  const seed = {
+    fn: "erp_deliverable_lines",
+    argsFrom: { p_order_id: "p_order_id" },
+    fill: { line_id: "line_id", quantity: "open_quantity" },
+  };
+  const open = [
+    { line_id: "a", line_no: 10, open_quantity: 10 },
+    { line_id: "b", line_no: 20, open_quantity: "2.5", description: "part" },
+  ];
+
+  test("holds a row per record, each column from its key, as a box would hold it", () => {
+    expect(seededRows(seed, open, { p_order_id: "o1" })).toEqual([
+      { line_id: "a", quantity: "10" },
+      { line_id: "b", quantity: "2.5" },
+    ]);
+  });
+
+  test("holds nothing when the door answers with nothing a row can be made of", () => {
+    expect(seededRows(seed, [], { p_order_id: "o1" })).toEqual([]);
+    expect(seededRows(seed, null, { p_order_id: "o1" })).toEqual([]);
+    expect(seededRows(seed, ["x", 1], { p_order_id: "o1" })).toEqual([]);
+    expect(seededRows(seed, [{ line_id: null }], { p_order_id: "o1" })).toEqual([
+      { line_id: "", quantity: "" },
+    ]);
+  });
+
+  test("asks with the choice it follows, and waits while it is not made", () => {
+    expect(optionArgs(seed, { p_order_id: "o1" })).toEqual({ p_order_id: "o1" });
+    expect(optionArgs(seed, {})).toBeNull();
+  });
+
+  const fields = [{ name: "p_order_id" }, { name: "p_lines", seed }, { name: "p_other" }];
+
+  test("starts again when the choice it follows changes", () => {
+    const rows = { p_lines: [{ line_id: "a", quantity: "4" }], p_other: [{ x: "1" }] };
+    expect(dropSeededRows(fields, rows, "p_order_id")).toEqual({ p_other: [{ x: "1" }] });
+  });
+
+  test("keeps what the person changed when anything else changes", () => {
+    const rows = { p_lines: [{ line_id: "a", quantity: "4" }] };
+    expect(dropSeededRows(fields, rows, "p_other")).toBe(rows);
+    expect(dropSeededRows(fields, {}, "p_order_id")).toEqual({});
   });
 });

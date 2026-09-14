@@ -18,8 +18,11 @@ import { friendlyError } from "../../lib/errors";
 import {
   clearDependentCells,
   dependentFields,
+  dropSeededRows,
   optionArgs,
   optionList,
+  seededRows,
+  type RowSeed,
 } from "../../lib/dependent-options";
 import { useT } from "../../lib/i18n";
 import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
@@ -271,6 +274,12 @@ export type Field =
        * being typed rather than after it has been saved.
        */
       total?: { quantity: string; price: string; currency: string };
+      /**
+       * The rows the editor arrives holding, read from a door once the choice
+       * it follows is made — the open lines of the order chosen above, each at
+       * what is left of it. Still editable; see RowSeed. One per form.
+       */
+      seed?: RowSeed;
     } & FieldBase);
 
 /**
@@ -623,6 +632,7 @@ function RowsField({
   onChange,
   currencies,
   formValues,
+  seedState,
 }: {
   field: Extract<Field, { kind: "rows" }>;
   value: Record<string, string>[];
@@ -630,7 +640,10 @@ function RowsField({
   currencies: Currency[] | undefined;
   /** The form's other answers, for a column whose picker follows one of them. */
   formValues?: Record<string, string>;
+  /** Where the rows the editor arrives holding have got to, when it has a seed. */
+  seedState?: { isPending: boolean; error: unknown; waiting: boolean; untouched: boolean };
 }) {
+  const { ui } = useT();
   const total = field.total;
   const sum = total
     ? value.reduce(
@@ -642,6 +655,22 @@ function RowsField({
 
   return (
     <div className="flex flex-col gap-2">
+      {seedState ? (
+        <PickerNote
+          isPending={seedState.isPending}
+          error={seedState.error}
+          empty={false}
+          waiting={seedState.waiting}
+        />
+      ) : null}
+      {seedState?.untouched &&
+      field.seed?.empty &&
+      value.length === 0 &&
+      !seedState.isPending &&
+      !seedState.waiting &&
+      !seedState.error ? (
+        <span className="text-xs text-muted-foreground">{ui(field.seed.empty)}</span>
+      ) : null}
       {value.map((row, index) => (
         <div
           key={index}
@@ -849,7 +878,8 @@ export function ActionDialog({
   }, [prefill, values]);
 
   // A choice another picker follows takes that picker's answer with it: the
-  // bucket of the old version is not a bucket of the new one.
+  // bucket of the old version is not a bucket of the new one. A line editor
+  // seeded from that choice starts again from what the new choice holds.
   function choose(name: string, value: string) {
     if ((values[name] ?? "") === value) return;
     const followers = dependentFields(fields, name);
@@ -858,8 +888,27 @@ export function ActionDialog({
       for (const f of followers) next[f] = "";
       return next;
     });
-    setRows((prev) => clearDependentCells(fields, prev, name));
+    setRows((prev) => dropSeededRows(fields, clearDependentCells(fields, prev, name), name));
   }
+
+  // The line editor that arrives holding rows, read once the choice it follows
+  // is made. Until the person changes a row, the rows shown and sent are the
+  // door's; the first change makes them the person's.
+  const seeded = fields.find(
+    (f): f is Extract<Field, { kind: "rows" }> => f.kind === "rows" && f.seed !== undefined,
+  );
+  const seed = seeded?.seed;
+  const seedArgs = seed ? optionArgs(seed, formValues) : null;
+  const seedQuery = useQuery({
+    queryKey: [seed?.fn ?? "no-seed", seedArgs ?? {}],
+    queryFn: () =>
+      seed && seedArgs ? callErp<unknown>(seed.fn, seedArgs) : Promise.resolve(null as unknown),
+    enabled: open && seed !== undefined && seedArgs !== null,
+  });
+  const heldRows: Record<string, Record<string, string>[]> =
+    seeded && seed && seedArgs !== null && rows[seeded.name] === undefined && seedQuery.data
+      ? { ...rows, [seeded.name]: seededRows(seed, seedQuery.data, formValues) }
+      : rows;
 
   // An open form with something typed into it is work in progress, and
   // leaving the screen must ask before it is thrown away.
@@ -896,7 +945,8 @@ export function ActionDialog({
   });
 
   function buildArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
-    if (mapArgs) return { ...mapArgs(values, { lists, rows }), ...(prefill ?? {}), ...extra };
+    if (mapArgs)
+      return { ...mapArgs(values, { lists, rows: heldRows }), ...(prefill ?? {}), ...extra };
     const args: Record<string, unknown> = {};
 
     for (const f of fields) {
@@ -907,7 +957,7 @@ export function ActionDialog({
       }
       if (f.kind === "rows") {
         const declared = f.columns;
-        const filled = (rows[f.name] ?? [])
+        const filled = (heldRows[f.name] ?? [])
           .map((row) => {
             const out: Record<string, unknown> = {};
             for (const c of declared) {
@@ -1004,10 +1054,20 @@ export function ActionDialog({
               ) : f.kind === "rows" ? (
                 <RowsField
                   field={f}
-                  value={rows[f.name] ?? []}
+                  value={heldRows[f.name] ?? []}
                   onChange={(v) => setRows((prev) => ({ ...prev, [f.name]: v }))}
                   currencies={currencies}
                   formValues={formValues}
+                  {...(f.seed
+                    ? {
+                        seedState: {
+                          isPending: seedArgs !== null && seedQuery.isPending,
+                          error: seedQuery.error,
+                          waiting: seedArgs === null,
+                          untouched: rows[f.name] === undefined,
+                        },
+                      }
+                    : {})}
                 />
               ) : f.kind === "choice" || f.kind === "site" ? (
                 <select

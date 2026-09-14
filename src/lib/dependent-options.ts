@@ -75,6 +75,63 @@ export function optionList(
   return chosen !== "" && Array.isArray(inner) ? inner : [];
 }
 
+/**
+ * The rows a line editor arrives holding, read from a door.
+ *
+ * A delivery raised from a sales order asked the person to retype the order's
+ * lines, which is the order's own information typed a second time and the
+ * commonest way for the two to disagree. So a line editor may name a door and
+ * the choice it follows: once that choice is made, the editor holds one row per
+ * record the door answers with, each column taken from the record's `fill` key.
+ * The rows stay editable — a quantity lowered, a line removed — and what the
+ * person changed is theirs until the choice it follows changes.
+ */
+export type RowSeed = DependentSource & {
+  fn: string;
+  /** Column name to the key of each record that fills it. */
+  fill: Record<string, string>;
+  /** Said when the door answers with nothing to hold. */
+  empty?: string;
+};
+
+/** A record's field as a text box would hold it. */
+function asCell(value: unknown): string {
+  return typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
+}
+
+/** One row per record the seed's door answered with, its columns filled. */
+export function seededRows(
+  seed: RowSeed,
+  data: unknown,
+  values: Record<string, string>,
+): Record<string, string>[] {
+  return optionList(seed, data, values)
+    .map(asRecord)
+    .filter((record): record is Record<string, unknown> => record !== null)
+    .map((record) =>
+      Object.fromEntries(
+        Object.entries(seed.fill).map(([column, key]) => [column, asCell(record[key])]),
+      ),
+    );
+}
+
+/**
+ * The rows of every line editor, less those seeded from a choice that just
+ * changed: the lines of the order chosen before are not the lines of the one
+ * chosen now, so the editor starts again from what the new choice holds.
+ */
+export function dropSeededRows(
+  fields: ReadonlyArray<{ name: string; seed?: DependentSource }>,
+  rows: Record<string, Record<string, string>[]>,
+  name: string,
+): Record<string, Record<string, string>[]> {
+  const dropped = new Set(
+    fields.filter((f) => f.name in rows && followsField(f.seed, name)).map((f) => f.name),
+  );
+  if (dropped.size === 0) return rows;
+  return Object.fromEntries(Object.entries(rows).filter(([key]) => !dropped.has(key)));
+}
+
 /** Whether a picker's list follows the field `name`. */
 export function followsField(source: DependentSource | undefined, name: string): boolean {
   if (!source) return false;
