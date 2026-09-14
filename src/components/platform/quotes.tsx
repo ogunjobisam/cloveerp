@@ -605,15 +605,16 @@ function Section({
   );
 }
 
+/** Console text is not tenant terminology, so a caption, not a screen-string label. */
 function Stepper({
-  label,
+  caption,
   hint,
   value,
   min = 0,
   disabled,
   onChange,
 }: {
-  label: string;
+  caption: string;
   hint: string;
   value: number;
   min?: number;
@@ -629,14 +630,14 @@ function Stepper({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
       <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
+        <p className="text-sm font-medium">{caption}</p>
         <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
       <div className="flex items-center gap-1.5">
         <button
           type="button"
           className={STEP}
-          aria-label={`Fewer: ${label}`}
+          aria-label={`Fewer: ${caption}`}
           disabled={disabled || value <= min}
           onClick={() => onChange(value - 1)}
         >
@@ -645,7 +646,7 @@ function Stepper({
         <input
           className="h-9 w-16 rounded-md border border-input bg-background text-center text-sm tabular-nums"
           inputMode="numeric"
-          aria-label={label}
+          aria-label={caption}
           disabled={disabled}
           value={draft ?? String(value)}
           onChange={(e) => setDraft(e.target.value)}
@@ -657,7 +658,7 @@ function Stepper({
         <button
           type="button"
           className={STEP}
-          aria-label={`More: ${label}`}
+          aria-label={`More: ${caption}`}
           disabled={disabled}
           onClick={() => onChange(value + 1)}
         >
@@ -888,7 +889,7 @@ function QuoteBuilder({
                 >
                   <div className="grid gap-3 md:grid-cols-2">
                     <Stepper
-                      label="Extra full users"
+                      caption="Extra full users"
                       hint={
                         fullUser
                           ? `${money(rateFor(fullUser, book, d.term_kind))} each ${unit}`
@@ -899,7 +900,7 @@ function QuoteBuilder({
                       onChange={(n) => void setQuantity(fullUser, n)}
                     />
                     <Stepper
-                      label="Light users"
+                      caption="Light users"
                       hint={
                         lightUser
                           ? `${money(rateFor(lightUser, book, d.term_kind))} each ${unit}`
@@ -920,7 +921,7 @@ function QuoteBuilder({
                       x ? (
                         <Stepper
                           key={x.code}
-                          label={x.name}
+                          caption={x.name}
                           hint={`${money(rateFor(x, book, d.term_kind))} each ${unit}`}
                           value={lineFor(lines, x.code)?.quantity ?? 0}
                           disabled={pending}
