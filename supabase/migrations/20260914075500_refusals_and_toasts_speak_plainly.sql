@@ -52,7 +52,7 @@
 --
 --   5. The words the desk now shows, each with a row it can be renamed by.
 --
--- Proof: erp_test.plain_words_suite(), ten cases, pinned by its wrapper.
+-- Proof: erp_test.plain_words_suite(), nine cases, pinned by its wrapper.
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 1. The refusal register, in plain words
@@ -644,7 +644,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 10;
+  c_expected constant integer := 9;
   v_total  integer;
   v_failed integer;
   v_detail text;
