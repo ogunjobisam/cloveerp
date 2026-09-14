@@ -118,12 +118,22 @@ function mayApprove(s: ChangeSet): boolean {
  */
 type Param = { name: string; label: string; suffix?: string; initial: string };
 
+/**
+ * The role an installer asks to approve. Left on the default, the database
+ * takes `preferred` where somebody holds it and administrator otherwise.
+ */
+type RoleParam = { name: string; label: string; preferred: string };
+
 type Module = {
   fn: string;
   name: string;
   blurb: string;
   param?: Param;
+  role?: RoleParam;
 };
+
+/** One row of erp_roles(). */
+type RoleOption = { role_id: string; code: string; name: string };
 
 /**
  * The fourteen installers, in the order a tenant would sensibly run them:
@@ -158,6 +168,7 @@ const MODULES: Module[] = [
       suffix: "minor units",
       initial: "1000000",
     },
+    role: { name: "p_approver_role", label: "Approver role", preferred: "procurement_manager" },
   },
   {
     fn: "erp_configure_procurement_controls",
@@ -175,6 +186,7 @@ const MODULES: Module[] = [
       suffix: "%",
       initial: "15",
     },
+    role: { name: "p_approver_role", label: "Approver role", preferred: "sales_manager" },
   },
   {
     fn: "erp_configure_sales_controls",
@@ -583,6 +595,8 @@ function ModulesPanel({ onDone }: { onDone: () => void }) {
 
 function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void }) {
   const [value, setValue] = useState(m.param?.initial ?? "");
+  // Empty is the database's default approver role, not a missing answer.
+  const [role, setRole] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
 
@@ -590,6 +604,7 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
     mutationFn: async () => {
       const args: Record<string, unknown> = {};
       if (m.param && value.trim() !== "") args[m.param.name] = Number(value);
+      if (m.role && role !== "") args[m.role.name] = role;
       const result = await callErp<unknown>(m.fn, args);
       const id = changeSetIdOf(result);
       // Read the set back rather than assuming: whether it promoted or stopped
@@ -638,6 +653,8 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
           </label>
         ) : null}
 
+        {m.role ? <ApproverRolePicker role={m.role} value={role} onChange={setRole} /> : null}
+
         <ActionButton
           onClick={() => {
             setError(null);
@@ -660,6 +677,50 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Who is asked to approve what a module raises.
+ *
+ * The organisation's own roles, from erp_roles. Left on the default the
+ * database picks the operational role where somebody holds it, and
+ * administrator otherwise; the person who submits a document is never the one
+ * asked to approve it.
+ */
+function ApproverRolePicker({
+  role,
+  value,
+  onChange,
+}: {
+  role: RoleParam;
+  value: string;
+  onChange: (code: string) => void;
+}) {
+  const roles = useQuery({
+    queryKey: ["erp_roles"],
+    queryFn: () => callErp<RoleOption[]>("erp_roles"),
+  });
+
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {role.label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={roles.isPending}
+        className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+      >
+        <option value="">{`Default: ${role.preferred}, or administrator`}</option>
+        {(roles.data ?? []).map((r) => (
+          <option key={r.role_id} value={r.code}>
+            {r.name === r.code ? r.code : `${r.name} (${r.code})`}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
