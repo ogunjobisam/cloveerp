@@ -3161,15 +3161,115 @@ export const QUALITY: ModuleDef = {
   ],
 };
 
+/**
+ * A delivery, raised from the sales order it delivers.
+ *
+ * Order to cash broke at despatch: the New delivery form asked for the order's
+ * lines to be typed again, and nothing tied what left the building to what the
+ * customer ordered. This raises the delivery from the order instead — its
+ * customer, company, site and prices — holding what is left to deliver on each
+ * line, and links every line back, so posting it counts what went on the order
+ * and moves the order on once all of it has gone. The picker offers orders that
+ * can still be despatched; the database refuses the rest, and a quantity more
+ * than is left, by name.
+ */
+export const DELIVERY_FROM_ORDER_FIELDS: Field[] = [
+  pickFrom(
+    "erp_documents",
+    "document_id",
+    ["document_number", "party", "state_name"],
+    "p_order_id",
+    "Sales order",
+    { p_type_code: "sales_order", p_limit: 200, p_states: ["confirmed", "picking"] },
+  ),
+  {
+    kind: "rows",
+    name: "p_lines",
+    label: "Lines to deliver",
+    addLabel: "Add a line",
+    hint: "Each line with something left to deliver arrives holding what is left. Lower a quantity to deliver part of a line, or remove a line to leave it for a later delivery.",
+    columns: [
+      {
+        name: "line_id",
+        label: "Order line",
+        kind: "select",
+        // The open lines of the order chosen above, not every sales order line.
+        options: {
+          fn: "erp_deliverable_lines",
+          argsFrom: { p_order_id: "p_order_id" },
+          value: "line_id",
+          label: ["line_no", "item", "description", "open_quantity"],
+        },
+      },
+      { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
+    ],
+    seed: {
+      fn: "erp_deliverable_lines",
+      argsFrom: { p_order_id: "p_order_id" },
+      fill: { line_id: "line_id", quantity: "open_quantity" },
+      empty:
+        "Nothing is left to deliver on this order: every line has been delivered or is on a delivery already.",
+    },
+  },
+];
+
+/**
+ * What the delivery door is sent. Lines the person never touched are sent as
+ * none, which the door reads as every open line in full; a row whose quantity
+ * was cleared is sent without one, which the door reads as the rest of that
+ * line.
+ */
+export function deliveryFromOrderArgs(
+  values: Record<string, string>,
+  picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
+): Record<string, unknown> {
+  const rows = picked?.rows["p_lines"];
+  return {
+    p_order_id: values["p_order_id"],
+    p_lines:
+      rows === undefined
+        ? null
+        : rows
+            .filter((row) => (row["line_id"] ?? "") !== "")
+            .map((row) => ({
+              line_id: row["line_id"],
+              ...((row["quantity"] ?? "") !== "" ? { quantity: Number(row["quantity"]) } : {}),
+            })),
+  };
+}
+
+/** On a module's bar, where the order is chosen on the form. */
+export const DELIVER_AN_ORDER: ActionSpec = {
+  label: "Create a delivery from an order",
+  title: "Create a delivery from a sales order",
+  description:
+    "A draft delivery for the order's customer and site, holding what is left to deliver on each line at the order's price. Post it when the goods leave.",
+  permission: "sales.despatch",
+  fn: "erp_create_delivery_from_order",
+  fields: DELIVERY_FROM_ORDER_FIELDS,
+  mapArgs: deliveryFromOrderArgs,
+  invalidates: ["erp_documents", "erp_document", "erp_deliverable_lines"],
+  submitLabel: "Create the delivery",
+};
+
+/** On a sales order that is already chosen. Keyed apart, so a step can name it. */
+export const DELIVER_THIS_ORDER: ActionSpec = {
+  ...DELIVER_AN_ORDER,
+  code: "deliver_this_order",
+  label: "Create a delivery from this order",
+  title: "Create a delivery from this order",
+};
+
 export const LOGISTICS: ModuleDef = {
   flow: {
     title: "Despatch, step by step",
-    note: "Plan the shipment, choose the carrier, book it, then record the proof of delivery. A delivery is confirmed or failed on its own document page.",
+    note: "Create the delivery from its sales order and post it when the goods leave. Then plan the shipment, choose the carrier, book it and record the proof of delivery.",
     stages: [
       {
         label: "Delivery",
         hint: "Picked goods waiting to leave. A delivery is what a shipment carries.",
-        fedBy: "Deliveries appear here once a sales order has been picked and a delivery raised.",
+        fedBy:
+          "Deliveries appear here once one is created from a confirmed sales order. Create a delivery from an order is on the bar below.",
 
         typeCode: "delivery",
         partyRole: "customer",
@@ -3211,6 +3311,7 @@ export const LOGISTICS: ModuleDef = {
   permission: "logistics.read",
   group: "move",
   actions: [
+    DELIVER_AN_ORDER,
     {
       label: "Plan a shipment",
       description: "Group deliveries leaving one site on one day.",
