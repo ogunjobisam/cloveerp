@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Briefcase, Building2, ChevronDown, Menu, Settings2 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import type { ErpSession } from "../../lib/erp";
+import { ScopeUsageContext } from "./session-context";
 import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { usePlatformOrganisation } from "../../lib/platform-organisation";
@@ -349,11 +350,14 @@ function ScopeControl({
   scope,
   onScopeChange,
   sites,
+  pageUsesScope,
 }: {
   session: ErpSession;
   scope: Scope;
   onScopeChange: (s: Scope) => void;
   sites: { id: string; code: string; name: string }[];
+  /** Whether anything on the page in front of you reads the choice. */
+  pageUsesScope: boolean;
 }) {
   const entity = session.entities.find((e) => e.id === scope.entityId);
   const site = session.sites.find((s) => s.id === scope.siteId);
@@ -371,8 +375,13 @@ function ScopeControl({
       <PopoverContent align="end" className="w-72">
         <p className="text-sm font-medium">Where you are working</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Records, totals and the documents you can raise all follow this.
+          The company and site a new document is raised for, and what Home summarises.
         </p>
+        {pageUsesScope ? null : (
+          <p className="mt-2 rounded-md bg-muted px-2.5 py-2 text-xs text-muted-foreground">
+            This page is about the whole organisation, so the choice below does not change it.
+          </p>
+        )}
         <div className="mt-3 flex flex-col gap-3">
           <ScopeSelect
             label="Company"
@@ -391,8 +400,11 @@ function ScopeControl({
             slug: useful when raising a support request and never otherwise, so
             it belongs where the organisation is already the subject rather
             than in permanent chrome. */}
-        <p className="mt-3 border-t border-border pt-3 font-mono text-[11px] text-muted-foreground">
-          {session.tenant?.code ?? "—"}
+        <p className="mt-3 border-t border-border pt-3 text-[11px] text-muted-foreground">
+          Organisation:{" "}
+          <span className="font-medium text-foreground">{session.tenant?.name ?? "—"}</span>
+          {" · "}
+          <span className="font-mono">{session.tenant?.code ?? "—"}</span>
           {session.tenant?.status && session.tenant.status !== "active"
             ? ` · ${session.tenant.status}`
             : ""}
@@ -418,6 +430,18 @@ export function Shell({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const brand = useBrand();
+
+  // How many mounted components read the header's company and site.
+  const [scopeReaders, setScopeReaders] = useState(0);
+  const scopeUsage = useMemo(
+    () => ({
+      register: () => {
+        setScopeReaders((n) => n + 1);
+        return () => setScopeReaders((n) => n - 1);
+      },
+    }),
+    [],
+  );
 
   // The tab icon follows the tenant, where the browser supports it.
   useBrandedFavicon(brand);
@@ -533,6 +557,7 @@ export function Shell({
                 scope={scope}
                 onScopeChange={onScopeChange}
                 sites={sites}
+                pageUsesScope={scopeReaders > 0}
               />
 
               <div className="hidden shrink-0 md:block">
@@ -575,7 +600,7 @@ export function Shell({
           <main id="main" tabIndex={-1} className={MAIN_AREA}>
             <Breadcrumbs />
             <PageHeaderExtras.Provider value={WalkthroughButton}>
-              {children}
+              <ScopeUsageContext.Provider value={scopeUsage}>{children}</ScopeUsageContext.Provider>
             </PageHeaderExtras.Provider>
           </main>
         </div>

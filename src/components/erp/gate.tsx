@@ -6,9 +6,13 @@ import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
 import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
-import { readJoinArrival } from "../../lib/invitation-email";
-import { clearStoredInvitation, readStoredInvitation } from "../../lib/invitation-token";
-import { usePlatformMe } from "../../lib/platform";
+import {
+  clearStoredInvitation,
+  readStoredInvitation,
+  storeInvitation,
+} from "../../lib/invitation-token";
+import { atLeast, usePlatformMe } from "../../lib/platform";
+import { onboardingView, pastedToken, selfServiceIsOpen } from "../../lib/self-service";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
@@ -277,49 +281,75 @@ function isRateLimited(error: {
 /**
  * The onboarding state: signed in, but resolving to no principal anywhere.
  *
- * Two ways out, because there are two ways to arrive here and only one of them
- * is a new customer.
+ * Organisations come by invitation. Somebody already inside one creates a
+ * principal for this person and sends them a single-use link; the platform's
+ * own staff create new organisations from the console. So what this screen
+ * offers depends on who is looking, and it is only ever a convenience: the
+ * database refuses creating an organisation or a demo to anybody it should,
+ * whatever is rendered here.
  *
- * Creating a tenant makes the caller its first principal, with an
- * administrator role holding every permission — tenant, principal, role and
- * grant in one transaction, because half of that list is worse than none.
+ *   an invitation held    only the card that joins it. Somebody who arrived
+ *                         through an invitation link, or pasted one, has said
+ *                         what they are here for.
+ *   nothing held          "You need an invitation": who they are signed in as,
+ *                         who to ask, a box to paste a link into, and Sign out.
+ *   platform operators    as well as the invitation hint, creating an
+ *   and owners, or        organisation (which makes the caller its first
+ *   self-service open     administrator, holding every permission) or a seeded
+ *                         demo. The platform owner opens and closes self-service
+ *                         sign-up from the console; it is closed by default.
  *
- * Redeeming an invitation is the other: somebody already inside a tenant
- * created a principal for this person and handed them a single-use token. It
- * belongs on the same screen, since from here the two states are
- * indistinguishable — you are signed in and the database has nothing to say
- * about you.
- *
- * Somebody who arrived through an invitation link has already said which of
- * the two they are, so theirs comes first — but it is redeemed only when they
- * press Join, on a card that names the account about to join. A sign-in joins
- * one organisation for good, and a held token does not say whose it is: the
- * link may have been opened in a browser already signed in to another account,
- * with the wrong Google account picked, or planted in this tab by somebody
- * else entirely. Only the person signed in can tell, so they are asked, and
- * "Not you?" signs them out with the invitation still held for the right
- * account. The rest of the screen stays: a refused invitation (expired, already
- * used) leaves them a paste box and the choice to start their own organisation.
+ * The invitation is redeemed only when they press Join, on a card that names
+ * the account about to join. A sign-in joins one organisation for good, and a
+ * held token does not say whose it is: the link may have been opened in a
+ * browser already signed in to another account, with the wrong Google account
+ * picked, or planted in this tab by somebody else entirely. Only the person
+ * signed in can tell, so they are asked, and "Not you?" signs them out with the
+ * invitation still held for the right account. A refused invitation (expired,
+ * already used) says so and offers the paste box again.
  */
 function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
   const queryClient = useQueryClient();
   const platform = usePlatformMe();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [token, setToken] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"create" | "demo" | "redeem" | "join" | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState<"create" | "demo" | "join" | null>(null);
 
-  // Read once: the card stays up with its refusal even after a failed attempt.
-  const [invitation] = useState<string | null>(readStoredInvitation);
+  // Read once, then held here: a pasted invitation takes the same card as one
+  // that arrived by link, and the card stays up with its refusal after a
+  // failed attempt until the person chooses another.
+  const [invitation, setInvitation] = useState<string | null>(readStoredInvitation);
   const [joinError, setJoinError] = useState<unknown>(null);
 
+  // Platform staff who may create organisations: operators and owners, as the
+  // doors decide. Support staff are asked about the switch like anybody else.
+  const staff = platform.isPending
+    ? undefined
+    : Boolean(platform.data?.is_staff) && atLeast(platform.data?.role, "operator");
+
+  // Asked only where the answer changes the screen: nobody holding an
+  // invitation, and no operator or owner, who may create regardless.
+  const selfService = useQuery({
+    queryKey: ["erp_self_service_organisations_open"],
+    queryFn: () => callErp<unknown>("erp_self_service_organisations_open"),
+    enabled: Boolean(supabase) && (invitation ?? "").trim() === "" && staff === false,
+    staleTime: 60_000,
+  });
+  const open = selfService.isSuccess
+    ? selfServiceIsOpen(selfService.data)
+    : selfService.isError
+      ? false
+      : undefined;
+
+  const view = onboardingView({ invitation, staff, open });
+
   // Only ever from the Join button. Nothing claims on arrival.
-  async function join(stored: string) {
+  async function join(held: string) {
     setBusy("join");
     setJoinError(null);
     try {
-      await callErp("erp_claim_invitation", { p_token: stored });
+      await callErp("erp_claim_invitation", { p_token: held });
       clearStoredInvitation();
       await queryClient.invalidateQueries();
     } catch (e) {
@@ -329,16 +359,29 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
     }
   }
 
-  const refusal = joinError ? friendlyError(joinError) : null;
+  function hold(pasted: string) {
+    const token = pastedToken(pasted);
+    if (token === "") return;
+    // Held for this tab, as an arriving link is, so "Not you?" keeps it for the
+    // right account. A value that does not look like a token is not stored; it
+    // is still offered, and the database says what is wrong with it.
+    storeInvitation(token);
+    setJoinError(null);
+    setInvitation(token);
+  }
 
-  async function run(which: "create" | "demo" | "redeem") {
+  function letGo() {
+    clearStoredInvitation();
+    setJoinError(null);
+    setInvitation(null);
+  }
+
+  async function run(which: "create" | "demo") {
     setBusy(which);
     setError(null);
     try {
       if (which === "create") {
         await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
-      } else if (which === "redeem") {
-        await callErp("erp_claim_invitation", { p_token: pastedToken(token) });
       } else {
         await callErp("erp_seed_demo");
       }
@@ -346,38 +389,86 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
       // re-resolves the tenant and lands on the shell.
       await queryClient.invalidateQueries();
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
+      // The switch may have closed since this screen asked. Asking again lets
+      // a refused person see the screen that applies to them now.
+      void queryClient.invalidateQueries({ queryKey: ["erp_self_service_organisations_open"] });
     } finally {
       setBusy(null);
     }
   }
 
-  return (
-    <Centred>
-      {invitation ? (
-        <section className="mb-4 rounded-xl border border-primary/40 bg-primary/5 p-6">
-          <h2 className="text-lg font-semibold">You have been invited to join an organisation</h2>
+  if (view === "checking") {
+    return (
+      <Centred>
+        <p role="status" className="text-sm text-muted-foreground">
+          Checking this account…
+        </p>
+      </Centred>
+    );
+  }
+
+  const signedInAs = (
+    <span className="font-medium break-all text-foreground">
+      {email ?? "an account with no email address"}
+    </span>
+  );
+
+  // The owner of the product arrives here on day one, belonging to no tenant
+  // at all. The console has to be reachable from exactly here.
+  const consoleNote =
+    platform.data?.is_staff || platform.data?.claimable ? (
+      <p className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-3 text-center text-xs">
+        {platform.data.is_staff ? "You are platform staff." : "This deployment has no owner yet."}{" "}
+        <Link to="/platform" className="font-medium underline underline-offset-2">
+          Open the platform console
+        </Link>
+      </p>
+    ) : null;
+
+  const signOut = (
+    <p className="mt-4 text-center text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={onSignOut}
+        disabled={busy !== null}
+        className="underline underline-offset-2 disabled:opacity-60"
+      >
+        Sign out
+      </button>
+    </p>
+  );
+
+  if (view === "join" && invitation !== null) {
+    const refusal = joinError ? friendlyError(joinError) : null;
+    return (
+      <Centred>
+        <section className="rounded-xl border border-primary/40 bg-primary/5 p-6">
+          <h1 className="text-lg font-semibold">You have been invited to join an organisation</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Joining brings this account into the organisation that invited you, with the roles it
             has given you. An account can belong to only one organisation, so check this is the
             account the invitation was meant for.
           </p>
-          <p className="mt-3 text-sm">
-            You are signed in as{" "}
-            <span className="font-medium break-all">
-              {email ?? "an account with no email address"}
-            </span>
-            .
-          </p>
+          <p className="mt-3 text-sm">You are signed in as {signedInAs}.</p>
 
           {refusal ? (
             <div role="alert" className="mt-3 text-sm">
               <p className="font-medium text-destructive">{refusal.title}</p>
               {refusal.body ? <p className="mt-1 text-muted-foreground">{refusal.body}</p> : null}
+              {refusal.hint ? <p className="mt-1 text-muted-foreground">{refusal.hint}</p> : null}
               <p className="mt-1 text-muted-foreground">
                 An invitation works once, expires, and is replaced when a new one is sent. Ask
                 whoever invited you to send it again.
               </p>
+              <button
+                type="button"
+                onClick={letGo}
+                disabled={busy !== null}
+                className="mt-2 font-medium underline underline-offset-2 disabled:opacity-60"
+              >
+                Use a different invitation
+              </button>
             </div>
           ) : null}
 
@@ -401,12 +492,50 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
             </button>
           </p>
         </section>
-      ) : null}
+      </Centred>
+    );
+  }
+
+  if (view === "invitation-only") {
+    return (
+      <Centred>
+        <section className="rounded-xl border border-border bg-card p-6">
+          <Wordmark size={30} />
+          <h1 className="mt-4 text-lg font-semibold">You need an invitation</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You are signed in as {signedInAs}, but this account is not part of an organisation yet.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Ask the organisation you work with to send you an invitation. Opening the link in that
+            email brings you in. If it was sent to a different address, sign out and sign in with
+            that one.
+          </p>
+          <PasteInvitation onHold={hold} disabled={busy !== null} />
+          {consoleNote}
+          {signOut}
+        </section>
+      </Centred>
+    );
+  }
+
+  const refused = error ? friendlyError(error) : null;
+
+  return (
+    <Centred>
+      <section className="mb-4 rounded-xl border border-primary/40 bg-primary/5 p-6">
+        <h2 className="text-base font-semibold">Been invited?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          If the organisation you work with has invited you, open the link in that email, or paste
+          it here. An account can belong to only one organisation, so join theirs rather than
+          creating one of your own.
+        </p>
+        <PasteInvitation onHold={hold} disabled={busy !== null} />
+      </section>
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          run("create");
+          void run("create");
         }}
         className="rounded-xl border border-border bg-card p-6"
       >
@@ -438,10 +567,12 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
           />
         </label>
 
-        {error ? (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {error}
-          </p>
+        {refused ? (
+          <div role="alert" className="mt-3 text-sm">
+            <p className="font-medium text-destructive">{refused.title}</p>
+            {refused.body ? <p className="mt-1 text-muted-foreground">{refused.body}</p> : null}
+            {refused.hint ? <p className="mt-1 text-muted-foreground">{refused.hint}</p> : null}
+          </div>
         ) : null}
 
         <button
@@ -460,70 +591,65 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
 
         <button
           type="button"
-          onClick={() => run("demo")}
+          onClick={() => void run("demo")}
           disabled={busy !== null}
           className="mt-4 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
         >
           {busy === "demo" ? "Seeding…" : "Explore a seeded demo organisation instead"}
         </button>
 
-        <div className="mt-6 border-t border-border pt-4">
-          <label className="block text-sm font-medium">
-            Been invited instead?
-            <input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="Paste your invitation link or token"
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => run("redeem")}
-            disabled={busy !== null || token.trim().length === 0}
-            className="mt-2 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
-          >
-            {busy === "redeem" ? "Redeeming…" : "Redeem invitation"}
-          </button>
-          <p className="mt-2 text-xs text-muted-foreground">
-            An invitation works once and then never again.
-          </p>
-        </div>
-
-        {/* The owner of the product arrives here on day one, belonging to no
-            tenant at all. The console has to be reachable from exactly here. */}
-        {platform.data?.is_staff || platform.data?.claimable ? (
-          <p className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-3 text-center text-xs">
-            {platform.data.is_staff
-              ? "You are platform staff."
-              : "This deployment has no owner yet."}{" "}
-            <Link to="/platform" className="font-medium underline underline-offset-2">
-              Open the platform console
-            </Link>
-          </p>
-        ) : null}
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          <button type="button" onClick={onSignOut} className="underline underline-offset-2">
-            Sign out
-          </button>
-        </p>
+        {consoleNote}
+        {signOut}
       </form>
     </Centred>
   );
 }
 
 /**
- * What somebody pasted: a bare token, or the join link an inviter copied, whose
- * token sits after the #. Anything else is passed on as typed, and the
- * database says what is wrong with it.
+ * The box an invitation link or token is pasted into. It does not redeem
+ * anything: what was pasted becomes the held invitation, and the card that
+ * names the signed-in account asks before it joins.
  */
-function pastedToken(pasted: string): string {
-  const value = pasted.trim();
-  const hash = value.indexOf("#");
-  return (hash >= 0 ? readJoinArrival(value.slice(hash)).invitation : null) ?? value;
+function PasteInvitation({
+  onHold,
+  disabled,
+}: {
+  onHold: (pasted: string) => void;
+  disabled: boolean;
+}) {
+  const [pasted, setPasted] = useState("");
+  return (
+    <div className="mt-5">
+      <label className="block text-sm font-medium">
+        Invitation link
+        <input
+          value={pasted}
+          onChange={(e) => setPasted(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && pasted.trim().length > 0) {
+              e.preventDefault();
+              onHold(pasted);
+            }
+          }}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="Paste your invitation link or token"
+          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => onHold(pasted)}
+        disabled={disabled || pasted.trim().length === 0}
+        className="mt-2 w-full rounded-md border border-input bg-background px-4 py-2 text-sm font-medium disabled:opacity-60"
+      >
+        Use this invitation
+      </button>
+      <p className="mt-2 text-xs text-muted-foreground">
+        An invitation works once and then never again.
+      </p>
+    </div>
+  );
 }
 
 const SCOPE_KEY = "clove-erp.scope";

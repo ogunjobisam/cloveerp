@@ -180,6 +180,15 @@ const SHELL: Record<string, unknown> = {
   erp_platform_me: { is_staff: false, role: null, claimable: false },
   erp_my_tenants: [],
 
+  // Self-service sign-up, answered open. A deployment starts with it closed,
+  // and a principal with no tenant then gets only the "You need an invitation"
+  // card — smoke.spec.ts proves that against a real stack. Open is the fuller
+  // onboarding screen: the invitation hint, the create form and the demo button
+  // all render, so this sweep draws every part of it that could throw. The
+  // gate reads anything but a literal true as closed, so the empty default
+  // would silently show the smaller screen instead.
+  erp_self_service_organisations_open: true,
+
   // The same again, for the four screens that read an array field off an
   // object the same way ServiceBanner does. Each was found by the sweep, each
   // costs the whole page rather than the panel, and each is the stub's doing
