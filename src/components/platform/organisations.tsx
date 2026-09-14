@@ -1,56 +1,31 @@
-import { friendlyError } from "@/lib/errors";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
-import {
-  Archive,
-  Building2,
-  ClipboardList,
-  Copy,
-  Gavel,
-  LogIn,
-  LogOut,
-  Pause,
-  Play,
-  Plus,
-  ShieldCheck,
-  Trash2,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { useState } from "react";
+import { Building2, ChevronRight, Plus, Trash2 } from "lucide-react";
 
-import {
-  createInvitationWithoutEmail,
-  CreateWithoutEmail,
-  InvitationOutcome,
-  sendInvitation,
-  type InvitationSent,
-  type PersonInviteRequest,
-} from "../erp/invite-dialog";
-import { OfferOwnership } from "../erp/ownership";
-import { Pill, Table } from "../erp/panel";
+import { InvitationOutcome, sendInvitation, type InvitationSent } from "../erp/invite-dialog";
+import { Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp, ErpError, InviteOutcomeUnknown } from "../../lib/erp";
 import type { OnboardCompanyArgs } from "../../lib/invitation-email";
 import {
   atLeast,
-  ROLE_BLURB,
-  type PlatformAuditRow,
-  type PlatformRole,
-  type PlatformStaff,
-  type PlatformTenant,
   type MyTenancy,
+  type PlatformRole,
+  type PlatformTenant,
 } from "../../lib/platform";
-import { Card, Fail, statusTone, INPUT } from "./kit";
+import { FormDialog } from "./dialogs";
+import { Card, ConsoleLink, Fail, INPUT, OrganisationName } from "./kit";
+import { OrganisationActions } from "./organisation-actions";
 
-/** Organisations, and everything done to one.
+/**
+ * Every organisation, and the way into each one's page.
  *
- * Ownership lives here too. It was a tab of its own for an action taken once
- * in the life of a company, and it belongs beside the company it transfers. */
+ * The actions on a row are the ones on the organisation's own page, from
+ * organisation-actions.tsx, so the list and the page cannot drift apart.
+ */
 
 export function Companies({ role }: { role: PlatformRole }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const mayOperate = atLeast(role, "operator");
 
   const [open, setOpen] = useState(false);
@@ -62,12 +37,10 @@ export function Companies({ role }: { role: PlatformRole }) {
     currency: "GBP",
     country: "GB",
   });
-  // The last invitation made here: whether it was emailed, and its link. Shown
-  // once, because the database keeps only a digest of the token inside it.
-  const [invitation, setInvitation] = useState<{
-    sent: InvitationSent;
-    onboarded: boolean;
-  } | null>(null);
+  // The last organisation onboarded here: whether its invitation was emailed,
+  // and its link. Shown once, because the database keeps only a digest of the
+  // token inside it.
+  const [invitation, setInvitation] = useState<InvitationSent | null>(null);
 
   const tenants = useQuery({
     queryKey: ["erp_platform_tenants"],
@@ -96,7 +69,7 @@ export function Companies({ role }: { role: PlatformRole }) {
     },
     onSuccess: (sent) => {
       setUncertainCode(null);
-      setInvitation({ sent, onboarded: true });
+      setInvitation(sent);
       setOpen(false);
       setForm({
         code: "",
@@ -110,38 +83,6 @@ export function Companies({ role }: { role: PlatformRole }) {
     },
   });
 
-  const setStatus = useMutation({
-    mutationFn: (v: { id: string; status: string; reason?: string }) =>
-      callErp("erp_platform_set_tenant_status", {
-        p_tenant_id: v.id,
-        p_status: v.status,
-        p_reason: v.reason ?? null,
-      }),
-    onSuccess: refresh,
-  });
-
-  // And erp_platform_invite_admin the same way, for a further administrator.
-  const invite = useMutation({
-    mutationFn: (request: PersonInviteRequest) => sendInvitation(request),
-    onError: (error) => {
-      if (error instanceof InviteOutcomeUnknown) void refresh();
-    },
-    onSuccess: (sent) => {
-      setInvitation({ sent, onboarded: false });
-      void refresh();
-    },
-  });
-  // Only when a person asks, after the function could not be reached.
-  const direct = useMutation({
-    mutationFn: (request: PersonInviteRequest) => createInvitationWithoutEmail(request),
-    onSuccess: (sent) => {
-      invite.reset();
-      setInvitation({ sent, onboarded: false });
-      void refresh();
-    },
-  });
-  const inviteUncertain =
-    invite.error instanceof InviteOutcomeUnknown ? invite.variables : undefined;
   const probablyCreated =
     uncertainCode !== null &&
     onboard.variables?.p_code.trim().toLowerCase() === uncertainCode.trim().toLowerCase() &&
@@ -151,8 +92,7 @@ export function Companies({ role }: { role: PlatformRole }) {
    * Which organisations you are currently inside.
    *
    * Entering grants you the administrator role there — a real grant on a real
-   * principal — and until now nothing in the product showed that, or offered a
-   * way out. Leaving revokes it.
+   * principal — so the row says so and offers Leave instead of Enter.
    */
   const mine = useQuery({
     queryKey: ["erp_platform_my_tenancies"],
@@ -160,88 +100,29 @@ export function Companies({ role }: { role: PlatformRole }) {
   });
   const inside = new Set((mine.data ?? []).filter((m) => m.is_active).map((m) => m.tenant_id));
 
-  const leave = useMutation({
-    mutationFn: (id: string) => callErp("erp_platform_leave_tenant", { p_tenant_id: id }),
-    onSuccess: () => queryClient.invalidateQueries(),
-  });
-
-  const enter = useMutation({
-    mutationFn: (v: { id: string; reason: string }) =>
-      callErp("erp_platform_enter_tenant", { p_tenant_id: v.id, p_reason: v.reason }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries();
-      void navigate({ to: "/" });
-    },
-  });
-
-  /**
-   * The one control here that removes data.
-   *
-   * "Mark ended" beside it writes a status and nothing else, which is why it no
-   * longer says Delete. This is the button that actually empties an organisation, so
-   * it asks for the code to be typed rather than accepting a click, and the
-   * database refuses it on an organisation that is still active.
-   */
-  const purge = useMutation({
-    mutationFn: (v: { id: string; code: string; reason: string }) =>
-      callErp<{ code: string }>("erp_platform_purge_tenant", {
-        p_tenant_id: v.id,
-        p_confirm_code: v.code,
-        p_reason: v.reason,
-      }),
-    onSuccess: refresh,
-  });
-
-  /** Finishes every deletion request whose grace period has elapsed. */
-  const sweep = useMutation({
-    mutationFn: (days: number) =>
-      callErp<{ purged: number }>("erp_platform_purge_due_tenants", { p_grace_days: days }),
-    onSuccess: refresh,
-  });
-
-  const busyError =
-    onboard.error ??
-    setStatus.error ??
-    (inviteUncertain ? null : invite.error) ??
-    enter.error ??
-    purge.error ??
-    sweep.error ??
-    tenants.error ??
-    null;
+  const rows = tenants.data ?? [];
 
   return (
     <div className="flex flex-col gap-5">
       {invitation ? (
         <InvitationOutcome
-          result={invitation.sent}
+          result={invitation}
           /* An organisation is handed over in setup, not finished: its first
              administrator is its only one, and nobody may approve their own
              change set once it is live. Saying so here is cheaper than the
              support ticket that asks why nothing can be installed. */
           note={
-            invitation.onboarded
-              ? "The organisation is in setup. It installs and configures freely until it has a " +
-                "second administrator and somebody takes it live."
-              : undefined
+            "The organisation is in setup. It installs and configures freely until it has a " +
+            "second administrator and somebody takes it live."
           }
         />
       ) : null}
-      {busyError ? <Fail error={busyError} /> : null}
+      {onboard.error ? <Fail error={onboard.error} /> : null}
       {probablyCreated ? (
         <p role="status" className="-mt-3 text-xs text-muted-foreground">
           The organisation was probably created by the earlier attempt, which could not reach the
           invitation service. Look for {onboard.variables?.p_code ?? "it"} in the list below.
         </p>
-      ) : null}
-      {inviteUncertain ? (
-        <div className="flex flex-col gap-2">
-          <Fail error={invite.error} />
-          <CreateWithoutEmail
-            busy={direct.isPending}
-            onCreate={() => direct.mutate(inviteUncertain)}
-          />
-          {direct.error ? <Fail error={direct.error} /> : null}
-        </div>
       ) : null}
 
       {mayOperate ? (
@@ -255,7 +136,7 @@ export function Companies({ role }: { role: PlatformRole }) {
               onClick={() => setOpen((v) => !v)}
               className={`${TOUCH} rounded-md border border-input px-3 text-sm font-medium`}
             >
-              {open ? "Close" : "New company"}
+              {open ? "Close" : "New organisation"}
             </button>
           }
         >
@@ -352,59 +233,34 @@ export function Companies({ role }: { role: PlatformRole }) {
       <Card
         title="Organisations"
         icon={<Building2 className="size-4 text-primary" />}
-        description="Every organisation on this deployment. Suspending and marking ended change a status; purging is the only thing here that removes data."
+        description="Every organisation on this deployment. Open one to see its plan, contract, invoices and people. Suspending and marking ended change a status; purging is the only thing here that removes data."
       >
-        {atLeast(role, "owner") ? (
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
-            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-              When an administrator requests deletion, their organisation is suspended and its keys
-              are destroyed, but its rows remain until they are purged. The sweep finishes every
-              request older than the grace period. Nothing runs it on a schedule yet.
-            </p>
-            <button
-              type="button"
-              disabled={sweep.isPending}
-              onClick={() => {
-                const days = window.prompt(
-                  "Purge every organisation whose deletion was requested more than how many days ago?",
-                  "7",
-                );
-                if (days === null) return;
-                const n = Number(days);
-                if (!Number.isFinite(n) || n < 0) return;
-                sweep.mutate(n);
-              }}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
-            >
-              <Trash2 className="size-3.5" />
-              {sweep.isPending ? "Sweeping…" : "Run deletion sweep"}
-            </button>
-          </div>
-        ) : null}
-
-        {sweep.isSuccess ? (
-          <p className="mb-3 text-xs text-muted-foreground">
-            Sweep purged {sweep.data?.purged ?? 0}{" "}
-            {(sweep.data?.purged ?? 0) === 1 ? "organisation" : "organisations"}.
-          </p>
-        ) : null}
+        {atLeast(role, "owner") ? <DeletionSweep /> : null}
 
         {tenants.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (tenants.data ?? []).length === 0 ? (
+        ) : tenants.error ? (
+          <Fail error={tenants.error} />
+        ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No organisations yet. Onboarding one is the first thing to do.
           </p>
         ) : (
-          <Table columns={["Organisation", "Status", "Owner", "People", "Structure", "Actions"]}>
-            {(tenants.data ?? []).map((t) => (
-              <tr key={t.id} className="border-b border-border/60 last:border-0">
+          <Table columns={["Organisation", "Owner", "People", "Structure", "Actions"]}>
+            {rows.map((t) => (
+              <tr key={t.id} className="border-b border-border/60 align-top last:border-0">
                 <td className="py-3 pr-4">
-                  <div className="font-medium">{t.name}</div>
-                  <div className="font-mono text-xs text-muted-foreground">{t.code}</div>
-                </td>
-                <td className="py-3 pr-4">
-                  <Pill tone={statusTone(t.status)}>{t.status}</Pill>
+                  <OrganisationName name={t.name} code={t.code} status={t.status}>
+                    <ConsoleLink
+                      section="customers"
+                      view="organisations"
+                      org={t.code}
+                      className="inline-flex items-center gap-0.5 font-medium underline-offset-2 hover:underline"
+                    >
+                      {t.name}
+                      <ChevronRight className="size-3.5 text-muted-foreground" />
+                    </ConsoleLink>
+                  </OrganisationName>
                 </td>
                 <td className="py-3 pr-4 text-xs">
                   {t.owner_email ? (
@@ -434,132 +290,82 @@ export function Companies({ role }: { role: PlatformRole }) {
                   {t.sites === 1 ? "site" : "sites"}
                 </td>
                 <td className="py-3 pr-0">
-                  <div className="flex flex-wrap gap-2">
-                    {inside.has(t.id) ? (
-                      <button
-                        type="button"
-                        disabled={leave.isPending}
-                        onClick={() => leave.mutate(t.id)}
-                        title="Ends your access and revokes the administrator role it granted you"
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/5 px-2 py-1 text-xs font-medium disabled:opacity-60"
-                      >
-                        <LogOut className="size-3.5" />
-                        Leave
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const reason = window.prompt(
-                            `Why are you entering ${t.name}? This is recorded against your name.`,
-                          );
-                          if (reason && reason.trim()) enter.mutate({ id: t.id, reason });
-                        }}
-                        className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
-                      >
-                        <LogIn className="size-3.5" />
-                        Enter
-                      </button>
-                    )}
-
-                    {mayOperate ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const email = window.prompt(`Invite an administrator to ${t.name}:`);
-                            if (!email) return;
-                            const name = window.prompt("Their name:")?.trim() || email;
-                            direct.reset();
-                            invite.mutate({
-                              door: "erp_platform_invite_admin",
-                              args: { p_tenant_id: t.id, p_email: email, p_display_name: name },
-                            });
-                          }}
-                          className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
-                        >
-                          <UserPlus className="size-3.5" />
-                          Invite admin
-                        </button>
-
-                        {t.status === "suspended" ? (
-                          <button
-                            type="button"
-                            onClick={() => setStatus.mutate({ id: t.id, status: "active" })}
-                            className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
-                          >
-                            <Play className="size-3.5" />
-                            Reactivate
-                          </button>
-                        ) : t.status === "active" ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const reason = window.prompt(`Why is ${t.name} being suspended?`);
-                              if (reason)
-                                setStatus.mutate({ id: t.id, status: "suspended", reason });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
-                          >
-                            <Pause className="size-3.5" />
-                            Suspend
-                          </button>
-                        ) : null}
-
-                        {/* A status, and only a status. It used to say Delete
-                            and remove nothing, which is the whole reason
-                            organisations piled up here. */}
-                        {atLeast(role, "owner") && t.status !== "deleted" ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const reason = window.prompt(
-                                `Mark ${t.name} as ended? This records a status and removes no ` +
-                                  `data — purging is a separate step. Reason:`,
-                              );
-                              if (reason) setStatus.mutate({ id: t.id, status: "deleted", reason });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
-                          >
-                            <Archive className="size-3.5" />
-                            Mark ended
-                          </button>
-                        ) : null}
-
-                        {/* This one empties it. Owner only, refused by the
-                            database on an active company, and the code has to
-                            be typed rather than a dialog dismissed. */}
-                        {atLeast(role, "owner") && t.status !== "active" ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const code = window.prompt(
-                                `Purge ${t.name} permanently?\n\n` +
-                                  `Every row belonging to it is removed and cannot be recovered. ` +
-                                  `Export first if the data is wanted.\n\n` +
-                                  `Type its code (${t.code}) to confirm:`,
-                              );
-                              if (!code) return;
-                              const reason = window.prompt("Why is it being purged?");
-                              if (reason && reason.trim()) purge.mutate({ id: t.id, code, reason });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
-                          >
-                            <Trash2 className="size-3.5" />
-                            Purge
-                          </button>
-                        ) : null}
-                      </>
-                    ) : null}
-
-                    <OfferOwnership tenant={t} role={role} />
-                  </div>
+                  <OrganisationActions tenant={t} role={role} inside={inside.has(t.id)} />
                 </td>
               </tr>
             ))}
           </Table>
         )}
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Finishes every deletion request whose grace period has elapsed.
+ *
+ * When an administrator requests deletion, their organisation is suspended and
+ * its keys destroyed, but its rows stay until they are purged. Nothing runs
+ * this on a schedule yet.
+ */
+function DeletionSweep() {
+  const queryClient = useQueryClient();
+  const [days, setDays] = useState("7");
+  const n = Number(days);
+  const valid = days.trim() !== "" && Number.isInteger(n) && n >= 0;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+      <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+        When an administrator requests deletion, their organisation is suspended and its keys are
+        destroyed, but its rows remain until they are purged. The sweep purges every request older
+        than the grace period. Nothing runs it on a schedule yet.
+      </p>
+      <FormDialog
+        trigger={
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium"
+          >
+            <Trash2 className="size-3.5" />
+            Run deletion sweep
+          </button>
+        }
+        title="Run the deletion sweep"
+        description="Every organisation whose administrator asked for deletion longer ago than the grace period is purged, permanently. Organisations nobody asked to delete are not touched."
+        submitLabel="Purge what is due"
+        busyLabel="Sweeping…"
+        danger
+        ready={valid}
+        run={() =>
+          callErp<{ purged: number }>("erp_platform_purge_due_tenants", { p_grace_days: n })
+        }
+        onDone={() => void queryClient.invalidateQueries()}
+        done={(result) => (
+          <p role="status" className="text-sm">
+            The sweep purged {result?.purged ?? 0}{" "}
+            {(result?.purged ?? 0) === 1 ? "organisation" : "organisations"}.
+          </p>
+        )}
+        onClosed={() => setDays("7")}
+      >
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Grace period, in days
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+            className={INPUT}
+          />
+          <span className="text-xs font-normal text-muted-foreground">
+            {valid
+              ? `Purges deletion requests made more than ${n} ${n === 1 ? "day" : "days"} ago.`
+              : "A whole number of days, 0 or more."}
+          </span>
+        </label>
+      </FormDialog>
     </div>
   );
 }

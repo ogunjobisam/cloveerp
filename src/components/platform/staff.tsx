@@ -38,6 +38,7 @@ import {
   usableReason,
   type SelfServiceChange,
 } from "../../lib/self-service";
+import { ReasonDialog } from "./dialogs";
 import { Card, Fail, TokenNotice, statusTone, INPUT } from "./kit";
 
 /** Who may work on the platform, and who may make an organisation without being invited. */
@@ -73,13 +74,7 @@ export function Staff({ role }: { role: PlatformRole }) {
     onSuccess: refresh,
   });
 
-  const revoke = useMutation({
-    mutationFn: (v: { id: string; reason: string }) =>
-      callErp("erp_platform_revoke_staff", { p_id: v.id, p_reason: v.reason }),
-    onSuccess: refresh,
-  });
-
-  const err = add.error ?? setRole.error ?? revoke.error ?? staff.error ?? null;
+  const err = add.error ?? setRole.error ?? staff.error ?? null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -178,16 +173,27 @@ export function Staff({ role }: { role: PlatformRole }) {
                         <option value="operator">operator</option>
                         <option value="support">support</option>
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const reason = window.prompt(`Remove ${s.display_name}? Reason:`);
-                          if (reason) revoke.mutate({ id: s.id, reason });
-                        }}
-                        className="rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
-                      >
-                        Remove
-                      </button>
+                      <ReasonDialog
+                        trigger={
+                          <button
+                            type="button"
+                            className="rounded-md border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive"
+                          >
+                            Remove
+                          </button>
+                        }
+                        title={`Remove ${s.display_name} from the platform`}
+                        description={`${s.email} loses the ${s.role} role and can no longer open this console. Their past actions stay in Activity.`}
+                        reasonLabel="Why are they being removed?"
+                        placeholder="For example: left the company on 12 September"
+                        submitLabel="Remove"
+                        busyLabel="Removing…"
+                        danger
+                        run={(reason) =>
+                          callErp("erp_platform_revoke_staff", { p_id: s.id, p_reason: reason })
+                        }
+                        onDone={() => void refresh()}
+                      />
                     </div>
                   ) : null}
                 </td>

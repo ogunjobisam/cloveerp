@@ -1,32 +1,41 @@
-import { friendlyError } from "@/lib/errors";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
+  BookOpen,
   Building2,
-  FileSignature,
-  Gavel,
-  HeartPulse,
-  LayoutDashboard,
+  CalendarCheck,
+  Handshake,
+  ReceiptText,
   ShieldCheck,
-  Users,
+  Server,
 } from "lucide-react";
 
 import { Wordmark } from "../components/erp/logo";
-import { Ownership } from "../components/erp/ownership";
 import { Pill } from "../components/erp/panel";
 import { TOUCH } from "../components/erp/page";
 import { callErp, isConfigured, supabase } from "../lib/erp";
 import { ROLE_BLURB, usePlatformMe, type PlatformRole } from "../lib/platform";
+import {
+  CONSOLE_SECTIONS,
+  consoleSearch,
+  locate,
+  parseConsoleSearch,
+  type ConsoleView,
+  type SectionKey,
+  type ViewKey,
+} from "../lib/platform-console";
 import { Card, Fail } from "../components/platform/kit";
-import { Companies } from "../components/platform/organisations";
+import { Companies, Ownership } from "../components/platform/organisations";
+import { OrganisationPage } from "../components/platform/organisation";
 import { Staff } from "../components/platform/staff";
 import { Activity } from "../components/platform/activity";
 import { Decisions } from "../components/platform/decisions";
 import { Enquiries } from "../components/platform/enquiries";
 import { Plans } from "../components/platform/plans";
-import { Overview } from "../components/platform/overview";
+import { Today } from "../components/platform/today";
+import { HealthSummary } from "../components/platform/health-summary";
 import { Diagnostics } from "../components/platform/diagnostics";
 import { Queue } from "../components/platform/queue";
 import { Deployment } from "../components/platform/deployment";
@@ -34,6 +43,7 @@ import { Incidents } from "../components/platform/incidents";
 import { Contracts } from "../components/platform/contracts";
 import { Quotes } from "../components/platform/quotes";
 import { Revenue } from "../components/platform/revenue";
+import { SellingPage } from "../components/platform/catalogue";
 
 /**
  * The platform console.
@@ -44,21 +54,23 @@ import { Revenue } from "../components/platform/revenue";
  * console that only appeared once you belonged somewhere would be unreachable
  * exactly when it is needed.
  *
- * FOUR AREAS, NOT NINE TABS
+ * SECTIONS BY JOB, AND THE PLACE IN THE ADDRESS
  *
- * This began as five equally-weighted tabs and would have become nine. Nine
- * answers "where is everything" and never answers "what should I look at",
- * which is the question somebody opening a console actually has. So the areas
- * are grouped the way the app shell groups its navigation, and Overview is the
- * landing view: it reads across every organisation and links into the area that
- * fixes whatever it found.
+ * The sections are the jobs of running the business — Today, Customers, Sales,
+ * Catalogue, Billing, Platform — rather than the areas the code was written in,
+ * and the console opens on Today: what needs doing, each with a button to the
+ * tab that does it.
  *
- * The panels themselves live in components/platform. This file is the shell,
- * the auth gate and the rail — it was 1,037 lines and would have been twice
- * that.
+ * Where you are is in the URL (?section=…&view=…&org=…), read by
+ * src/lib/platform-console.ts, so every place can be linked to, bookmarked and
+ * returned to with Back. An address that names nowhere opens Today.
+ *
+ * The panels live in components/platform. This file is the shell, the auth gate
+ * and the navigation.
  */
 
 export const Route = createFileRoute("/platform")({
+  validateSearch: parseConsoleSearch,
   head: () => ({
     meta: [
       { title: "Platform console — Clove ERP" },
@@ -80,75 +92,41 @@ export const Route = createFileRoute("/platform")({
   component: PlatformConsole,
 });
 
-/**
- * The four jobs this console has. Ownership sits under Organisations because it
- * is an action taken once in the life of a company and belongs beside the
- * company it transfers, not in a tab of its own.
- */
-type AreaKey = "overview" | "organisations" | "commercial" | "health" | "governance";
+const ICONS: Record<SectionKey, ReactNode> = {
+  today: <CalendarCheck className="size-4" />,
+  customers: <Building2 className="size-4" />,
+  sales: <Handshake className="size-4" />,
+  catalogue: <BookOpen className="size-4" />,
+  billing: <ReceiptText className="size-4" />,
+  platform: <Server className="size-4" />,
+};
 
-const AREAS: {
-  key: AreaKey;
-  label: string;
-  blurb: string;
-  icon: ReactNode;
-  views: { key: string; label: string }[];
-}[] = [
-  {
-    key: "overview",
-    label: "Overview",
-    blurb: "What needs you, across every organisation.",
-    icon: <LayoutDashboard className="size-4" />,
-    views: [{ key: "overview", label: "Overview" }],
-  },
-  {
-    key: "organisations",
-    label: "Organisations",
-    blurb: "The companies on this deployment, and everything done to one.",
-    icon: <Building2 className="size-4" />,
-    views: [
-      { key: "organisations", label: "All organisations" },
-      { key: "ownership", label: "Ownership transfers" },
-      { key: "plans", label: "Plans and subscriptions" },
-    ],
-  },
-  {
-    key: "commercial",
-    label: "Commercial",
-    blurb:
-      "Contracts with the organisations on this deployment, what each provisions, and what they add up to.",
-    icon: <FileSignature className="size-4" />,
-    views: [
-      { key: "quotes", label: "Quotes" },
-      { key: "contracts", label: "Contracts" },
-      { key: "revenue", label: "Revenue and renewals" },
-      { key: "enquiries", label: "Enquiries" },
-    ],
-  },
-  {
-    key: "health",
-    label: "Health",
-    blurb: "Whether this deployment is sound, doing its work, and up to date.",
-    icon: <HeartPulse className="size-4" />,
-    views: [
-      { key: "diagnostics", label: "Diagnostics" },
-      { key: "queue", label: "Jobs and queue" },
-      { key: "deployment", label: "Deployment" },
-      { key: "incidents", label: "Incidents and notices" },
-    ],
-  },
-  {
-    key: "governance",
-    label: "Governance",
-    blurb: "Who may work here, what they did, and what was decided.",
-    icon: <Gavel className="size-4" />,
-    views: [
-      { key: "staff", label: "Staff" },
-      { key: "activity", label: "Activity" },
-      { key: "decisions", label: "Decisions" },
-    ],
-  },
-];
+type ViewContext = { role: PlatformRole; org: string | null };
+
+/**
+ * Every tab's panel. Keyed by the view keys in platform-console.ts, so a tab
+ * added there without a panel here does not compile.
+ */
+const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
+  today: () => <Today />,
+  organisations: ({ role, org }) =>
+    org ? <OrganisationPage code={org} role={role} /> : <Companies role={role} />,
+  ownership: () => <Ownership />,
+  enquiries: ({ role }) => <Enquiries role={role} />,
+  quotes: ({ role }) => <Quotes role={role} />,
+  contracts: ({ role }) => <Contracts role={role} />,
+  selling: ({ role }) => <SellingPage role={role} />,
+  plans: () => <Plans />,
+  revenue: ({ role }) => <Revenue role={role} />,
+  health: () => <HealthSummary />,
+  diagnostics: () => <Diagnostics />,
+  queue: () => <Queue />,
+  deployment: () => <Deployment />,
+  incidents: () => <Incidents />,
+  staff: ({ role }) => <Staff role={role} />,
+  activity: () => <Activity />,
+  decisions: () => <Decisions />,
+};
 
 function Frame({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
@@ -177,11 +155,22 @@ function Frame({ children, right }: { children: ReactNode; right?: ReactNode }) 
   );
 }
 
+/** The tabs of a section, in their groups where it has any. */
+function groupsOf(views: readonly ConsoleView[]): { group: string | null; views: ConsoleView[] }[] {
+  const out: { group: string | null; views: ConsoleView[] }[] = [];
+  for (const v of views) {
+    const group = v.group ?? null;
+    const last = out[out.length - 1];
+    if (last && last.group === group) last.views.push(v);
+    else out.push({ group, views: [v] });
+  }
+  return out;
+}
+
 function PlatformConsole() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [area, setArea] = useState<AreaKey>("overview");
-  const [view, setView] = useState<string | null>(null);
+  const search = Route.useSearch();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -292,17 +281,7 @@ function PlatformConsole() {
   }
 
   const role = me.data.role as PlatformRole;
-
-  const current = AREAS.find((a) => a.key === area) ?? AREAS[0]!;
-  const currentView =
-    view && current.views.some((v) => v.key === view) ? view : current.views[0]!.key;
-
-  const go = (next: string) => {
-    const target = AREAS.find((a) => a.key === next);
-    if (!target) return;
-    setArea(target.key);
-    setView(target.views[0]!.key);
-  };
+  const { section, view, org } = locate(search);
 
   return (
     <Frame
@@ -317,71 +296,75 @@ function PlatformConsole() {
     >
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* The rail. Horizontal and scrollable below lg, because a console read
-            on a phone at 2am is a real thing that happens. */}
-        <nav className="lg:w-52 lg:shrink-0">
+            on a phone at 2am is a real thing that happens. Links, not buttons:
+            each section is an address that can be opened in a new tab. */}
+        <nav aria-label="Console sections" className="lg:w-52 lg:shrink-0">
           <ul className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-            {AREAS.map((a) => (
-              <li key={a.key} className="shrink-0 lg:shrink">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setArea(a.key);
-                    setView(a.views[0]!.key);
-                  }}
-                  className={`${TOUCH} flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium ${
-                    area === a.key ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  {a.icon}
-                  {a.label}
-                </button>
-              </li>
-            ))}
+            {CONSOLE_SECTIONS.map((s) => {
+              const current = s.key === section.key;
+              return (
+                <li key={s.key} className="shrink-0 lg:shrink">
+                  <Link
+                    to="/platform"
+                    search={consoleSearch(s.key)}
+                    aria-current={current ? "page" : undefined}
+                    className={`${TOUCH} flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium ${
+                      current ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                    }`}
+                  >
+                    {ICONS[s.key]}
+                    {s.label}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 
         <div className="min-w-0 flex-1">
           <div className="mb-5">
-            <h1 className="font-display text-2xl font-semibold tracking-tight">{current.label}</h1>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">{section.label}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {current.blurb} {area === "overview" ? ROLE_BLURB[role] : ""}
+              {section.blurb} {section.key === "today" ? ROLE_BLURB[role] : ""}
             </p>
           </div>
 
-          {/* A second level only where an area genuinely holds more than one
-              thing. A single-view area shows no chrome for choosing it. */}
-          {current.views.length > 1 ? (
-            <nav className="mb-5 flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">
-              {current.views.map((v) => (
-                <button
-                  key={v.key}
-                  type="button"
-                  onClick={() => setView(v.key)}
-                  className={`${TOUCH} shrink-0 rounded-md px-3 text-sm font-medium ${
-                    currentView === v.key ? "bg-muted" : "hover:bg-muted/60"
-                  }`}
-                >
-                  {v.label}
-                </button>
+          {/* A second level only where a section genuinely holds more than one
+              thing. A single-view section shows no chrome for choosing it. */}
+          {section.views.length > 1 ? (
+            <nav
+              aria-label={`${section.label} tabs`}
+              className="mb-5 flex flex-wrap gap-x-3 gap-y-1 overflow-x-auto rounded-lg border border-border bg-card p-1"
+            >
+              {groupsOf(section.views).map((g) => (
+                <div key={g.group ?? "tabs"} className="flex min-w-0 items-center gap-1">
+                  {g.group ? (
+                    <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {g.group}
+                    </span>
+                  ) : null}
+                  {g.views.map((v) => {
+                    const current = v.key === view.key;
+                    return (
+                      <Link
+                        key={v.key}
+                        to="/platform"
+                        search={consoleSearch(section.key, v.key as ViewKey)}
+                        aria-current={current ? "page" : undefined}
+                        className={`${TOUCH} inline-flex shrink-0 items-center rounded-md px-3 text-sm font-medium ${
+                          current ? "bg-muted" : "hover:bg-muted/60"
+                        }`}
+                      >
+                        {v.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               ))}
             </nav>
           ) : null}
 
-          {currentView === "overview" ? <Overview onGo={go} /> : null}
-          {currentView === "organisations" ? <Companies role={role} /> : null}
-          {currentView === "ownership" ? <Ownership /> : null}
-          {currentView === "diagnostics" ? <Diagnostics /> : null}
-          {currentView === "queue" ? <Queue /> : null}
-          {currentView === "deployment" ? <Deployment /> : null}
-          {currentView === "incidents" ? <Incidents /> : null}
-          {currentView === "staff" ? <Staff role={role} /> : null}
-          {currentView === "activity" ? <Activity /> : null}
-          {currentView === "decisions" ? <Decisions /> : null}
-          {currentView === "plans" ? <Plans /> : null}
-          {currentView === "quotes" ? <Quotes role={role} /> : null}
-          {currentView === "contracts" ? <Contracts role={role} /> : null}
-          {currentView === "revenue" ? <Revenue role={role} /> : null}
-          {currentView === "enquiries" ? <Enquiries role={role} /> : null}
+          {PANELS[view.key]({ role, org })}
         </div>
       </div>
     </Frame>

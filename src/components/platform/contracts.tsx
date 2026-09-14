@@ -6,14 +6,15 @@ import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import type { PlatformRole } from "../../lib/platform";
+import { describeChanges, describeTermination, describeUplift } from "../../lib/contract-terms";
+import { DraftAmendment } from "./amendment-form";
 import { Card, Fail, INPUT } from "./kit";
-import { SellingSetup } from "./selling";
 
 /**
  * Contracts. Specification v1.5 §17.5, §17.8 and §17.9.
  *
- * Selling is set up here (§17.5): the platform's own organisation and its
- * price list, in selling.tsx. A contract is
+ * Selling is set up under Catalogue (§17.5): the platform's own organisation
+ * and its price list, in selling.tsx. A contract is
  * created from an accepted quote and nothing else; signing it provisions the
  * subscription directly (§17.9, D35); every change after that is an
  * amendment with its own signature. Key dates are structured fields with a
@@ -276,8 +277,6 @@ export function Contracts({ role }: { role: PlatformRole }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SellingSetup role={role} />
-
       {selected ? (
         <ContractDetail id={selected} mayWrite={mayWrite} onBack={() => setSelected(null)} />
       ) : (
@@ -624,12 +623,6 @@ function ContractDetail({
   });
   const invalidates = ["erp_platform_contract", "erp_platform_contracts"];
   const [sig, setSig] = useState({ customer: "", platform: "", meaning: "" });
-  const [amendTitle, setAmendTitle] = useState("");
-  const [amendFrom, setAmendFrom] = useState("");
-  const [amendChanges, setAmendChanges] = useState(
-    '{"entitlements": [{"code": "users", "limit_value": 250}]}',
-  );
-  const [amendWhy, setAmendWhy] = useState("");
   const [amendSig, setAmendSig] = useState<
     Record<string, { customer: string; platform: string; meaning: string }>
   >({});
@@ -703,10 +696,17 @@ function ContractDetail({
           </dd>
           <dt className="text-muted-foreground">Renewal</dt>
           <dd>
-            {c.renewal_kind} · {c.notice_days} days' notice · uplift {JSON.stringify(c.uplift_rule)}
+            {c.renewal_kind.replace(/_/g, " ")} · {c.notice_days} days' notice ·{" "}
+            {describeUplift(c.uplift_rule)}
           </dd>
           <dt className="text-muted-foreground">Termination</dt>
-          <dd className="text-xs text-muted-foreground">{JSON.stringify(c.termination_terms)}</dd>
+          <dd>
+            <ul className="flex flex-col gap-0.5">
+              {describeTermination(c.termination_terms).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </dd>
           <dt className="text-muted-foreground">Subscription</dt>
           <dd>
             {c.subscription ? (
@@ -933,9 +933,13 @@ function ContractDetail({
                   {a.signed_at ? <Pill tone="ok">signed</Pill> : <Pill tone="warn">unsigned</Pill>}
                   {a.provisioned_at ? <Pill tone="ok">provisioned</Pill> : null}
                 </div>
-                <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">
-                  {JSON.stringify(a.changes, null, 1)}
-                </pre>
+                <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-5 text-sm">
+                  {describeChanges(a.changes, (minor) => money(minor, c.currency)).map(
+                    (line, n) => (
+                      <li key={`${n}-${line}`}>{line}</li>
+                    ),
+                  )}
+                </ul>
                 {a.rationale ? (
                   <p className="mt-1 text-xs text-muted-foreground">{a.rationale}</p>
                 ) : null}
@@ -969,64 +973,7 @@ function ContractDetail({
         )}
         {mayWrite && (c.status === "active" || c.status === "terminating") ? (
           <div className="mt-4">
-            <Form
-              label="Draft an amendment"
-              fn="erp_platform_amend_contract"
-              invalidates={invalidates}
-              build={() => {
-                try {
-                  const changes = JSON.parse(amendChanges) as Record<string, unknown>;
-                  return amendTitle && amendFrom
-                    ? {
-                        p_contract_id: id,
-                        p_title: amendTitle,
-                        p_effective_from: amendFrom,
-                        p_changes: changes,
-                        p_rationale: amendWhy || null,
-                      }
-                    : null;
-                } catch {
-                  return null;
-                }
-              }}
-            >
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="block text-xs font-medium">
-                  Title
-                  <input
-                    className={INPUT}
-                    value={amendTitle}
-                    onChange={(e) => setAmendTitle(e.target.value)}
-                  />
-                </label>
-                <label className="block text-xs font-medium">
-                  Effective from
-                  <input
-                    type="date"
-                    className={INPUT}
-                    value={amendFrom}
-                    onChange={(e) => setAmendFrom(e.target.value)}
-                  />
-                </label>
-              </div>
-              <label className="block text-xs font-medium">
-                Changes, as JSON: plan_code, entitlements [code, limit_value], capabilities [code,
-                action], term_end, annual_value_minor, renewal_kind, notice_days, uplift_rule
-                <textarea
-                  className={`${INPUT} min-h-24 font-mono`}
-                  value={amendChanges}
-                  onChange={(e) => setAmendChanges(e.target.value)}
-                />
-              </label>
-              <label className="block text-xs font-medium">
-                Rationale
-                <input
-                  className={INPUT}
-                  value={amendWhy}
-                  onChange={(e) => setAmendWhy(e.target.value)}
-                />
-              </label>
-            </Form>
+            <DraftAmendment contractId={id} contract={c} invalidates={invalidates} />
           </div>
         ) : null}
       </Card>

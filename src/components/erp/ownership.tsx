@@ -11,6 +11,7 @@ import {
   type PlatformStaff,
   type PlatformTenant,
 } from "../../lib/platform";
+import { ReasonDialog } from "../platform/dialogs";
 import { Pill, Table } from "./panel";
 import { TOUCH } from "./page";
 
@@ -175,18 +176,9 @@ export function Ownership() {
     onSuccess: () => queryClient.invalidateQueries(),
   });
 
-  const withdraw = useMutation({
-    mutationFn: (v: { id: string; reason?: string | undefined }) =>
-      callErp("erp_platform_cancel_ownership_transfer", {
-        p_transfer_id: v.id,
-        p_reason: v.reason ?? null,
-      }),
-    onSuccess: () => queryClient.invalidateQueries(),
-  });
-
   const rows = transfers.data ?? [];
   const mine = rows.filter((r) => r.is_mine_to_answer);
-  const error = transfers.error ?? respond.error ?? withdraw.error ?? null;
+  const error = transfers.error ?? respond.error ?? null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -229,18 +221,28 @@ export function Ownership() {
                   >
                     Accept
                   </button>
-                  <button
-                    type="button"
-                    disabled={respond.isPending}
-                    onClick={() => {
-                      const note = window.prompt(`Why are you declining ${r.tenant_name}?`);
-                      if (note !== null)
-                        respond.mutate({ id: r.id, accept: false, note: note || undefined });
-                    }}
-                    className={BTN}
-                  >
-                    Decline
-                  </button>
+                  <ReasonDialog
+                    trigger={
+                      <button type="button" disabled={respond.isPending} className={BTN}>
+                        Decline
+                      </button>
+                    }
+                    title={`Decline ${r.tenant_name ?? "this organisation"}`}
+                    description="It stays with the owner who offered it, and the declined offer stays in the handover history."
+                    reasonLabel="Why are you declining?"
+                    placeholder="Shown to the owner who offered it"
+                    required={false}
+                    submitLabel="Decline the offer"
+                    busyLabel="Declining…"
+                    run={(note) =>
+                      callErp("erp_platform_respond_ownership_transfer", {
+                        p_transfer_id: r.id,
+                        p_accept: false,
+                        p_note: note || null,
+                      })
+                    }
+                    onDone={() => void queryClient.invalidateQueries()}
+                  />
                 </div>
               </div>
             ))}
@@ -261,7 +263,7 @@ export function Ownership() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No company has been handed over yet. Offer one from the Companies tab.
+              No organisation has been handed over yet. Offer one from All organisations.
             </p>
           ) : (
             <Table columns={["Company", "From", "To", "Status", "When", ""]}>
@@ -289,18 +291,26 @@ export function Ownership() {
                   </td>
                   <td className="py-3 pr-0">
                     {r.is_mine_to_withdraw ? (
-                      <button
-                        type="button"
-                        disabled={withdraw.isPending}
-                        onClick={() => {
-                          const reason = window.prompt("Why are you withdrawing this offer?");
-                          if (reason !== null)
-                            withdraw.mutate({ id: r.id, reason: reason || undefined });
-                        }}
-                        className={BTN}
-                      >
-                        Withdraw
-                      </button>
+                      <ReasonDialog
+                        trigger={
+                          <button type="button" className={BTN}>
+                            Withdraw
+                          </button>
+                        }
+                        title="Withdraw the offer"
+                        description={`${r.tenant_name ?? "The organisation"} stays with you, and the withdrawn offer stays in the handover history.`}
+                        reasonLabel="Why are you withdrawing it?"
+                        required={false}
+                        submitLabel="Withdraw the offer"
+                        busyLabel="Withdrawing…"
+                        run={(reason) =>
+                          callErp("erp_platform_cancel_ownership_transfer", {
+                            p_transfer_id: r.id,
+                            p_reason: reason || null,
+                          })
+                        }
+                        onDone={() => void queryClient.invalidateQueries()}
+                      />
                     ) : null}
                   </td>
                 </tr>

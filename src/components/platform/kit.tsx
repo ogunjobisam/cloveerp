@@ -2,7 +2,42 @@ import { friendlyError } from "@/lib/errors";
 import { useState, type ReactNode } from "react";
 import { Copy } from "lucide-react";
 
+import { Link } from "@tanstack/react-router";
+
 import { TOUCH } from "../erp/page";
+import { Pill } from "../erp/panel";
+import {
+  consoleSearch,
+  isDemoCode,
+  type SectionKey,
+  type ViewKey,
+} from "../../lib/platform-console";
+
+/**
+ * A link to a place in the console. A real link, so it can be opened in a new
+ * tab and bookmarked, and Back returns from it.
+ */
+export function ConsoleLink({
+  section,
+  view,
+  org,
+  className,
+  children,
+}: {
+  section: SectionKey;
+  view?: ViewKey | undefined;
+  org?: string | undefined;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link to="/platform" search={consoleSearch(section, view, org)} className={className}>
+      {children}
+    </Link>
+  );
+}
+
+export const LINK_BUTTON = `${TOUCH} inline-flex items-center justify-center gap-1.5 rounded-md border border-input px-3 text-sm font-medium hover:bg-muted`;
 
 /**
  * The console's shared furniture.
@@ -99,4 +134,45 @@ export function statusTone(status: string): "ok" | "warn" | "bad" | "muted" {
   if (status === "suspended") return "warn";
   if (status === "deleted") return "bad";
   return "muted";
+}
+
+/**
+ * An organisation's status in words. `deleted` is what the database calls an
+ * organisation marked ended, whose data is still held until it is purged, and
+ * "deleted" on screen said something that had not happened.
+ */
+export function statusLabel(status: string): string {
+  if (status === "active") return "Active";
+  if (status === "suspended") return "Suspended";
+  if (status === "deleted") return "Ended";
+  return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
+}
+
+/**
+ * An organisation as a person recognises it: its name first, its code quietly
+ * after, and a Demo pill on a demonstration so nobody mistakes one for a
+ * customer.
+ */
+export function OrganisationName({
+  name,
+  code,
+  status,
+  children,
+}: {
+  name: string;
+  code: string;
+  status?: string;
+  /** The name as a link, when it leads somewhere; the plain name otherwise. */
+  children?: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-sm font-medium">{children ?? name}</span>
+        {isDemoCode(code) ? <Pill tone="muted">Demo</Pill> : null}
+        {status ? <Pill tone={statusTone(status)}>{statusLabel(status)}</Pill> : null}
+      </div>
+      <div className="font-mono text-[11px] text-muted-foreground">{code}</div>
+    </div>
+  );
 }

@@ -26,7 +26,7 @@ import {
   type PriceItem,
   type QuoteLine,
 } from "../../lib/quote-builder";
-import { Card, Fail, INPUT } from "./kit";
+import { Card, ConsoleLink, Fail, INPUT, LINK_BUTTON } from "./kit";
 import type { CommercialState } from "./selling";
 
 /**
@@ -184,9 +184,12 @@ export function Quotes({ role }: { role: PlatformRole }) {
     return (
       <Card title="Quotes" icon={<FileText className="size-4 text-primary" />}>
         <p className="text-sm text-muted-foreground">
-          Quotes are built from Clove ERP&apos;s price list. Set selling up first under Catalogue:
-          choose Clove ERP&apos;s own organisation and load the price list.
+          Quotes are built from Clove ERP&apos;s price list. Set selling up first: choose Clove
+          ERP&apos;s own organisation and load the price list.
         </p>
+        <ConsoleLink section="catalogue" view="selling" className={`${LINK_BUTTON} mt-3`}>
+          Set up selling
+        </ConsoleLink>
       </Card>
     );
   }
@@ -197,8 +200,16 @@ export function Quotes({ role }: { role: PlatformRole }) {
       <Card title="Quotes" icon={<FileText className="size-4 text-primary" />}>
         <p className="text-sm">
           Quotes are built inside {name}, and you are not a member of it. Invite yourself as its
-          administrator under Customers, accept the invitation, then come back.
+          administrator from its page, accept the invitation, then come back.
         </p>
+        <ConsoleLink
+          section="customers"
+          view="organisations"
+          org={platform.tenant_code}
+          className={`${LINK_BUTTON} mt-3`}
+        >
+          Open {name}
+        </ConsoleLink>
       </Card>
     );
   }
@@ -1339,14 +1350,24 @@ function ContractFromQuote({
       description="From the accepted quote. It is drafted here and signed under Contracts, which sets up the organisation's subscription."
     >
       {done ? (
-        <p className="text-sm" role="status">
-          The contract is drafted. Sign it under Sales → Contracts to switch the subscription on.
-        </p>
+        <div>
+          <p className="text-sm" role="status">
+            The contract is drafted. Sign it under Contracts to switch the subscription on.
+          </p>
+          <ConsoleLink section="sales" view="contracts" className={`${LINK_BUTTON} mt-3`}>
+            Open Contracts
+          </ConsoleLink>
+        </div>
       ) : customers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {quote.party_name ?? "The customer"} is not an organisation on Clove ERP yet. Onboard them
-          under Customers, then come back to make the contract.
-        </p>
+        <div>
+          <p className="text-sm text-muted-foreground">
+            {quote.party_name ?? "The customer"} is not an organisation on Clove ERP yet. Onboard
+            them under Customers, then come back to make the contract.
+          </p>
+          <ConsoleLink section="customers" view="organisations" className={`${LINK_BUTTON} mt-3`}>
+            Open Customers
+          </ConsoleLink>
+        </div>
       ) : (
         <form
           className="flex flex-col gap-3"
