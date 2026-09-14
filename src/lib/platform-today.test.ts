@@ -6,13 +6,16 @@ import {
   enquiryCards,
   healthSummary,
   incidentCards,
+  invoiceCards,
   listNames,
   organisationCards,
   priceListLoaded,
   revenueCards,
   sellingCards,
   summariseToday,
+  supportWindowCards,
   transferCards,
+  type OpenInvoiceRow,
   type RevenueRead,
   type TodayCard,
 } from "./platform-today";
@@ -120,7 +123,7 @@ describe("renewals and invoices", () => {
     expect(revenueCards(QUIET_REVENUE)).toEqual([]);
   });
 
-  test("renewals to decide, contracts at risk and unpaid invoices each have a card", () => {
+  test("renewals to decide and contracts at risk each have a card", () => {
     const cards = revenueCards({
       renewals: [
         { status: "proposed", tenant_code: "acme" },
@@ -132,14 +135,120 @@ describe("renewals and invoices", () => {
       invoices: { issued_minor: 120_000 },
       gross_margin: [{ currency: "GBP" }],
     });
-    expect(cards.map((c) => c.key)).toEqual(["renewals", "at-risk", "unpaid"]);
+    // Unpaid invoices are not a revenue card any more: an invoice not yet due
+    // needs nobody, and one that is late has a card of its own.
+    expect(cards.map((c) => c.key)).toEqual(["renewals", "at-risk"]);
     expect(cards[0]!.figure).toBe("2");
     expect(cards[0]!.sentence).toContain("acme and bolt");
     expect(cards[1]!.tone).toBe("bad");
-    // The door has no count of unpaid invoices, so the amount is the headline.
-    expect(cards[2]!.figure).toMatch(/1\D?200/);
-    expect(cards[2]!.target).toEqual({ section: "sales", view: "contracts" });
     for (const c of cards) opensARealTab(c);
+  });
+
+  const invoice = (over: Partial<OpenInvoiceRow>): OpenInvoiceRow => ({
+    reference: "INV-1",
+    tenant_code: "acme",
+    customer_legal_name: "Acme Ltd",
+    currency: "GBP",
+    total_minor: 39_500,
+    due_on: "2026-09-01",
+    overdue: false,
+    days_overdue: 0,
+    ...over,
+  });
+
+  test("an invoice not yet due needs nobody", () => {
+    expect(invoiceCards([invoice({})])).toEqual([]);
+  });
+
+  test("late invoices say how much, from whom and how late, and one customer opens its page", () => {
+    const one = invoiceCards([
+      invoice({ reference: "INV-1", overdue: true, days_overdue: 13 }),
+      invoice({ reference: "INV-2", overdue: true, days_overdue: 1, total_minor: 20_500 }),
+      invoice({ reference: "INV-3" }),
+    ]);
+    expect(one).toHaveLength(1);
+    expect(one[0]!.figure).toBe("2");
+    expect(one[0]!.tone).toBe("bad");
+    expect(one[0]!.sentence).toMatch(
+      /600 from Acme Ltd are past the due date; the oldest is 13 days late\.$/,
+    );
+    expect(one[0]!.target).toEqual({ section: "customers", view: "organisations", org: "acme" });
+    opensARealTab(one[0]!);
+
+    const two = invoiceCards([
+      invoice({ overdue: true, days_overdue: 1 }),
+      invoice({
+        tenant_code: "bolt",
+        customer_legal_name: "Bolt plc",
+        currency: "EUR",
+        overdue: true,
+        days_overdue: 1,
+      }),
+    ]);
+    expect(two[0]!.sentence).toBe(
+      "2 invoices from Acme Ltd and Bolt plc are past the due date; the oldest is 1 day late.",
+    );
+    expect(two[0]!.target).toEqual({ section: "sales", view: "contracts" });
+    opensARealTab(two[0]!);
+  });
+});
+
+describe("support windows", () => {
+  const inHours = (h: number) => new Date(NOW.getTime() + h * 3600_000).toISOString();
+
+  test("an open window says who is inside, where, and for how long", () => {
+    const cards = supportWindowCards(
+      [
+        {
+          tenant_code: "acme",
+          tenant_name: "Acme",
+          staff_email: "sam@clove.test",
+          is_write_access: true,
+          expires_at: inHours(0.5),
+        },
+        {
+          tenant_code: "bolt",
+          tenant_name: "Bolt",
+          staff_email: "sam@clove.test",
+          is_write_access: false,
+          expires_at: hoursAgo(1),
+        },
+      ],
+      NOW,
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.sentence).toBe(
+      "sam@clove.test is inside Acme with write access; the window closes in 30 minutes.",
+    );
+    expect(cards[0]!.target).toEqual({ section: "customers", view: "organisations", org: "acme" });
+    opensARealTab(cards[0]!);
+  });
+
+  test("several windows name the organisations and the last to close", () => {
+    const cards = supportWindowCards(
+      [
+        {
+          tenant_code: "a",
+          tenant_name: "A",
+          staff_email: "x@t",
+          is_write_access: false,
+          expires_at: inHours(4),
+        },
+        {
+          tenant_code: "b",
+          tenant_name: "B",
+          staff_email: "y@t",
+          is_write_access: false,
+          expires_at: inHours(1),
+        },
+      ],
+      NOW,
+    );
+    expect(cards[0]!.figure).toBe("2");
+    expect(cards[0]!.sentence).toBe(
+      "Platform staff are inside B and A; the last window closes in 4 hours.",
+    );
+    expect(supportWindowCards([], NOW)).toEqual([]);
   });
 });
 
@@ -204,14 +313,19 @@ describe("selling", () => {
 });
 
 describe("organisations", () => {
-  test("suspended and ended are separate, and one of either opens its own page", () => {
+  test("suspended, deletion requested and ended are separate, and one of any opens its own page", () => {
     const cards = organisationCards([
-      { code: "acme", name: "Acme", status: "suspended" },
-      { code: "bolt", name: "Bolt", status: "deleted" },
-      { code: "core", name: "Core", status: "deleted" },
+      { code: "acme", name: "Acme", status: "suspended", deleted_at: null },
+      { code: "bolt", name: "Bolt", status: "deleted", deleted_at: "2026-09-01T00:00:00Z" },
+      { code: "core", name: "Core", status: "deleted", deleted_at: "2026-09-01T00:00:00Z" },
       { code: "dash", name: "Dash", status: "active" },
+      { code: "echo", name: "Echo", status: "suspended", deleted_at: "2026-09-12T00:00:00Z" },
     ]);
-    expect(cards.map((c) => c.key)).toEqual(["suspended", "ended"]);
+    expect(cards.map((c) => c.key)).toEqual(["suspended", "deletion-requested", "ended"]);
+    expect(cards[0]!.sentence).toBe("Nobody in Acme can work while it is suspended.");
+    expect(cards[1]!.sentence).toContain("Echo asked to be deleted");
+    expect(cards[1]!.target).toEqual({ section: "customers", view: "organisations", org: "echo" });
+    cards.splice(1, 1);
     expect(cards[0]!.target).toEqual({ section: "customers", view: "organisations", org: "acme" });
     expect(cards[1]!.target).toEqual({ section: "customers", view: "organisations" });
     expect(cards[1]!.sentence).toContain("Bolt and Core");
