@@ -626,19 +626,46 @@ jobs:
         # destroy organisations and do not belong on live. erp.platform_assurance()
         # runs every registered assertion; the whole-database reconciliation
         # visits every organisation. Either failing fails the deploy, loudly.
+        #
+        # And how long it took, check by check. erp.platform_assurance() runs
+        # under a 55-second statement_timeout and took 63.3 s here on 14
+        # September; the console asks for it through the data API. It is run
+        # once, kept, and read twice: for what failed, and for where the time
+        # went (erp.run_diagnostic() records elapsed_ms per check since
+        # 20260914090000). Over 35 s is a warning, not a failure: a slow proof
+        # is still a proof, and the slowest checks it prints are where to look.
         if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         run: |
           set -euo pipefail
-          bad=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
-              from jsonb_array_elements(erp.platform_assurance()) c
-             where not (c ->> 'ok')::boolean;")
+          assurance="$RUNNER_TEMP/assurance.json"
+          started=$(date +%s%N)
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.platform_assurance();" > "$assurance"
+          wall_ms=$(( ($(date +%s%N) - started) / 1000000 ))
+          seconds=$(awk -v ms="$wall_ms" 'BEGIN { printf "%.1f", ms / 1000 }')
+          slowest=$(jq -r '
+            map(select(.elapsed_ms != null)) | sort_by(-.elapsed_ms) | .[:10][]
+            | "\(.elapsed_ms | tostring | " " * ([0, 9 - length] | max) + .) ms  \(.code)"
+          ' "$assurance")
+          echo "platform_assurance took ${seconds} s; the slowest checks:"
+          echo "$slowest"
+          {
+            echo "## Assurance"
+            echo "erp.platform_assurance() took ${seconds} s. The slowest checks:"
+            echo '```'
+            echo "$slowest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          bad=$(jq -r '.[] | select(.ok == false) | "\(.code): \((.detail // "")[0:120])"' "$assurance")
           if [[ -n "$bad" ]]; then
             echo "::error::platform_assurance() is not green on live:"
             echo "$bad"
             exit 1
           fi
-          echo "platform_assurance: every registered check green"
+          if (( wall_ms > 35000 )); then
+            echo "::warning::platform_assurance() took ${seconds} s on live, more than the 35 s it should stay under; its statement_timeout is 55 s. The slowest checks are listed above."
+          fi
+          echo "platform_assurance: every registered check green in ${seconds} s"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
           # The release is proved: the database it produced passed. A release
           # row without proved_at is a deploy that applied and did not check.
