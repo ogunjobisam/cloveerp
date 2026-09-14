@@ -14,6 +14,11 @@ import {
 } from "../../lib/modules";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "../../components/erp/currencies";
+import {
+  useAvailableTransitions,
+  type Transition,
+} from "../../components/erp/available-transitions";
+import { DocumentTransitions } from "../../components/erp/document-transitions";
 
 /**
  * One document, whatever kind of document it is.
@@ -88,17 +93,6 @@ type Lineage = {
   relation: string;
 };
 
-type Transition = {
-  code: string;
-  name: string;
-  to_state: string;
-  /** The caller holds the transition's `required_permission`. */
-  permitted: boolean;
-  /** The transition's guard evaluates true against this document's numbers. */
-  guard_passes: boolean;
-  is_automatic: boolean;
-};
-
 type Payload = {
   document: Doc | null;
   lines: Line[];
@@ -116,12 +110,7 @@ function Document() {
   // The transitions are asked for on their own as well: the payload carries
   // them, but a guard can change under the reader's feet — a line added, an
   // approval decided — and this read is the one the buttons follow.
-  const live = useQuery({
-    queryKey: ["erp_available_transitions", { p_document_id: documentId }],
-    queryFn: () =>
-      callErp<Transition[]>("erp_available_transitions", { p_document_id: documentId }),
-    refetchInterval: 30_000,
-  });
+  const live = useAvailableTransitions(documentId);
 
   const { currencies } = useCurrencies();
 
@@ -164,8 +153,9 @@ function Document() {
           ) : null}
         </div>
 
-        <Transitions
+        <DocumentTransitions
           documentId={documentId}
+          documentType={doc.document_type}
           transitions={live.data ?? data.available_transitions}
           committed={doc.is_committed}
         />
@@ -340,72 +330,6 @@ function ApprovalChain({ documentId }: { documentId: string }) {
         )}
       </div>
     </section>
-  );
-}
-
-/**
- * What may happen to this document next.
- *
- * Three states, and the difference between the last two is the reason
- * `erp_available_transitions` exists:
- *
- *   permitted, guard passes  — offered
- *   not permitted            — not offered at all, because the caller may not
- *   guard does not pass      — offered, disabled, and named
- *
- * "You may not do this" and "you may do this but not yet" are different facts,
- * and collapsing them into a greyed button tells the reader neither.
- */
-function Transitions({
-  documentId,
-  transitions,
-  committed,
-}: {
-  documentId: string;
-  transitions: Transition[];
-  committed: boolean;
-}) {
-  const act = useErpAction({
-    fn: "erp_transition_document",
-    invalidates: ["erp_document", "erp_documents"],
-  });
-
-  const offered = transitions.filter((t) => t.permitted && !t.is_automatic);
-
-  if (offered.length === 0) {
-    return (
-      <p className="mt-4 text-xs text-muted-foreground">
-        {transitions.length === 0
-          ? committed
-            ? "This document has reached a state its lifecycle does not continue from."
-            : "This document's type has no lifecycle configured, so there is nothing to move it through."
-          : "Nothing here is offered to this account. The transitions this document has all require a permission it does not hold."}
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-4 flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        {offered.map((t) => (
-          <ActionButton
-            key={t.code}
-            variant={t.guard_passes ? "primary" : "secondary"}
-            disabled={!t.guard_passes}
-            busy={act.isPending}
-            title={
-              t.guard_passes
-                ? `Moves this document to ${t.to_state}.`
-                : "This document does not yet satisfy the condition on this transition."
-            }
-            onClick={() => act.mutate({ p_document_id: documentId, p_transition_code: t.code })}
-          >
-            {t.name}
-          </ActionButton>
-        ))}
-      </div>
-      <ErrorNote error={act.error} />
-    </div>
   );
 }
 

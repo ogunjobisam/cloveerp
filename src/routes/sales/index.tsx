@@ -45,6 +45,10 @@ export const Route = createFileRoute("/sales/")({
 const SALES_ACTIONS: ActionSpec[] = [
   {
     label: "Convert to a sales order",
+    // erp.convert_document moves the quotation to Accepted as it
+    // raises the order, so the step offers it where that move is available and
+    // does not offer the bare move beside it.
+    transition: "accept",
     title: "Turn this quotation into a sales order",
     description:
       "A quotation the customer has accepted becomes an order. Every line still outstanding is carried across at the quoted price, and the order remembers the quotation it came from.",
@@ -189,6 +193,9 @@ function Sales() {
               fedBy: "Quotations appear here once one is raised for a customer.",
 
               typeCode: "quotation",
+              // Being written, or with the customer. Accepted, declined or
+              // expired, it is finished; "Show finished" lists it.
+              states: ["draft", "sent"],
               partyRole: "customer",
               recordArg: "p_document_id",
               actionFn: "erp_convert_document",
@@ -201,6 +208,11 @@ function Sales() {
                 "Orders appear here once a quotation is accepted, or an order is raised directly.",
 
               typeCode: "sales_order",
+              // Every order not yet despatched: a draft, one with its approvers,
+              // one confirmed and one being picked.
+              states: ["draft", "pending_approval", "confirmed", "picking"],
+              // A delivery comes from an order that can still be despatched.
+              actionStates: { deliver_this_order: ["confirmed", "picking"] },
               partyRole: "customer",
               // The chosen order is the one the delivery is created from.
               recordArg: "p_order_id",
@@ -221,6 +233,8 @@ function Sales() {
                 "Deliveries appear here once one is created from a confirmed sales order: choose the order on the sales order step.",
 
               typeCode: "delivery",
+              // Waiting to leave. Posted, the goods have gone.
+              states: ["draft"],
               partyRole: "customer",
               recordArg: "p_delivery_id",
               to: "/logistics",
@@ -232,6 +246,8 @@ function Sales() {
               fedBy: "Invoices appear here once a delivery is confirmed and invoiced.",
 
               typeCode: "sales_invoice",
+              // Being raised, or issued and owed. Paid or credited, it is settled.
+              states: ["draft", "issued"],
               partyRole: "customer",
               recordArg: "p_invoice_id",
               to: "/finance",
