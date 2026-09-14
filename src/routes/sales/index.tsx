@@ -84,7 +84,9 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.order",
     fn: "erp_reserve_for_line",
     fields: [
-      pickLine("sales_order", "p_document_line_id", "Order line"),
+      // Open lines only: not on a closed or cancelled order. The line row keeps
+      // no reservation; erp.reserve_for_line refuses a line that holds stock.
+      pickLine("sales_order", "p_document_line_id", "Order line", { openOnly: true }),
       {
         kind: "text",
         name: "p_policy_code",
@@ -107,7 +109,7 @@ const SALES_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_document_id",
         "Sales order",
-        { p_type_code: "sales_order", p_limit: 100 },
+        { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
       ),
       pickLocation("p_location_id", "Pick from location", false),
       pickBatch("p_batch_id", "Batch", false),
@@ -125,7 +127,7 @@ const SALES_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_document_id",
         "Document",
-        { p_limit: 100 },
+        { p_limit: 100, p_actionable: true },
       ),
       reason("p_reason", "Reason", true),
     ],
@@ -135,13 +137,16 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.order",
     fn: "erp_raise_customer_return",
     fields: [
+      // Posted deliveries only: erp.raise_customer_return checks no state, so
+      // this follows what a return is — goods that left — as its suite does.
+      // Posted is terminal, so p_actionable would offer none.
       pickFrom(
         "erp_documents",
         "document_id",
         ["document_number", "state"],
         "p_original_document_id",
         "Original document",
-        { p_limit: 100 },
+        { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
       ),
       // The door only checks non-empty, so the register is enforced here.
       pickReasonCode("RETURN_CUSTOMER", "p_reason_code", "Reason code", true),
@@ -259,7 +264,7 @@ function Sales() {
                 ["document_number", "state"],
                 "p_sales_order_id",
                 "Sales order",
-                { p_type_code: "sales_order", p_limit: 100 },
+                { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
               ),
               pickParty("supplier", "p_supplier_party_id", "Supplier"),
             ],
@@ -278,7 +283,7 @@ function Sales() {
                 ["document_number", "state"],
                 "p_sales_order_id",
                 "Sales order",
-                { p_type_code: "sales_order", p_limit: 100 },
+                { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
               ),
               pickSite("p_site_id", "Receiving site"),
             ],
@@ -291,7 +296,8 @@ function Sales() {
             permission: "sales.order",
             fn: "erp_set_line_stock_identity",
             fields: [
-              pickLine("sales_order", "p_line_id", "Sales order line"),
+              // Open lines only: not on a closed or cancelled order.
+              pickLine("sales_order", "p_line_id", "Sales order line", { openOnly: true }),
               pickBatch("p_batch_id", "Batch", false),
               pickLocation("p_location_id", "Location", false),
               {

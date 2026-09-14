@@ -197,11 +197,19 @@ export const pickLocation = (
   options: { fn: "erp_locations", value: "location_id", label: ["code", "name"] },
 });
 
-/** A line of a document, shown as its number, item and quantity. */
+/**
+ * A line of a document, shown as its number, item and quantity.
+ *
+ * `filter.openOnly` asks erp_document_lines for p_open_only: no line of a
+ * cancelled or finished document, and no line already received and invoiced
+ * in full. Both, not either — a line received in full is the one an invoice is
+ * matched against.
+ */
 export const pickLine = (
   typeCode: string,
   name = "p_order_line_id",
   label = "Order line",
+  filter?: { openOnly?: boolean },
 ): Field => ({
   kind: "select",
   name,
@@ -209,7 +217,11 @@ export const pickLine = (
   required: true,
   options: {
     fn: "erp_document_lines",
-    args: { p_type_code: typeCode, p_limit: 200 },
+    args: {
+      p_type_code: typeCode,
+      p_limit: 200,
+      ...(filter?.openOnly ? { p_open_only: true } : {}),
+    },
     value: "line_id",
     label: ["document_number", "item", "quantity"],
   },
@@ -256,12 +268,26 @@ export const codeField = (
         hint: `A short code of your own choosing — for example ${example}.`,
       };
 
-/** An existing document, shown as its number. */
+/**
+ * An existing document, shown as its number — one that can still move.
+ *
+ * A picker is for acting, so it never offers a document whose lifecycle has
+ * ended: cancelled, or in a terminal state. The owner found "Send this
+ * requisition back" offering a cancelled requisition; the database refused it
+ * on submit, which is enforcement arriving one form too late.
+ *
+ * `filter.transition` narrows further, to the documents whose current state
+ * has that transition out of it — the same code the action sends as
+ * p_transition_code — so "Approve" offers what is waiting for approval and
+ * nothing else. The database still refuses a move it does not allow; this only
+ * stops offering one.
+ */
 export const pickDocument = (
   typeCode: string,
   name = "p_document_id",
   label = "Document",
   required = true,
+  filter?: { transition?: string },
 ): Field => ({
   kind: "select",
   name,
@@ -269,7 +295,12 @@ export const pickDocument = (
   required,
   options: {
     fn: "erp_documents",
-    args: { p_type_code: typeCode, p_limit: 200 },
+    args: {
+      p_type_code: typeCode,
+      p_limit: 200,
+      p_actionable: true,
+      ...(filter?.transition ? { p_transition_code: filter.transition } : {}),
+    },
     value: "document_id",
     label: ["document_number", "state"],
   },
