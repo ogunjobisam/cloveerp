@@ -64,6 +64,57 @@ export function formatMinor(
 }
 
 /**
+ * A headline amount: whole units, with the currency's symbol.
+ *
+ * A figure at the top of a screen read "GRNI value 400,552" — no symbol, and
+ * nothing to say whether it was pounds or pence. It was pounds, divided by a
+ * hundred whatever the currency, with the pence dropped. The pence stay
+ * dropped here, because a tile is read at a glance; the symbol does not, and
+ * the exponent is the currency's.
+ */
+export function formatMinorWhole(
+  minor: number | null | undefined,
+  code: string,
+  minorUnits: number = DEFAULT_MINOR_UNITS,
+): string {
+  const value = Math.round((minor ?? 0) / 10 ** minorUnits);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${value.toLocaleString()} ${code}`;
+  }
+}
+
+/**
+ * Amounts in more than one currency, added up without adding them together.
+ *
+ * Summing a pound and a dollar gives a number that is neither, so a total over
+ * rows in several currencies is one figure per currency, largest first.
+ * Rows that name no currency are counted in `fallback`.
+ */
+export function formatMinorTotals(
+  rows: { minor: number; currency: string | null | undefined }[],
+  minorUnits: (code: string) => number = () => DEFAULT_MINOR_UNITS,
+  fallback = "GBP",
+): string {
+  const totals = new Map<string, number>();
+  for (const r of rows) {
+    const code = r.currency && r.currency.trim() !== "" ? r.currency.trim() : fallback;
+    totals.set(code, (totals.get(code) ?? 0) + (Number.isFinite(r.minor) ? r.minor : 0));
+  }
+  if (totals.size === 0) return formatMinorWhole(0, fallback, minorUnits(fallback));
+  return [...totals.entries()]
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .map(([code, minor]) => formatMinorWhole(minor, code, minorUnits(code)))
+    .join(" + ");
+}
+
+/**
  * What a person typed, to the integer the database expects.
  *
  * The direction that writes to the ledger, so both of its edge cases are

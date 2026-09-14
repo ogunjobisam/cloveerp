@@ -17,7 +17,7 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow } from "../../components/erp/process-flow";
-import { PURCHASING_KPIS } from "../../lib/modules";
+import { GOODS_IN_LIST, PURCHASING_KPIS } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/procurement/")({
@@ -78,6 +78,7 @@ const pickRequisition = (transition?: string): ReturnType<typeof pickFrom> =>
 const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
     code: "requisition_submit",
+    transition: "submit",
     label: "Submit for approval",
     title: "Send this requisition for approval",
     description:
@@ -102,6 +103,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   },
   {
     code: "requisition_approve",
+    transition: "approve",
     label: "Approve",
     title: "Approve this requisition",
     description:
@@ -128,6 +130,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   },
   {
     code: "requisition_reject",
+    transition: "reject",
     label: "Send back",
     title: "Send this requisition back",
     description: "The requisition returns to draft, with the reason on the record.",
@@ -217,6 +220,10 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
 
   {
     label: "Convert to a purchase order",
+    // erp.convert_document moves the requisition to Ordered as it
+    // raises the order, so the step offers it where that move is available and
+    // does not offer the bare move beside it.
+    transition: "order",
     title: "Turn this requisition into a purchase order",
     description:
       "An approved requisition becomes an order to a supplier. Every line still outstanding is carried across, and the order remembers the requisition it came from — so a part order can be finished later.",
@@ -569,6 +576,9 @@ function Procurement() {
               fedBy: "Requisitions appear here once somebody raises one.",
 
               typeCode: "requisition",
+              // A draft is what is waiting to be asked for. Submitted, it has
+              // moved on to approval; ordered or cancelled, it is finished.
+              states: ["draft"],
               partyRole: "supplier",
               recordArg: "p_document_id",
               actionFn: "requisition_submit",
@@ -590,6 +600,9 @@ function Procurement() {
                 noun: "requisition",
                 nounPlural: "requisitions",
               },
+              // Waiting on a decision, or approved and waiting to become an
+              // order: converting is the verb of this step, so it is listed here.
+              states: ["submitted", "approved"],
               recordArg: "p_document_id",
               actionFn: "requisition_approve",
               actionFns: ["requisition_reject", "erp_convert_document"],
@@ -602,6 +615,12 @@ function Procurement() {
                 "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
 
               typeCode: "purchase_order",
+              // Every order not yet received in full: a draft being written, one
+              // with its approvers, one approved and not sent, and one the
+              // supplier is delivering against.
+              states: ["draft", "pending_approval", "approved", "sent", "partially_received"],
+              // The behaviour of an order is fixed once the supplier has it.
+              actionStates: { erp_set_order_behaviour: ["draft", "pending_approval", "approved"] },
               partyRole: "supplier",
               recordArg: "p_document_id",
               actionFn: "erp_set_order_behaviour",
@@ -612,6 +631,14 @@ function Procurement() {
               fedBy: "Receipts appear here once goods are received against a purchase order.",
 
               typeCode: "goods_receipt",
+              // A receipt still being counted in. Posted, its stock is in goods-in
+              // and it waits for the bill from the supplier; "Show finished" lists it
+              // here to be billed.
+              states: ["draft"],
+              actionStates: {
+                erp_receive_against: ["draft"],
+                erp_bill_from_receipt: ["posted"],
+              },
               partyRole: "supplier",
               recordArg: "p_receipt_id",
               actionFn: "erp_receive_against",
@@ -623,16 +650,7 @@ function Procurement() {
               fedBy:
                 "Stock appears here once a goods receipt is posted, because a receipt lands in the site's receiving area.",
 
-              list: {
-                fn: "erp_goods_in",
-                args: {},
-                id: "line_key",
-                title: ["item_code", "item"],
-                subtitle: ["location", "quantity", "suggested_location"],
-                status: "putaway_task",
-                noun: "pallet",
-                nounPlural: "pallets",
-              },
+              list: GOODS_IN_LIST,
               createFn: "erp_raise_putaway_tasks",
             },
             {
@@ -651,6 +669,7 @@ function Procurement() {
                 noun: "task",
                 nounPlural: "tasks",
               },
+              states: ["open"],
               recordArg: "p_task_id",
               actionFn: "erp_complete_warehouse_task",
             },
@@ -661,6 +680,8 @@ function Procurement() {
               fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
               typeCode: "purchase_invoice",
+              // Being entered, owed, or in dispute. Paid is the end of it.
+              states: ["draft", "registered", "disputed"],
               partyRole: "supplier",
               recordArg: "p_invoice_id",
               actionFn: "erp_invoice_against",

@@ -45,6 +45,32 @@ const QUALITY_EVENT_LIST: StageList = {
   nounPlural: "events",
 };
 
+/**
+ * An event's states before it is closed. Nothing but closing moves an event
+ * between them today, so every quality step lists the same open events rather
+ * than guessing which of them has been inspected.
+ */
+const QUALITY_EVENT_OPEN = ["open", "investigating", "action", "verification"];
+
+/**
+ * What is standing in goods-in, pallet by pallet, with where each belongs.
+ *
+ * Stock's goods-in step listed goods receipts — every one ever raised, drafts
+ * and years-old posted ones alike — under a hint that said "stock lands in
+ * goods-in before it has a home". This read is that stock, and it is the one
+ * Purchasing's goods-in step already lists.
+ */
+export const GOODS_IN_LIST: StageList = {
+  fn: "erp_goods_in",
+  args: {},
+  id: "line_key",
+  title: ["item_code", "item"],
+  subtitle: ["location", "quantity", "suggested_location"],
+  status: "putaway_task",
+  noun: "pallet",
+  nounPlural: "pallets",
+};
+
 /** Shipments, listed the same way at every step of despatch. */
 const SHIPMENT_LIST: StageList = {
   fn: "erp_shipments",
@@ -56,6 +82,9 @@ const SHIPMENT_LIST: StageList = {
   noun: "shipment",
   nounPlural: "shipments",
 };
+
+/** A shipment planned and not yet booked with a carrier: what choosing and booking act on. */
+const SHIPMENT_UNBOOKED = ["planning", "planned", "tendered"];
 
 /**
  * One description of every module, used by every surface that talks about it.
@@ -103,12 +132,26 @@ export type Panel = {
   columns: Column<Row>[];
 };
 
+/**
+ * What a tile's arithmetic may ask of the screen.
+ *
+ * `money` totals a field of minor units as money — the symbol, whole units,
+ * the currency's own exponent, and one figure per currency when the rows are
+ * in more than one — so no tile divides by a hundred and prints the result.
+ */
+export type KpiContext = {
+  money: (rows: Row[], field: string) => string;
+};
+
 export type Kpi = {
   label: string;
   fn: string;
   args?: Record<string, unknown>;
   /** Derived from the rows of `fn`. Returning null means "no basis to state one". */
-  compute: (rows: Row[]) => { value: string; hint?: string; tone?: "ok" | "warn" | "bad" } | null;
+  compute: (
+    rows: Row[],
+    context: KpiContext,
+  ) => { value: string; hint?: string; tone?: "ok" | "warn" | "bad" } | null;
 };
 
 export type Chart = {
@@ -219,9 +262,6 @@ const count = (rows: Row[], predicate: (r: Row) => boolean) => rows.filter(predi
 
 const isOneOf = (value: unknown, words: string[]) =>
   words.includes(String(value ?? "").toLowerCase());
-
-const money = (minor: number) =>
-  (minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
 const pill = (field: string): Column<Row> => ({
   header: "Status",
@@ -384,8 +424,10 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Goods in",
         hint: "Receipts posted against a purchase order. Stock lands in goods-in before it has a home.",
-        fedBy: "Receipts appear here once a purchase order is received and posted.",
+        fedBy: "Stock appears here once a receipt against a purchase order is posted.",
 
+        list: GOODS_IN_LIST,
+        // Still raised from here: a receipt is what puts stock into goods-in.
         typeCode: "goods_receipt",
         partyRole: "supplier",
         createFn: "erp_raise_putaway_tasks",
@@ -406,6 +448,7 @@ export const INVENTORY: ModuleDef = {
           noun: "task",
           nounPlural: "tasks",
         },
+        states: ["open"],
         recordArg: "p_task_id",
         actionFn: "erp_complete_warehouse_task",
       },
@@ -987,10 +1030,8 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock value",
       fn: "erp_stock_valuation",
-      compute: (rows) =>
-        rows.length === 0
-          ? null
-          : { value: money(sum(rows, "value_minor")), hint: String(rows[0]?.["currency"] ?? "") },
+      compute: (rows, { money }) =>
+        rows.length === 0 ? null : { value: money(rows, "value_minor"), hint: "on hand, at cost" },
     },
     {
       label: "Expiring in 30 days",
@@ -1149,6 +1190,8 @@ export const FINANCE: ModuleDef = {
         fedBy: "Invoices appear here once a delivery has been despatched and invoiced.",
 
         typeCode: "sales_invoice",
+        // Being raised, or issued and owed. Paid or credited, it is settled.
+        states: ["draft", "issued"],
         partyRole: "customer",
         recordArg: "p_invoice_id",
         createFn: "erp_invoice_from_delivery",
@@ -1173,6 +1216,8 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // Being put together, or proposed and waiting for a second pair of eyes.
+        states: ["draft", "proposed"],
         recordArg: "p_proposal_id",
         createFn: "erp_propose_payment_run",
       },
@@ -1191,6 +1236,8 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // erp.approve_payment_run takes a proposed run and nothing else.
+        states: ["proposed"],
         recordArg: "p_proposal_id",
         actionFn: "erp_approve_payment_run",
       },
@@ -1209,6 +1256,8 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // erp.pay_payment_run takes an approved run and nothing else.
+        states: ["approved"],
         recordArg: "p_proposal_id",
         actionFn: "erp_pay_payment_run",
       },
@@ -1233,6 +1282,9 @@ export const FINANCE: ModuleDef = {
           noun: "period",
           nounPlural: "periods",
         },
+        // A period still being worked or reopenable; permanently closed years
+        // are history, reached through Show finished.
+        states: ["future", "open", "closing", "closed"],
         recordArg: "p_fiscal_period_id",
         actionFns: [
           "erp_open_period_close",
@@ -1695,17 +1747,28 @@ export const FINANCE: ModuleDef = {
     {
       label: "Receivables",
       fn: "erp_receivables_ageing",
-      compute: (rows) =>
+      compute: (rows, { money }) =>
         rows.length === 0
           ? null
-          : { value: money(sum(rows, "total_minor")), hint: "outstanding, all customers" },
+          : { value: money(rows, "total_minor"), hint: "outstanding, all customers" },
     },
     {
       label: "Overdue 60+",
       fn: "erp_receivables_ageing",
-      compute: (rows) => {
-        const v = sum(rows, "days_60_plus_minor");
-        return { value: money(v), hint: "past sixty days", tone: v > 0 ? "bad" : "ok" };
+      // erp.receivables_ageing bands 61-90 and over 90; it has no 60-plus
+      // column, so the tile read one that was never there and said nothing
+      // was overdue.
+      compute: (rows, { money }) => {
+        const overdue = rows.map((r) => ({
+          ...r,
+          overdue_minor: num(r["days_61_90"]) + num(r["days_over_90"]),
+        }));
+        const v = sum(overdue, "overdue_minor");
+        return {
+          value: money(overdue, "overdue_minor"),
+          hint: "past sixty days",
+          tone: v > 0 ? "bad" : "ok",
+        };
       },
     },
     {
@@ -1973,6 +2036,8 @@ export const PLANNING: ModuleDef = {
           noun: "forecast",
           nounPlural: "forecasts",
         },
+        // A draft run, and the one in force. Superseded and withdrawn are history.
+        states: ["draft", "active"],
         createFn: "erp_run_forecast",
       },
       {
@@ -1990,6 +2055,8 @@ export const PLANNING: ModuleDef = {
           noun: "forecast",
           nounPlural: "forecasts",
         },
+        // Signing off makes a draft the one in force.
+        states: ["draft"],
         recordArg: "p_version_id",
         actionFn: "erp_sign_off_forecast",
       },
@@ -2015,6 +2082,8 @@ export const PLANNING: ModuleDef = {
           noun: "planned order",
           nounPlural: "planned orders",
         },
+        // Suggested by a run and not yet turned into an order or cancelled.
+        states: ["suggested", "reviewed", "firmed"],
         recordArg: "p_planned_order_id",
         actionFn: "erp_firm_planned_order",
       },
@@ -2444,6 +2513,7 @@ export const PRODUCTION: ModuleDef = {
           "Orders appear here once one is raised, or once a planned order is firmed in planning.",
 
         list: WORKS_ORDER_LIST,
+        states: ["draft", "planned"],
         createFn: "erp_raise_works_order",
       },
       {
@@ -2452,6 +2522,8 @@ export const PRODUCTION: ModuleDef = {
         fedBy: "Orders appear here once one has been raised at the works order step.",
 
         list: WORKS_ORDER_LIST,
+        // erp.release_works_order takes a draft or planned order.
+        states: ["draft", "planned"],
         recordArg: "p_works_order_id",
         actionFn: "erp_release_works_order",
       },
@@ -2459,6 +2531,8 @@ export const PRODUCTION: ModuleDef = {
         label: "Issue components",
         hint: "Stock leaves the store and joins the order's cost.",
         list: WORKS_ORDER_LIST,
+        // Issuing and receiving take a released order or one under way.
+        states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_issue_to_works_order",
       },
@@ -2466,6 +2540,7 @@ export const PRODUCTION: ModuleDef = {
         label: "Book time",
         hint: "Operation time against the route, so the variance means something.",
         list: WORKS_ORDER_LIST,
+        states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_book_operation_time",
       },
@@ -2473,6 +2548,7 @@ export const PRODUCTION: ModuleDef = {
         label: "Receive output",
         hint: "Finished quantity, and scrap, back into stock.",
         list: WORKS_ORDER_LIST,
+        states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_receive_works_order_output",
       },
@@ -2480,6 +2556,8 @@ export const PRODUCTION: ModuleDef = {
         label: "Close",
         hint: "Closing an order settles its variance and stops further booking.",
         list: WORKS_ORDER_LIST,
+        // erp.close_works_order takes an order under way or completed.
+        states: ["in_progress", "completed"],
         recordArg: "p_works_order_id",
         actionFn: "erp_close_works_order",
       },
@@ -2839,6 +2917,7 @@ export const QUALITY: ModuleDef = {
         fedBy: "Events appear here once one is raised, here or from the floor.",
 
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         createFn: "erp_raise_quality_event",
       },
       {
@@ -2847,18 +2926,21 @@ export const QUALITY: ModuleDef = {
         fedBy: "Inspections appear here once an event is raised or a receipt requires inspection.",
 
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         createFn: "erp_record_inspection_result",
       },
       {
         label: "Disposition",
         hint: "Release, reject, rework or scrap. This is the decision the audit reads.",
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         createFn: "erp_disposition_inspection",
       },
       {
         label: "Close",
         hint: "An event closes when the disposition is made and the actions are logged.",
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         recordArg: "p_event_id",
         actionFn: "erp_close_quality_event",
       },
@@ -3335,6 +3417,8 @@ export const LOGISTICS: ModuleDef = {
           "Deliveries appear here once one is created from a confirmed sales order. Create a delivery from an order is on the bar below.",
 
         typeCode: "delivery",
+        // Waiting to leave. Posted, the goods have gone.
+        states: ["draft"],
         partyRole: "customer",
         recordArg: "p_delivery_id",
         createFn: "erp_plan_shipment",
@@ -3345,6 +3429,7 @@ export const LOGISTICS: ModuleDef = {
         fedBy: "Shipments appear here once deliveries are gathered into one at the delivery step.",
 
         list: SHIPMENT_LIST,
+        states: SHIPMENT_UNBOOKED,
         recordArg: "p_shipment_id",
         actionFn: "erp_select_carrier",
       },
@@ -3354,6 +3439,7 @@ export const LOGISTICS: ModuleDef = {
         fedBy: "Shipments appear here once a carrier has been chosen.",
 
         list: SHIPMENT_LIST,
+        states: SHIPMENT_UNBOOKED,
         recordArg: "p_shipment_id",
         actionFn: "erp_book_shipment",
       },
@@ -3361,6 +3447,8 @@ export const LOGISTICS: ModuleDef = {
         label: "Proof",
         hint: "The signature or the photograph, attached to the shipment.",
         list: SHIPMENT_LIST,
+        // Booked or on its way, and not yet signed for.
+        states: ["booked", "despatched", "exception"],
         recordArg: "p_shipment_id",
         actionFn: "erp_record_proof_of_delivery",
       },
@@ -3786,10 +3874,10 @@ export const PURCHASING_KPIS: Kpi[] = [
   {
     label: "GRNI value",
     fn: "erp_grni",
-    compute: (rows) =>
+    compute: (rows, { money }) =>
       rows.length === 0
         ? null
-        : { value: money(sum(rows, "open_value_minor")), hint: "open on the balance sheet" },
+        : { value: money(rows, "open_value_minor"), hint: "open on the balance sheet" },
   },
   {
     label: "Match exceptions",
@@ -3799,11 +3887,11 @@ export const PURCHASING_KPIS: Kpi[] = [
   {
     label: "Value at risk",
     fn: "erp_match_workbench",
-    compute: (rows) =>
+    compute: (rows, { money }) =>
       rows.length === 0
         ? null
         : {
-            value: money(sum(rows, "value_at_risk_minor")),
+            value: money(rows, "value_at_risk_minor"),
             hint: "held by match exceptions",
             tone: "warn",
           },

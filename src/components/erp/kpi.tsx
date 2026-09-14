@@ -4,7 +4,9 @@ import { Boxes, Clock, FileText, Gauge, PoundSterling } from "lucide-react";
 import { callErp } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
-import type { Chart, Kpi, Row } from "../../lib/modules";
+import { formatMinorTotals, minorUnitsOf } from "../../lib/money";
+import type { Chart, Kpi, KpiContext, Row } from "../../lib/modules";
+import { useCurrencies } from "./currencies";
 
 /**
  * The numbers at the top of a module.
@@ -43,13 +45,24 @@ function markFor(label: string) {
 
 export function KpiTile({ kpi }: { kpi: Kpi }) {
   const { ui } = useT();
+  const { currencies } = useCurrencies();
   const { data, isPending, error } = useQuery({
     queryKey: [kpi.fn, kpi.args ?? {}],
     queryFn: () => callErp<Row[]>(kpi.fn, kpi.args ?? {}),
     refetchInterval: 60_000,
   });
 
-  const result = data ? kpi.compute(data) : null;
+  const context: KpiContext = {
+    money: (rows, field) =>
+      formatMinorTotals(
+        rows.map((r) => ({
+          minor: Number(r[field] ?? 0),
+          currency: typeof r["currency"] === "string" ? r["currency"] : null,
+        })),
+        (code) => minorUnitsOf(currencies, code),
+      ),
+  };
+  const result = data ? kpi.compute(data, context) : null;
   const label = ui(kpi.label);
   const Mark = markFor(label);
 

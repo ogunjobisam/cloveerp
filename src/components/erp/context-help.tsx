@@ -8,6 +8,7 @@ import { friendlyError } from "@/lib/errors";
 
 import { callErp } from "../../lib/erp";
 import { prettifyRoutine } from "../../lib/friendly";
+import { useT } from "../../lib/i18n";
 import { MODULES, allTiles } from "../../lib/modules";
 import { TOUCH } from "./page";
 
@@ -73,10 +74,27 @@ function helpPathFor(pathname: string): string {
   return paths[0] ?? pathname;
 }
 
+/**
+ * What the screen is called, the way the menu calls it.
+ *
+ * The sheet said "The product's guidance for /procurement": the route, in a
+ * typewriter face, to somebody who reached the screen by pressing a tile
+ * called Purchasing.
+ */
+function useScreenName(path: string): string {
+  const { t, ui } = useT();
+  if (path === "/") return ui("Home");
+  if (path === "/settings") return t("nav.settings", "Settings");
+  const tile = allTiles().find((x) => x.path === path);
+  return tile ? t(tile.titleKey, tile.title) : ui("this screen");
+}
+
 export function ContextHelp() {
+  const { ui } = useT();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const path = helpPathFor(pathname);
+  const screen = useScreenName(path);
 
   const topic = useQuery({
     queryKey: ["erp_help_topic", { p_screen_path: path }],
@@ -105,8 +123,9 @@ export function ContextHelp() {
             {topic.data?.title ?? "Help for this screen"}
           </SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">
-            The product&apos;s guidance for <span className="font-mono">{path}</span>. The same for
-            every organisation; a note of your own sits beneath it.
+            {ui(
+              "The product's guidance for {screen}. The same for every organisation; a note of your own sits beneath it.",
+            ).replace("{screen}", screen)}
           </SheetDescription>
 
           {topic.isPending ? (
@@ -160,9 +179,9 @@ export function ContextHelp() {
                 </section>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Your organisation has not added a note for this screen. An administrator writes
-                  one as the terminology override{" "}
-                  <span className="font-mono">{topic.data.local_key}</span>.
+                  {ui(
+                    "Your organisation has not added a note for this screen. An administrator can add one under Terminology.",
+                  )}
                 </p>
               )}
 
