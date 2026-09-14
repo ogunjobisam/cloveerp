@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Banknote,
   Boxes,
+  Check,
   ClipboardCheck,
   Factory,
   FileText,
@@ -59,9 +60,10 @@ export const Route = createFileRoute("/product")({
           operatingSystem: "Web",
           url: "https://cloveerp.com/product",
           offers: {
-            "@type": "Offer",
-            price: "25",
+            "@type": "AggregateOffer",
+            lowPrice: "395",
             priceCurrency: "GBP",
+            offerCount: 3,
           },
         }),
       },
@@ -122,10 +124,10 @@ function Hero() {
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link
-              to="/signin"
+              to="/contact"
               className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-surface transition-transform active:scale-[0.98]"
             >
-              Start exploring
+              Book a demo
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
             <a
@@ -391,10 +393,198 @@ function Gallery() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+
+/**
+ * The price list, as the platform owner set it on 14 September 2026.
+ *
+ * One price for the organisation with a core team included, rather than a
+ * rate per seat: a requisition approver and a production planner are not the
+ * same cost to serve, and "£25 per seat" priced a whole ERP below the tools it
+ * replaces. Organisations come by invitation, so every call to action here
+ * leads to a conversation (/contact), never to a sign-up the product refuses.
+ *
+ * Pounds a month, billed annually, excluding VAT. The platform's own price
+ * book carries the same figures; this page is what a visitor reads before
+ * anybody has quoted them.
+ */
+type Plan = {
+  name: string;
+  audience: string;
+  price: string;
+  from?: boolean;
+  modules: string;
+  terms: [string, string][];
+  featured?: boolean;
+};
+
+const PLANS: Plan[] = [
+  {
+    name: "Starter",
+    audience: "One company and one site, moving off spreadsheets and bolt-on stock tools.",
+    price: "£395",
+    modules:
+      "Purchasing, stock, sales and the ledger, with segregation of duties and a full audit trail.",
+    terms: [
+      ["Full users included", "5, up to 10"],
+      ["Each extra full user", "£45"],
+      ["Each light user", "£9"],
+      ["Companies · sites", "1 · 1"],
+    ],
+  },
+  {
+    name: "Standard",
+    audience: "Manufacturers and distributors running several sites.",
+    price: "£1,095",
+    modules:
+      "Everything in Starter, plus manufacturing, MRP planning and forecasting, batch and expiry traceability, quality and recall, stock counts, landed cost and returns.",
+    terms: [
+      ["Full users included", "15, up to 100"],
+      ["Each extra full user", "£49"],
+      ["Each light user", "£9"],
+      ["Companies · sites", "3 · 10"],
+    ],
+    featured: true,
+  },
+  {
+    name: "Enterprise",
+    audience: "Groups with several companies, regulated goods or trading between entities.",
+    price: "£2,750",
+    from: true,
+    modules:
+      "Everything in Standard, plus multi-company and intercompany trading, serial numbers, container tracking, project accounting and more sandbox environments.",
+    terms: [
+      ["Full users included", "40, no limit"],
+      ["Each extra full user", "£45"],
+      ["Each light user", "£6"],
+      ["Companies · sites", "No limit"],
+    ],
+  },
+];
+
+const GETTING_STARTED: [string, string, string][] = [
+  [
+    "Guided onboarding",
+    "£2,500",
+    "Set-up interview, your products and partners imported, opening balances and two training sessions.",
+  ],
+  [
+    "Standard implementation",
+    "£7,500",
+    "Guided onboarding plus warehouse layout, approval limits, document templates and five days of support.",
+  ],
+  [
+    "Moving from another system",
+    "Quoted",
+    "Sage 200, NetSuite or several companies at once, priced once we have seen your data.",
+  ],
+];
+
+const SUPPORT: [string, string, string][] = [
+  ["Standard", "Included", "Email support in UK business hours."],
+  ["Priority", "10% of subscription", "Four-hour response and a named contact, from £150 a month."],
+  [
+    "Premier",
+    "Enterprise",
+    "Telephone support, one-hour response to critical issues, quarterly review.",
+  ],
+];
+
+function PlanCard({ plan }: { plan: Plan }) {
+  return (
+    <article
+      className={
+        "flex flex-col rounded-2xl border bg-surface p-6 " +
+        (plan.featured ? "border-accent ring-2 ring-accent/25" : "border-line ring-1 ring-black/5")
+      }
+      aria-labelledby={`plan-${plan.name}`}
+    >
+      <h3 id={`plan-${plan.name}`} className="font-display text-xl font-semibold text-brand">
+        {plan.name}
+      </h3>
+      <p className="mt-1.5 min-h-[3lh] text-sm leading-relaxed text-ink/65 text-pretty">
+        {plan.audience}
+      </p>
+      <p className="mt-4 flex items-baseline gap-1.5">
+        {plan.from ? <span className="text-sm text-ink/60">from</span> : null}
+        <span className="font-display text-4xl font-medium tabular-nums text-brand">
+          {plan.price}
+        </span>
+        <span className="text-sm text-ink/60">a month</span>
+      </p>
+      <p className="mt-1 text-xs text-ink/50">Billed annually, excluding VAT</p>
+      <dl className="mt-5 divide-y divide-line border-y border-line text-sm">
+        {plan.terms.map(([term, value]) => (
+          <div key={term} className="flex items-baseline justify-between gap-4 py-2">
+            <dt className="text-ink/65">{term}</dt>
+            <dd className="font-medium tabular-nums text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-5 flex gap-2 text-sm leading-relaxed text-ink/75 text-pretty">
+        <Check className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
+        {plan.modules}
+      </p>
+    </article>
+  );
+}
+
+function PriceTable({ caption, rows }: { caption: string; rows: [string, string, string][] }) {
+  return (
+    <div>
+      <h3 className="font-display text-base font-semibold text-brand">{caption}</h3>
+      <dl className="mt-3 divide-y divide-line border-y border-line">
+        {rows.map(([name, price, body]) => (
+          <div key={name} className="grid gap-1 py-3 sm:grid-cols-[1fr_auto] sm:gap-x-6">
+            <dt className="text-sm font-medium text-ink">{name}</dt>
+            <dd className="text-sm font-medium tabular-nums text-brand sm:text-right">{price}</dd>
+            <dd className="text-sm leading-relaxed text-ink/65 text-pretty sm:col-span-2">
+              {body}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function Pricing() {
   return (
     <section className="py-12" id="pricing" aria-labelledby="pricing-heading">
-      <div className="relative overflow-hidden rounded-3xl bg-accent p-8 text-surface md:p-10">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+        Fair, British pricing
+      </p>
+      <h2
+        id="pricing-heading"
+        className="mt-3 max-w-[26ch] font-display text-3xl font-medium leading-tight text-brand text-balance md:text-4xl"
+      >
+        One price for your organisation, with your core team included.
+      </h2>
+      <p className="mt-4 max-w-[62ch] text-base leading-relaxed text-ink/70 text-pretty">
+        Add people as you grow. Light users — people who only approve, look at reports or use the
+        scanner — cost a fraction of a full user. No per-transaction fees, and your data always
+        exports with you.
+      </p>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-3">
+        {PLANS.map((plan) => (
+          <PlanCard key={plan.name} plan={plan} />
+        ))}
+      </div>
+
+      <div className="mt-10 grid gap-8 md:grid-cols-2">
+        <PriceTable caption="Getting started" rows={GETTING_STARTED} />
+        <PriceTable caption="Support" rows={SUPPORT} />
+      </div>
+
+      <p className="mt-6 max-w-[80ch] text-xs leading-relaxed text-ink/55 text-pretty">
+        All prices in pounds sterling, excluding VAT, with a VAT invoice. Plans are billed annually;
+        month-to-month billing adds 15%, and two- and three-year terms save 10% and 15%. An extra
+        company is £150 and an extra site £75 a month. Renewal increases are capped at CPI or 5%,
+        whichever is lower.
+      </p>
+
+      <div className="relative mt-10 overflow-hidden rounded-3xl bg-accent p-8 text-surface md:p-10">
         <div
           className="absolute top-0 right-0 size-48 rounded-full bg-white/5 -mr-20 -mt-20 blur-2xl"
           aria-hidden="true"
@@ -402,32 +592,27 @@ function Pricing() {
         <div className="relative grid items-center gap-8 md:grid-cols-2">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-surface/80">
-              Fair, British pricing
+              Founding customers
             </p>
-            <h2
-              id="pricing-heading"
-              className="mt-3 font-display text-3xl font-medium leading-tight md:text-4xl"
-            >
-              From £25 per seat, per month.
-            </h2>
-            <p className="mt-3 max-w-[42ch] text-sm leading-relaxed text-surface/85 text-pretty">
-              Every module included. Billed in sterling, VAT invoice supplied, no per-transaction
-              tolls. Cancel at month-end — your data exports with you.
+            <h3 className="mt-3 font-display text-3xl font-medium leading-tight text-balance md:text-4xl">
+              35% off your first two years.
+            </h3>
+            <p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-surface/85 text-pretty">
+              We are taking a small number of founding customers. In return for a case study, a
+              monthly feedback call and being a reference, your plan is 35% off for 24 months.
             </p>
           </div>
           <div className="flex flex-col gap-3">
             <Link
-              to="/signin"
+              to="/contact"
               className="rounded-full bg-surface px-6 py-3.5 text-center text-sm font-semibold text-accent ring-2 ring-surface/20 transition-transform active:scale-[0.98]"
             >
-              Start exploring with demo data
+              Book a demo
             </Link>
-            <Link
-              to="/contact"
-              className="rounded-full px-6 py-3.5 text-center text-sm font-medium text-surface ring-1 ring-surface/40 transition-colors hover:bg-surface/10"
-            >
-              Book a walkthrough
-            </Link>
+            <p className="text-center text-sm leading-relaxed text-surface/85 text-pretty">
+              Not ready to commit? Run a 30-day pilot on your own data for £500, credited against
+              your first year.
+            </p>
           </div>
         </div>
       </div>
