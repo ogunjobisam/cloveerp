@@ -255,11 +255,16 @@ export function NewDocumentAction({
               currency: "GBP",
               placeholder: "1.85",
             },
+            // The product's own description arrives the moment the product is
+            // picked, so it is seen and can be changed. Left blank, the
+            // database gives the line the product's description anyway — the
+            // same rule for every route a line is written by, not only this one.
             {
               name: "description",
               label: "Description",
               kind: "text",
-              placeholder: "Rolled oats, 25kg sack",
+              placeholder: "Leave blank to use the product's description",
+              fillFrom: { column: "item_id", key: "description" },
             },
           ],
         },
@@ -279,7 +284,9 @@ export function NewDocumentAction({
               row["unit_price_minor"] ?? "",
               minorUnitsOf(currencies, "GBP"),
             ),
-            description: row["description"] ?? null,
+            // A cleared box is no description: null, so the line takes the
+            // product's.
+            description: row["description"] || null,
           })),
       })}
       // One press for the straightforward case: raise it and move it on.

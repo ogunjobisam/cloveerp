@@ -177,7 +177,8 @@ function OrderAction({ row, type }: { row: ForecastRow; type: DocType | undefine
           {
             item_id: row.item_id,
             quantity: Number(v["quantity"] ?? 0),
-            description: row.item_name ?? null,
+            // Left to the database: the line takes the product's own description.
+            description: null,
           },
         ],
       })}

@@ -257,7 +257,62 @@ export type RowColumn = {
   options?: OptionSource;
   /** For `money`. */
   currency?: string;
+  /**
+   * Arrive holding something the row's picker already knows.
+   *
+   * A product carries its own description, so a line should not make somebody
+   * type it again: when `column` picks an option, this column takes that
+   * option's `key` from the picker's own source. It stays editable, and what
+   * the person typed is never overwritten — see `pickIntoRow`.
+   */
+  fillFrom?: { column: string; key: string };
 };
+
+/**
+ * What a picker hands back beside the value: the source's record for the
+ * option now chosen, and for the one it replaced. A plain string list has no
+ * record, so both are undefined there.
+ */
+export type OptionPick = {
+  picked: Record<string, unknown> | undefined;
+  previous: Record<string, unknown> | undefined;
+};
+
+/** A record's field as a text box would hold it. */
+function asText(v: unknown): string {
+  return typeof v === "string" ? v : typeof v === "number" ? String(v) : "";
+}
+
+/**
+ * One row after one of its cells changed.
+ *
+ * The changed cell takes its value. Every column that fills from that cell
+ * takes the picked option's field — unless the person has typed their own.
+ * Theirs is anything other than blank or exactly what the previous pick put
+ * there: blank has nothing to lose, and the previous pick's text was never
+ * theirs, so changing the product changes it too. Choosing nothing, or a
+ * product with nothing to give, leaves the column blank for the database to
+ * decide.
+ */
+export function pickIntoRow(
+  row: Record<string, string>,
+  columns: RowColumn[],
+  changed: string,
+  value: string,
+  pick?: OptionPick,
+): Record<string, string> {
+  const next: Record<string, string> = { ...row, [changed]: value };
+  if (!pick) return next;
+  for (const c of columns) {
+    const from = c.fillFrom;
+    if (!from || from.column !== changed || c.name === changed) continue;
+    const current = row[c.name] ?? "";
+    if (current !== "" && current !== asText(pick.previous?.[from.key])) continue;
+    const filled = asText(pick.picked?.[from.key]);
+    if (filled !== current) next[c.name] = filled;
+  }
+  return next;
+}
 
 /** The label a picker shows for one row of its source. */
 function optionLabel(row: Record<string, unknown>, keys: string[]): string {
@@ -285,14 +340,16 @@ function useOptions(source: OptionSource | undefined) {
 
   // Most reference reads return a row per option. A few — the time zone list
   // is one — return plain strings, which are their own value and their own
-  // label.
-  const rows = source
+  // label. A row keeps its record, so a picker can say more than its label
+  // about what was chosen.
+  const rows: { value: string; label: string; record?: Record<string, unknown> }[] = source
     ? (Array.isArray(list) ? (list as Record<string, unknown>[]) : []).map((row) =>
         typeof row === "string" || typeof row === "number"
           ? { value: String(row), label: String(row) }
           : {
               value: String(row[source.value] ?? ""),
               label: optionLabel(row, source.label) || String(row[source.value] ?? ""),
+              record: row,
             },
       )
     : [];
@@ -329,7 +386,7 @@ export function SelectField({
 }: {
   field: Extract<Field, { kind: "select" }>;
   value: string;
-  onChange: (v: string) => void;
+  onChange: (v: string, pick?: OptionPick) => void;
 }) {
   const { rows, isPending, error } = useOptions(field.options);
   const [filter, setFilter] = useState("");
@@ -356,7 +413,13 @@ export function SelectField({
         aria-label={field.label}
         required={field.required ?? false}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          onChange(next, {
+            picked: rows.find((r) => r.value === next)?.record,
+            previous: rows.find((r) => r.value === value)?.record,
+          });
+        }}
         disabled={isPending || Boolean(error)}
         className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60`}
       >
@@ -466,7 +529,7 @@ function RowCell({
 }: {
   column: RowColumn;
   value: string;
-  onChange: (v: string) => void;
+  onChange: (v: string, pick?: OptionPick) => void;
 }) {
   if (column.kind === "select" && column.options)
     return (
@@ -545,8 +608,12 @@ function RowsField({
               <RowCell
                 column={c}
                 value={row[c.name] ?? ""}
-                onChange={(v) =>
-                  onChange(value.map((r, i) => (i === index ? { ...r, [c.name]: v } : r)))
+                onChange={(v, pick) =>
+                  onChange(
+                    value.map((r, i) =>
+                      i === index ? pickIntoRow(r, field.columns, c.name, v, pick) : r,
+                    ),
+                  )
                 }
               />
             </div>
