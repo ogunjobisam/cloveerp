@@ -233,7 +233,7 @@ function EncryptionKeysPanel() {
 }
 
 /**
- * A year of trading, one week per call.
+ * A year of trading, a few days per call.
  *
  * Master data alone leaves every dashboard at zero, because a dashboard reads
  * movements, not records; and three documents dated today leave an ageing
@@ -243,11 +243,16 @@ function EncryptionKeysPanel() {
  * document goes through, so everything it writes reconciles exactly as a
  * customer's would.
  *
- * The database builds one week per call and says where the next call should
- * start; the button loops until it says it is done. That is what keeps each
- * call inside the statement timeout a signed-in user has, and what lets a call
- * that failed be repeated: a week that already exists is skipped, not
- * duplicated.
+ * The database builds one day at a time and stops starting new days once a
+ * quarter of the caller's statement timeout has gone, at most five days a
+ * call, then says where the next call should start; the button loops until it
+ * says it is done. A week per call ran into the eight-second timeout a
+ * signed-in user has once approvals were asked for every order (14 September).
+ * A call that failed can be repeated: a day that already exists is skipped,
+ * not duplicated, and so is every day of a five-day slice built before.
+ *
+ * Progress is measured from where the first call started, not from where the
+ * latest one did, so the bar moves the way the year does.
  */
 type DemoHistoryStep = {
   done?: boolean;
@@ -277,10 +282,12 @@ function DemoHistoryPanel() {
   const building = useErpAction({ fn: "erp_seed_demo_history", invalidates: [] });
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{
+    /** Where the first call of this run started. */
     from: string;
     to: string;
     through: string;
     documents: number;
+    calls: number;
   } | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const stop = useRef(false);
@@ -291,13 +298,17 @@ function DemoHistoryPanel() {
     setNotes([]);
     setProgress(null);
     let from: string | null = null;
+    let start: string | null = null;
     let documents = 0;
+    let calls = 0;
     try {
       for (;;) {
         const step = (await building.mutateAsync(from ? { p_from: from } : {})) as DemoHistoryStep;
         documents += Number(step.built ?? 0);
+        calls += 1;
         if (step.from && step.to && step.built_through) {
-          setProgress({ from: step.from, to: step.to, through: step.built_through, documents });
+          start ??= step.from;
+          setProgress({ from: start, to: step.to, through: step.built_through, documents, calls });
         }
         const fresh = Array.isArray(step.notes) ? step.notes.map(String) : [];
         if (fresh.length > 0) {
@@ -333,8 +344,10 @@ function DemoHistoryPanel() {
         <Prose className="mt-0.5 text-xs text-muted-foreground">
           Builds a year of purchasing, receipts, sales, despatches, invoices and cash, with the
           quotations and requisitions around them, so the dashboards, ageing, margin and the stock
-          ledger have a year to show. One week is built per call and the button keeps calling until
-          the year is done; a week that already exists is skipped. Refused in a live organisation.
+          ledger have a year to show. A few days are built per call, as many as fit comfortably in
+          the time a call is allowed, and the button keeps calling until the year is done; a day
+          that already exists is skipped, so pressing it again after a failure carries on from where
+          it stopped. Refused in a live organisation.
         </Prose>
       </header>
       <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
@@ -355,7 +368,7 @@ function DemoHistoryPanel() {
                 stop.current = true;
               }}
             >
-              Stop after this week
+              Stop after this call
             </button>
           ) : null}
         </div>
@@ -368,13 +381,24 @@ function DemoHistoryPanel() {
               />
             </div>
             <p className="text-muted-foreground" aria-live="polite">
-              Built through {shortDate(progress.through)} — {progress.documents} documents
+              Built through {shortDate(progress.through)} — {progress.documents} documents in{" "}
+              {progress.calls} {progress.calls === 1 ? "call" : "calls"}
               {percent !== null ? ` (${percent}%)` : ""}
               {running ? "" : "."}
             </p>
           </div>
         ) : null}
-        {building.error ? <ErrorNote error={building.error} /> : null}
+        {building.error ? (
+          <>
+            <ErrorNote error={building.error} />
+            {progress ? (
+              <p className="text-sm text-muted-foreground">
+                Everything up to {shortDate(progress.through)} is kept. Press the button again to
+                carry on; the days already built are skipped.
+              </p>
+            ) : null}
+          </>
+        ) : null}
         {notes.length > 0 ? (
           <ul className="list-disc pl-5 text-sm text-muted-foreground">
             {notes.map((n, i) => (

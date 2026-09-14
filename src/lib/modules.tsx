@@ -45,6 +45,32 @@ const QUALITY_EVENT_LIST: StageList = {
   nounPlural: "events",
 };
 
+/**
+ * An event's states before it is closed. Nothing but closing moves an event
+ * between them today, so every quality step lists the same open events rather
+ * than guessing which of them has been inspected.
+ */
+const QUALITY_EVENT_OPEN = ["open", "investigating", "action", "verification"];
+
+/**
+ * What is standing in goods-in, pallet by pallet, with where each belongs.
+ *
+ * Stock's goods-in step listed goods receipts — every one ever raised, drafts
+ * and years-old posted ones alike — under a hint that said "stock lands in
+ * goods-in before it has a home". This read is that stock, and it is the one
+ * Purchasing's goods-in step already lists.
+ */
+export const GOODS_IN_LIST: StageList = {
+  fn: "erp_goods_in",
+  args: {},
+  id: "line_key",
+  title: ["item_code", "item"],
+  subtitle: ["location", "quantity", "suggested_location"],
+  status: "putaway_task",
+  noun: "pallet",
+  nounPlural: "pallets",
+};
+
 /** Shipments, listed the same way at every step of despatch. */
 const SHIPMENT_LIST: StageList = {
   fn: "erp_shipments",
@@ -56,6 +82,9 @@ const SHIPMENT_LIST: StageList = {
   noun: "shipment",
   nounPlural: "shipments",
 };
+
+/** A shipment planned and not yet booked with a carrier: what choosing and booking act on. */
+const SHIPMENT_UNBOOKED = ["planning", "planned", "tendered"];
 
 /**
  * One description of every module, used by every surface that talks about it.
@@ -103,12 +132,26 @@ export type Panel = {
   columns: Column<Row>[];
 };
 
+/**
+ * What a tile's arithmetic may ask of the screen.
+ *
+ * `money` totals a field of minor units as money — the symbol, whole units,
+ * the currency's own exponent, and one figure per currency when the rows are
+ * in more than one — so no tile divides by a hundred and prints the result.
+ */
+export type KpiContext = {
+  money: (rows: Row[], field: string) => string;
+};
+
 export type Kpi = {
   label: string;
   fn: string;
   args?: Record<string, unknown>;
   /** Derived from the rows of `fn`. Returning null means "no basis to state one". */
-  compute: (rows: Row[]) => { value: string; hint?: string; tone?: "ok" | "warn" | "bad" } | null;
+  compute: (
+    rows: Row[],
+    context: KpiContext,
+  ) => { value: string; hint?: string; tone?: "ok" | "warn" | "bad" } | null;
 };
 
 export type Chart = {
@@ -220,9 +263,6 @@ const count = (rows: Row[], predicate: (r: Row) => boolean) => rows.filter(predi
 const isOneOf = (value: unknown, words: string[]) =>
   words.includes(String(value ?? "").toLowerCase());
 
-const money = (minor: number) =>
-  (minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 });
-
 const pill = (field: string): Column<Row> => ({
   header: "Status",
   cell: (r) => <StatusPill value={r[field]} />,
@@ -328,14 +368,34 @@ const zeroIsGood = (n: number, label: string) => ({
  * Stock is where the batch is; quality is who decides. It was declared on Stock
  * alone, so the people who hold the release — a quality manager, a responsible
  * person — had to hold stock's screen as well to find it.
+ *
+ * The door has always taken the inspection the release relies on, and the form
+ * never sent it. It offers the inspections of the chosen batch now: the database
+ * refuses a batch last rejected, one whose inspection failed, an inspection of
+ * another batch, and, once the organisation is live, a release by whoever
+ * dispositioned it (20260914070000).
  */
-const RELEASE_BATCH: ActionSpec = {
+export const RELEASE_BATCH: ActionSpec = {
   label: "Release a batch",
   permission: "quality.release_batch",
   fn: "erp_release_batch",
   fields: [
     pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
     pickSite(),
+    {
+      kind: "select",
+      name: "p_inspection_id",
+      label: "Inspection",
+      required: false,
+      hint: "The inspection of this batch the release relies on. A batch last rejected, or whose inspection failed, is not released, and once the organisation is live nobody releases a batch they dispositioned.",
+      options: {
+        fn: "erp_inspections",
+        args: { p_limit: 100 },
+        argsFrom: { p_batch_id: "p_batch_id" },
+        value: "inspection_id",
+        label: ["disposition", "status", "completed_at"],
+      },
+    },
     {
       kind: "text",
       name: "p_basis",
@@ -364,8 +424,10 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Goods in",
         hint: "Receipts posted against a purchase order. Stock lands in goods-in before it has a home.",
-        fedBy: "Receipts appear here once a purchase order is received and posted.",
+        fedBy: "Stock appears here once a receipt against a purchase order is posted.",
 
+        list: GOODS_IN_LIST,
+        // Still raised from here: a receipt is what puts stock into goods-in.
         typeCode: "goods_receipt",
         partyRole: "supplier",
         createFn: "erp_raise_putaway_tasks",
@@ -386,6 +448,7 @@ export const INVENTORY: ModuleDef = {
           noun: "task",
           nounPlural: "tasks",
         },
+        states: ["open"],
         recordArg: "p_task_id",
         actionFn: "erp_complete_warehouse_task",
       },
@@ -654,11 +717,19 @@ export const INVENTORY: ModuleDef = {
       fn: "erp_commit_allocation",
       fields: [
         {
-          kind: "text",
+          // Chosen, not typed: the reservations sales order lines hold and
+          // nobody has picked yet, as erp_allocations lists them.
+          kind: "select",
           name: "p_allocation_id",
-          label: "Allocation id",
+          label: "Reservation",
           required: true,
-          hint: "The reservation the sales line holds; leave location and batch empty to let the policy choose.",
+          hint: "A sales order line's reservation not yet picked. Leave location and batch empty to let the policy choose.",
+          options: {
+            fn: "erp_allocations",
+            args: { p_status: "reserved", p_limit: 200 },
+            value: "allocation_id",
+            label: ["document_number", "item", "quantity"],
+          },
         },
         pickLocation("p_location_id", "Location", false),
         pickBatch("p_batch_id", "Batch", false),
@@ -967,10 +1038,8 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock value",
       fn: "erp_stock_valuation",
-      compute: (rows) =>
-        rows.length === 0
-          ? null
-          : { value: money(sum(rows, "value_minor")), hint: String(rows[0]?.["currency"] ?? "") },
+      compute: (rows, { money }) =>
+        rows.length === 0 ? null : { value: money(rows, "value_minor"), hint: "on hand, at cost" },
     },
     {
       label: "Expiring in 30 days",
@@ -1129,6 +1198,8 @@ export const FINANCE: ModuleDef = {
         fedBy: "Invoices appear here once a delivery has been despatched and invoiced.",
 
         typeCode: "sales_invoice",
+        // Being raised, or issued and owed. Paid or credited, it is settled.
+        states: ["draft", "issued"],
         partyRole: "customer",
         recordArg: "p_invoice_id",
         createFn: "erp_invoice_from_delivery",
@@ -1153,6 +1224,8 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // Being put together, or proposed and waiting for a second pair of eyes.
+        states: ["draft", "proposed"],
         recordArg: "p_proposal_id",
         createFn: "erp_propose_payment_run",
       },
@@ -1171,6 +1244,8 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // erp.approve_payment_run takes a proposed run and nothing else.
+        states: ["proposed"],
         recordArg: "p_proposal_id",
         actionFn: "erp_approve_payment_run",
       },
@@ -1189,13 +1264,42 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // erp.pay_payment_run takes an approved run and nothing else.
+        states: ["approved"],
         recordArg: "p_proposal_id",
         actionFn: "erp_pay_payment_run",
       },
       {
+        label: "Journals",
+        hint: "Accruals and corrections typed by hand: raised by one person, approved and posted by another.",
+        to: "/finance/journals",
+        toLabel: "Open journals",
+      },
+      {
         label: "Close",
-        hint: "Period close: the task list, then the close itself.",
-        createFn: "erp_close_period",
+        hint: "Open a period's close, work through its tasks, close the period, and at the end of the year close the year for good.",
+        fedBy:
+          "Periods appear here once Financials is installed, which creates the fiscal calendar.",
+
+        list: {
+          fn: "erp_fiscal_periods",
+          id: "fiscal_period_id",
+          title: ["code"],
+          subtitle: ["ledger", "starts_on", "ends_on"],
+          status: "status",
+          noun: "period",
+          nounPlural: "periods",
+        },
+        // A period still being worked or reopenable; permanently closed years
+        // are history, reached through Show finished.
+        states: ["future", "open", "closing", "closed"],
+        recordArg: "p_fiscal_period_id",
+        actionFns: [
+          "erp_open_period_close",
+          "erp_close_period",
+          "erp_close_fiscal_year",
+          "erp_reopen_period",
+        ],
       },
     ],
   },
@@ -1467,6 +1571,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       label: "Close a period",
+      description:
+        "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
       permission: "finance.close_period",
       fn: "erp_close_period",
       fields: [
@@ -1493,6 +1599,23 @@ export const FINANCE: ModuleDef = {
           "Period",
         ),
         reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status"],
+    },
+    {
+      label: "Close the fiscal year",
+      description:
+        "Year end, once every period of the year is closed: each period of it is closed for good, and nothing is posted into, closed or reopened in that year again.",
+      permission: "finance.close_period",
+      fn: "erp_close_fiscal_year",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "ledger", "status"],
+          "p_fiscal_period_id",
+          "Last period of the year",
+        ),
       ],
       invalidates: ["erp_fiscal_periods", "erp_close_status"],
     },
@@ -1575,15 +1698,27 @@ export const FINANCE: ModuleDef = {
           // and posted is terminal, so p_actionable would offer none.
           { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
         ),
+        // Invoicing goods you despatched yourself is an exception to the
+        // separation of duties. Once the organisation is live it needs a reason
+        // and somebody who may promote configuration, so only they are asked.
         {
           kind: "choice",
           name: "p_allow_self_invoice",
           label: "Allow self-invoice",
+          permission: "administration.promote",
           boolean: true,
           choices: [
             { value: "false", label: "No" },
             { value: "true", label: "Yes" },
           ],
+          hint: "Only when you despatched these goods yourself and nobody else can invoice them. Once the organisation is live it needs a reason.",
+        },
+        {
+          kind: "text",
+          name: "p_self_invoice_reason",
+          label: "Reason for invoicing your own delivery",
+          permission: "administration.promote",
+          hint: "Why nobody else can invoice these goods, and what checks the invoice instead. At least twenty characters once the organisation is live; kept on the invoice.",
         },
       ],
       invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
@@ -1632,17 +1767,28 @@ export const FINANCE: ModuleDef = {
     {
       label: "Receivables",
       fn: "erp_receivables_ageing",
-      compute: (rows) =>
+      compute: (rows, { money }) =>
         rows.length === 0
           ? null
-          : { value: money(sum(rows, "total_minor")), hint: "outstanding, all customers" },
+          : { value: money(rows, "total_minor"), hint: "outstanding, all customers" },
     },
     {
       label: "Overdue 60+",
       fn: "erp_receivables_ageing",
-      compute: (rows) => {
-        const v = sum(rows, "days_60_plus_minor");
-        return { value: money(v), hint: "past sixty days", tone: v > 0 ? "bad" : "ok" };
+      // erp.receivables_ageing bands 61-90 and over 90; it has no 60-plus
+      // column, so the tile read one that was never there and said nothing
+      // was overdue.
+      compute: (rows, { money }) => {
+        const overdue = rows.map((r) => ({
+          ...r,
+          overdue_minor: num(r["days_61_90"]) + num(r["days_over_90"]),
+        }));
+        const v = sum(overdue, "overdue_minor");
+        return {
+          value: money(overdue, "overdue_minor"),
+          hint: "past sixty days",
+          tone: v > 0 ? "bad" : "ok",
+        };
       },
     },
     {
@@ -1910,6 +2056,8 @@ export const PLANNING: ModuleDef = {
           noun: "forecast",
           nounPlural: "forecasts",
         },
+        // A draft run, and the one in force. Superseded and withdrawn are history.
+        states: ["draft", "active"],
         createFn: "erp_run_forecast",
       },
       {
@@ -1927,6 +2075,8 @@ export const PLANNING: ModuleDef = {
           noun: "forecast",
           nounPlural: "forecasts",
         },
+        // Signing off makes a draft the one in force.
+        states: ["draft"],
         recordArg: "p_version_id",
         actionFn: "erp_sign_off_forecast",
       },
@@ -1952,6 +2102,8 @@ export const PLANNING: ModuleDef = {
           noun: "planned order",
           nounPlural: "planned orders",
         },
+        // Suggested by a run and not yet turned into an order or cancelled.
+        states: ["suggested", "reviewed", "firmed"],
         recordArg: "p_planned_order_id",
         actionFn: "erp_firm_planned_order",
       },
@@ -2381,6 +2533,7 @@ export const PRODUCTION: ModuleDef = {
           "Orders appear here once one is raised, or once a planned order is firmed in planning.",
 
         list: WORKS_ORDER_LIST,
+        states: ["draft", "planned"],
         createFn: "erp_raise_works_order",
       },
       {
@@ -2389,6 +2542,8 @@ export const PRODUCTION: ModuleDef = {
         fedBy: "Orders appear here once one has been raised at the works order step.",
 
         list: WORKS_ORDER_LIST,
+        // erp.release_works_order takes a draft or planned order.
+        states: ["draft", "planned"],
         recordArg: "p_works_order_id",
         actionFn: "erp_release_works_order",
       },
@@ -2396,6 +2551,8 @@ export const PRODUCTION: ModuleDef = {
         label: "Issue components",
         hint: "Stock leaves the store and joins the order's cost.",
         list: WORKS_ORDER_LIST,
+        // Issuing and receiving take a released order or one under way.
+        states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_issue_to_works_order",
       },
@@ -2403,6 +2560,7 @@ export const PRODUCTION: ModuleDef = {
         label: "Book time",
         hint: "Operation time against the route, so the variance means something.",
         list: WORKS_ORDER_LIST,
+        states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_book_operation_time",
       },
@@ -2410,6 +2568,7 @@ export const PRODUCTION: ModuleDef = {
         label: "Receive output",
         hint: "Finished quantity, and scrap, back into stock.",
         list: WORKS_ORDER_LIST,
+        states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_receive_works_order_output",
       },
@@ -2417,6 +2576,8 @@ export const PRODUCTION: ModuleDef = {
         label: "Close",
         hint: "Closing an order settles its variance and stops further booking.",
         list: WORKS_ORDER_LIST,
+        // erp.close_works_order takes an order under way or completed.
+        states: ["in_progress", "completed"],
         recordArg: "p_works_order_id",
         actionFn: "erp_close_works_order",
       },
@@ -2776,6 +2937,7 @@ export const QUALITY: ModuleDef = {
         fedBy: "Events appear here once one is raised, here or from the floor.",
 
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         createFn: "erp_raise_quality_event",
       },
       {
@@ -2784,18 +2946,21 @@ export const QUALITY: ModuleDef = {
         fedBy: "Inspections appear here once an event is raised or a receipt requires inspection.",
 
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         createFn: "erp_record_inspection_result",
       },
       {
         label: "Disposition",
         hint: "Release, reject, rework or scrap. This is the decision the audit reads.",
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         createFn: "erp_disposition_inspection",
       },
       {
         label: "Close",
         hint: "An event closes when the disposition is made and the actions are logged.",
         list: QUALITY_EVENT_LIST,
+        states: QUALITY_EVENT_OPEN,
         recordArg: "p_event_id",
         actionFn: "erp_close_quality_event",
       },
@@ -3272,6 +3437,8 @@ export const LOGISTICS: ModuleDef = {
           "Deliveries appear here once one is created from a confirmed sales order. Create a delivery from an order is on the bar below.",
 
         typeCode: "delivery",
+        // Waiting to leave. Posted, the goods have gone.
+        states: ["draft"],
         partyRole: "customer",
         recordArg: "p_delivery_id",
         createFn: "erp_plan_shipment",
@@ -3282,6 +3449,7 @@ export const LOGISTICS: ModuleDef = {
         fedBy: "Shipments appear here once deliveries are gathered into one at the delivery step.",
 
         list: SHIPMENT_LIST,
+        states: SHIPMENT_UNBOOKED,
         recordArg: "p_shipment_id",
         actionFn: "erp_select_carrier",
       },
@@ -3291,6 +3459,7 @@ export const LOGISTICS: ModuleDef = {
         fedBy: "Shipments appear here once a carrier has been chosen.",
 
         list: SHIPMENT_LIST,
+        states: SHIPMENT_UNBOOKED,
         recordArg: "p_shipment_id",
         actionFn: "erp_book_shipment",
       },
@@ -3298,6 +3467,8 @@ export const LOGISTICS: ModuleDef = {
         label: "Proof",
         hint: "The signature or the photograph, attached to the shipment.",
         list: SHIPMENT_LIST,
+        // Booked or on its way, and not yet signed for.
+        states: ["booked", "despatched", "exception"],
         recordArg: "p_shipment_id",
         actionFn: "erp_record_proof_of_delivery",
       },
@@ -3723,10 +3894,10 @@ export const PURCHASING_KPIS: Kpi[] = [
   {
     label: "GRNI value",
     fn: "erp_grni",
-    compute: (rows) =>
+    compute: (rows, { money }) =>
       rows.length === 0
         ? null
-        : { value: money(sum(rows, "open_value_minor")), hint: "open on the balance sheet" },
+        : { value: money(rows, "open_value_minor"), hint: "open on the balance sheet" },
   },
   {
     label: "Match exceptions",
@@ -3736,11 +3907,11 @@ export const PURCHASING_KPIS: Kpi[] = [
   {
     label: "Value at risk",
     fn: "erp_match_workbench",
-    compute: (rows) =>
+    compute: (rows, { money }) =>
       rows.length === 0
         ? null
         : {
-            value: money(sum(rows, "value_at_risk_minor")),
+            value: money(rows, "value_at_risk_minor"),
             hint: "held by match exceptions",
             tone: "warn",
           },
@@ -4088,6 +4259,15 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Profit and balance sheet",
     blurb:
       "What the period made and what the company is worth, read from the journals purchases, stock and invoices already posted.",
+    permission: "finance.read",
+    group: "settle",
+  },
+  {
+    path: "/finance/journals",
+    titleKey: "nav.finance_journals",
+    title: "Journals",
+    blurb:
+      "Accruals, prepayments and corrections typed by hand: raised by one person, approved and posted by another, reversed rather than changed.",
     permission: "finance.read",
     group: "settle",
   },

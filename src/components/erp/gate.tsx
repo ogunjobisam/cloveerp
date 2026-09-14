@@ -1,7 +1,7 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
@@ -13,6 +13,7 @@ import {
 } from "../../lib/invitation-token";
 import { atLeast, usePlatformMe } from "../../lib/platform";
 import { onboardingView, pastedToken, selfServiceIsOpen } from "../../lib/self-service";
+import { tenantStorageKey } from "../../lib/tenant-storage";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
@@ -654,9 +655,20 @@ function PasteInvitation({
 
 const SCOPE_KEY = "clove-erp.scope";
 
-function readScope(): Scope {
+const NO_SCOPE: Scope = { entityId: "", siteId: "" };
+
+/**
+ * The company and site chosen in the header, for one organisation.
+ *
+ * Kept per organisation (tenantStorageKey): a company chosen in one
+ * organisation is not a company of any other, and carried across it narrowed
+ * the next organisation's screens to an id it has never heard of.
+ */
+function readScope(tenantId: string | null): Scope {
+  const key = tenantStorageKey(SCOPE_KEY, tenantId);
+  if (!key) return NO_SCOPE;
   try {
-    const raw = localStorage.getItem(SCOPE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<Scope>;
       return { entityId: parsed.entityId ?? "", siteId: parsed.siteId ?? "" };
@@ -664,7 +676,7 @@ function readScope(): Scope {
   } catch {
     /* private window, cleared site data, or storage blocked entirely */
   }
-  return { entityId: "", siteId: "" };
+  return NO_SCOPE;
 }
 
 /**
@@ -692,17 +704,10 @@ export function Gate({
   // Each route mounts its own Gate, so scope held in plain state would reset on
   // every navigation. It is a per-viewer convenience, not shared state, so the
   // browser is the right place for it — and it is read defensively because a
-  // private window or blocked site data makes any of this throw.
-  const [scope, setScope] = useState<Scope>(readScope);
-
-  const changeScope = (s: Scope) => {
-    setScope(s);
-    try {
-      localStorage.setItem(SCOPE_KEY, JSON.stringify(s));
-    } catch {
-      /* storage unavailable; the selection still applies for this page */
-    }
-  };
+  // private window or blocked site data makes any of this throw. What was
+  // chosen on this page is held with the organisation it was chosen in, so a
+  // session that moves to another organisation reads that one's choice.
+  const [chosen, setChosen] = useState<{ tenantId: string; scope: Scope } | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -722,6 +727,23 @@ export function Gate({
     queryFn: () => callErp<ErpSession>("erp_session"),
     enabled: Boolean(supabase && authSession),
   });
+
+  const tenantId = data?.tenant_id ?? null;
+  // Read once per organisation rather than on every render, so the scope a
+  // page holds keeps its identity until somebody changes it.
+  const stored = useMemo(() => readScope(tenantId), [tenantId]);
+  const scope = chosen !== null && chosen.tenantId === tenantId ? chosen.scope : stored;
+
+  const changeScope = (s: Scope) => {
+    if (!tenantId) return;
+    setChosen({ tenantId, scope: s });
+    const key = tenantStorageKey(SCOPE_KEY, tenantId);
+    try {
+      if (key) localStorage.setItem(key, JSON.stringify(s));
+    } catch {
+      /* storage unavailable; the selection still applies for this page */
+    }
+  };
 
   if (!isConfigured) return <NotConfigured />;
   if (!authReady)

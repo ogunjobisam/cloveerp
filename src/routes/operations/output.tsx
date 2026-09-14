@@ -373,7 +373,7 @@ function Output() {
                 name: "p_domain",
                 label: "Domain",
                 required: true,
-                placeholder: "northwindfoods.co.uk",
+                placeholder: "yourcompany.co.uk",
                 hint: "The domain your documents are sent from.",
               },
               {
@@ -396,7 +396,7 @@ function Output() {
                 kind: "text",
                 name: "p_reply_to",
                 label: "Reply-to",
-                placeholder: "accounts@northwindfoods.co.uk",
+                placeholder: "accounts@yourcompany.co.uk",
                 hint: "Where replies should go, if not the sending address.",
               },
             ],

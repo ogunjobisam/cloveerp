@@ -15,6 +15,7 @@ import {
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { friendlyError } from "../../lib/errors";
+import { fieldsFor } from "../../lib/form-fields";
 import {
   clearDependentCells,
   dependentFields,
@@ -204,6 +205,16 @@ type FieldBase = {
   placeholder?: string;
   /** What the box arrives holding. */
   default?: string;
+  /**
+   * Asked only of somebody holding this permission.
+   *
+   * For a question within a form that only some of the people who may submit
+   * it may answer: invoicing a delivery you despatched yourself is an exception
+   * only somebody who may promote configuration can make, so nobody else is
+   * offered it. The field is left out of the form, and out of what is sent, for
+   * everybody else. The database still decides.
+   */
+  permission?: string;
 };
 
 /** Where a picker gets its list. */
@@ -795,7 +806,7 @@ export function ActionDialog({
   description,
   permission,
   fn,
-  fields,
+  fields: declaredFields,
   mapArgs,
   prefill,
   context,
@@ -856,6 +867,11 @@ export function ActionDialog({
   const { ui } = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  // A field that names a permission is asked only of somebody holding it.
+  const fields = useMemo(
+    () => fieldsFor(declaredFields, (code) => hasPermission(session, code)),
+    [declaredFields, session],
+  );
   // The walkthrough opens this form by the door it drives — only while the
   // form is offered. A dialog the viewer cannot see must not answer to its
   // name, or the walkthrough would close on a button that opened nothing.

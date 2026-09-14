@@ -5,9 +5,27 @@ import { useMemo, useState } from "react";
 import { callErp, hasPermission } from "../../lib/erp";
 import { actionKey, stageActionKeys } from "../../lib/flow-actions";
 import { useT } from "../../lib/i18n";
+import { formatMinor, minorUnitsOf } from "../../lib/money";
+import {
+  DOCUMENT_READ,
+  describeLine,
+  offerFor,
+  rowsAtStage,
+  settledAtStage,
+  stageReadArgs,
+  stateOf,
+  summariseRecord,
+  type DocumentLine,
+  type Offer,
+} from "../../lib/stage-records";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import type { ActionSpec } from "./actions-bar";
+import { StatusPill } from "./auto";
+import { useCurrencies } from "./currencies";
+import { offersAnyTransition, useAvailableTransitions } from "./available-transitions";
+import { DocumentTransitions } from "./document-transitions";
 import { NewDocumentForType } from "./documents";
+import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 
@@ -49,6 +67,23 @@ export type Stage = {
   /** Lists documents of this type code, via public.erp_documents. */
   typeCode?: string;
   /**
+   * The states a record is in while it waits at this step, by code.
+   *
+   * A step without them listed every record of its kind: "Requisition" and
+   * "Approval" showed the same twenty-six requisitions, most of them already
+   * ordered. A document step asks the database for these states; any other
+   * step narrows its read by the row's status. The count on the step counts
+   * the same rows, and "Show finished" brings back the ones that are done.
+   */
+  states?: string[];
+  /**
+   * The states a verb that is not a transition is offered in, keyed as the
+   * verb is named. Converting applies to an approved requisition and billing
+   * to a posted receipt; offering either on anything else is offering a
+   * refusal.
+   */
+  actionStates?: Record<string, string[]>;
+  /**
    * Which side of the trade this step's documents name, when one may be raised
    * here: `customer`, `provider`, and so on. Raising happens on this step, on
    * one screen — header and lines together — rather than on the list screen.
@@ -88,6 +123,8 @@ export type FlowSpec = {
 const CAP = 200;
 /** Rows per page in the left list. */
 const PER_PAGE = 20;
+/** Lines of a document shown beside it before the reader is sent to the document. */
+const LINES_SHOWN = 5;
 
 type Row = Record<string, unknown>;
 
@@ -95,7 +132,7 @@ function sourceOf(stage: Stage): StageList | undefined {
   if (stage.list) return stage.list;
   if (stage.typeCode)
     return {
-      fn: "erp_documents",
+      fn: DOCUMENT_READ,
       args: { p_type_code: stage.typeCode, p_limit: CAP },
       id: "document_id",
       title: ["document_number"],
@@ -107,18 +144,34 @@ function sourceOf(stage: Stage): StageList | undefined {
   return undefined;
 }
 
-function useStageRows(stage: Stage) {
+/**
+ * The rows sitting at a stage.
+ *
+ * The step's count and its list both come from here, so the number on the
+ * step is the number of rows under it. `showFinished` adds the finished ones
+ * for the list; the count never includes them.
+ */
+function useStageRows(stage: Stage, showFinished = false) {
   const source = sourceOf(stage);
+  const args = source
+    ? stageReadArgs(source.fn, source.args ?? {}, stage.states, showFinished)
+    : {};
 
   const query = useQuery({
-    queryKey: [source?.fn ?? "no-stage-list", source?.args ?? {}],
-    queryFn: () =>
-      source ? callErp<Row[]>(source.fn, source.args ?? {}) : Promise.resolve([] as Row[]),
+    queryKey: [source?.fn ?? "no-stage-list", args],
+    queryFn: () => (source ? callErp<Row[]>(source.fn, args) : Promise.resolve([] as Row[])),
     enabled: Boolean(source),
   });
 
-  const rows = Array.isArray(query.data) ? query.data : [];
-  return { source, rows, isPending: Boolean(source) && query.isPending, error: query.error };
+  const read = Array.isArray(query.data) ? query.data : [];
+  const rows = rowsAtStage(read, { states: stage.states, statusKey: source?.status }, showFinished);
+  return {
+    source,
+    rows,
+    capped: read.length >= CAP,
+    isPending: Boolean(source) && query.isPending,
+    error: query.error,
+  };
 }
 
 function join(row: Row, keys: string[] | undefined): string {
@@ -142,46 +195,13 @@ function haystack(row: Row): string {
  *
  * A task marked done, a document posted or cancelled, is finished: offering the
  * verb that finished it again is an invitation to an error the database will
- * refuse anyway. The verb is greyed instead, and says why.
+ * refuse anyway. The verb is greyed instead, and says why. Which words mean
+ * finished, and the exception for a record in its own step's states, are in
+ * `settledAtStage`; these are the verbs that stay open on a finished record —
+ * reading, correcting, reversing.
  */
-const SETTLED = new Set([
-  "done",
-  "complete",
-  "completed",
-  "posted",
-  "closed",
-  "cancelled",
-  "canceled",
-  "rejected",
-  "delivered",
-  "despatched",
-  "dispatched",
-  "received",
-  "paid",
-  "withdrawn",
-  "superseded",
-  "archived",
-]);
-
-/** Verbs that stay open on a finished record — reading, correcting, reversing. */
 const STILL_ALLOWED =
   /edit|amend|correct|update|change|view|open|print|note|comment|reopen|revers/i;
-
-function statusOf(row: Row, source: StageList | undefined): string | null {
-  const keys = [source?.status, "status", "state_name", "state", "task_status", "document_state"];
-  for (const key of keys) {
-    if (!key) continue;
-    const value = row[key];
-    if (typeof value === "string" && value.trim() !== "") return value.trim().toLowerCase();
-  }
-  return null;
-}
-
-function isSettled(row: Row | null, source: StageList | undefined): string | null {
-  if (!row) return null;
-  const status = statusOf(row, source);
-  return status && SETTLED.has(status) ? status : null;
-}
 
 function actionStaysOpen(action: ActionSpec): boolean {
   return STILL_ALLOWED.test(`${action.code ?? ""} ${action.fn} ${action.label}`);
@@ -210,7 +230,7 @@ function StageAction({
       </ActionButton>
     );
 
-  if (settled && !actionStaysOpen(action))
+  if (settled)
     return (
       <ActionButton
         variant="secondary"
@@ -244,19 +264,26 @@ function StageList({
   stage,
   rows,
   source,
+  capped,
   isPending,
   error,
   selectedId,
   onSelect,
+  showFinished,
+  onShowFinished,
 }: {
   stage: Stage;
   rows: Row[];
   source: StageList | undefined;
+  capped: boolean;
   isPending: boolean;
   error: unknown;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  showFinished: boolean;
+  onShowFinished: (show: boolean) => void;
 }) {
+  const { ui } = useT();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
@@ -278,7 +305,7 @@ function StageList({
 
   return (
     <div className="min-w-0">
-      <div className="border-b border-border px-4 py-2 sm:px-5">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-2 sm:px-5">
         <input
           type="search"
           value={search}
@@ -288,8 +315,23 @@ function StageList({
           }}
           aria-label={`Search ${source.nounPlural}`}
           placeholder={`Search ${source.nounPlural}…`}
-          className="w-full min-w-0 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
+          className="w-full min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
         />
+        {/* History, on request. The step lists what is waiting there; the
+            finished ones are a press away rather than in the way. */}
+        {stage.states && stage.states.length > 0 ? (
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showFinished}
+              onChange={(e) => {
+                onShowFinished(e.target.checked);
+                setPage(0);
+              }}
+            />
+            {ui("Show finished")}
+          </label>
+        ) : null}
       </div>
 
       <div className="min-h-[12rem]">
@@ -348,7 +390,7 @@ function StageList({
       <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-[11px] text-muted-foreground sm:px-5">
         <span>
           {matches.length} {matches.length === 1 ? source.noun : source.nounPlural}
-          {rows.length >= CAP ? ` — the first ${CAP}. Search to reach the rest.` : ""}
+          {capped ? ` — the first ${CAP}. Search to reach the rest.` : ""}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           <button
@@ -378,6 +420,23 @@ function StageList({
   );
 }
 
+/** What erp_document returns, as much of it as the record panel reads. */
+type DocumentPayload = {
+  lines: DocumentLine[];
+};
+
+/**
+ * The chosen record, as a person reads it.
+ *
+ * It used to print the read's columns under their own names — STATE ordered,
+ * TOTAL MINOR 317100, IS CANCELLED false — and every verb the step carries,
+ * whatever state the record was in; and a draft purchase order offered nothing
+ * that could move it on. Now a document shows its number and state, its
+ * customer or supplier, its dates, its total as money and its first lines, and
+ * links to its page. The step's verbs are offered only where the record's state
+ * allows them (`offerFor`), and the document's other moves are offered beside
+ * them as its own page offers them (`DocumentTransitions`).
+ */
 function StageRecord({
   stage,
   source,
@@ -393,6 +452,7 @@ function StageRecord({
 }) {
   const { ui } = useT();
   const { session } = useErpSession();
+  const { currencies } = useCurrencies();
   const permitted = (a: ActionSpec) => !a.permission || hasPermission(session, a.permission);
   const id = row && source ? String(row[source.id] ?? "") : "";
   const prefill: Record<string, unknown> =
@@ -401,7 +461,60 @@ function StageRecord({
     row && source
       ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
       : undefined;
-  const settled = isSettled(row, source);
+  const state = stateOf(row, source?.status);
+  const settled = settledAtStage(row, source?.status, stage.states);
+  const isDocument = Boolean(row && source?.fn === DOCUMENT_READ && id);
+
+  // The moves the document's current state has, read as its own page reads
+  // them, and its lines. Both keyed by the state as well: a move made from
+  // this panel changes the state the list reports, and what is offered must
+  // follow it rather than wait for the next poll.
+  const moves = useAvailableTransitions(id, { enabled: isDocument, state });
+  const detail = useQuery({
+    queryKey: ["erp_document", { p_document_id: id }, state],
+    queryFn: () => callErp<DocumentPayload>("erp_document", { p_document_id: id }),
+    enabled: isDocument,
+  });
+  const transitions = isDocument && Array.isArray(moves.data) ? moves.data : [];
+  const available: string[] | null | undefined = !isDocument
+    ? null
+    : moves.isPending
+      ? undefined
+      : moves.error || !Array.isArray(moves.data)
+        ? null
+        : moves.data.map((t) => t.code);
+
+  const minorUnits = (code: string) => minorUnitsOf(currencies, code);
+  const fields = row && source ? summariseRecord(row, source, minorUnits, stage.partyRole) : [];
+  const lines = isDocument ? (detail.data?.lines ?? []) : [];
+  const currency = typeof row?.["currency"] === "string" ? row["currency"] : "GBP";
+
+  const offers: { action: ActionSpec; offer: Offer }[] = row
+    ? recordActions.map((action) => ({
+        action,
+        offer: offerFor({
+          transition: action.transition,
+          offeredIn: stage.actionStates?.[actionKey(action)],
+          state,
+          stageStates: stage.states,
+          available,
+          settled: settled !== null,
+          staysOpen: actionStaysOpen(action),
+        }),
+      }))
+    : [];
+  const offered = offers.filter((o) => o.offer === "offer" || o.offer === "settled");
+  // A move a step verb makes is offered by that verb, under the step's words,
+  // and not a second time as the lifecycle's bare move.
+  const coveredMoves = recordActions.flatMap((a) => (a.transition ? [a.transition] : []));
+  const documentType = typeof row?.["document_type"] === "string" ? row["document_type"] : null;
+  const movesOffered = offersAnyTransition(documentType, transitions, coveredMoves);
+  const nothingApplies =
+    row !== null &&
+    offers.length > 0 &&
+    offers.every((o) => o.offer === "hide") &&
+    !movesOffered &&
+    !(isDocument && moves.isPending);
 
   return (
     <div className="min-w-0 px-4 py-4 sm:px-5">
@@ -410,28 +523,85 @@ function StageRecord({
 
       {row && source ? (
         <>
-          <p className="mt-3 flex items-center gap-2 font-mono text-sm">
+          <p className="mt-3 flex flex-wrap items-center gap-2 font-mono text-sm">
             <span className="truncate">{join(row, source.title)}</span>
+            {source.fn === DOCUMENT_READ ? (
+              <span className="font-sans">
+                <Pill tone={row["is_committed"] === true ? "ok" : "muted"}>
+                  {String(row["state_name"] ?? row["state"] ?? "—")}
+                </Pill>
+              </span>
+            ) : source.status && row[source.status] ? (
+              <span className="font-sans">
+                <StatusPill value={row[source.status]} />
+              </span>
+            ) : null}
             {settled ? (
               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-sans text-[11px] font-medium text-muted-foreground">
                 Already {settled}
               </span>
             ) : null}
           </p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-            {Object.entries(row)
-              .filter(([k, v]) => k !== source.id && !k.endsWith("_id") && typeof v !== "object")
-              .map(([k, v]) => (
-                <div key={k} className="min-w-0">
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {k.replace(/_/g, " ")}
-                  </dt>
-                  <dd className="mt-0.5 truncate text-sm">
-                    {v === null || v === undefined || v === "" ? "—" : String(v)}
+          {fields.length > 0 ? (
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+              {fields.map((f) => (
+                <div key={f.key} className="min-w-0">
+                  <dt className="text-[11px] font-medium text-muted-foreground">{ui(f.label)}</dt>
+                  <dd
+                    className={`mt-0.5 truncate text-sm ${
+                      f.kind === "money" || f.kind === "number" ? "tabular-nums" : ""
+                    }`}
+                  >
+                    {f.kind === "flag" ? ui(f.value) : f.value}
                   </dd>
                 </div>
               ))}
-          </dl>
+            </dl>
+          ) : null}
+
+          {lines.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-[11px] font-medium text-muted-foreground">{ui("Lines")}</p>
+              <ul className="mt-1 divide-y divide-border/60 rounded-md border border-border/60">
+                {lines.slice(0, LINES_SHOWN).map((line) => (
+                  <li
+                    key={`${line.line_no}`}
+                    className="flex items-baseline justify-between gap-3 px-2 py-1 text-xs"
+                  >
+                    <span className="min-w-0 truncate">{describeLine(line)}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {line.quantity}
+                      {line.net_minor !== null && line.net_minor !== undefined
+                        ? ` · ${formatMinor(line.net_minor, currency, minorUnits(currency))}`
+                        : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {lines.length > LINES_SHOWN ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {ui("More lines are on the document.")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {isDocument ? (
+            <DocumentTransitions
+              documentId={id}
+              documentType={documentType}
+              transitions={transitions}
+              committed={row["is_committed"] === true}
+              exclude={coveredMoves}
+              quiet
+            />
+          ) : null}
+
+          {nothingApplies ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {ui("Nothing on this step applies to this record in its current state.")}
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -442,18 +612,25 @@ function StageRecord({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {row
-          ? recordActions.map((a) => (
-              <StageAction
-                key={actionKey(a)}
-                action={a}
-                prefill={prefill}
-                permitted={permitted(a)}
-                settled={settled}
-                {...(summary ? { context: summary } : {})}
-              />
-            ))
-          : null}
+        {offered.map(({ action, offer }) => (
+          <StageAction
+            key={actionKey(action)}
+            action={action}
+            prefill={prefill}
+            permitted={permitted(action)}
+            settled={offer === "settled" ? settled : null}
+            {...(summary ? { context: summary } : {})}
+          />
+        ))}
+        {isDocument ? (
+          <Link
+            to="/documents/$documentId"
+            params={{ documentId: id }}
+            className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-3 text-sm font-medium`}
+          >
+            {ui("Open the document")}
+          </Link>
+        ) : null}
         {stage.typeCode ? (
           <NewDocumentForType
             typeCode={stage.typeCode}
@@ -484,7 +661,8 @@ function StageRecord({
 
 /** The workbench for one chosen stage: its list on the left, its record on the right. */
 function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[] }) {
-  const { source, rows, isPending, error } = useStageRows(stage);
+  const [showFinished, setShowFinished] = useState(false);
+  const { source, rows, capped, isPending, error } = useStageRows(stage, showFinished);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const byFn = new Map(actions.map((a) => [actionKey(a), a]));
@@ -505,10 +683,13 @@ function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[
           stage={stage}
           rows={rows}
           source={source}
+          capped={capped}
           isPending={isPending}
           error={error}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          showFinished={showFinished}
+          onShowFinished={setShowFinished}
         />
       </div>
       <StageRecord
@@ -544,10 +725,9 @@ function StageTab({
   disabled: boolean;
 }) {
   const { ui } = useT();
-  const { rows, isPending } = useStageRows(stage);
-  const source = sourceOf(stage);
-  const count =
-    source && !isPending ? (rows.length >= CAP ? `${CAP}+` : String(rows.length)) : null;
+  // The count is what is waiting at the step, never its history.
+  const { source, rows, capped, isPending } = useStageRows(stage);
+  const count = source && !isPending ? (capped ? `${rows.length}+` : String(rows.length)) : null;
 
   return (
     <li className="min-w-0 flex-1 basis-40">

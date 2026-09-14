@@ -18,6 +18,7 @@ import { PageHeader, Prose } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { Field, RecordBrowser, RecordSection } from "../../components/erp/record-browser";
 import { callErp, hasPermission } from "../../lib/erp";
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 
 /**
@@ -376,21 +377,82 @@ function Items({ mayWrite, maySeeSuppliers }: { mayWrite: boolean; maySeeSupplie
   );
 }
 
+type Words = (text: string) => string;
+
+/**
+ * A product's class in the words the New product form offers it by. A class
+ * nothing on the form names (one a file loaded, say) is still shown as words.
+ */
+function classWord(code: string | null, ui: Words): string {
+  switch (code) {
+    case null:
+    case "":
+      return "—";
+    case "finished_good":
+      return ui("Finished good");
+    case "raw_material":
+      return ui("Raw material");
+    case "packaging":
+      return ui("Packaging");
+    case "consumable":
+      return ui("Consumable");
+    default:
+      return prettifyField(code);
+  }
+}
+
+/** A product's status (erp.item_lifecycle), as the New product form words it. */
+function lifecycleWord(code: string, ui: Words): string {
+  switch (code) {
+    case "draft":
+      return ui("Draft");
+    case "active":
+      return ui("Active");
+    case "restricted":
+      return ui("Restricted");
+    case "discontinued":
+      return ui("Discontinued");
+    case "obsolete":
+      return ui("Obsolete");
+    default:
+      return prettifyField(code);
+  }
+}
+
+/** Whether a record is in use (erp.record_status). */
+function recordStatusWord(code: string, ui: Words): string {
+  switch (code) {
+    case "draft":
+      return ui("Draft");
+    case "active":
+      return ui("Active");
+    case "inactive":
+      return ui("Inactive");
+    case "archived":
+      return ui("Archived");
+    default:
+      return prettifyField(code);
+  }
+}
+
 function ItemRecord({ item, maySeeSuppliers }: { item: Item; maySeeSuppliers: boolean }) {
+  const { ui } = useT();
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="font-mono text-sm font-semibold">{item.code}</h3>
         <p className="min-w-0 flex-1 truncate text-base">{item.name}</p>
-        <Pill tone={item.lifecycle === "active" ? "ok" : "muted"}>{item.lifecycle}</Pill>
+        <Pill tone={item.lifecycle === "active" ? "ok" : "muted"}>
+          {lifecycleWord(item.lifecycle, ui)}
+        </Pill>
       </div>
 
       <RecordSection title="Identification">
         <dl className="grid gap-4 sm:grid-cols-3">
-          <Field label="Class">{item.item_class ?? "—"}</Field>
+          <Field label="Class">{classWord(item.item_class, ui)}</Field>
           <Field label="Group">{item.item_group ?? "—"}</Field>
           <Field label="Stock unit">{item.stock_uom_code ?? "—"}</Field>
-          <Field label="Status">{item.status}</Field>
+          <Field label="Status">{recordStatusWord(item.status, ui)}</Field>
         </dl>
       </RecordSection>
 
@@ -633,19 +695,22 @@ function Parties({ mayWrite }: { mayWrite: boolean }) {
 }
 
 function PartyRecord({ party }: { party: Party }) {
+  const { ui } = useT();
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="font-mono text-sm font-semibold">{party.code}</h3>
         <p className="min-w-0 flex-1 truncate text-base">{party.name}</p>
-        <Pill tone={party.status === "active" ? "ok" : "muted"}>{party.status}</Pill>
+        <Pill tone={party.status === "active" ? "ok" : "muted"}>
+          {recordStatusWord(party.status, ui)}
+        </Pill>
       </div>
 
       <RecordSection title="Identification">
         <dl className="grid gap-4 sm:grid-cols-3">
           <Field label="Legal name">{party.legal_name ?? party.name}</Field>
           <Field label="Country">{party.country_code ?? "—"}</Field>
-          <Field label="Status">{party.status}</Field>
+          <Field label="Status">{recordStatusWord(party.status, ui)}</Field>
         </dl>
       </RecordSection>
 

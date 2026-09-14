@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { tenantStorageKey } from "../../lib/tenant-storage";
 import { ErrorNote } from "./action";
 import { EmptyState, Prose } from "./page";
+import { useErpSession } from "./session-context";
 
 /**
  * A list that stays beside the record it opened.
@@ -34,7 +36,10 @@ import { EmptyState, Prose } from "./page";
  *     convenience for one person at one browser — nobody else reads it back,
  *     and it is not worth a tenant-scoped table, a door and a suite. Every
  *     access is wrapped: a browser with site data blocked throws on the
- *     property itself, and the list must still render.
+ *     property itself, and the list must still render. The key carries the
+ *     organisation from the session (tenantStorageKey): under one key for
+ *     every organisation, a demonstration's list showed Clove Foods'
+ *     products.
  */
 
 export type BrowserColumn<T> = {
@@ -176,15 +181,30 @@ export function RecordBrowser<T>({
   titleOf: (row: T) => string;
   subtitleOf: (row: T) => string;
   detail: (row: T) => ReactNode;
+  /** The list's name; the organisation's id is added to it before it is stored. */
   recentsKey: string;
 }) {
+  const { session } = useErpSession();
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recents, setRecents] = useState<Recent[]>([]);
 
+  // The list belongs to the organisation the session is in, and to nothing
+  // before the session says which that is.
+  const storageKey = tenantStorageKey(recentsKey, session.tenant_id);
+
   // localStorage is not readable while rendering on the server, so the recents
   // arrive after mount rather than in the first paint.
-  useEffect(() => setRecents(readRecents(recentsKey)), [recentsKey]);
+  useEffect(() => {
+    setRecents(storageKey ? readRecents(storageKey) : []);
+    // The list written before it carried an organisation cannot say whose it
+    // was, so it is dropped rather than shown to anybody.
+    try {
+      window.localStorage.removeItem(recentsKey);
+    } catch {
+      // Site data blocked: there is nothing stored to drop.
+    }
+  }, [storageKey, recentsKey]);
 
   // Debounced, because every keystroke would otherwise be a round trip.
   const serverTerm = serverSearchTerm(columns, filters);
@@ -214,7 +234,7 @@ export function RecordBrowser<T>({
     const entry: Recent = { id, label: titleOf(row), sub: subtitleOf(row) };
     const next = [entry, ...recents.filter((r) => r.id !== id)].slice(0, RECENT_LIMIT);
     setRecents(next);
-    writeRecents(recentsKey, next);
+    if (storageKey) writeRecents(storageKey, next);
   }
 
   /**
