@@ -13,6 +13,7 @@ import {
   type PlatformRole,
   type PlatformTenant,
 } from "../../lib/platform";
+import { purgeSweepSummary, readPurgeSweep } from "../../lib/purge-sweep";
 import { FormDialog } from "./dialogs";
 import { Card, ConsoleLink, Fail, INPUT, OrganisationName } from "./kit";
 import { OrganisationActions } from "./organisation-actions";
@@ -302,7 +303,8 @@ export function Companies({ role }: { role: PlatformRole }) {
 }
 
 /**
- * Finishes every deletion request whose grace period has elapsed.
+ * Finishes every deletion request whose grace period has elapsed, and says
+ * which were purged, read the same way the Jobs screen reads the sweep.
  *
  * When an administrator requests deletion, their organisation is suspended and
  * its keys destroyed, but its rows stay until they are purged. Nothing runs
@@ -337,14 +339,17 @@ function DeletionSweep() {
         busyLabel="Sweeping…"
         danger
         ready={valid}
-        run={() =>
-          callErp<{ purged: number }>("erp_platform_purge_due_tenants", { p_grace_days: n })
+        run={async () =>
+          readPurgeSweep(
+            await callErp<unknown>("erp_platform_purge_due_tenants", { p_grace_days: n }),
+          )
         }
         onDone={() => void queryClient.invalidateQueries()}
         done={(result) => (
           <p role="status" className="text-sm">
-            The sweep purged {result?.purged ?? 0}{" "}
-            {(result?.purged ?? 0) === 1 ? "organisation" : "organisations"}.
+            {result
+              ? purgeSweepSummary(result)
+              : "The sweep ran, but its answer could not be read. The list shows what remains."}
           </p>
         )}
         onClosed={() => setDays("7")}
