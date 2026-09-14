@@ -194,6 +194,27 @@ export function money(minor: number | null | undefined, currency = "GBP"): strin
   return currency === "GBP" ? `£${text}` : `${text} ${currency}`;
 }
 
+/**
+ * The total an issued order form states, in minor units.
+ *
+ * A form issued since 20260914093000 carries its price as
+ * `pricing.totals.net_minor`. One issued before carried the quote's margin
+ * totals instead, whose `quoted_minor` is the same figure. Anything else has
+ * no total to show.
+ */
+export function orderFormTotal(content: unknown): number | null {
+  const at = (value: unknown, key: string): unknown =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)[key]
+      : undefined;
+  const figure = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+  return (
+    figure(at(at(at(content, "pricing"), "totals"), "net_minor")) ??
+    figure(at(at(at(content, "margin"), "totals"), "quoted_minor"))
+  );
+}
+
 /** The largest discount a quote may carry: 35% for a founding customer, 25% otherwise. */
 export function discountCeiling(programme: string | null | undefined): number {
   return programme === "founding" ? 35 : 25;
