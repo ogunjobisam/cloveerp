@@ -57,14 +57,22 @@ export const Route = createFileRoute("/procurement/")({
  * opposite party role — which is either evidence for the thesis or a very
  * short file, depending on how generous you are feeling.
  */
-const pickRequisition = (): ReturnType<typeof pickFrom> =>
+const pickRequisition = (transition?: string): ReturnType<typeof pickFrom> =>
+  // Only requisitions that can still move: a cancelled or ordered one is the
+  // end of its process. Given the transition the action sends, only those whose
+  // current state allows it — see pickDocument.
   pickFrom(
     "erp_documents",
     "document_id",
     ["document_number", "state_name", "party"],
     "p_document_id",
     "Requisition",
-    { p_type_code: "requisition", p_limit: 200 },
+    {
+      p_type_code: "requisition",
+      p_limit: 200,
+      p_actionable: true,
+      ...(transition ? { p_transition_code: transition } : {}),
+    },
   );
 
 const PROCUREMENT_ACTIONS: ActionSpec[] = [
@@ -76,7 +84,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       "A draft requisition goes to whoever approves at its value. Nothing is committed to a supplier until it comes back approved.",
     permission: "procurement.requisition",
     fn: "erp_transition_document",
-    fields: [pickRequisition()],
+    fields: [pickRequisition("submit")],
     mapArgs: (v) => ({ p_document_id: v["p_document_id"], p_transition_code: "submit" }),
     invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
     submitLabel: "Submit for approval",
@@ -101,7 +109,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "procurement.approve",
     fn: "erp_transition_document",
     fields: [
-      pickRequisition(),
+      pickRequisition("approve"),
       {
         kind: "text",
         name: "p_reason",
@@ -126,7 +134,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "procurement.approve",
     fn: "erp_transition_document",
     fields: [
-      pickRequisition(),
+      pickRequisition("reject"),
       {
         kind: "text",
         name: "p_reason",
@@ -231,13 +239,15 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "procurement.match",
     fn: "erp_bill_from_receipt",
     fields: [
+      // Only posted receipts: erp.bill_from_receipt bills nothing else, and
+      // posted is terminal, so p_actionable would offer none.
       pickFrom(
         "erp_documents",
         "document_id",
         ["document_number", "state"],
         "p_receipt_id",
         "Goods receipt",
-        { p_type_code: "goods_receipt", p_limit: 100 },
+        { p_type_code: "goods_receipt", p_limit: 100, p_states: ["posted"] },
       ),
       {
         kind: "text",
@@ -268,9 +278,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_receipt_id",
         "Receipt",
-        { p_limit: 100 },
+        // A goods receipt still being built: not another kind of document.
+        { p_type_code: "goods_receipt", p_limit: 100, p_actionable: true },
       ),
-      pickLine("purchase_order"),
+      // Open lines only: not on a closed or cancelled order, not received and
+      // invoiced in full.
+      pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       pickBatch(),
     ],
@@ -287,9 +300,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_invoice_id",
         "Invoice",
-        { p_limit: 100 },
+        // A supplier invoice still being matched: not another kind of document.
+        { p_type_code: "purchase_invoice", p_limit: 100, p_actionable: true },
       ),
-      pickLine("purchase_order"),
+      // Open lines only, as for receiving: a line received in full but not yet
+      // invoiced stays, because that is the line this matches.
+      pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       {
         kind: "number",
@@ -313,7 +329,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_document_id",
         "Purchase order",
-        { p_type_code: "purchase_order", p_limit: 100 },
+        { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
       ),
       pickFrom("erp_order_behaviours", "code", ["name"], "p_behaviour", "Behaviour"),
       {
@@ -338,7 +354,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_blanket_id",
         "Blanket order",
-        { p_type_code: "purchase_order", p_limit: 100 },
+        { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
       ),
       {
         kind: "text",
@@ -367,7 +383,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_purchase_order_id",
         "Drop-ship order",
-        { p_type_code: "purchase_order", p_limit: 100 },
+        { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
       ),
       { kind: "date", name: "p_delivered_on", label: "Delivered on", required: true },
       {
@@ -400,7 +416,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "document_type", "state"],
         "p_object_id",
         "Document",
-        { p_limit: 200 },
+        { p_limit: 200, p_actionable: true },
       ),
       {
         kind: "number",
