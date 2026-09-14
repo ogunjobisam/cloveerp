@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
+import { unstagedActions } from "../../lib/flow-actions";
 import { useT } from "../../lib/i18n";
 import { AREA_HOME, GROUP_LABELS, areaOf, type ModuleDef, type Panel } from "../../lib/modules";
 import { ActionBar } from "./actions-bar";
@@ -49,6 +50,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
   const { t, ui } = useT();
   const [tab, setTab] = useState<Tab>("dashboard");
   const title = t(def.titleKey, def.title);
+  const unstaged = unstagedActions(def.flow, def.actions ?? []);
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "dashboard", label: ui("Dashboard") },
@@ -120,9 +122,13 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
       {tab === "dashboard" ? (
         <div className="flex min-w-0 flex-col gap-4">
           <KpiRow kpis={def.kpis} />
-          {!def.flow && def.actions && def.actions.length > 0 ? (
+          {/* On a module with a strip, the strip carries the verbs its steps
+              name and this carries the rest. It used to be switched off
+              whenever there was a strip, which left every verb no step names
+              declared, permitted and unreachable. */}
+          {unstaged.length > 0 ? (
             <ActionBar
-              actions={def.actions}
+              actions={unstaged}
               title="What you can do here"
               note="The database authorises every one of these; you only see the ones you hold."
             />
