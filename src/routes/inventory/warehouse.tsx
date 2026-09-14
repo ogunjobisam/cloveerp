@@ -14,6 +14,7 @@ import {
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/inventory/warehouse")({
@@ -57,6 +58,15 @@ const LOCATION_TYPES = [
   { value: "transit", label: "In transit" },
   { value: "virtual", label: "Virtual" },
 ];
+
+/**
+ * A kind of place in the words the form offers it by. The table showed the
+ * database's code (bulk, despatch, receiving) beside a form that never did.
+ */
+function locationKindWord(code: string, ui: (text: string) => string): string {
+  const known = LOCATION_TYPES.find((t) => t.value === code);
+  return known ? ui(known.label) : prettifyField(code);
+}
 
 const PICKABLE = [
   { value: "true", label: "Yes — pickers are sent here" },
@@ -278,7 +288,7 @@ function WarehouseLayout() {
                 <td className="py-2 pr-4 font-mono text-xs">{l.site}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{l.code}</td>
                 <td className="py-2 pr-4">{l.name ?? "—"}</td>
-                <td className="py-2 pr-4">{l.location_type}</td>
+                <td className="py-2 pr-4">{locationKindWord(l.location_type, ui)}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{l.parent ?? "—"}</td>
                 <td className="py-2 pr-4 tabular-nums">
                   {l.capacity_quantity == null

@@ -158,7 +158,7 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="sam@northwindfoods.co.uk"
+                    placeholder="sam.taylor@yourcompany.co.uk"
                     autoComplete="off"
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm font-normal`}
                   />
@@ -172,7 +172,7 @@ export function InviteDialog({ onInvited }: { onInvited?: () => void }) {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Sam Ogunjobi"
+                    placeholder="Sam Taylor"
                     autoComplete="off"
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm font-normal`}
                   />

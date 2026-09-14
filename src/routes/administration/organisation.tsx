@@ -564,7 +564,7 @@ function Organisation() {
             fn: "erp_assign_named_approver",
             fields: namedApproverFields(
               { value: "role", label: "A role" },
-              pickFrom("erp_roles", "role_id", ["code", "name"], "p_subject_id", "Role"),
+              pickFrom("erp_roles", "role_id", ["name"], "p_subject_id", "Role"),
             ),
             invalidates,
           },

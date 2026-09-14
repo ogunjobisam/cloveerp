@@ -6,6 +6,9 @@ import { EmptyState, Prose, TOUCH } from "../erp/page";
 import { Pill, Table } from "../erp/panel";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { formatMinor, toMinor } from "../../lib/money";
+import { decisionLabel, featureName, packConflictWords } from "../../lib/pack-words";
+import type { Capability } from "./capabilities";
 
 /**
  * §11 on a screen, in the order §11 states it.
@@ -63,6 +66,29 @@ type PlanItem = {
   is_decision: boolean;
 };
 type Plan = { pack: string; conflicts: Conflict[]; decisions: Decision[]; items: PlanItem[] };
+
+/**
+ * A band's threshold is money: the pack's bands are in pounds (their payload
+ * says GBP) and the door stores the upper bound in pence, as upper_bound_minor.
+ * People type pounds; the answer is sent in the minor units the door takes.
+ */
+const DECISION_CURRENCY = "GBP";
+const DECISION_MINOR_UNITS = 2;
+
+/**
+ * Every feature's title by its code, from the same read the Features screen
+ * makes, so the plan names a feature the way that screen does. While it loads,
+ * or if it cannot be read, codes are shown as words instead.
+ */
+function useFeatureTitles(): Record<string, string> {
+  const caps = useQuery({
+    queryKey: ["erp_capabilities"],
+    queryFn: () => callErp<Capability[]>("erp_capabilities", {}),
+  });
+  const titles: Record<string, string> = {};
+  for (const c of caps.data ?? []) titles[c.code] = c.title;
+  return titles;
+}
 
 export function Packs({ mayConfigure }: { mayConfigure: boolean }) {
   const { ui } = useT();
@@ -124,6 +150,7 @@ function PackRow({
   onToggle: () => void;
 }) {
   const { ui } = useT();
+  const titles = useFeatureTitles();
   const applied = (p.applied ?? []).filter((a) => a.status === "applied");
   const latest = applied[0];
 
@@ -145,7 +172,9 @@ function PackRow({
           <p className="mt-1 text-xs text-muted-foreground">
             {p.items} items
             {p.decisions > 0 ? `, ${p.decisions} of them decisions you have to make` : ""}
-            {p.requires_capability ? ` · needs the ${p.requires_capability} feature` : ""}
+            {p.requires_capability
+              ? ` · needs the ${featureName(p.requires_capability, titles)} feature`
+              : ""}
           </p>
         </div>
         <button
@@ -170,6 +199,7 @@ function PackRow({
 function PackPlan({ pack, mayConfigure }: { pack: Pack; mayConfigure: boolean }) {
   const { ui } = useT();
   const qc = useQueryClient();
+  const titles = useFeatureTitles();
   const [built, setBuilt] = useState<{ change_set_code: string; items: number } | null>(null);
 
   const plan = useQuery({
@@ -178,12 +208,12 @@ function PackPlan({ pack, mayConfigure }: { pack: Pack; mayConfigure: boolean })
   });
 
   const answer = useMutation({
-    mutationFn: (v: { kind: string; key: string; value: string }) =>
+    mutationFn: (v: { kind: string; key: string; minor: number }) =>
       callErp("erp_answer_pack_decision", {
         p_pack_code: pack.code,
         p_object_kind: v.kind,
         p_object_key: v.key,
-        p_answer: { upper_bound_minor: Number(v.value) },
+        p_answer: { upper_bound_minor: v.minor },
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["erp_pack_plan", { p_pack_code: pack.code }] });
@@ -221,7 +251,7 @@ function PackPlan({ pack, mayConfigure }: { pack: Pack; mayConfigure: boolean })
           </p>
           <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
             {blocking.map((c) => (
-              <li key={c.conflict}>{c.conflict}</li>
+              <li key={c.conflict}>{packConflictWords(c.conflict, titles)}</li>
             ))}
           </ul>
         </div>
@@ -232,7 +262,7 @@ function PackPlan({ pack, mayConfigure }: { pack: Pack; mayConfigure: boolean })
           <p className="font-medium text-foreground">{ui("Held back")}</p>
           <ul className="mt-1 list-disc pl-5">
             {advisory.map((c) => (
-              <li key={c.conflict}>{c.conflict}</li>
+              <li key={c.conflict}>{packConflictWords(c.conflict, titles)}</li>
             ))}
           </ul>
           <p className="mt-1">
@@ -258,8 +288,8 @@ function PackPlan({ pack, mayConfigure }: { pack: Pack; mayConfigure: boolean })
                 decision={x}
                 mayConfigure={mayConfigure}
                 pending={answer.isPending}
-                onAnswer={(value) =>
-                  answer.mutate({ kind: x.object_kind, key: x.object_key, value })
+                onAnswer={(minor) =>
+                  answer.mutate({ kind: x.object_kind, key: x.object_key, minor })
                 }
               />
             ))}
@@ -334,36 +364,52 @@ function DecisionRow({
   decision: Decision;
   mayConfigure: boolean;
   pending: boolean;
-  onAnswer: (value: string) => void;
+  /** The threshold in the minor units the door stores. */
+  onAnswer: (minor: number) => void;
 }) {
   const { ui } = useT();
   const [value, setValue] = useState("");
   const current = decision.answer?.["upper_bound_minor"];
+  // Pounds as people write them: "5000", "5,000" or "5000.50".
+  const minor = toMinor(value.replace(/[,\s]/g, ""), DECISION_MINOR_UNITS);
+  const valid = minor !== null && minor >= 0;
 
   return (
     <li className="rounded-md border border-border p-2">
       <p className="text-xs">{decision.prompt}</p>
-      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{decision.object_key}</p>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        {decisionLabel(decision.object_kind, decision.object_key)}
+      </p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {decision.answered ? (
-          <Pill tone="ok">answered: {String(current ?? "")}</Pill>
+          <Pill tone="ok">
+            answered:{" "}
+            {typeof current === "number"
+              ? formatMinor(current, DECISION_CURRENCY, DECISION_MINOR_UNITS)
+              : String(current ?? "")}
+          </Pill>
         ) : (
           <Pill tone="warn">{ui("open")}</Pill>
         )}
-        <input
-          aria-label="Answer"
-          className={`${TOUCH} w-40 rounded-md border border-input px-2 text-sm`}
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="e.g. 500000"
-          disabled={!mayConfigure}
-        />
+        <label className="flex items-center gap-1 text-sm">
+          <span aria-hidden="true">£</span>
+          <input
+            aria-label="Answer, in pounds"
+            className={`${TOUCH} w-40 rounded-md border border-input px-2 text-sm`}
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="e.g. 5000"
+            disabled={!mayConfigure}
+          />
+        </label>
         <button
           type="button"
           className={`${TOUCH} rounded-md border border-input px-3 text-sm font-medium disabled:opacity-50`}
-          disabled={!mayConfigure || pending || value.trim() === ""}
-          onClick={() => onAnswer(value.trim())}
+          disabled={!mayConfigure || pending || !valid}
+          onClick={() => {
+            if (minor !== null && minor >= 0) onAnswer(minor);
+          }}
         >
           {decision.answered ? ui("Change") : ui("Answer")}
         </button>
