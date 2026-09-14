@@ -40,6 +40,7 @@ import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
 import { Route as FinanceCostCentresRouteImport } from './routes/finance/cost-centres'
 import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensions'
+import { Route as FinanceJournalsRouteImport } from './routes/finance/journals'
 import { Route as FinanceStatementsRouteImport } from './routes/finance/statements'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
@@ -232,6 +233,11 @@ const FinanceDimensionsRoute = FinanceDimensionsRouteImport.update({
   path: '/finance/dimensions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceJournalsRoute = FinanceJournalsRouteImport.update({
+  id: '/finance/journals',
+  path: '/finance/journals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceStatementsRoute = FinanceStatementsRouteImport.update({
   id: '/finance/statements',
   path: '/finance/statements',
@@ -407,6 +413,7 @@ export interface FileRoutesByFullPath {
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
+  '/finance/journals': typeof FinanceJournalsRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -468,6 +475,7 @@ export interface FileRoutesByTo {
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
+  '/finance/journals': typeof FinanceJournalsRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -530,6 +538,7 @@ export interface FileRoutesById {
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
+  '/finance/journals': typeof FinanceJournalsRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -593,6 +602,7 @@ export interface FileRouteTypes {
     | '/finance/account-determination'
     | '/finance/cost-centres'
     | '/finance/dimensions'
+    | '/finance/journals'
     | '/finance/statements'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -654,6 +664,7 @@ export interface FileRouteTypes {
     | '/finance/account-determination'
     | '/finance/cost-centres'
     | '/finance/dimensions'
+    | '/finance/journals'
     | '/finance/statements'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -715,6 +726,7 @@ export interface FileRouteTypes {
     | '/finance/account-determination'
     | '/finance/cost-centres'
     | '/finance/dimensions'
+    | '/finance/journals'
     | '/finance/statements'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -777,6 +789,7 @@ export interface RootRouteChildren {
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
   FinanceCostCentresRoute: typeof FinanceCostCentresRoute
   FinanceDimensionsRoute: typeof FinanceDimensionsRoute
+  FinanceJournalsRoute: typeof FinanceJournalsRoute
   FinanceStatementsRoute: typeof FinanceStatementsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
   InventoryForecastRoute: typeof InventoryForecastRoute
@@ -1027,6 +1040,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceDimensionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/journals': {
+      id: '/finance/journals'
+      path: '/finance/journals'
+      fullPath: '/finance/journals'
+      preLoaderRoute: typeof FinanceJournalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/finance/statements': {
       id: '/finance/statements'
       path: '/finance/statements'
@@ -1257,6 +1277,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
   FinanceCostCentresRoute: FinanceCostCentresRoute,
   FinanceDimensionsRoute: FinanceDimensionsRoute,
+  FinanceJournalsRoute: FinanceJournalsRoute,
   FinanceStatementsRoute: FinanceStatementsRoute,
   InventoryAuditRoute: InventoryAuditRoute,
   InventoryForecastRoute: InventoryForecastRoute,
