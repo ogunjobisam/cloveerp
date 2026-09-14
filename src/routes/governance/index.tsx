@@ -21,6 +21,11 @@ const pickMassChange = () =>
   );
 
 export const Route = createFileRoute("/governance/")({
+  // ?task=<id> arrives from an approval email, so the task a person was asked
+  // about is marked on My approvals. Optional, so every existing link to this
+  // screen stays valid without it.
+  validateSearch: (search: Record<string, unknown>): { task?: string } =>
+    typeof search["task"] === "string" && search["task"] !== "" ? { task: search["task"] } : {},
   head: () => ({
     meta: [
       { title: "Change requests and approvals — Clove ERP" },
@@ -47,6 +52,7 @@ export const Route = createFileRoute("/governance/")({
 
 function Governance() {
   const { t } = useT();
+  const { task } = Route.useSearch();
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -184,6 +190,7 @@ function Governance() {
         fn="erp_my_approvals"
         empty="Nothing is waiting on you. Requests appear here when an approval band routes one to you."
         rowKey={(r) => String(r["task_id"])}
+        highlight={task ?? null}
         columns={[
           // What is being approved: the document by its number, linked to it,
           // with its type, partner and value. It said OBJECT "document".

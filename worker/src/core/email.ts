@@ -1,3 +1,7 @@
+import {
+  composeNotificationEmail,
+  type ClaimedNotification,
+} from "../../../src/lib/email/notification-email.ts";
 import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { asPrincipal, type Sql } from "./db.ts";
 import { PermanentSendFailure, sendViaResend, type EmailRow } from "./resend.ts";
@@ -21,6 +25,12 @@ export { PermanentSendFailure, sendViaResend, type EmailRow };
  * report each outcome separately. One message failing must not roll back the
  * ones that already left, which is why every settle is its own statement rather
  * than a batch at the end.
+ *
+ * What a message says is src/lib/email/notification-email.ts: a notification
+ * that carries a context (20260914094000) goes out in the shared layout, as
+ * HTML and text; one without, or one whose context does not render, goes out
+ * as the subject and body it was written with, which is what every email said
+ * before. A context that fails to render is logged and never stops the send.
  *
  * The API key is read from the environment, used, and dropped. It is never
  * written back and never logged: a failure's text goes into
@@ -49,15 +59,32 @@ export async function drainEmail(
     b,
     // The claim carries this worker's name and takes a lease, so a message
     // abandoned mid-send is visibly held and reclaimable, not stuck for ever.
+    // It also returns the context, the organisation's name and the reader's.
     (tx) => tx`select * from erp.claim_email_batch(50, ${cfg.workerName})`,
-  )) as unknown as EmailRow[];
+  )) as unknown as Array<EmailRow & ClaimedNotification>;
 
   if (claimed.length === 0) return;
   out.emailClaimed += claimed.length;
 
   for (const row of claimed) {
     try {
-      const providerId = await sendViaResend(apiKey, row);
+      const message = composeNotificationEmail(row, cfg.appOrigin);
+      if (message.fallback !== null) {
+        // The id and the reason only: the context holds names and figures,
+        // and a log is read by more people than the queue is.
+        console.warn(
+          `[email] notification ${row.id} went as its plain body: ${message.fallback}`,
+        );
+      }
+      const providerId = await sendViaResend(apiKey, {
+        id: row.id,
+        to_address: row.to_address,
+        from_address: row.from_address,
+        reply_to: row.reply_to,
+        subject: message.subject,
+        body: message.body,
+        html: message.html,
+      });
       await asPrincipal(
         sql,
         b,

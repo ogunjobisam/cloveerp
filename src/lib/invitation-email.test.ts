@@ -25,8 +25,11 @@ const ACTION = `${SUPABASE}/auth/v1/verify?token=pkce_123&type=invite&redirect_t
 describe("the module both runtimes read", () => {
   const source = readFileSync(new URL("./invitation-email.ts", import.meta.url), "utf8");
 
-  test("imports nothing, so Deno can follow it from the invite function", () => {
-    expect(source).not.toMatch(/^\s*import\s/m);
+  test("imports only the shared email layout, with its extension, so Deno can follow it", () => {
+    const imports = (source.match(/^import\s.*$/gm) ?? []).map((line) => line.trim());
+    expect(imports).toEqual([
+      'import { escapeHtml, oneLine, renderEmail } from "./email/layout.ts";',
+    ]);
     expect(source).not.toMatch(/\brequire\(/);
   });
 
@@ -297,7 +300,8 @@ describe("the email", () => {
     });
     expect(m.subject).toBe(INVITATION_SUBJECT);
     expect(m.text).toContain("You have been invited to join an organisation on Clove ERP.");
-    expect(m.text.startsWith("Hello,\n")).toBe(true);
+    // The heading comes first in the text part now, as in every email's layout.
+    expect(m.text.startsWith("You are invited to join Clove ERP\n\nHello,\n")).toBe(true);
     expect(m.text).not.toContain("stays open until");
   });
 
