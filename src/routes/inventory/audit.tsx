@@ -165,8 +165,53 @@ function StockAudit() {
             invalidates,
           },
           {
+            // A count outside the tolerance of its programme waits on an
+            // approval task, and until 20260914070000 deciding it moved
+            // nothing: the count stayed waiting. Deciding it here approves or
+            // refuses the count itself.
+            label: "Decide a count variance",
+            description:
+              "A count outside its programme's tolerance waits for the approving role to agree. Agreed, it can be posted; refused, it stays as it was found and is not posted.",
+            // No permission: the door gates on the task being assigned to the
+            // caller, and a code here would hide it from an assignee who lacks it.
+            fn: "erp_decide_approval",
+            fields: [
+              pickFrom(
+                "erp_my_approvals",
+                "task_id",
+                ["object_type", "requested_by", "requested_at"],
+                "p_task_id",
+                "Approval waiting on me",
+              ),
+              {
+                kind: "choice",
+                name: "p_approve",
+                label: "Decision",
+                required: true,
+                choices: [
+                  { value: "true", label: "Approve" },
+                  { value: "false", label: "Refuse" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "p_comment",
+                label: "Comment",
+                placeholder: "Recounted, the shortage is real",
+              },
+            ],
+            mapArgs: (v) => ({
+              p_task_id: v["p_task_id"],
+              p_approve: v["p_approve"] === "true",
+              ...(v["p_comment"] ? { p_comment: v["p_comment"] } : {}),
+            }),
+            invalidates: [...invalidates, "erp_my_approvals"],
+            submitLabel: "Record the decision",
+          },
+          {
             label: "Post a count",
-            description: "Accept the difference and correct the stock by it.",
+            description:
+              "Correct the stock by an agreed difference. Once the organisation is live, somebody other than the person who counted it posts it.",
             permission: "inventory.adjust",
             fn: "erp_post_count",
             fields: [countTask()],

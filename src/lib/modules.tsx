@@ -328,14 +328,34 @@ const zeroIsGood = (n: number, label: string) => ({
  * Stock is where the batch is; quality is who decides. It was declared on Stock
  * alone, so the people who hold the release — a quality manager, a responsible
  * person — had to hold stock's screen as well to find it.
+ *
+ * The door has always taken the inspection the release relies on, and the form
+ * never sent it. It offers the inspections of the chosen batch now: the database
+ * refuses a batch last rejected, one whose inspection failed, an inspection of
+ * another batch, and, once the organisation is live, a release by whoever
+ * dispositioned it (20260914070000).
  */
-const RELEASE_BATCH: ActionSpec = {
+export const RELEASE_BATCH: ActionSpec = {
   label: "Release a batch",
   permission: "quality.release_batch",
   fn: "erp_release_batch",
   fields: [
     pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
     pickSite(),
+    {
+      kind: "select",
+      name: "p_inspection_id",
+      label: "Inspection",
+      required: false,
+      hint: "The inspection of this batch the release relies on. A batch last rejected, or whose inspection failed, is not released, and once the organisation is live nobody releases a batch they dispositioned.",
+      options: {
+        fn: "erp_inspections",
+        args: { p_limit: 100 },
+        argsFrom: { p_batch_id: "p_batch_id" },
+        value: "inspection_id",
+        label: ["disposition", "status", "completed_at"],
+      },
+    },
     {
       kind: "text",
       name: "p_basis",
