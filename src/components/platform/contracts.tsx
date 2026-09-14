@@ -7,11 +7,13 @@ import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import type { PlatformRole } from "../../lib/platform";
 import { Card, Fail, INPUT } from "./kit";
+import { SellingSetup } from "./selling";
 
 /**
  * Contracts. Specification v1.5 §17.5, §17.8 and §17.9.
  *
- * The platform's own organisation is designated here (§17.5). A contract is
+ * Selling is set up here (§17.5): the platform's own organisation and its
+ * price list, in selling.tsx. A contract is
  * created from an accepted quote and nothing else; signing it provisions the
  * subscription directly (§17.9, D35); every change after that is an
  * amendment with its own signature. Key dates are structured fields with a
@@ -20,19 +22,6 @@ import { Card, Fail, INPUT } from "./kit";
 
 const BUTTON = `${TOUCH} inline-flex items-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60`;
 const SECONDARY = `${TOUCH} inline-flex items-center rounded-md border border-input px-3 text-xs font-medium`;
-
-type CommercialState = {
-  platform_organisation: {
-    tenant_code: string;
-    designated_at: string;
-    designated_by: string;
-    reason: string | null;
-    status: string | null;
-  } | null;
-  candidates: { code: string; name: string }[];
-  price_items: number;
-  findings: { finding: string; reference: string; detail: string }[];
-};
 
 type ContractRow = {
   id: string;
@@ -250,18 +239,12 @@ export function Contracts({ role }: { role: PlatformRole }) {
   const mayWrite = role === "owner" || role === "operator";
   const [selected, setSelected] = useState<string | null>(null);
 
-  const state = useQuery({
-    queryKey: ["erp_platform_commercial_state"],
-    queryFn: () => callErp<CommercialState>("erp_platform_commercial_state"),
-  });
   const list = useQuery({
     queryKey: ["erp_platform_contracts"],
     queryFn: () => callErp<ContractsReport>("erp_platform_contracts"),
     refetchInterval: 60_000,
   });
 
-  const [designate, setDesignate] = useState("");
-  const [designateReason, setDesignateReason] = useState("");
   const [quote, setQuote] = useState("");
   const [customer, setCustomer] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -293,84 +276,7 @@ export function Contracts({ role }: { role: PlatformRole }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card
-        title="The platform's organisation"
-        icon={<FileSignature className="size-4 text-primary" />}
-        description="The one organisation on this deployment that is the platform itself. Its products are price items, its quotations are commercial quotes, its approval chains route discounts and its output templates render order forms."
-      >
-        {state.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : state.error ? (
-          <Fail error={state.error} />
-        ) : !state.data ? null : (
-          <div className="flex flex-col gap-3">
-            {state.data.platform_organisation ? (
-              <p className="text-sm">
-                <span className="font-mono text-xs">
-                  {state.data.platform_organisation.tenant_code}
-                </span>{" "}
-                <Pill tone={state.data.platform_organisation.status === "active" ? "ok" : "bad"}>
-                  {state.data.platform_organisation.status ?? "missing"}
-                </Pill>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  designated {day(state.data.platform_organisation.designated_at)} by{" "}
-                  {state.data.platform_organisation.designated_by} · {state.data.price_items} price
-                  item(s)
-                </span>
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No organisation is designated yet, so nobody has a price book.
-              </p>
-            )}
-            {state.data.findings.length > 0 ? (
-              <ul className="flex flex-col gap-1" role="alert">
-                {state.data.findings.map((f, i) => (
-                  <li key={`${f.finding}-${i}`} className="text-xs text-destructive">
-                    <span className="font-medium">{f.finding}</span> · {f.reference}: {f.detail}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {role === "owner" ? (
-              <Form
-                label="Designate"
-                fn="erp_platform_designate_organisation"
-                invalidates={["erp_platform_commercial_state", "erp_platform_contracts"]}
-                build={() =>
-                  designate ? { p_tenant_code: designate, p_reason: designateReason || null } : null
-                }
-              >
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <label className="block text-xs font-medium">
-                    Organisation
-                    <select
-                      className={INPUT}
-                      value={designate}
-                      onChange={(e) => setDesignate(e.target.value)}
-                    >
-                      <option value="">Choose…</option>
-                      {state.data.candidates.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.code} — {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block text-xs font-medium">
-                    Reason, if moving it
-                    <input
-                      className={INPUT}
-                      value={designateReason}
-                      onChange={(e) => setDesignateReason(e.target.value)}
-                    />
-                  </label>
-                </div>
-              </Form>
-            ) : null}
-          </div>
-        )}
-      </Card>
+      <SellingSetup role={role} />
 
       {selected ? (
         <ContractDetail id={selected} mayWrite={mayWrite} onBack={() => setSelected(null)} />
