@@ -286,6 +286,7 @@ function Pipeline({
 
   return (
     <div className="flex flex-col gap-6">
+      <Renewals mayWrite={mayWrite} onOpen={onOpen} />
       <Card
         title="Quotes"
         icon={<FileText className="size-4 text-primary" />}
@@ -373,6 +374,125 @@ function Pipeline({
         )}
       </Card>
     </div>
+  );
+}
+
+type RenewalRow = {
+  id: string;
+  tenant_code: string;
+  customer_legal_name: string;
+  term_start: string;
+  term_end: string;
+  uplift_pct: number;
+  previous_annual_value_minor: number;
+  proposed_annual_value_minor: number;
+  currency: string;
+  notice_deadline: string | null;
+  status: string;
+  quote_document_id: string | null;
+};
+
+/**
+ * Renewals waiting for a quote.
+ *
+ * The renewal sweep proposes each renewal at its contract's lead time with the
+ * uplift already applied, and its quote was raised only on the desk. Here it is
+ * one button: the quote carries the contract's recurring lines at the uplifted
+ * price, leaves one-off charges behind, and opens in the builder like any other.
+ * Signing it is recorded under Billing, which is where the button points.
+ */
+function Renewals({ mayWrite, onOpen }: { mayWrite: boolean; onOpen: (id: string) => void }) {
+  const renewals = useQuery({
+    queryKey: ["erp_commercial_renewals"],
+    queryFn: () => callErp<RenewalRow[]>("erp_commercial_renewals"),
+  });
+  const raise = useDoor<{ p_renewal_id: string }, string>("erp_open_renewal_quote", (id) => {
+    if (typeof id === "string") onOpen(id);
+  });
+  const queryClient = useQueryClient();
+
+  const rows = renewals.data ?? [];
+  if (renewals.isPending || (rows.length === 0 && !renewals.error)) return null;
+
+  return (
+    <Card
+      title="Renewals to quote"
+      icon={<FileText className="size-4 text-primary" />}
+      description="Proposed by the renewal sweep ahead of each contract's end, with its uplift applied. The quote carries the contract's recurring lines at the new price and goes through approval and the order form like any other."
+    >
+      {renewals.error ? (
+        <Fail error={renewals.error} />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <Table columns={["Customer", "New term", "This year", "Proposed", "Notice by", ""]}>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-border/60 align-middle last:border-0">
+                <td className="py-2 pr-4 text-sm">
+                  {r.customer_legal_name}
+                  <span className="block font-mono text-xs text-muted-foreground">
+                    {r.tenant_code}
+                  </span>
+                </td>
+                <td className="py-2 pr-4 text-sm">
+                  {day(r.term_start)} to {day(r.term_end)}
+                </td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {money(r.previous_annual_value_minor, r.currency)}
+                </td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {money(r.proposed_annual_value_minor, r.currency)}
+                  <span className="block text-xs text-muted-foreground">
+                    {r.uplift_pct > 0 ? `up ${r.uplift_pct}%` : "no increase"}
+                  </span>
+                </td>
+                <td className="py-2 pr-4 text-sm">{day(r.notice_deadline)}</td>
+                <td className="py-2 text-right">
+                  {r.status === "quoted" && r.quote_document_id ? (
+                    <button
+                      type="button"
+                      className={SECONDARY}
+                      onClick={() => onOpen(r.quote_document_id ?? "")}
+                    >
+                      Open the renewal quote
+                    </button>
+                  ) : mayWrite ? (
+                    <button
+                      type="button"
+                      className={BUTTON}
+                      disabled={raise.isPending}
+                      onClick={() =>
+                        raise.mutate(
+                          { p_renewal_id: r.id },
+                          {
+                            onSettled: () =>
+                              void queryClient.invalidateQueries({
+                                queryKey: ["erp_commercial_renewals"],
+                              }),
+                          },
+                        )
+                      }
+                    >
+                      {raise.isPending && raise.variables?.p_renewal_id === r.id
+                        ? "Raising…"
+                        : "Raise the renewal quote"}
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </Table>
+          <p className="text-xs text-muted-foreground">
+            A founding customer&apos;s discount is carried onto the renewal quote. Within their 24
+            months, mark the renewal quote as a founding customer quote; after them, lower the
+            discount. Once the customer accepts, sign the renewal under Billing.
+          </p>
+          <ConsoleLink section="billing" view="revenue" className={`${LINK_BUTTON} self-start`}>
+            Open renewals under Billing
+          </ConsoleLink>
+          {raise.error ? <Fail error={raise.error} /> : null}
+        </div>
+      )}
+    </Card>
   );
 }
 
