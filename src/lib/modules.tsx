@@ -287,6 +287,40 @@ const zeroIsGood = (n: number, label: string) => ({
   tone: n === 0 ? ("ok" as const) : n > 5 ? ("bad" as const) : ("warn" as const),
 });
 
+/**
+ * Releasing a batch, declared once and offered on both screens that need it.
+ *
+ * Stock is where the batch is; quality is who decides. It was declared on Stock
+ * alone, so the people who hold the release — a quality manager, a responsible
+ * person — had to hold stock's screen as well to find it.
+ */
+const RELEASE_BATCH: ActionSpec = {
+  label: "Release a batch",
+  permission: "quality.release_batch",
+  fn: "erp_release_batch",
+  fields: [
+    pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+    pickSite(),
+    {
+      kind: "text",
+      name: "p_basis",
+      label: "Basis",
+      required: true,
+      placeholder: "Certificate of analysis 4471 reviewed",
+      hint: "What you relied on to decide.",
+    },
+    {
+      kind: "text",
+      name: "p_signature",
+      label: "Signature",
+      required: true,
+      placeholder: "Your full name",
+      hint: "Typed in full. It is kept against the release.",
+    },
+  ],
+  invalidates: ["erp_batches", "erp_stock_health"],
+};
+
 export const INVENTORY: ModuleDef = {
   flow: {
     title: "Stock, step by step",
@@ -781,32 +815,7 @@ export const INVENTORY: ModuleDef = {
       ],
       invalidates: ["erp_batches", "erp_stock_health"],
     },
-    {
-      label: "Release a batch",
-      permission: "quality.release_batch",
-      fn: "erp_release_batch",
-      fields: [
-        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
-        pickSite(),
-        {
-          kind: "text",
-          name: "p_basis",
-          label: "Basis",
-          required: true,
-          placeholder: "Certificate of analysis 4471 reviewed",
-          hint: "What you relied on to decide.",
-        },
-        {
-          kind: "text",
-          name: "p_signature",
-          label: "Signature",
-          required: true,
-          placeholder: "Your full name",
-          hint: "Typed in full. It is kept against the release.",
-        },
-      ],
-      invalidates: ["erp_batches", "erp_stock_health"],
-    },
+    RELEASE_BATCH,
     {
       label: "Merge two batches",
       description: "Combine one batch into another of the same product and condition.",
@@ -1831,7 +1840,9 @@ export const PLANNING: ModuleDef = {
       {
         label: "Requirements run",
         hint: "Demand against supply, netted, exploded through the bills of material.",
-        createFn: "erp_run_planning",
+        // The baseline, by code: "Run a scenario" is the same function, and a
+        // scenario's orders can never be firmed at the next step.
+        createFn: "planning_run",
       },
       {
         label: "Planned order",
@@ -1959,6 +1970,7 @@ export const PLANNING: ModuleDef = {
   group: "plan",
   actions: [
     {
+      code: "planning_run",
       label: "Run planning",
       description: "Regenerate planned orders and exceptions for one site.",
       permission: "planning.run",
@@ -1970,6 +1982,7 @@ export const PLANNING: ModuleDef = {
       invalidates: ["erp_planned_orders", "erp_planner_workbench", "erp_planning_runs"],
     },
     {
+      code: "planning_scenario_run",
       label: "Run a scenario",
       description:
         "Plan one site under assumptions, beside the baseline. A scenario's orders are never supply and cannot be firmed; compare it with the baseline instead.",
@@ -2814,6 +2827,7 @@ export const QUALITY: ModuleDef = {
       ],
       invalidates: ["erp_inspections", "erp_quality_events", "erp_batches"],
     },
+    RELEASE_BATCH,
     {
       label: "Raise a recall",
       permission: "quality.recall",
