@@ -9,6 +9,7 @@ import {
   invoiceCards,
   listNames,
   organisationCards,
+  paymentDetailsCards,
   priceListLoaded,
   revenueCards,
   sellingCards,
@@ -249,6 +250,30 @@ describe("support windows", () => {
       "Platform staff are inside B and A; the last window closes in 4 hours.",
     );
     expect(supportWindowCards([], NOW)).toEqual([]);
+  });
+});
+
+describe("payment details", () => {
+  test("asks for them before an invoice goes out without them, and opens where they are set", () => {
+    const cards = paymentDetailsCards({ set: false });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.title).toBe("Add payment details before invoices go out");
+    expect(cards[0]!.tone).toBe("warn");
+    expect(cards[0]!.action).toBe("Add payment details");
+    expect(cards[0]!.target).toEqual({ section: "billing", view: "payment" });
+    opensARealTab(cards[0]!);
+  });
+
+  test("says nothing once they are set", () => {
+    expect(
+      paymentDetailsCards({
+        set: true,
+        legal_name: "Example Supplier Ltd",
+        bank_account_name: "Example Supplier Ltd",
+        sort_code: "00-00-00",
+        account_number: "00000000",
+      }),
+    ).toEqual([]);
   });
 });
 

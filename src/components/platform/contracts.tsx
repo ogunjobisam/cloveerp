@@ -8,6 +8,7 @@ import { callErp } from "../../lib/erp";
 import type { PlatformRole } from "../../lib/platform";
 import { describeChanges, describeTermination, describeUplift } from "../../lib/contract-terms";
 import { DraftAmendment } from "./amendment-form";
+import { BillingContact, SendAgain, SendLines, useCommercialEmails } from "./commercial-email";
 import { Card, Fail, INPUT } from "./kit";
 
 /**
@@ -278,7 +279,12 @@ export function Contracts({ role }: { role: PlatformRole }) {
   return (
     <div className="flex flex-col gap-6">
       {selected ? (
-        <ContractDetail id={selected} mayWrite={mayWrite} onBack={() => setSelected(null)} />
+        <ContractDetail
+          id={selected}
+          mayWrite={mayWrite}
+          isOwner={role === "owner"}
+          onBack={() => setSelected(null)}
+        />
       ) : (
         <Card
           title="Contracts"
@@ -611,10 +617,12 @@ export function Contracts({ role }: { role: PlatformRole }) {
 function ContractDetail({
   id,
   mayWrite,
+  isOwner,
   onBack,
 }: {
   id: string;
   mayWrite: boolean;
+  isOwner: boolean;
   onBack: () => void;
 }) {
   const q = useQuery({
@@ -911,6 +919,8 @@ function ContractDetail({
         </Card>
       ) : null}
 
+      <BillingContact contractId={id} isOwner={isOwner} />
+
       <Invoices contractId={id} mayWrite={mayWrite} status={c.status} />
 
       <Card
@@ -983,6 +993,7 @@ function ContractDetail({
 
 type InvoiceLine =
   | { kind: "subscription"; net_minor: number; description: string }
+  | { kind: "one_off"; net_minor: number; description: string; quantity: number }
   | {
       kind: "overage";
       entitlement_code: string;
@@ -1034,8 +1045,13 @@ function Invoices({
     queryKey: ["erp_platform_invoices", { p_contract_id: contractId }],
     queryFn: () => callErp<Invoice[]>("erp_platform_invoices", { p_contract_id: contractId }),
   });
+  const emails = useCommercialEmails({ contractId });
   const invalidate = () => {
-    for (const k of ["erp_platform_invoices", "erp_platform_revenue"]) {
+    for (const k of [
+      "erp_platform_invoices",
+      "erp_platform_revenue",
+      "erp_platform_commercial_emails",
+    ]) {
       void queryClient.invalidateQueries({ queryKey: [k] });
     }
   };
@@ -1096,7 +1112,17 @@ function Invoices({
         </p>
       ) : (
         <Table
-          columns={["Reference", "Period", "Due", "Subscription", "Overage", "Total", "State", ""]}
+          columns={[
+            "Reference",
+            "Period",
+            "Due",
+            "Subscription",
+            "Overage",
+            "Total",
+            "State",
+            "Emailed",
+            "",
+          ]}
         >
           {q.data.map((i) => (
             <Fragment key={i.id}>
@@ -1140,6 +1166,27 @@ function Invoices({
                     {i.status}
                   </Pill>
                 </td>
+                <td className="py-2 pr-4">
+                  {i.status === "issued" || i.status === "paid" ? (
+                    <div className="flex flex-col items-start gap-1.5">
+                      {emails.data ? (
+                        <SendLines sends={emails.data.sends} documentId={i.id} />
+                      ) : emails.error ? (
+                        <span className="text-xs text-destructive">Could not be read</span>
+                      ) : null}
+                      {mayWrite && emails.data && !emails.data.demonstration ? (
+                        <SendAgain
+                          kind="contract_invoice"
+                          documentId={i.id}
+                          disabled={emails.data.recipients.length === 0}
+                          sentBefore={emails.data.sends.some((x) => x.document_id === i.id)}
+                        />
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">When issued</span>
+                  )}
+                </td>
                 <td className="py-2">
                   {mayWrite && i.status === "scheduled" ? (
                     <button
@@ -1177,7 +1224,7 @@ function Invoices({
               </tr>
               {open === i.id ? (
                 <tr className="border-b border-border/50 last:border-0">
-                  <td colSpan={8} className="pb-3">
+                  <td colSpan={9} className="pb-3">
                     <InvoiceLines lines={i.lines} currency={i.currency} />
                   </td>
                 </tr>
@@ -1198,10 +1245,11 @@ export function InvoiceLines({ lines, currency }: { lines: InvoiceLine[]; curren
     <Table columns={["Line", "Used", "Limit", "Over", "Unit", "Band", "Net"]}>
       {lines.map((l, n) => (
         <tr key={n} className="border-b border-border/50 last:border-0">
-          {l.kind === "subscription" ? (
+          {l.kind === "subscription" || l.kind === "one_off" ? (
             <>
               <td className="py-1.5 pr-4 text-xs" colSpan={6}>
                 {l.description}
+                {l.kind === "one_off" ? " · charged once" : ""}
               </td>
               <td className="py-1.5 text-sm tabular-nums">{money(l.net_minor, currency)}</td>
             </>

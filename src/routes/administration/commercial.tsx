@@ -187,6 +187,16 @@ type Agreement = {
     derived_from: string;
     remedy: string;
   }[];
+  /** Where the invoices ask to be paid; null until the platform has said. */
+  payment_details: {
+    legal_name: string;
+    registered_address: string | null;
+    company_number: string | null;
+    bank_account_name: string;
+    sort_code: string;
+    account_number: string;
+    payment_reference_guidance: string | null;
+  } | null;
 };
 
 function day(value: string | null | undefined) {
@@ -270,6 +280,7 @@ function Commercial() {
         subscription: d?.subscription ?? null,
         sub_processors: d?.sub_processors ?? [],
         service_commitments: d?.service_commitments ?? [],
+        payment_details: d?.payment_details ?? null,
       };
     },
     refetchInterval: 60_000,
@@ -685,6 +696,37 @@ function Commercial() {
                               <p className="mt-2 text-xs text-muted-foreground">
                                 {i.tax_statement}
                               </p>
+                            ) : null}
+                            {i.status === "issued" ? (
+                              data.payment_details ? (
+                                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 rounded-md bg-muted/50 p-3 text-xs">
+                                  <dt className="text-muted-foreground">Pay to</dt>
+                                  <dd>{data.payment_details.bank_account_name}</dd>
+                                  <dt className="text-muted-foreground">Sort code</dt>
+                                  <dd className="font-mono">{data.payment_details.sort_code}</dd>
+                                  <dt className="text-muted-foreground">Account number</dt>
+                                  <dd className="font-mono">
+                                    {data.payment_details.account_number}
+                                  </dd>
+                                  <dt className="text-muted-foreground">Reference</dt>
+                                  <dd className="font-mono">{i.reference}</dd>
+                                  {data.payment_details.payment_reference_guidance ? (
+                                    <dd className="col-span-2 text-muted-foreground">
+                                      {data.payment_details.payment_reference_guidance}
+                                    </dd>
+                                  ) : null}
+                                  <dd className="col-span-2 mt-1 text-muted-foreground">
+                                    {data.payment_details.legal_name}
+                                    {data.payment_details.company_number
+                                      ? `, company number ${data.payment_details.company_number}`
+                                      : ""}
+                                  </dd>
+                                </dl>
+                              ) : (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Payment details will follow from the Clove ERP accounts team.
+                                </p>
+                              )
                             ) : null}
                           </td>
                         </tr>
