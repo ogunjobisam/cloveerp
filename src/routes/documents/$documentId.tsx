@@ -539,9 +539,12 @@ function LineagePanel({ lineage, documentId }: { lineage: Lineage[]; documentId:
               name: "p_to_document_id",
               label: "Related document",
               required: true,
+              // Any document but a cancelled one: what a relation points at —
+              // the invoice a credit credits, the delivery an invoice invoices
+              // — is usually posted or closed, so p_actionable would hide it.
               options: {
                 fn: "erp_documents",
-                args: { p_limit: 200 },
+                args: { p_limit: 200, p_exclude_cancelled: true },
                 value: "document_id",
                 label: ["document_number", "document_type"],
               },

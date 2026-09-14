@@ -71,6 +71,8 @@ type Item = {
   item_id: string;
   code: string;
   name: string;
+  /** What lines take when nobody types one. Null when the product has none. */
+  description: string | null;
   item_class: string | null;
   item_group: string | null;
   lifecycle: string;
@@ -392,6 +394,18 @@ function ItemRecord({ item, maySeeSuppliers }: { item: Item; maySeeSuppliers: bo
         </dl>
       </RecordSection>
 
+      <RecordSection title="Description">
+        {/* Its own section rather than a field in the grid above: a field
+            there is one truncated line, and this can run to a paragraph. */}
+        {item.description ? (
+          <p className="whitespace-pre-line break-words text-sm">{item.description}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            None. A line for this product carries only what whoever raises it types.
+          </p>
+        )}
+      </RecordSection>
+
       <RecordSection title="Traceability">
         {/* Three separate controls, so they are shown separately. A single
             "tracked" pill would hide which of the three a product actually
@@ -518,6 +532,13 @@ function NewItem() {
           placeholder: "Oat milk 1L, case of 12",
         },
         {
+          kind: "text",
+          name: "p_description",
+          label: "Description",
+          placeholder: "Oat milk, 1 litre cartons, case of 12",
+          hint: "What the product is, in the words that should appear on orders, receipts and invoices. Lines take it when nobody types one.",
+        },
+        {
           kind: "choice",
           name: "p_item_class",
           label: "Class",
@@ -553,6 +574,8 @@ function NewItem() {
       mapArgs={(v) => ({
         p_code: v["p_code"],
         p_name: v["p_name"],
+        // Optional: blank is no description, and the database trims the rest.
+        p_description: v["p_description"]?.trim() || null,
         p_item_class: v["p_item_class"] || null,
         p_item_group: v["p_item_group"] || null,
         p_lifecycle: v["p_lifecycle"] || null,
