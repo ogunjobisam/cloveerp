@@ -187,9 +187,10 @@ transaction-path function.
 
 **The write surface.** Provisioning creates a tenant, its root company, an
 administrator role holding every permission, and the first administrator as an
-_invited_ principal with a single-use token. Self-service onboarding creates a
-tenant for a caller who has none, inside a bootstrap window that `go_live()`
-closes.
+_invited_ principal with a single-use token. Organisations come by invitation:
+self-service onboarding, which creates a tenant for a caller who has none, is
+closed until the platform owner opens it. Either way the tenant starts inside a
+bootstrap window that `go_live()` closes.
 
 **The dispatch worker** (`worker/`). The one component that must live outside
 the database, because the database deliberately holds no credentials. Its
@@ -362,8 +363,15 @@ nothing to authorise against:
 select public.erp_onboard_tenant('Acme Ltd', 'acme');
 ```
 
-It builds the same tenant the operator door does, with one difference: the
-environment is not yet live. That is the **bootstrap window**. Inside it, an
+It is closed by default. Organisations come by invitation, so the door refuses
+with `CLOVEERP_ORGANISATION_BY_INVITATION_ONLY` unless the caller is platform
+staff, the session is trusted, or the platform owner has opened self-service
+sign-up with `erp_platform_set_self_service_organisations`, which needs a
+reason and is logged. The demo seeders follow the same rule. A signed-in person
+with no organisation sees only the invitation they hold, or a request for one.
+
+When it is open, it builds the same tenant the operator door does, with one
+difference: the environment is not yet live. That is the **bootstrap window**. Inside it, an
 installer approves and promotes in the same call, because separation of duties
 has nobody to separate from. `erp.go_live()` closes it, and refuses to close it
 over dead configuration or over a tenant with a single administrator. After
