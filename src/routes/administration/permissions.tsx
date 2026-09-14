@@ -3,11 +3,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { PermissionName } from "../../components/erp/action";
+import { ErrorNote, PermissionName } from "../../components/erp/action";
 import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InviteDialog } from "../../components/erp/invite-dialog";
 import { PeopleAccess } from "../../components/erp/people-access";
+import {
+  DutiesPanel,
+  GrantRefusal,
+  RecordedForReview,
+  SOD_CONFLICTS_KEY,
+} from "../../components/erp/separation-of-duties";
 
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
@@ -15,6 +21,7 @@ import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { accessWord, type DirectoryPrincipal } from "../../lib/people-access";
+import type { SettledConflict } from "../../lib/separation-of-duties";
 import { useUnsavedGuard } from "../../components/erp/unsaved";
 
 export const Route = createFileRoute("/administration/permissions")({
@@ -98,6 +105,7 @@ function Permissions() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["erp_permissions_directory"] });
     queryClient.invalidateQueries({ queryKey: ["erp_session"] });
+    queryClient.invalidateQueries({ queryKey: SOD_CONFLICTS_KEY });
   };
 
   if (!allowed) {
@@ -160,6 +168,7 @@ function Permissions() {
         <>
           <PeopleAccess principals={data.principals} />
           <PeoplePanel directory={data} onDone={invalidate} />
+          <DutiesPanel />
           <GrantForm directory={data} onDone={invalidate} />
           <GrantsPanel directory={data} onDone={invalidate} />
           <RolesPanel directory={data} onDone={invalidate} />
@@ -169,9 +178,18 @@ function Permissions() {
   );
 }
 
+type SetRolesAnswer = { granted: number; revoked: number; conflicts?: SettledConflict[] };
+type GrantAnswer = { grant_id: string; conflicts?: SettledConflict[] };
+
+/** The reason for an exception is sent only when there is one, so the call still matches a database a release behind. */
+function exceptionArgs(reason: string | null): Record<string, string> {
+  return reason ? { p_sod_override_reason: reason } : {};
+}
+
 function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () => void }) {
   const [selected, setSelected] = useState<string>(directory.principals[0]?.id ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [recorded, setRecorded] = useState<SettledConflict[] | null>(null);
   const [pending, setPending] = useState<Set<string> | null>(null);
 
   const activeRoles = directory.roles.filter((r) => r.status === "active");
@@ -194,18 +212,20 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
   useUnsavedGuard(pending !== null);
 
   const save = useMutation({
-    mutationFn: (codes: string[]) =>
-      callErp("erp_set_user_roles", {
+    mutationFn: ({ codes, reason }: { codes: string[]; reason: string | null }) =>
+      callErp<SetRolesAnswer>("erp_set_user_roles", {
         p_app_user_id: selected,
         p_role_codes: codes,
         p_reason: "set from the roles panel",
+        ...exceptionArgs(reason),
       }),
-    onSuccess: () => {
+    onSuccess: (answer) => {
       setPending(null);
       setError(null);
+      setRecorded(answer?.conflicts ?? null);
       onDone();
     },
-    onError: (e) => setError(friendlyError(e).title),
+    onError: (e) => setError(e),
   });
 
   const toggle = (code: string) => {
@@ -213,6 +233,7 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
     if (next.has(code)) next.delete(code);
     else next.add(code);
     setPending(next);
+    setRecorded(null);
   };
 
   return (
@@ -237,6 +258,7 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
               setSelected(e.target.value);
               setPending(null);
               setError(null);
+              setRecorded(null);
             }}
             className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
           >
@@ -285,7 +307,7 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => save.mutate([...ticked])}
+                  onClick={() => save.mutate({ codes: [...ticked], reason: null })}
                   disabled={save.isPending || pending === null}
                   className={`${TOUCH} inline-flex items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60`}
                 >
@@ -293,7 +315,10 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
                 </button>
                 {pending !== null ? (
                   <button
-                    onClick={() => setPending(null)}
+                    onClick={() => {
+                      setPending(null);
+                      setError(null);
+                    }}
                     className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
                   >
                     Discard changes
@@ -303,11 +328,13 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
             </>
           )}
 
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <GrantRefusal
+            key={selected}
+            error={error}
+            busy={save.isPending}
+            onException={(reason) => save.mutate({ codes: [...ticked], reason })}
+          />
+          <RecordedForReview conflicts={recorded} />
         </div>
       </div>
     </section>
@@ -320,27 +347,30 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
   const [validFrom, setValidFrom] = useState("");
   const [validTo, setValidTo] = useState("");
   const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [recorded, setRecorded] = useState<SettledConflict[] | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      callErp("erp_grant_role", {
+    mutationFn: (exception: string | null) =>
+      callErp<GrantAnswer>("erp_grant_role", {
         p_app_user_id: appUserId,
         p_role_id: roleId,
         p_valid_from: validFrom || undefined,
         p_valid_to: validTo || null,
         p_grant_reason: reason || null,
+        ...exceptionArgs(exception),
       }),
-    onSuccess: () => {
+    onSuccess: (answer) => {
       setAppUserId("");
       setRoleId("");
       setValidFrom("");
       setValidTo("");
       setReason("");
       setError(null);
+      setRecorded(answer?.conflicts ?? null);
       onDone();
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => setError(e),
   });
 
   const activeRoles = directory.roles.filter((r) => r.status === "active");
@@ -360,7 +390,8 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
-          mutation.mutate();
+          setRecorded(null);
+          mutation.mutate(null);
         }}
       >
         <label className="flex flex-col gap-1 text-sm">
@@ -447,26 +478,30 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             {mutation.isPending ? "Granting…" : "Grant role"}
           </button>
         </div>
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive sm:col-span-2 lg:col-span-3">
-            {error}
-          </p>
-        ) : null}
       </form>
+      <div className="flex flex-col gap-3 px-4 pb-4 empty:hidden sm:px-5">
+        <GrantRefusal
+          key={`${appUserId}-${roleId}`}
+          error={error}
+          busy={mutation.isPending}
+          onException={(exception) => mutation.mutate(exception)}
+        />
+        <RecordedForReview conflicts={recorded} />
+      </div>
     </section>
   );
 }
 
 function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () => void }) {
-  const [error, setError] = useState<string | null>(null);
+  const { ui } = useT();
+  const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
     mutationFn: (id: string) => callErp("erp_revoke_role", { p_user_role_id: id }),
     onSuccess: () => {
       setError(null);
       onDone();
     },
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => setError(e),
   });
 
   const principalName = (id: string) =>
@@ -478,7 +513,9 @@ function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () =
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Grants ({directory.grants.length})</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Removing a grant takes effect immediately; the principal's next session reflects it.
+          {ui(
+            "Removing a grant ends it: it stops today and stays on file. A grant that had not begun is withdrawn.",
+          )}
         </p>
       </header>
       <div className="px-5 py-4">
@@ -515,9 +552,9 @@ function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () =
           </Table>
         )}
         {error ? (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {error}
-          </p>
+          <div className="mt-3">
+            <ErrorNote error={error} />
+          </div>
         ) : null}
       </div>
     </section>
