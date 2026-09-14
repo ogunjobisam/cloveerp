@@ -6,11 +6,13 @@ import { useMemo, useState } from "react";
 import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InviteDialog } from "../../components/erp/invite-dialog";
+import { PeopleAccess } from "../../components/erp/people-access";
 
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
+import { accessWord, type DirectoryPrincipal } from "../../lib/people-access";
 import { useUnsavedGuard } from "../../components/erp/unsaved";
 
 export const Route = createFileRoute("/administration/permissions")({
@@ -37,14 +39,7 @@ export const Route = createFileRoute("/administration/permissions")({
   ),
 });
 
-type Principal = {
-  id: string;
-  display_name: string;
-  email: string | null;
-  kind: "person" | "service";
-  status: string;
-  created_at: string;
-};
+type Principal = DirectoryPrincipal;
 
 type Role = {
   id: string;
@@ -156,6 +151,7 @@ function Permissions() {
         </div>
       ) : data ? (
         <>
+          <PeopleAccess principals={data.principals} />
           <PeoplePanel directory={data} onDone={invalidate} />
           <GrantForm directory={data} onDone={invalidate} />
           <GrantsPanel directory={data} onDone={invalidate} />
@@ -205,16 +201,6 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
     onError: (e) => setError(friendlyError(e).title),
   });
 
-  const remove = useMutation({
-    mutationFn: () => callErp("erp_remove_principal", { p_app_user_id: selected }),
-    onSuccess: () => {
-      setPending(null);
-      setError(null);
-      onDone();
-    },
-    onError: (e) => setError(friendlyError(e).title),
-  });
-
   const toggle = (code: string) => {
     const next = new Set(ticked);
     if (next.has(code)) next.delete(code);
@@ -225,11 +211,11 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
   return (
     <section className="rounded-xl border border-border bg-card">
       <header className="border-b border-border px-4 py-4 sm:px-5">
-        <h2 className="text-sm font-semibold">People and the roles they hold</h2>
+        <h2 className="text-sm font-semibold">The roles each person holds</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
           Roles combine. Somebody who works across stock and the ledger holds both, and may do
-          everything either allows. Removing somebody ends their access without deleting them, so
-          the same email can be invited again later and return to the same record.
+          everything either allows. To withdraw an invitation, or to remove or restore
+          somebody&apos;s access, use People above.
         </Prose>
       </header>
 
@@ -251,13 +237,13 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
             {directory.principals.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.display_name}
-                {p.status !== "active" ? ` (${p.status})` : ""}
+                {p.status !== "active" ? ` (${accessWord(p)})` : ""}
               </option>
             ))}
           </select>
           {person ? (
             <span className="mt-1 text-xs text-muted-foreground">
-              {person.email ?? "no email"} · {person.kind} · {person.status}
+              {person.email ?? "no email"} · {person.kind} · {accessWord(person)}
             </span>
           ) : null}
         </label>
@@ -306,13 +292,6 @@ function PeoplePanel({ directory, onDone }: { directory: Directory; onDone: () =
                     Discard changes
                   </button>
                 ) : null}
-                <button
-                  onClick={() => remove.mutate()}
-                  disabled={remove.isPending}
-                  className={`${TOUCH} ml-auto inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium text-destructive disabled:opacity-50`}
-                >
-                  {remove.isPending ? "Removing…" : "Remove this person"}
-                </button>
               </div>
             </>
           )}
@@ -391,7 +370,7 @@ function GrantForm({ directory, onDone }: { directory: Directory; onDone: () => 
             {directory.principals.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.display_name}
-                {p.status !== "active" ? ` (${p.status})` : ""}
+                {p.status !== "active" ? ` (${accessWord(p)})` : ""}
               </option>
             ))}
           </select>
