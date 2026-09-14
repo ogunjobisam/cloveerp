@@ -34,7 +34,12 @@ export type TodayCard = {
 /* -------------------------------------------------------------------------- */
 
 export type AssuranceCheck = { code: string; title?: string | undefined; ok: boolean | null };
-export type EnquiryRow = { submitted_at: string; status: string };
+export type EnquiryRow = {
+  submitted_at: string;
+  status: string;
+  /** Set when a member of staff recorded what was done about it. */
+  handled_at?: string | null;
+};
 export type RevenueRead = {
   renewals: { status: string; tenant_code: string }[];
   revenue_at_risk: { tenant_code: string; annual_value_minor: number }[];
@@ -49,7 +54,30 @@ export type SellingRead = {
   price_items: number;
   selling: { installed: boolean; price_book: unknown; waiting: boolean } | null;
 };
-export type TenantRow = { code: string; name: string; status: string };
+export type TenantRow = {
+  code: string;
+  name: string;
+  status: string;
+  /** Set when deletion was requested or the organisation was marked ended. */
+  deleted_at?: string | null;
+};
+export type OpenInvoiceRow = {
+  reference: string;
+  tenant_code: string;
+  customer_legal_name: string;
+  currency: string;
+  total_minor: number;
+  due_on: string;
+  overdue: boolean;
+  days_overdue: number;
+};
+export type SupportWindowRow = {
+  tenant_code: string;
+  tenant_name: string;
+  staff_email: string;
+  is_write_access: boolean;
+  expires_at: string;
+};
 
 /* -------------------------------------------------------------------------- */
 /* Words.                                                                     */
@@ -118,7 +146,9 @@ export const NEW_ENQUIRY_DAYS = 7;
 const STUCK_MINUTES = 15;
 
 export function enquiryCards(rows: EnquiryRow[], now: Date): TodayCard[] {
-  const live = rows.filter((e) => e.status !== "erased");
+  // Erased is gone, and handled has had somebody deal with it: neither needs
+  // anybody today, whatever the mail did.
+  const live = rows.filter((e) => e.status !== "erased" && !e.handled_at);
   const at = now.getTime();
   const recent = live.filter(
     (e) => at - new Date(e.submitted_at).getTime() <= NEW_ENQUIRY_DAYS * DAY,
@@ -195,19 +225,86 @@ export function revenueCards(revenue: RevenueRead): TodayCard[] {
     });
   }
 
-  if (revenue.invoices.issued_minor > 0) {
-    cards.push({
-      key: "unpaid",
-      figure: formatMinorWhole(revenue.invoices.issued_minor, currency),
-      title: "Invoiced and not yet paid",
-      sentence:
-        "Issued to customers and waiting for payment; each contract lists its invoices and when each is due.",
-      tone: "warn",
-      action: "Open contracts",
-      target: { section: "sales", view: "contracts" },
-    });
-  }
   return cards;
+}
+
+/**
+ * Invoices past their due date. An invoice issued and not yet due needs
+ * nobody: the customer has until the date on it. One that is late needs a
+ * reminder, so it is the serious kind of card.
+ */
+export function invoiceCards(rows: OpenInvoiceRow[]): TodayCard[] {
+  const late = rows.filter((i) => i.overdue);
+  if (late.length === 0) return [];
+  const customers = [...new Set(late.map((i) => i.customer_legal_name))];
+  const codes = [...new Set(late.map((i) => i.tenant_code))];
+  const currencies = [...new Set(late.map((i) => i.currency))];
+  const oldest = Math.max(...late.map((i) => i.days_overdue));
+  const amount =
+    currencies.length === 1
+      ? formatMinorWhole(
+          late.reduce((sum, i) => sum + i.total_minor, 0),
+          currencies[0]!,
+        )
+      : null;
+  const what = amount
+    ? `${amount} from ${listNames(customers)}`
+    : `${late.length} invoices from ${listNames(customers)}`;
+  return [
+    {
+      key: "overdue-invoices",
+      figure: String(late.length),
+      title: plural(late.length, "Invoice overdue", "Invoices overdue"),
+      sentence: `${what} ${plural(late.length, "is", "are")} past the due date; the oldest is ${oldest} ${plural(oldest, "day", "days")} late.`,
+      tone: "bad",
+      action: codes.length === 1 ? "Open the organisation" : "Open contracts",
+      target:
+        codes.length === 1
+          ? { section: "customers", view: "organisations", org: codes[0]! }
+          : { section: "sales", view: "contracts" },
+    },
+  ];
+}
+
+function closesIn(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 90) return `${minutes} ${plural(minutes, "minute", "minutes")}`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} ${plural(hours, "hour", "hours")}`;
+}
+
+/**
+ * Support windows open anywhere. Nothing is wrong with one, but somebody from
+ * the platform is inside a customer's organisation, and whoever runs the
+ * platform should know who and for how long.
+ */
+export function supportWindowCards(rows: SupportWindowRow[], now: Date): TodayCard[] {
+  const at = now.getTime();
+  const open = rows
+    .filter((w) => new Date(w.expires_at).getTime() > at)
+    .sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime());
+  if (open.length === 0) return [];
+  const codes = [...new Set(open.map((w) => w.tenant_code))];
+  const first = open[0]!;
+  const last = open[open.length - 1]!;
+  const sentence =
+    open.length === 1
+      ? `${first.staff_email} is inside ${first.tenant_name}${first.is_write_access ? " with write access" : ""}; the window closes in ${closesIn(new Date(first.expires_at).getTime() - at)}.`
+      : `Platform staff are inside ${listNames([...new Set(open.map((w) => w.tenant_name))])}; the last window closes in ${closesIn(new Date(last.expires_at).getTime() - at)}.`;
+  return [
+    {
+      key: "support-windows",
+      figure: String(open.length),
+      title: plural(open.length, "Support window open", "Support windows open"),
+      sentence,
+      tone: "warn",
+      action: codes.length === 1 ? "Open the organisation" : "Open organisations",
+      target:
+        codes.length === 1
+          ? { section: "customers", view: "organisations", org: codes[0]! }
+          : { section: "customers", view: "organisations" },
+    },
+  ];
 }
 
 export function incidentCards(rows: IncidentRow[]): TodayCard[] {
@@ -291,16 +388,32 @@ export function organisationCards(tenants: TenantRow[]): TodayCard[] {
       ? { section: "customers", view: "organisations", org: rows[0]!.code }
       : { section: "customers", view: "organisations" };
 
-  const suspended = tenants.filter((t) => t.status === "suspended");
+  // A deletion request suspends the organisation and records when it was asked
+  // for; a suspension on its own records nothing of the kind. Different things
+  // to do: one is waiting to be let back in, the other to be purged.
+  const requested = tenants.filter((t) => t.status === "suspended" && Boolean(t.deleted_at));
+  const suspended = tenants.filter((t) => t.status === "suspended" && !t.deleted_at);
   if (suspended.length > 0) {
     cards.push({
       key: "suspended",
       figure: String(suspended.length),
       title: plural(suspended.length, "Suspended organisation", "Suspended organisations"),
-      sentence: `Nobody in ${listNames(suspended.map((t) => t.name))} can work while ${plural(suspended.length, "it is", "they are")} suspended, which is also how an organisation waits to be purged after a deletion request.`,
+      sentence: `Nobody in ${listNames(suspended.map((t) => t.name))} can work while ${plural(suspended.length, "it is", "they are")} suspended.`,
       tone: "warn",
       action: suspended.length === 1 ? "Open the organisation" : "Open organisations",
       target: pageOrList(suspended),
+    });
+  }
+
+  if (requested.length > 0) {
+    cards.push({
+      key: "deletion-requested",
+      figure: String(requested.length),
+      title: plural(requested.length, "Deletion requested", "Deletions requested"),
+      sentence: `${listNames(requested.map((t) => t.name))} asked to be deleted. The sweep purges an organisation seven days after the request, or an owner can purge it sooner.`,
+      tone: "warn",
+      action: requested.length === 1 ? "Open the organisation" : "Open organisations",
+      target: pageOrList(requested),
     });
   }
 

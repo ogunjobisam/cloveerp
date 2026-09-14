@@ -7,6 +7,7 @@ import {
   lineFor,
   money,
   oneOffItems,
+  orderFormTotal,
   partyCodeFor,
   planItems,
   quotePlan,
@@ -144,6 +145,22 @@ describe("words and defaults", () => {
     expect(money(45425)).toBe("£454.25");
     expect(money(null)).toBe("—");
     expect(money(10000, "EUR")).toBe("100 EUR");
+  });
+
+  test("an order form's total is its price, whenever it was issued", () => {
+    expect(orderFormTotal({ pricing: { totals: { net_minor: 1991200 } } })).toBe(1991200);
+    expect(
+      orderFormTotal({ margin: { totals: { quoted_minor: 1314000, cost_minor: 450000 } } }),
+    ).toBe(1314000);
+    expect(
+      orderFormTotal({
+        pricing: { totals: { net_minor: 500 } },
+        margin: { totals: { quoted_minor: 900 } },
+      }),
+    ).toBe(500);
+    expect(orderFormTotal(null)).toBeNull();
+    expect(orderFormTotal({ pricing: [1, 2] })).toBeNull();
+    expect(orderFormTotal({ pricing: { totals: { net_minor: "1991200" } } })).toBeNull();
   });
 
   test("terms read as a person says them", () => {

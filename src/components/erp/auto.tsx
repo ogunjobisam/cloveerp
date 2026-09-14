@@ -34,6 +34,7 @@ export function AutoPanel<T extends Record<string, unknown>>({
   loading,
   columns,
   rowKey,
+  highlight,
 }: {
   title: string;
   description?: string;
@@ -46,6 +47,11 @@ export function AutoPanel<T extends Record<string, unknown>>({
   loading?: string;
   columns: Column<T>[];
   rowKey: (row: T, index: number) => string;
+  /**
+   * The row a link pointed at, by its key: shown marked, so a person who
+   * followed an email to one task finds it without reading the list.
+   */
+  highlight?: string | null;
 }) {
   const { ui } = useT();
 
@@ -64,7 +70,17 @@ export function AutoPanel<T extends Record<string, unknown>>({
       {(rows) => (
         <Table columns={columns.map((c) => ui(c.header))}>
           {rows.map((row, i) => (
-            <tr key={rowKey(row, i)} className="border-b border-border/50 last:border-0">
+            <tr
+              key={rowKey(row, i)}
+              {...(highlight && rowKey(row, i) === highlight
+                ? { "aria-current": "true" as const, "data-highlighted": "true" }
+                : {})}
+              className={`border-b border-border/50 last:border-0 ${
+                highlight && rowKey(row, i) === highlight
+                  ? "bg-accent/10 outline outline-2 outline-accent"
+                  : ""
+              }`}
+            >
               {columns.map((c) => (
                 <td
                   key={c.header}

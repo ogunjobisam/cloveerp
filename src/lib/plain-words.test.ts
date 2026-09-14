@@ -13,6 +13,7 @@ import {
   documentIdInPath,
   documentOutcome,
   localIsoDate,
+  quarterToDate,
   movedOnWord,
   orderPeriods,
   periodRank,
@@ -282,6 +283,19 @@ describe("the Close step's periods", () => {
 
   test("today is the reader's own date, as the database writes one", () => {
     expect(localIsoDate(new Date(2026, 8, 4, 23, 30))).toBe("2026-09-04");
+  });
+
+  test("the tax report asks for the calendar quarter so far", () => {
+    expect(quarterToDate(new Date(2026, 8, 14, 9, 0))).toEqual({
+      p_from: "2026-07-01",
+      p_to: "2026-09-14",
+    });
+    expect(quarterToDate(new Date(2027, 0, 1, 0, 5))).toEqual({
+      p_from: "2027-01-01",
+      p_to: "2027-01-01",
+    });
+    const src = readFileSync(join(ROOT, "src", "lib", "modules.tsx"), "utf8");
+    expect(src).toMatch(/fn: "erp_tax_report",[\s\S]{0,400}args: quarterToDate\(\)/);
   });
 
   test("the Close step is declared to work in that order", () => {

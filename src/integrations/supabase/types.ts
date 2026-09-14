@@ -1376,6 +1376,10 @@ export type Database = {
         Returns: Json
       }
       erp_platform_maintenance_windows: { Args: never; Returns: Json }
+      erp_platform_mark_enquiry_handled: {
+        Args: { p_id: string; p_note: string }
+        Returns: Json
+      }
       erp_platform_me: { Args: never; Returns: Json }
       erp_platform_my_support_accesses: { Args: never; Returns: Json }
       erp_platform_my_tenancies: { Args: never; Returns: Json }
@@ -1399,10 +1403,12 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_platform_open_invoices: { Args: never; Returns: Json }
       erp_platform_ownership_transfers: {
         Args: { p_limit?: number; p_tenant_id?: string }
         Returns: Json
       }
+      erp_platform_people: { Args: { p_tenant_id: string }; Returns: Json }
       erp_platform_plans: { Args: never; Returns: Json }
       erp_platform_policy_decisions: { Args: never; Returns: Json }
       erp_platform_post_incident_update: {
@@ -1536,6 +1542,7 @@ export type Database = {
       }
       erp_platform_staff: { Args: never; Returns: Json }
       erp_platform_support_access: { Args: never; Returns: Json }
+      erp_platform_support_windows: { Args: never; Returns: Json }
       erp_platform_tenant_configuration: { Args: never; Returns: Json }
       erp_platform_tenants: { Args: never; Returns: Json }
       erp_post_count: { Args: { p_task_id: string }; Returns: number }

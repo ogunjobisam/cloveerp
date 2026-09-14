@@ -6,6 +6,8 @@
  * holds one. If this file ever grows a query, that guarantee is gone.
  */
 
+import { appOrigin } from "../../../src/lib/email/notification-email.ts";
+
 export type TenantBinding = {
   tenantId: string;
   /**
@@ -62,6 +64,12 @@ export type WorkerConfig = {
    * drain for every other organisation this process serves.
    */
   resendApiKey: string | null;
+  /**
+   * The site an email's buttons open: CLOVEERP_APP_URL's origin, read the way
+   * the invite function reads it, or https://cloveerp.com. A notification
+   * carries the paths of the screens it points at; this is what they hang off.
+   */
+  appOrigin: string;
   supabaseUrl: string | null;
   supabaseServiceRoleKey: string | null;
 };
@@ -165,6 +173,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       leaseSeconds,
       httpTimeoutMs,
       resendApiKey: env["RESEND_API_KEY"]?.trim() || null,
+      appOrigin: appOrigin(env["CLOVEERP_APP_URL"]),
       supabaseUrl: env["SUPABASE_URL"]?.trim() || null,
       supabaseServiceRoleKey: env["SUPABASE_SERVICE_ROLE_KEY"]?.trim() || null,
     };
