@@ -87,7 +87,7 @@
 -- The narrowing is only real if the planner cannot undo it. Each set of
 -- candidates is materialized, or searched in a subquery kept from being
 -- flattened, before the expensive test is asked of it. Written as plain joins
--- (20260914071000 on the build, never applied anywhere), the planner put the
+-- (a draft of this file on the build, never applied anywhere), the planner put the
 -- pattern first: authorising_doors still took 4.8 s and intelligence_boundary
 -- 4.4. And the build of 14800bc, the pull request that brought
 -- 20260914065000, spent 154 s on the old caller_reachable_internals where

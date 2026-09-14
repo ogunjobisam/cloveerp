@@ -632,7 +632,7 @@ jobs:
         # September; the console asks for it through the data API. It is run
         # once, kept, and read twice: for what failed, and for where the time
         # went (erp.run_diagnostic() records elapsed_ms per check since
-        # 20260914072000). Over 35 s is a warning, not a failure: a slow proof
+        # 20260914090000). Over 35 s is a warning, not a failure: a slow proof
         # is still a proof, and the slowest checks it prints are where to look.
         if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         run: |
