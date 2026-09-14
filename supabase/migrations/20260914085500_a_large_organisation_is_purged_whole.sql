@@ -55,8 +55,8 @@ declare
     raise exception
       'CLOVEERP_PURGE_TOO_LARGE: % has more rows than one request may remove; nothing was removed', v_t.code
       using errcode = '54000',
-            hint = 'Run erp.purge_organisation(code, your email, reason) from a direct database session, '
-                   'where no request limit applies. The organisation is unchanged until then.';
+            hint = 'Nothing was removed. Ask whoever looks after the database to finish the purge from a direct '
+                   'connection, where a request has no time limit.';
   end;$n$;
 begin
   if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
@@ -69,10 +69,13 @@ $purge$;
 alter function public.erp_platform_purge_tenant(uuid, text, text) set statement_timeout = '55s';
 alter function public.erp_platform_purge_due_tenants(integer) set statement_timeout = '55s';
 
+-- The next action is for whoever reads the console, so it names nobody's
+-- routine (erp_test.sounds_internal): the routine is erp.purge_organisation,
+-- below, and its comment says so.
 select erp.register_refusal('CLOVEERP_PURGE_TOO_LARGE',
   'Purging an organisation with more rows than one request can remove in its time.',
   'A purge happens whole or not at all. A half-purged organisation would leave documents without their history, so a purge that runs out of time removes nothing.',
-  'Run erp.purge_organisation(code, your email, reason) from a direct database session, where no request limit applies.');
+  'Ask whoever looks after the database to finish the purge from a direct connection, where a request has no time limit. The organisation is unchanged until then.');
 
 -- ── The same purge, from a direct session ────────────────────────────────────
 
