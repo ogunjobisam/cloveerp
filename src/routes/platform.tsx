@@ -28,6 +28,7 @@ import {
 } from "../lib/platform-console";
 import { Card, Fail } from "../components/platform/kit";
 import { Companies, Ownership } from "../components/platform/organisations";
+import { OrganisationPage } from "../components/platform/organisation";
 import { Staff } from "../components/platform/staff";
 import { Activity } from "../components/platform/activity";
 import { Decisions } from "../components/platform/decisions";
@@ -107,7 +108,8 @@ type ViewContext = { role: PlatformRole; org: string | null };
  */
 const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
   today: () => <Today />,
-  organisations: ({ role }) => <Companies role={role} />,
+  organisations: ({ role, org }) =>
+    org ? <OrganisationPage code={org} role={role} /> : <Companies role={role} />,
   ownership: () => <Ownership />,
   enquiries: ({ role }) => <Enquiries role={role} />,
   contracts: ({ role }) => <Contracts role={role} />,
