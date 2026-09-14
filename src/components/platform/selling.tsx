@@ -6,6 +6,7 @@ import { Pill } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import type { PlatformRole } from "../../lib/platform";
+import { priceListLoaded } from "../../lib/platform-today";
 import { Card, Fail, INPUT } from "./kit";
 
 /**
@@ -139,9 +140,8 @@ export function SellingSetup({ role }: { role: PlatformRole }) {
     (c) => !c.is_demonstration && c.code !== platform?.tenant_code,
   );
   const selling = state.data?.selling ?? null;
-  const listLoaded = Boolean(
-    selling?.installed && selling.price_book && (state.data?.price_items ?? 0) > 0,
-  );
+  // The same test Today's "Selling is not set up" card uses, so the two agree.
+  const listLoaded = state.data ? priceListLoaded(state.data) : false;
 
   return (
     <Card
@@ -190,8 +190,8 @@ export function SellingSetup({ role }: { role: PlatformRole }) {
               </button>
             ) : choices.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                There is no organisation to choose. Onboard one for Clove ERP under Organisations,
-                then come back.
+                There is no organisation to choose. Onboard one for Clove ERP under Customers, then
+                come back.
               </p>
             ) : (
               <form
@@ -281,7 +281,7 @@ export function SellingSetup({ role }: { role: PlatformRole }) {
                 {tenants.isPending ? null : !membership ? (
                   <p className="text-sm">
                     You are not a member of {platform.name ?? platform.tenant_code}. Invite yourself
-                    as its administrator under Organisations, accept the invitation, then come back.
+                    as its administrator under Customers, accept the invitation, then come back.
                   </p>
                 ) : role === "support" ? (
                   <p className="text-xs text-muted-foreground">

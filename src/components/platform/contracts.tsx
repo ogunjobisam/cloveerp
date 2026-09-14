@@ -9,13 +9,12 @@ import type { PlatformRole } from "../../lib/platform";
 import { describeChanges, describeTermination, describeUplift } from "../../lib/contract-terms";
 import { DraftAmendment } from "./amendment-form";
 import { Card, Fail, INPUT } from "./kit";
-import { SellingSetup } from "./selling";
 
 /**
  * Contracts. Specification v1.5 §17.5, §17.8 and §17.9.
  *
- * Selling is set up here (§17.5): the platform's own organisation and its
- * price list, in selling.tsx. A contract is
+ * Selling is set up under Catalogue (§17.5): the platform's own organisation
+ * and its price list, in selling.tsx. A contract is
  * created from an accepted quote and nothing else; signing it provisions the
  * subscription directly (§17.9, D35); every change after that is an
  * amendment with its own signature. Key dates are structured fields with a
@@ -278,8 +277,6 @@ export function Contracts({ role }: { role: PlatformRole }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SellingSetup role={role} />
-
       {selected ? (
         <ContractDetail id={selected} mayWrite={mayWrite} onBack={() => setSelected(null)} />
       ) : (

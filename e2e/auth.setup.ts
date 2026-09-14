@@ -80,7 +80,7 @@ setup("the demo account signs in and seeds its organisation", async ({ page }) =
       );
     }
     await claim.click();
-    await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Today", level: 1 })).toBeVisible({
       timeout: 30_000,
     });
 
