@@ -2,16 +2,24 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 import { callErp } from "../../lib/erp";
-import type { CheckResult, OwnershipTransfer, PlatformTenant } from "../../lib/platform";
+import type {
+  CheckResult,
+  OpenInvoice,
+  OwnershipTransfer,
+  PlatformTenant,
+  SupportWindow,
+} from "../../lib/platform";
 import {
   assuranceCards,
   enquiryCards,
   healthSummary,
   incidentCards,
+  invoiceCards,
   organisationCards,
   revenueCards,
   sellingCards,
   summariseToday,
+  supportWindowCards,
   transferCards,
   type EnquiryRow,
   type IncidentRow,
@@ -83,15 +91,25 @@ export function Today() {
     queryKey: ["erp_platform_commercial_state"],
     queryFn: () => callErp<SellingRead>("erp_platform_commercial_state"),
   });
+  const invoices = useQuery({
+    queryKey: ["erp_platform_open_invoices"],
+    queryFn: () => callErp<OpenInvoice[]>("erp_platform_open_invoices"),
+  });
+  const windows = useQuery({
+    queryKey: ["erp_platform_support_windows"],
+    queryFn: () => callErp<SupportWindow[]>("erp_platform_support_windows"),
+  });
 
   const now = new Date();
   const summary = summariseToday([
     source("incidents", "Incidents", incidents, (rows) => incidentCards(rows ?? [])),
     source("assurance", "Checks", assurance, (rows) => assuranceCards(rows ?? [])),
-    source("revenue", "Renewals and invoices", revenue, (d) => (d ? revenueCards(d) : [])),
+    source("revenue", "Renewals", revenue, (d) => (d ? revenueCards(d) : [])),
+    source("invoices", "Invoices", invoices, (rows) => invoiceCards(rows ?? [])),
     source("enquiries", "Enquiries", enquiries, (rows) => enquiryCards(rows ?? [], now)),
     source("transfers", "Ownership transfers", transfers, (rows) => transferCards(rows ?? [])),
     source("organisations", "Organisations", tenants, (rows) => organisationCards(rows ?? [])),
+    source("windows", "Support windows", windows, (rows) => supportWindowCards(rows ?? [], now)),
     source("selling", "Selling setup", selling, (d) => (d ? sellingCards(d) : [])),
   ]);
 
@@ -113,7 +131,8 @@ export function Today() {
                     : ""
                 }.`
               : "Every check on this deployment holds."}{" "}
-            No incident is open, no renewal is waiting, and every organisation is running.
+            No incident is open, no renewal or invoice is waiting, and every organisation is
+            running.
           </p>
           <ConsoleLink
             section="platform"

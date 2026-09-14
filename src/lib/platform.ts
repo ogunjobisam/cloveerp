@@ -32,6 +32,8 @@ export type PlatformTenant = {
   created_at: string;
   provisioned_at: string | null;
   suspended_at: string | null;
+  /** When deletion was requested or the organisation was marked ended. */
+  deleted_at: string | null;
   principals: number;
   entities: number;
   sites: number;
@@ -44,6 +46,49 @@ export type PlatformTenant = {
   owner_since: string | null;
   /** Set while an offer is open, so the row can say so rather than offer again. */
   pending_transfer_to: string | null;
+};
+
+/** One person in an organisation, for its console page. Operator and up. */
+export type OrganisationPerson = {
+  principal_id: string;
+  display_name: string | null;
+  email: string | null;
+  kind: string;
+  status: string;
+  roles: string[];
+  /** From the sign-in service; null for somebody who has never signed in. */
+  last_sign_in_at: string | null;
+};
+
+/** A support window still open, anywhere on the deployment. */
+export type SupportWindow = {
+  access_id: string;
+  tenant_id: string;
+  tenant_code: string;
+  tenant_name: string;
+  staff_email: string;
+  staff_role: string;
+  reason: string;
+  is_write_access: boolean;
+  granted_at: string;
+  expires_at: string;
+};
+
+/** An issued contract invoice not yet paid, anywhere on the deployment. */
+export type OpenInvoice = {
+  invoice_id: string;
+  reference: string;
+  contract_id: string;
+  tenant_code: string;
+  customer_legal_name: string;
+  period_start: string;
+  period_end: string;
+  due_on: string;
+  issued_at: string | null;
+  currency: string;
+  total_minor: number;
+  overdue: boolean;
+  days_overdue: number;
 };
 
 /**
