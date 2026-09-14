@@ -31,6 +31,15 @@ export type ActionSpec = {
    * them a step carries. A code does.
    */
   code?: string;
+  /**
+   * The document transition this verb performs, when it performs one.
+   *
+   * A process step offers the verb on a chosen document only when that
+   * document's current state has this transition, so "Submit for approval" is
+   * not offered on a requisition already ordered. The database refuses the
+   * move regardless; this only stops the screen offering it.
+   */
+  transition?: string;
   fields?: Field[];
 
   /** Query keys — the `fn` names of the reads this action makes stale. */
