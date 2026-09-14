@@ -42,6 +42,7 @@ import { Deployment } from "../components/platform/deployment";
 import { Incidents } from "../components/platform/incidents";
 import { Contracts } from "../components/platform/contracts";
 import { Quotes } from "../components/platform/quotes";
+import { PaymentDetails } from "../components/platform/payment-details";
 import { Revenue } from "../components/platform/revenue";
 import { SellingPage } from "../components/platform/catalogue";
 
@@ -118,6 +119,7 @@ const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
   selling: ({ role }) => <SellingPage role={role} />,
   plans: () => <Plans />,
   revenue: ({ role }) => <Revenue role={role} />,
+  payment: ({ role }) => <PaymentDetails role={role} />,
   health: () => <HealthSummary />,
   diagnostics: () => <Diagnostics />,
   queue: () => <Queue />,

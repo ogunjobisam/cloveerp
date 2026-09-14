@@ -16,11 +16,13 @@ import {
   incidentCards,
   invoiceCards,
   organisationCards,
+  paymentDetailsCards,
   revenueCards,
   sellingCards,
   summariseToday,
   supportWindowCards,
   transferCards,
+  type BillingDetailsRead,
   type EnquiryRow,
   type IncidentRow,
   type RevenueRead,
@@ -95,6 +97,10 @@ export function Today() {
     queryKey: ["erp_platform_open_invoices"],
     queryFn: () => callErp<OpenInvoice[]>("erp_platform_open_invoices"),
   });
+  const payment = useQuery({
+    queryKey: ["erp_platform_billing_details"],
+    queryFn: () => callErp<BillingDetailsRead>("erp_platform_billing_details"),
+  });
   const windows = useQuery({
     queryKey: ["erp_platform_support_windows"],
     queryFn: () => callErp<SupportWindow[]>("erp_platform_support_windows"),
@@ -111,6 +117,7 @@ export function Today() {
     source("organisations", "Organisations", tenants, (rows) => organisationCards(rows ?? [])),
     source("windows", "Support windows", windows, (rows) => supportWindowCards(rows ?? [], now)),
     source("selling", "Selling setup", selling, (d) => (d ? sellingCards(d) : [])),
+    source("payment", "Payment details", payment, (d) => (d ? paymentDetailsCards(d) : [])),
   ]);
 
   const health = assurance.data ? healthSummary(assurance.data) : null;

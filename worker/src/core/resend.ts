@@ -54,7 +54,26 @@ export type EmailRow = {
    * as text, and a missing text part is a spam signal besides.
    */
   html?: string | null;
+  /**
+   * Sent as Resend's Idempotency-Key header, when the caller has one.
+   *
+   * Optional. The commercial email queue sets it to the document, the send and
+   * the recipient (erp_meta.commercial_email.idempotency_key), so a message
+   * whose settle was lost after the provider took it is not delivered twice
+   * when its lease runs out and it is claimed again.
+   */
+  idempotency_key?: string | null;
 };
+
+/** The request's headers: the key, the content type, and the idempotency key when there is one. */
+export function resendHeaders(apiKey: string, row: Pick<EmailRow, "idempotency_key">): Record<string, string> {
+  const key = row.idempotency_key?.trim();
+  return {
+    "content-type": "application/json",
+    authorization: `Bearer ${apiKey}`,
+    ...(key ? { "idempotency-key": key.slice(0, 256) } : {}),
+  };
+}
 
 /**
  * What Resend says when it takes a message.
@@ -139,10 +158,7 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
 
   const response = await fetch(RESEND_ENDPOINT, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
+    headers: resendHeaders(apiKey, row),
     body: JSON.stringify({
       from,
       to: [row.to_address],

@@ -1247,6 +1247,7 @@ export type Database = {
         Args: { p_action?: string; p_limit?: number; p_tenant_id?: string }
         Returns: Json
       }
+      erp_platform_billing_details: { Args: never; Returns: Json }
       erp_platform_cancel_maintenance: {
         Args: { p_code: string; p_reason: string }
         Returns: undefined
@@ -1257,6 +1258,10 @@ export type Database = {
       }
       erp_platform_claim_ownership: {
         Args: { p_display_name?: string }
+        Returns: Json
+      }
+      erp_platform_commercial_emails: {
+        Args: { p_contract_id?: string; p_quote_document_id?: string }
         Returns: Json
       }
       erp_platform_commercial_state: { Args: never; Returns: Json }
@@ -1498,6 +1503,26 @@ export type Database = {
       erp_platform_run_check: { Args: { p_code: string }; Returns: Json }
       erp_platform_run_due_jobs: {
         Args: { p_batch_size?: number }
+        Returns: Json
+      }
+      erp_platform_send_commercial_email: {
+        Args: { p_document_id: string; p_kind: string }
+        Returns: Json
+      }
+      erp_platform_set_billing_contact: {
+        Args: { p_contract_id: string; p_email: string; p_name: string }
+        Returns: Json
+      }
+      erp_platform_set_billing_details: {
+        Args: {
+          p_account_number: string
+          p_bank_account_name: string
+          p_company_number: string
+          p_legal_name: string
+          p_payment_reference_guidance: string
+          p_registered_address: string
+          p_sort_code: string
+        }
         Returns: Json
       }
       erp_platform_set_index_rate: {
@@ -2238,6 +2263,10 @@ export type Database = {
           p_reason?: string
           p_valid_from?: string
         }
+        Returns: Json
+      }
+      erp_set_quote_contact: {
+        Args: { p_document_id: string; p_email: string; p_name: string }
         Returns: Json
       }
       erp_set_quote_line_discount: {
