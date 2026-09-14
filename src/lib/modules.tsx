@@ -719,11 +719,19 @@ export const INVENTORY: ModuleDef = {
       fn: "erp_commit_allocation",
       fields: [
         {
-          kind: "text",
+          // Chosen, not typed: the reservations sales order lines hold and
+          // nobody has picked yet, as erp_allocations lists them.
+          kind: "select",
           name: "p_allocation_id",
-          label: "Allocation id",
+          label: "Reservation",
           required: true,
-          hint: "The reservation the sales line holds; leave location and batch empty to let the policy choose.",
+          hint: "A sales order line's reservation not yet picked. Leave location and batch empty to let the policy choose.",
+          options: {
+            fn: "erp_allocations",
+            args: { p_status: "reserved", p_limit: 200 },
+            value: "allocation_id",
+            label: ["document_number", "item", "quantity"],
+          },
         },
         pickLocation("p_location_id", "Location", false),
         pickBatch("p_batch_id", "Batch", false),
@@ -1691,15 +1699,27 @@ export const FINANCE: ModuleDef = {
           // and posted is terminal, so p_actionable would offer none.
           { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
         ),
+        // Invoicing goods you despatched yourself is an exception to the
+        // separation of duties. Once the organisation is live it needs a reason
+        // and somebody who may promote configuration, so only they are asked.
         {
           kind: "choice",
           name: "p_allow_self_invoice",
           label: "Allow self-invoice",
+          permission: "administration.promote",
           boolean: true,
           choices: [
             { value: "false", label: "No" },
             { value: "true", label: "Yes" },
           ],
+          hint: "Only when you despatched these goods yourself and nobody else can invoice them. Once the organisation is live it needs a reason.",
+        },
+        {
+          kind: "text",
+          name: "p_self_invoice_reason",
+          label: "Reason for invoicing your own delivery",
+          permission: "administration.promote",
+          hint: "Why nobody else can invoice these goods, and what checks the invoice instead. At least twenty characters once the organisation is live; kept on the invoice.",
         },
       ],
       invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
