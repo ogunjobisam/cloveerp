@@ -11,6 +11,7 @@ import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { toMinor } from "../../lib/money";
 import { permissionName } from "../../lib/permission-name";
@@ -720,6 +721,14 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
 }
 
 /**
+ * A role by its name: the organisation's own where it has the role, and the
+ * code as words where it has not, never the code itself.
+ */
+function roleName(roles: RoleOption[] | undefined, code: string): string {
+  return roles?.find((r) => r.code === code)?.name ?? prettifyField(code);
+}
+
+/**
  * Who is asked to approve what a module raises.
  *
  * The organisation's own roles, from erp_roles. Left on the default the
@@ -752,10 +761,12 @@ function ApproverRolePicker({
         disabled={roles.isPending}
         className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
       >
-        <option value="">{`Default: ${role.preferred}, or administrator`}</option>
+        <option value="">
+          {`Default: ${roleName(roles.data, role.preferred)}, or ${roleName(roles.data, "administrator")}`}
+        </option>
         {(roles.data ?? []).map((r) => (
           <option key={r.role_id} value={r.code}>
-            {r.name === r.code ? r.code : `${r.name} (${r.code})`}
+            {r.name}
           </option>
         ))}
       </select>

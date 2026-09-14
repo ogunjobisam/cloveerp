@@ -149,7 +149,7 @@ function ItemSupply() {
         )}
         fn="erp_item_suppliers"
         empty={ui(
-          "No product has a supplier yet, so purchasing cannot resolve where to buy anything. Link one under Actions above.",
+          "No product has a supplier yet, so purchasing cannot resolve where to buy anything. Set one under Supplier defaults above.",
         )}
       >
         {(rows) => (
