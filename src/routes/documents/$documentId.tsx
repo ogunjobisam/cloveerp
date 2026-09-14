@@ -6,6 +6,7 @@ import { Gate } from "../../components/erp/gate";
 import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
+import { decisionWords, type ApprovalDecision } from "../../lib/approval-decisions";
 import { callErp } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
@@ -224,6 +225,8 @@ function Document() {
 
       <ApprovalChain documentId={documentId} />
 
+      <ApprovalDecisions documentId={documentId} />
+
       {data.lineage.length > 0 ? (
         <LineagePanel lineage={data.lineage} documentId={documentId} typeName={typeNames.ofBase} />
       ) : null}
@@ -417,6 +420,60 @@ function ApprovalChain({ documentId }: { documentId: string }) {
             ))}
           </Table>
         )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Who decided this document's approval, task by task (20260914098000). An
+ * administrator may approve for the people asked, or their own request, where
+ * the organisation allows it, and each such decision says so.
+ */
+function ApprovalDecisions({ documentId }: { documentId: string }) {
+  const { data, error } = useQuery({
+    queryKey: ["erp_document_approval_decisions", { p_document_id: documentId }],
+    queryFn: () =>
+      callErp<ApprovalDecision[]>("erp_document_approval_decisions", {
+        p_document_id: documentId,
+      }),
+  });
+
+  const decisions = data ?? [];
+  if (!error && decisions.length === 0) return null;
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="border-b border-border px-4 py-4 sm:px-5">
+        <h2 className="text-sm font-semibold">Approval decisions</h2>
+        <Prose className="mt-0.5 text-xs text-muted-foreground">
+          Every task this document&apos;s approval asked for, who decided it and when.
+        </Prose>
+      </header>
+      <div className="w-full max-w-full overflow-x-auto px-4 py-4 sm:px-5">
+        <ErrorNote error={error} />
+        {decisions.length > 0 ? (
+          <Table columns={["Step", "Decision", "When", "Comment"]}>
+            {decisions.map((d) => (
+              <tr key={d.task_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4">{d.step}</td>
+                <td className="py-2 pr-4">
+                  {decisionWords(d)}
+                  {d.decided_via === "administrator" ? (
+                    <>
+                      {" "}
+                      <Pill tone="warn">administrator</Pill>
+                    </>
+                  ) : null}
+                </td>
+                <td className="py-2 pr-4 whitespace-nowrap">
+                  {d.decided_at ? d.decided_at.slice(0, 16).replace("T", " ") : "—"}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">{d.comment ?? "—"}</td>
+              </tr>
+            ))}
+          </Table>
+        ) : null}
       </div>
     </section>
   );
