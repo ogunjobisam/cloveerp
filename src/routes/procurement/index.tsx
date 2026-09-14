@@ -190,7 +190,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     label: "Raise putaway tasks",
     description:
       "Ask the warehouse to move what is standing in goods-in. A task is raised for each pallet in a receiving location at that site, sending it to the place the storage rules say the product belongs.",
-    permission: "inventory.adjust",
+    permission: "inventory.move",
     fn: "erp_raise_putaway_tasks",
     fields: [pickSite()],
     invalidates: ["erp_warehouse_tasks", "erp_goods_in"],
@@ -199,7 +199,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
     label: "Complete a putaway",
     description: "The pallet has been moved. Completing the task is what moves the stock.",
-    permission: "inventory.adjust",
+    permission: "inventory.move",
     fn: "erp_complete_warehouse_task",
     fields: [
       pickFrom(

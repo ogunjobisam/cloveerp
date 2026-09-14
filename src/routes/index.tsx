@@ -5,7 +5,7 @@ import { FirstRun } from "../components/erp/first-run";
 import { Gate } from "../components/erp/gate";
 import { hasStoredSession } from "../lib/erp";
 import { Launchpad } from "../components/erp/launchpad";
-import { useErpSession } from "../components/erp/session-context";
+import { useErpSession, useScope } from "../components/erp/session-context";
 import { PageHeader, Prose } from "../components/erp/page";
 import { SeedDemoAction } from "../components/erp/seed";
 import { useT } from "../lib/i18n";
@@ -119,7 +119,8 @@ function DemoSeed() {
 }
 
 function Overview() {
-  const { session, scope } = useErpSession();
+  const { session } = useErpSession();
+  const scope = useScope();
   const { ui } = useT();
 
   const entity = session.entities.find((e) => e.id === scope.entityId);

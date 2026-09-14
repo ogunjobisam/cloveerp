@@ -1,6 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { callErp } from "../../lib/erp";
+import { atLeast, usePlatformMe } from "../../lib/platform";
+import { selfServiceIsOpen } from "../../lib/self-service";
 import { ActionButton, ErrorNote } from "./action";
 import { useErpSession } from "./session-context";
 
@@ -25,7 +27,19 @@ export function SeedDemoAction({ label = "Explore with demo data" }: { label?: s
     onSuccess: () => queryClient.invalidateQueries(),
   });
 
+  // Demo data is created by platform operators and owners, or by anybody while
+  // the owner has opened self-service sign-up. The database refuses everyone
+  // else; offering a button that can only fail is not help.
+  const platform = usePlatformMe();
+  const staff = Boolean(platform.data?.is_staff) && atLeast(platform.data?.role, "operator");
+  const open = useQuery({
+    queryKey: ["erp_self_service_organisations_open"],
+    queryFn: () => callErp<unknown>("erp_self_service_organisations_open"),
+    enabled: platform.isSuccess && !staff,
+  });
+
   if (session.tenant?.code.startsWith("demo-")) return null;
+  if (!staff && !selfServiceIsOpen(open.data)) return null;
 
   return (
     <div className="flex flex-col gap-2">
