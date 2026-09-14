@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { PermissionName } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, TOUCH } from "../../components/erp/page";
@@ -113,9 +114,11 @@ function AuditLog() {
           )}
         </PageHeader>
         <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
-          This account does not hold{" "}
-          <code className="font-mono text-xs">administration.audit_read</code>, so the audit trail
-          is not offered. Absence of a grant is a refusal, not a default.
+          This account does not hold the permission{" "}
+          <span className="font-medium text-foreground">
+            <PermissionName code="administration.audit_read" />
+          </span>
+          , so the audit trail is not offered. Absence of a grant is a refusal, not a default.
         </p>
       </div>
     );

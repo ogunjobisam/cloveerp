@@ -26,6 +26,19 @@ export function selfServiceIsOpen(answer: unknown): boolean {
   return answer === true;
 }
 
+/**
+ * Whether the desk offers demo data at all: to platform operators and owners,
+ * and to anybody while self-service sign-up is open — the same two the demo
+ * doors serve.
+ *
+ * A customer is neither, and is not shown a card that talks about demo data
+ * with nothing on it to press. `open` is the switch's raw answer, so an
+ * outstanding or failed answer offers nothing.
+ */
+export function maySeedDemo(input: { staff: boolean; open: unknown }): boolean {
+  return input.staff || selfServiceIsOpen(input.open);
+}
+
 /** What public.erp_platform_set_self_service_organisations() returns. */
 export type SelfServiceChange = {
   open: boolean;

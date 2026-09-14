@@ -257,28 +257,63 @@ const pickEntity = (name = "p_entity_id", label = "Company", required = true): F
 });
 
 /**
- * The form sends every field as text. Most doors take text; some take a JSON
- * object or a number, and this rebuilds the arguments with those parsed, so a
- * door that wants {"demand_multiplier": 2} is not handed the six characters.
- * An empty field is left out, so the door's own default applies.
+ * A scenario's assumptions, from three boxes rather than a line of JSON.
+ *
+ * erp.run_planning honours demand_multiplier, lead_time_days_delta and
+ * reorder_point_multiplier and refuses any other key, so only those are sent,
+ * and only when something was typed.
  */
-const argsWith =
-  (spec: { json?: string[]; numbers?: string[]; arrays?: string[] }) =>
-  (values: Record<string, string>): Record<string, unknown> => {
-    const args: Record<string, unknown> = {};
-    for (const [name, raw] of Object.entries(values)) {
-      if (raw === "") continue;
-      if (spec.json?.includes(name)) args[name] = JSON.parse(raw);
-      else if (spec.numbers?.includes(name)) args[name] = Number(raw);
-      else if (spec.arrays?.includes(name))
-        args[name] = raw
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean);
-      else args[name] = raw;
-    }
-    return args;
-  };
+export const scenarioArgs = (values: Record<string, string>): Record<string, unknown> => {
+  const assumptions: Record<string, number | string> = {};
+  for (const key of ["demand_multiplier", "lead_time_days_delta", "reorder_point_multiplier"]) {
+    const raw = (values[key] ?? "").trim();
+    if (raw === "") continue;
+    // Something that is not a number is sent as typed, so the run refuses it by
+    // name rather than quietly planning without it.
+    const n = Number(raw);
+    assumptions[key] = Number.isFinite(n) ? n : raw;
+  }
+  const args: Record<string, unknown> = { p_assumptions: assumptions };
+  for (const name of ["p_site_id", "p_scenario_code", "p_label"]) {
+    const raw = values[name] ?? "";
+    if (raw !== "") args[name] = raw;
+  }
+  const horizon = values["p_horizon_days"] ?? "";
+  if (horizon !== "") args["p_horizon_days"] = Number(horizon);
+  return args;
+};
+
+/** The orders stock.allocation_policy may take stock in. */
+const STOCK_ORDER = [
+  { value: "fifo", label: "First in, first out" },
+  { value: "fefo", label: "First to expire, first out" },
+  { value: "lifo", label: "Last in, first out" },
+];
+
+/**
+ * An allocation policy, from four questions rather than a line of JSON.
+ *
+ * The value is the object stock.allocation_policy's schema declares — the two
+ * orders and the two yes-or-no options — holding only what was answered, so
+ * an unanswered question keeps whatever the policy already says.
+ */
+export const allocationPolicyArgs = (values: Record<string, string>): Record<string, unknown> => {
+  const policy: Record<string, string | boolean> = {};
+  for (const key of ["default", "expiry_controlled"]) {
+    const raw = values[key] ?? "";
+    if (raw !== "") policy[key] = raw;
+  }
+  for (const key of ["single_batch_per_order", "prefer_nearest_location"]) {
+    const raw = values[key] ?? "";
+    if (raw !== "") policy[key] = raw === "true";
+  }
+  const args: Record<string, unknown> = { p_value: policy };
+  for (const name of ["p_entity_code", "p_site_code", "p_change_set_id"]) {
+    const raw = values[name] ?? "";
+    if (raw !== "") args[name] = raw;
+  }
+  return args;
+};
 
 /** A count, coloured by whether zero is the good answer. */
 const zeroIsGood = (n: number, label: string) => ({
@@ -552,7 +587,7 @@ export const INVENTORY: ModuleDef = {
         "The allocation policy for a company or one of its sites: which stock a promise takes first. Proposed as a change like any other configuration.",
       permission: "administration.configure",
       fn: "erp_propose_allocation_policy",
-      mapArgs: argsWith({ json: ["p_value"] }),
+      mapArgs: allocationPolicyArgs,
       fields: [
         {
           kind: "select",
@@ -569,10 +604,40 @@ export const INVENTORY: ModuleDef = {
           hint: "Leave unchosen to apply the policy across the whole company.",
         },
         {
-          kind: "text",
-          name: "p_value",
-          label: 'The policy, as configuration — {"default": "fifo"}',
+          kind: "choice",
+          name: "default",
+          label: "Stock taken first",
           required: true,
+          choices: STOCK_ORDER,
+        },
+        {
+          kind: "choice",
+          name: "expiry_controlled",
+          label: "Stock with an expiry date",
+          choices: STOCK_ORDER,
+          hint: "Leave unchosen to take it in the same order as everything else.",
+        },
+        {
+          kind: "choice",
+          name: "single_batch_per_order",
+          label: "One batch per order",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+          hint: "Yes leaves an order short rather than filling it from two batches.",
+        },
+        {
+          kind: "choice",
+          name: "prefer_nearest_location",
+          label: "Nearest location first",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+          hint: "Between stock the rule above cannot separate, take the nearest.",
         },
         {
           ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
@@ -1293,19 +1358,41 @@ export const FINANCE: ModuleDef = {
       permission: "finance.post",
       fn: "erp_match_settlement_line",
       fields: [
+        // Chosen to narrow the lines; the door takes the line, not the statement.
+        pickFrom(
+          "erp_settlement_statements",
+          "statement_id",
+          ["provider", "statement_ref", "status"],
+          "p_statement_id",
+          "Statement",
+        ),
         {
-          kind: "text",
+          kind: "select",
           name: "p_line_id",
-          label: "Statement line id",
+          label: "Statement line",
           required: true,
-          hint: "From the Settlement statement question below.",
+          options: {
+            fn: "erp_settlement_statement",
+            argsFrom: { p_statement_id: "p_statement_id" },
+            path: "lines",
+            value: "line_id",
+            label: ["line_no", "reference", "party_code", "status"],
+          },
         },
         {
-          kind: "text",
+          kind: "select",
           name: "p_subledger_item_id",
-          label: "Receivable item id",
+          label: "Receivable",
           required: true,
-          hint: "One of the candidates the same question lists.",
+          options: {
+            fn: "erp_settlement_statement",
+            argsFrom: { p_statement_id: "p_statement_id" },
+            path: "lines",
+            within: { field: "p_line_id", key: "line_id", path: "candidates" },
+            value: "subledger_item_id",
+            label: ["document_number", "party_code", "due_date"],
+          },
+          hint: "The open receivables this line could settle. A line already matched has none.",
         },
         {
           kind: "text",
@@ -1316,7 +1403,12 @@ export const FINANCE: ModuleDef = {
           hint: "Kept with the record for whoever reads it later.",
         },
       ],
-      invalidates: ["erp_settlement_statements"],
+      mapArgs: (v) => ({
+        p_line_id: v["p_line_id"],
+        p_subledger_item_id: v["p_subledger_item_id"],
+        p_note: v["p_note"],
+      }),
+      invalidates: ["erp_settlement_statements", "erp_settlement_statement"],
     },
     {
       label: "Apply a settlement statement",
@@ -1994,9 +2086,24 @@ export const PLANNING: ModuleDef = {
         codeField("p_scenario_code", "Scenario", "BASE-2026"),
         {
           kind: "text",
-          name: "p_assumptions",
-          label: "Assumptions",
-          hint: 'JSON: demand_multiplier, lead_time_days_delta, reorder_point_multiplier — for example {"demand_multiplier": 1.5}.',
+          name: "demand_multiplier",
+          label: "Demand multiplier",
+          placeholder: "1.5",
+          hint: "Every demand times this: 1.5 is half as much again. Leave empty to plan demand as it stands.",
+        },
+        {
+          kind: "text",
+          name: "lead_time_days_delta",
+          label: "Lead time change, in days",
+          placeholder: "7",
+          hint: "Days added to every lead time, or taken off with a minus. Leave empty for none.",
+        },
+        {
+          kind: "text",
+          name: "reorder_point_multiplier",
+          label: "Reorder point multiplier",
+          placeholder: "1.2",
+          hint: "Every reorder point times this. Leave empty to keep them as they are.",
         },
         {
           kind: "text",
@@ -2006,7 +2113,7 @@ export const PLANNING: ModuleDef = {
           hint: "A short name so you can recognise this later.",
         },
       ],
-      mapArgs: argsWith({ json: ["p_assumptions"], numbers: ["p_horizon_days"] }),
+      mapArgs: scenarioArgs,
       invalidates: ["erp_planning_runs"],
     },
     {
@@ -2041,16 +2148,35 @@ export const PLANNING: ModuleDef = {
       permission: "planning.forecast",
       fn: "erp_adjust_forecast_line",
       fields: [
+        // Chosen to narrow the buckets; the door takes the bucket, not the version.
+        pickFrom(
+          "erp_forecast_versions",
+          "version_id",
+          ["forecast", "version", "status"],
+          "p_version_id",
+          "Forecast version",
+        ),
         {
-          kind: "text",
+          kind: "select",
           name: "p_line_id",
-          label: "Forecast line id",
+          label: "Bucket",
           required: true,
-          hint: "From the Forecast lines question below.",
+          options: {
+            fn: "erp_forecast_lines",
+            argsFrom: { p_version_id: "p_version_id" },
+            value: "id",
+            label: ["item_code", "site_code", "bucket_start", "quantity"],
+          },
+          hint: "Product, site, the week or month it starts, and the figure it holds now.",
         },
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         reason("p_reason", "Reason", true),
       ],
+      mapArgs: (v) => ({
+        p_line_id: v["p_line_id"],
+        p_quantity: Number(v["p_quantity"]),
+        p_reason: v["p_reason"],
+      }),
       invalidates: ["erp_forecast_lines"],
     },
     {
@@ -3166,11 +3292,13 @@ export const LOGISTICS: ModuleDef = {
           hint: "The carrier's own service code, from their rate card.",
         },
         {
-          kind: "number",
+          kind: "money",
           name: "p_cost_minor",
           label: "Cost",
+          currency: "GBP",
           required: true,
-          hint: "In minor units — pence, cents.",
+          placeholder: "12.50",
+          hint: "What the carrier charges for this shipment.",
         },
       ],
       invalidates: ["erp_shipments", "erp_delivery_performance"],
@@ -3308,7 +3436,7 @@ export const REPORTING: ModuleDef = {
   path: "/reporting",
   titleKey: "module.reporting",
   title: "Reports and inquiries",
-  blurb: "Data quality, duplicates and specification coverage, read from operational tables.",
+  blurb: "Data quality and duplicate business partners, read from operational tables.",
   permission: "reporting.read",
   group: "records",
   kpis: [
@@ -3873,7 +4001,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/administration/permissions",
     titleKey: "nav.administration_permissions",
-    title: "Users and authorisations",
+    title: "People and permissions",
     blurb: "Principals, roles, and the grants between them.",
     permission: "administration.roles",
     group: "people",

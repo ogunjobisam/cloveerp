@@ -7,10 +7,12 @@ import { useErpSession } from "../../components/erp/session-context";
 import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { MODULES, REPORTING } from "../../lib/modules";
+import { isPlatformOperator, usePlatformMe } from "../../lib/platform";
+import { moduleForViewer } from "../../lib/platform-reads";
 
 const TITLE = "Reporting — Clove ERP";
 const DESC =
-  "The reporting hub: every module report in one index, plus data quality, duplicates and specification coverage.";
+  "The reporting hub: every module report in one index, plus data quality and duplicate business partners.";
 
 export const Route = createFileRoute("/reporting/")({
   head: () => ({
@@ -38,11 +40,13 @@ export const Route = createFileRoute("/reporting/")({
  * which module owns it. It is generated from the same registry the module
  * pages render, so a report cannot appear in one and not the other.
  */
-function ReportCatalogue() {
+function ReportCatalogue({ platformOperator }: { platformOperator: boolean }) {
   const { session } = useErpSession();
   const { t } = useT();
 
-  const visible = MODULES.filter((m) => !m.permission || hasPermission(session, m.permission));
+  const visible = MODULES.filter((m) => !m.permission || hasPermission(session, m.permission)).map(
+    (m) => moduleForViewer(m, platformOperator),
+  );
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
@@ -85,11 +89,18 @@ function ReportCatalogue() {
   );
 }
 
+/**
+ * The specification's own coverage figures are the platform's, not the
+ * customer's: shown to platform operators and owners, left off for everybody
+ * else (see src/lib/platform-reads.ts).
+ */
 function Reporting() {
+  const platform = usePlatformMe();
+  const platformOperator = isPlatformOperator(platform.data);
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <ModulePage def={REPORTING} />
-      <ReportCatalogue />
+      <ModulePage def={moduleForViewer(REPORTING, platformOperator)} />
+      <ReportCatalogue platformOperator={platformOperator} />
     </div>
   );
 }

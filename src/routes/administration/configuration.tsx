@@ -12,6 +12,7 @@ import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { toMinor } from "../../lib/money";
 
 /**
  * Installing configuration, from the app.
@@ -116,7 +117,14 @@ function mayApprove(s: ChangeSet): boolean {
  * no arguments at all. These are offered only where the default is a business
  * decision somebody might reasonably want to make differently on the way in.
  */
-type Param = { name: string; label: string; suffix?: string; initial: string };
+type Param = {
+  name: string;
+  label: string;
+  suffix?: string;
+  initial: string;
+  /** An amount: typed in pounds and pence, sent in the minor units the door takes. */
+  money?: boolean;
+};
 
 type Module = {
   fn: string;
@@ -155,8 +163,9 @@ const MODULES: Module[] = [
     param: {
       name: "p_approval_threshold_minor",
       label: "Approval threshold",
-      suffix: "minor units",
-      initial: "1000000",
+      suffix: "GBP",
+      initial: "10000",
+      money: true,
     },
   },
   {
@@ -589,7 +598,8 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
   const install = useMutation({
     mutationFn: async () => {
       const args: Record<string, unknown> = {};
-      if (m.param && value.trim() !== "") args[m.param.name] = Number(value);
+      if (m.param && value.trim() !== "")
+        args[m.param.name] = m.param.money ? toMinor(value) : Number(value);
       const result = await callErp<unknown>(m.fn, args);
       const id = changeSetIdOf(result);
       // Read the set back rather than assuming: whether it promoted or stopped
@@ -630,6 +640,7 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
             <input
               type="number"
               inputMode="decimal"
+              step={m.param.money ? "any" : undefined}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="default"

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
+import { PermissionName } from "../../components/erp/action";
 import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InviteDialog } from "../../components/erp/invite-dialog";
@@ -12,18 +13,19 @@ import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp, hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 import { accessWord, type DirectoryPrincipal } from "../../lib/people-access";
 import { useUnsavedGuard } from "../../components/erp/unsaved";
 
 export const Route = createFileRoute("/administration/permissions")({
   head: () => ({
     meta: [
-      { title: "Permissions — Clove ERP" },
+      { title: "People and permissions — Clove ERP" },
       {
         name: "description",
         content: "View principals and assign or remove permission grants for a tenant.",
       },
-      { property: "og:title", content: "Permissions — Clove ERP" },
+      { property: "og:title", content: "People and permissions — Clove ERP" },
       {
         property: "og:description",
         content: "View principals and assign or remove permission grants for a tenant.",
@@ -101,9 +103,14 @@ function Permissions() {
   if (!allowed) {
     return (
       <div className="flex min-w-0 flex-col gap-6">
-        <PageHeader title="Permissions">Principals, roles, and the grants between them.</PageHeader>
+        <PageHeader title="People and permissions">
+          Principals, roles, and the grants between them.
+        </PageHeader>
         <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5">
-          This account does not hold <code className="font-mono text-xs">administration.roles</code>
+          This account does not hold the permission{" "}
+          <span className="font-medium text-foreground">
+            <PermissionName code="administration.roles" />
+          </span>
           , so the directory is not offered. Absence of a grant is a refusal, not a default.
         </p>
       </div>
@@ -112,7 +119,7 @@ function Permissions() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Permissions">
+      <PageHeader title="People and permissions">
         A grant is the only way a principal gains a permission. Everything on this page is scoped to{" "}
         <span className="font-medium">{session.tenant?.name}</span> by the database, not by this
         screen.
@@ -592,9 +599,10 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
                   {r.permissions.map((p) => (
                     <li
                       key={p}
-                      className="rounded-full bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground"
+                      title={p}
+                      className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground"
                     >
-                      {p}
+                      <PermissionName code={p} />
                     </li>
                   ))}
                 </ul>
@@ -623,6 +631,7 @@ function RoleForm({
   const [description, setDescription] = useState(role?.description ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []));
   const [error, setError] = useState<string | null>(null);
+  const { t } = useT();
 
   const byModule = useMemo(() => {
     const map = new Map<string, CatalogItem[]>();
@@ -706,22 +715,26 @@ function RoleForm({
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {byModule.map(([moduleCode, items]) => (
           <fieldset key={moduleCode} className="rounded-md border border-border/60 p-3">
-            <legend className="px-1 font-mono text-xs text-muted-foreground">{moduleCode}</legend>
+            <legend className="px-1 text-xs font-medium text-muted-foreground">
+              {t(`module.${moduleCode}`, moduleCode)}
+            </legend>
             <ul className="flex flex-col gap-1.5">
               {items.map((item) => (
                 <li key={item.code}>
-                  <label className="flex items-center gap-2 text-sm">
+                  <label className="flex items-start gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={selected.has(item.code)}
                       onChange={() => toggle(item.code)}
+                      className="mt-1"
                     />
-                    <span className="font-mono text-xs">{item.action}</span>
-                    {item.is_mutating ? (
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        write
+                    <span className="min-w-0">
+                      <PermissionName code={item.code} />
+                      <span className="block font-mono text-[11px] text-muted-foreground">
+                        {item.code}
+                        {item.is_mutating ? " · changes records" : ""}
                       </span>
-                    ) : null}
+                    </span>
                   </label>
                 </li>
               ))}

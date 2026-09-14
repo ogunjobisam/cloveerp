@@ -101,6 +101,19 @@ export function atLeast(role: PlatformRole | null | undefined, min: PlatformRole
   return role ? RANK[role] >= RANK[min] : false;
 }
 
+/**
+ * Whether the account is one of the people who run the product for customers:
+ * a platform operator or owner. Support staff are not, and nor is anybody whose
+ * answer has not arrived — a customer must never see the platform's own
+ * material while the question is still outstanding.
+ *
+ * What it decides is only what the desk shows. The doors behind that material
+ * decide for themselves.
+ */
+export function isPlatformOperator(me: Pick<PlatformMe, "is_staff" | "role"> | undefined): boolean {
+  return me?.is_staff === true && atLeast(me.role, "operator");
+}
+
 export const ROLE_BLURB: Record<PlatformRole, string> = {
   owner: "Full control, including who else works on the platform.",
   operator: "Onboards and manages companies, and invites their administrators.",

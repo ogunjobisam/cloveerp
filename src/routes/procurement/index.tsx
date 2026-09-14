@@ -308,10 +308,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       {
-        kind: "number",
+        kind: "money",
         name: "p_unit_price_minor",
         label: "Unit price",
-        hint: "In minor units — pence, cents.",
+        currency: "GBP",
+        placeholder: "1.85",
+        hint: "Leave empty to take the order line's price.",
       },
     ],
     invalidates: ["erp_match_workbench", "erp_grni"],
@@ -357,16 +359,40 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
       ),
       {
-        kind: "text",
+        kind: "rows",
         name: "p_lines",
         label: "Lines",
         required: true,
-        hint: 'JSON: [{"line_id": "…", "quantity": 10, "required_date": "2026-10-01"}]. The Blanket position question lists the line ids.',
+        addLabel: "Add a line",
+        hint: "The lines of the blanket order chosen above being called off, and how much of each.",
+        columns: [
+          {
+            name: "line_id",
+            label: "Blanket line",
+            kind: "select",
+            // The lines of the chosen blanket, not every purchase order line.
+            options: {
+              fn: "erp_document_lines",
+              args: { p_limit: 200 },
+              argsFrom: { p_document_id: "p_blanket_id" },
+              value: "line_id",
+              label: ["line_no", "item", "description", "quantity"],
+            },
+          },
+          { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
+          { name: "required_date", label: "Required by", kind: "date" },
+        ],
       },
     ],
-    mapArgs: (v) => ({
+    mapArgs: (v, picked) => ({
       p_blanket_id: v["p_blanket_id"],
-      p_lines: JSON.parse(v["p_lines"] ?? "[]"),
+      p_lines: (picked?.rows["p_lines"] ?? [])
+        .filter((row) => (row["line_id"] ?? "") !== "")
+        .map((row) => ({
+          line_id: row["line_id"],
+          quantity: Number(row["quantity"] ?? 0),
+          ...(row["required_date"] ? { required_date: row["required_date"] } : {}),
+        })),
     }),
     invalidates: ["erp_documents"],
   },
