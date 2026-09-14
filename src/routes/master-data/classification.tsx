@@ -13,7 +13,10 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { RpcButton } from "../../components/erp/rpc-button";
+import { useMaySeedDemo } from "../../components/erp/seed";
+import { useErpSession } from "../../components/erp/session-context";
 import { ConfigTransfer } from "../../components/erp/transfer";
+import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
 export const Route = createFileRoute("/master-data/classification")({
@@ -120,6 +123,8 @@ const summarise = (value: unknown) => {
 
 function Classification() {
   const { ui } = useT();
+  const { session } = useErpSession();
+  const maySeedDemo = useMaySeedDemo();
   const invalidates = [
     "erp_classification_axes",
     "erp_classification_values",
@@ -137,22 +142,27 @@ function Classification() {
         )}
       </PageHeader>
 
-      <div className="flex flex-wrap justify-end gap-2">
-        <RpcButton
-          label="Seed a demo configuration"
-          fn="erp_seed_demo_configuration"
-          permission="administration.configure"
-          confirm="This adds sample axes, values, a code template, supplier defaults and a marshalling area. Running it twice changes nothing the second time."
-          invalidates={[
-            "erp_classification_axes",
-            "erp_classification_values",
-            "erp_code_templates",
-            "erp_classification_gaps",
-            "erp_item_suppliers",
-            "erp_release_areas",
-          ]}
-        />
-      </div>
+      {/* Demonstration configuration is made by Clove ERP staff, or by anybody
+          while self-service sign-up is open, and only by somebody who may change
+          configuration: the database refuses everyone else, so nobody else is
+          offered the button. */}
+      {maySeedDemo && hasPermission(session, "administration.configure") ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <RpcButton
+            label="Seed a demo configuration"
+            fn="erp_seed_demo_configuration"
+            confirm="This adds sample axes, values, a code template, supplier defaults and a marshalling area. Running it twice changes nothing the second time."
+            invalidates={[
+              "erp_classification_axes",
+              "erp_classification_values",
+              "erp_code_templates",
+              "erp_classification_gaps",
+              "erp_item_suppliers",
+              "erp_release_areas",
+            ]}
+          />
+        </div>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <ConfigTransfer
