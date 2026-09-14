@@ -22,6 +22,7 @@ import { isDemoCode } from "../../lib/platform-console";
 import { Card, ConsoleLink, Fail, LINK_BUTTON, statusLabel, statusTone } from "./kit";
 import { OrganisationActions } from "./organisation-actions";
 import type { PlatformPlans } from "./plans";
+import { Seats } from "./seats";
 
 /**
  * One organisation, on one page.
@@ -191,6 +192,7 @@ function People({ tenant: t, inside }: { tenant: PlatformTenant; inside: boolean
         <Figure caption="Companies" value={String(t.entities)} />
         <Figure caption="Sites" value={String(t.sites)} />
       </div>
+      <Seats tenantId={t.id} />
       {inside ? (
         <p className="mt-3 text-xs text-muted-foreground">
           You are inside this organisation, and hold a role there until you leave.
