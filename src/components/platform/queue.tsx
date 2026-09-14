@@ -7,6 +7,7 @@ import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import { Card, Fail } from "./kit";
 import type { DrainResult, JobHandler } from "../../lib/platform";
+import { purgeSweepSummary, readPurgeSweep } from "../../lib/purge-sweep";
 
 /**
  * Jobs, across every organisation.
@@ -19,7 +20,6 @@ import type { DrainResult, JobHandler } from "../../lib/platform";
 export function Queue() {
   const queryClient = useQueryClient();
   const [last, setLast] = useState<DrainResult | null>(null);
-  const [swept, setSwept] = useState<string | null>(null);
 
   const handlers = useQuery({
     queryKey: ["erp_job_handlers"],
@@ -34,11 +34,11 @@ export function Queue() {
     },
   });
 
+  /** The door answers with one object — a count and the organisations — never a list. */
   const sweep = useMutation({
-    mutationFn: () =>
-      callErp<{ purged: number }[]>("erp_platform_purge_due_tenants", { p_grace_days: 7 }),
-    onSuccess: (r) => {
-      setSwept(`${Array.isArray(r) ? r.length : 0} organisation(s) purged`);
+    mutationFn: async () =>
+      readPurgeSweep(await callErp<unknown>("erp_platform_purge_due_tenants", { p_grace_days: 7 })),
+    onSuccess: () => {
       void queryClient.invalidateQueries();
     },
   });
@@ -79,7 +79,13 @@ export function Queue() {
             <Fail error={sweep.error} />
           </div>
         ) : null}
-        {swept ? <p className="mt-3 text-sm text-muted-foreground">{swept}</p> : null}
+        {sweep.isSuccess ? (
+          <p role="status" className="mt-3 text-sm text-muted-foreground">
+            {sweep.data
+              ? purgeSweepSummary(sweep.data)
+              : "The sweep ran, but its answer could not be read. Check the organisations list to see what was purged."}
+          </p>
+        ) : null}
 
         {last ? (
           <div className="mt-4">
