@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
+import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
@@ -171,6 +172,10 @@ function Document() {
           />
         ) : null}
       </section>
+
+      {/* A sales invoice is issued here: its permanent number and the PDF the
+          customer receives, through the numbered issue path. */}
+      {doc.document_type === "sales_invoice" ? <InvoiceIssue documentId={documentId} /> : null}
 
       <Lines
         documentId={documentId}

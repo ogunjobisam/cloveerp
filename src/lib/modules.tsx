@@ -368,14 +368,34 @@ const zeroIsGood = (n: number, label: string) => ({
  * Stock is where the batch is; quality is who decides. It was declared on Stock
  * alone, so the people who hold the release — a quality manager, a responsible
  * person — had to hold stock's screen as well to find it.
+ *
+ * The door has always taken the inspection the release relies on, and the form
+ * never sent it. It offers the inspections of the chosen batch now: the database
+ * refuses a batch last rejected, one whose inspection failed, an inspection of
+ * another batch, and, once the organisation is live, a release by whoever
+ * dispositioned it (20260914070000).
  */
-const RELEASE_BATCH: ActionSpec = {
+export const RELEASE_BATCH: ActionSpec = {
   label: "Release a batch",
   permission: "quality.release_batch",
   fn: "erp_release_batch",
   fields: [
     pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
     pickSite(),
+    {
+      kind: "select",
+      name: "p_inspection_id",
+      label: "Inspection",
+      required: false,
+      hint: "The inspection of this batch the release relies on. A batch last rejected, or whose inspection failed, is not released, and once the organisation is live nobody releases a batch they dispositioned.",
+      options: {
+        fn: "erp_inspections",
+        args: { p_limit: 100 },
+        argsFrom: { p_batch_id: "p_batch_id" },
+        value: "inspection_id",
+        label: ["disposition", "status", "completed_at"],
+      },
+    },
     {
       kind: "text",
       name: "p_basis",
@@ -1242,9 +1262,33 @@ export const FINANCE: ModuleDef = {
         actionFn: "erp_pay_payment_run",
       },
       {
+        label: "Journals",
+        hint: "Accruals and corrections typed by hand: raised by one person, approved and posted by another.",
+        to: "/finance/journals",
+        toLabel: "Open journals",
+      },
+      {
         label: "Close",
-        hint: "Period close: the task list, then the close itself.",
-        createFn: "erp_close_period",
+        hint: "Open a period's close, work through its tasks, close the period, and at the end of the year close the year for good.",
+        fedBy:
+          "Periods appear here once Financials is installed, which creates the fiscal calendar.",
+
+        list: {
+          fn: "erp_fiscal_periods",
+          id: "fiscal_period_id",
+          title: ["code"],
+          subtitle: ["ledger", "starts_on", "ends_on"],
+          status: "status",
+          noun: "period",
+          nounPlural: "periods",
+        },
+        recordArg: "p_fiscal_period_id",
+        actionFns: [
+          "erp_open_period_close",
+          "erp_close_period",
+          "erp_close_fiscal_year",
+          "erp_reopen_period",
+        ],
       },
     ],
   },
@@ -1516,6 +1560,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       label: "Close a period",
+      description:
+        "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
       permission: "finance.close_period",
       fn: "erp_close_period",
       fields: [
@@ -1542,6 +1588,23 @@ export const FINANCE: ModuleDef = {
           "Period",
         ),
         reason("p_reason", "Reason", true),
+      ],
+      invalidates: ["erp_fiscal_periods", "erp_close_status"],
+    },
+    {
+      label: "Close the fiscal year",
+      description:
+        "Year end, once every period of the year is closed: each period of it is closed for good, and nothing is posted into, closed or reopened in that year again.",
+      permission: "finance.close_period",
+      fn: "erp_close_fiscal_year",
+      fields: [
+        pickFrom(
+          "erp_fiscal_periods",
+          "fiscal_period_id",
+          ["code", "ledger", "status"],
+          "p_fiscal_period_id",
+          "Last period of the year",
+        ),
       ],
       invalidates: ["erp_fiscal_periods", "erp_close_status"],
     },
@@ -4173,6 +4236,15 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Profit and balance sheet",
     blurb:
       "What the period made and what the company is worth, read from the journals purchases, stock and invoices already posted.",
+    permission: "finance.read",
+    group: "settle",
+  },
+  {
+    path: "/finance/journals",
+    titleKey: "nav.finance_journals",
+    title: "Journals",
+    blurb:
+      "Accruals, prepayments and corrections typed by hand: raised by one person, approved and posted by another, reversed rather than changed.",
     permission: "finance.read",
     group: "settle",
   },

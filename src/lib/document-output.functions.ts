@@ -23,6 +23,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { attachErpSession } from "./erp-session-middleware";
 import {
   renderSalesInvoicePdf,
   sha256Blob,
@@ -59,7 +60,8 @@ function refuse(message: string): never {
 }
 
 export const documentOutput = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  // The caller's token first, so the database decides as the caller.
+  .middleware([attachErpSession, requireSupabaseAuth])
   .inputValidator((data: unknown) => input.parse(data))
   .handler(async ({ data, context }): Promise<DocumentOutputResult> => {
     const supabase = context.supabase;

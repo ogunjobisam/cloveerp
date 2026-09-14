@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ActionSpec } from "../components/erp/actions-bar";
 import type { FlowSpec } from "../components/erp/process-flow";
 import { actionKey, stageActionKeys, stagedKeys, unstagedActions } from "./flow-actions";
-import { MODULES, PLANNING, QUALITY } from "./modules";
+import { MODULES, PLANNING, QUALITY, RELEASE_BATCH } from "./modules";
 
 /**
  * Every verb a module declares can be reached from its screen.
@@ -166,5 +166,22 @@ describe("the verbs the walkthrough found unreachable", () => {
     const staged = stagedKeys(QUALITY.flow as FlowSpec).has("erp_release_batch");
     const onBar = unstagedActions(QUALITY.flow, actions).some((a) => a.fn === "erp_release_batch");
     expect(staged || onBar).toBe(true);
+  });
+
+  test("the release sends the inspection it relies on, chosen from that batch's own", () => {
+    expect(RELEASE_BATCH.fields?.map((f) => f.name)).toEqual([
+      "p_batch_id",
+      "p_site_id",
+      "p_inspection_id",
+      "p_basis",
+      "p_signature",
+    ]);
+    const inspection = RELEASE_BATCH.fields?.find((f) => f.name === "p_inspection_id");
+    if (inspection?.kind !== "select") throw new Error("the inspection is not chosen from a list");
+    expect(inspection.required).toBe(false);
+    expect(inspection.options.fn).toBe("erp_inspections");
+    expect(inspection.options.argsFrom).toEqual({ p_batch_id: "p_batch_id" });
+    expect(inspection.options.value).toBe("inspection_id");
+    expect(QUALITY.actions).toContain(RELEASE_BATCH);
   });
 });

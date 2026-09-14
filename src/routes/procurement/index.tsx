@@ -334,6 +334,36 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_match_workbench", "erp_grni"],
   },
   {
+    // A line that did not match raised an approval, and the exception held
+    // the invoice out of every payment run with nothing that could release it.
+    // The database accepts one only once that approval is given, and never at
+    // the hand of whoever raised it in a live organisation (20260914070000).
+    label: "Accept a match exception",
+    title: "Accept an invoice that did not match",
+    description:
+      "Once the approval the exception asked for has been given, the difference is accepted and the invoice can go into a payment run. Whoever raised the exception does not accept it once the organisation is live.",
+    permission: "procurement.match",
+    fn: "erp_accept_match_exception",
+    fields: [
+      pickFrom(
+        "erp_match_workbench",
+        "exception_id",
+        ["order_number", "line_no", "party_name", "status"],
+        "p_exception_id",
+        "Match exception",
+      ),
+      {
+        kind: "text",
+        name: "p_note",
+        label: "Note",
+        placeholder: "Price rise agreed with the supplier in March",
+        hint: "Optional. Kept with the exception.",
+      },
+    ],
+    invalidates: ["erp_match_workbench", "erp_supplier_balances", "erp_payables_ageing"],
+    submitLabel: "Accept it",
+  },
+  {
     label: "Set an order's behaviour",
     description:
       "Standard, blanket, consignment, drop-ship or intercompany. Fixed once the order is sent.",
