@@ -34,7 +34,12 @@ export type TodayCard = {
 /* -------------------------------------------------------------------------- */
 
 export type AssuranceCheck = { code: string; title?: string | undefined; ok: boolean | null };
-export type EnquiryRow = { submitted_at: string; status: string };
+export type EnquiryRow = {
+  submitted_at: string;
+  status: string;
+  /** Set when a member of staff recorded what was done about it. */
+  handled_at?: string | null;
+};
 export type RevenueRead = {
   renewals: { status: string; tenant_code: string }[];
   revenue_at_risk: { tenant_code: string; annual_value_minor: number }[];
@@ -118,7 +123,9 @@ export const NEW_ENQUIRY_DAYS = 7;
 const STUCK_MINUTES = 15;
 
 export function enquiryCards(rows: EnquiryRow[], now: Date): TodayCard[] {
-  const live = rows.filter((e) => e.status !== "erased");
+  // Erased is gone, and handled has had somebody deal with it: neither needs
+  // anybody today, whatever the mail did.
+  const live = rows.filter((e) => e.status !== "erased" && !e.handled_at);
   const at = now.getTime();
   const recent = live.filter(
     (e) => at - new Date(e.submitted_at).getTime() <= NEW_ENQUIRY_DAYS * DAY,

@@ -98,6 +98,21 @@ describe("enquiries", () => {
   test("nothing asked, nothing shown", () => {
     expect(enquiryCards([], NOW)).toEqual([]);
   });
+
+  test("an enquiry somebody marked handled needs nobody, even one that was never emailed", () => {
+    const cards = enquiryCards(
+      [
+        {
+          submitted_at: hoursAgo(24 * 10),
+          status: "notification_failed",
+          handled_at: hoursAgo(1),
+        },
+        { submitted_at: hoursAgo(2), status: "notified", handled_at: hoursAgo(1) },
+      ],
+      NOW,
+    );
+    expect(cards).toEqual([]);
+  });
 });
 
 describe("renewals and invoices", () => {
