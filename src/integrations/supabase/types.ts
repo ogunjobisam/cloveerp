@@ -1505,6 +1505,7 @@ export type Database = {
         Args: { p_batch_size?: number }
         Returns: Json
       }
+      erp_platform_seats: { Args: { p_tenant_id: string }; Returns: Json }
       erp_platform_send_commercial_email: {
         Args: { p_document_id: string; p_kind: string }
         Returns: Json
