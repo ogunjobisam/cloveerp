@@ -93,7 +93,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     label: "Work out who approves",
     title: "Route this requisition for approval",
     description:
-      "Stamps the chain the value and the department resolve to, and raises the approval tasks that go with it.",
+      "Records the approval chain the value and the department resolve to. It asks nobody to approve.",
     permission: "procurement.requisition",
     fn: "erp_stamp_document_approval",
     fields: [pickRequisition()],
@@ -190,7 +190,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     label: "Raise putaway tasks",
     description:
       "Ask the warehouse to move what is standing in goods-in. A task is raised for each pallet in a receiving location at that site, sending it to the place the storage rules say the product belongs.",
-    permission: "inventory.adjust",
+    permission: "inventory.move",
     fn: "erp_raise_putaway_tasks",
     fields: [pickSite()],
     invalidates: ["erp_warehouse_tasks", "erp_goods_in"],
@@ -199,7 +199,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
     label: "Complete a putaway",
     description: "The pallet has been moved. Completing the task is what moves the stock.",
-    permission: "inventory.adjust",
+    permission: "inventory.move",
     fn: "erp_complete_warehouse_task",
     fields: [
       pickFrom(
@@ -281,9 +281,13 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         // A goods receipt still being built: not another kind of document.
         { p_type_code: "goods_receipt", p_limit: 100, p_actionable: true },
       ),
-      // Open lines only: not on a closed or cancelled order, not received and
-      // invoiced in full.
-      pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
+      // Open lines on orders sent to the supplier: the database refuses a
+      // receipt against a draft, an order waiting on approval, or one approved
+      // and not sent, and against one already received in full.
+      pickLine("purchase_order", "p_order_line_id", "Order line", {
+        openOnly: true,
+        states: ["sent", "partially_received"],
+      }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       pickBatch(),
     ],
@@ -304,8 +308,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         { p_type_code: "purchase_invoice", p_limit: 100, p_actionable: true },
       ),
       // Open lines only, as for receiving: a line received in full but not yet
-      // invoiced stays, because that is the line this matches.
-      pickLine("purchase_order", "p_order_line_id", "Order line", { openOnly: true }),
+      // invoiced stays, because that is the line this matches. And only on an
+      // order the supplier has been sent: nothing else can be billed.
+      pickLine("purchase_order", "p_order_line_id", "Order line", {
+        openOnly: true,
+        states: ["sent", "partially_received", "received"],
+      }),
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       {
         kind: "money",

@@ -204,12 +204,16 @@ export const pickLocation = (
  * cancelled or finished document, and no line already received and invoiced
  * in full. Both, not either — a line received in full is the one an invoice is
  * matched against.
+ *
+ * `filter.states` asks for p_document_states: only lines whose document is in
+ * one of those states, as goods are received only against an order that has
+ * been sent. An empty list is not sent, because the door would list nothing.
  */
 export const pickLine = (
   typeCode: string,
   name = "p_order_line_id",
   label = "Order line",
-  filter?: { openOnly?: boolean },
+  filter?: { openOnly?: boolean; states?: string[] },
 ): Field => ({
   kind: "select",
   name,
@@ -221,6 +225,7 @@ export const pickLine = (
       p_type_code: typeCode,
       p_limit: 200,
       ...(filter?.openOnly ? { p_open_only: true } : {}),
+      ...(filter?.states && filter.states.length > 0 ? { p_document_states: filter.states } : {}),
     },
     value: "line_id",
     label: ["document_number", "item", "quantity"],
