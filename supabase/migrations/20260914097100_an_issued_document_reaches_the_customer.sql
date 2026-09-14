@@ -55,6 +55,13 @@
 -- committed and no drain can send it.
 -- =============================================================================
 
+-- 20260914097000 took 74 minutes to apply on a restored build database. This
+-- version carries the same statements with a timestamp before and after each
+-- section and each closing statement, so the build log says which was slow.
+
+select 'T start' as mark, clock_timestamp();
+
+select 'T section 1. An address that can receive email' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 1. An address that can receive email
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -76,6 +83,7 @@ comment on function erp.email_address_usable(text) is
   'Whether an address has the shape of one that can receive email: something, '
   'an @, and a domain with a dot in it.';
 
+select 'T section 2. Where invoices ask to be paid' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 2. Where invoices ask to be paid
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -227,6 +235,7 @@ begin
 end;
 $$;
 
+select 'T section 3. A contracts billing contact' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 3. A contract's billing contact
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -289,6 +298,7 @@ begin
 end;
 $$;
 
+select 'T section 4. A quotes customer contact' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 4. A quote's customer contact
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -359,6 +369,7 @@ as $$ select erp.set_quote_contact(p_document_id, p_name, p_email); $$;
 
 select erp_meta.add_help_actions('/commercial/quotes', array['erp_set_quote_contact']);
 
+select 'T section 5. Who a document goes to' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. Who a document goes to
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -507,6 +518,7 @@ $$;
 
 revoke all on function erp.commercial_document_is_demonstration(text, uuid) from public, anon, authenticated;
 
+select 'T section 6. The queue' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 6. The queue
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -658,6 +670,7 @@ comment on function erp.queue_commercial_email(text, uuid) is
   'platform staff at operator, or somebody issuing the quote under sales.order.';
 
 -- Issuing an order form sends it.
+select 'T before do issue_quote' as mark, clock_timestamp();
 do $issue_quote$
 declare
   v_sig   constant text := 'erp.issue_quote(uuid)';
@@ -689,9 +702,11 @@ begin
   end if;
 end
 $issue_quote$;
+select 'T after do issue_quote' as mark, clock_timestamp();
 
 -- Issuing an invoice sends it, before the person is set aside to tell the
 -- customer's organisation.
+select 'T before do issue_invoice' as mark, clock_timestamp();
 do $issue_invoice$
 declare
   v_sig    constant text := 'erp.issue_contract_invoice(uuid)';
@@ -714,7 +729,9 @@ begin
   end if;
 end
 $issue_invoice$;
+select 'T after do issue_invoice' as mark, clock_timestamp();
 
+select 'T section 7. The claim and the settle' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 7. The claim and the settle
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -975,6 +992,7 @@ $$;
 
 revoke all on function erp.fail_commercial_email(uuid, text, boolean) from public, anon, authenticated;
 
+select 'T section 8. What the console reads and does' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 8. What the console reads and does
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -1073,6 +1091,7 @@ end;
 $$;
 
 -- The customer reads the payment details on its own invoices.
+select 'T before do agreement' as mark, clock_timestamp();
 do $agreement$
 declare
   v_sig    constant text := 'erp.my_agreement()';
@@ -1093,7 +1112,9 @@ begin
   end if;
 end
 $agreement$;
+select 'T after do agreement' as mark, clock_timestamp();
 
+select 'T section 9. Registration' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 9. Registration
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -1177,6 +1198,7 @@ select erp.register_refusal('CLOVEERP_COMMERCIAL_EMAIL_NOT_ISSUED',
   'What the customer receives is the document as it was issued, and there is none yet.',
   'Issue the quote or the invoice first. Issuing sends it.');
 
+select 'T section 10. The suite' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 10. The suite
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -1187,6 +1209,7 @@ select erp.register_refusal('CLOVEERP_COMMERCIAL_EMAIL_NOT_ISSUED',
 -- are gone with it. It runs on the live database when this migration is
 -- deployed.
 
+select 'T before suite created' as mark, clock_timestamp();
 create or replace function erp_test.commercial_email_suite()
 returns table (case_name text, passed boolean, detail text)
 language plpgsql
@@ -1632,30 +1655,81 @@ $$;
 
 revoke all on function erp_test.assert_commercial_email_suite() from public, anon, authenticated;
 
+select 'T section 11. Generators, then the checks that read what changed' as mark, clock_timestamp();
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 11. Generators, then the checks that read what changed
 -- ═════════════════════════════════════════════════════════════════════════════
 
+select 'T before erp.apply_row_security' as mark, clock_timestamp();
 select erp.apply_row_security();
+select 'T after erp.apply_row_security' as mark, clock_timestamp();
+select 'T before erp.apply_platform_internal_security' as mark, clock_timestamp();
 select erp.apply_platform_internal_security();
+select 'T after erp.apply_platform_internal_security' as mark, clock_timestamp();
+select 'T before erp.apply_attribution_triggers' as mark, clock_timestamp();
 select erp.apply_attribution_triggers();
+select 'T after erp.apply_attribution_triggers' as mark, clock_timestamp();
+select 'T before erp.apply_audit_coverage' as mark, clock_timestamp();
 select erp.apply_audit_coverage();
+select 'T after erp.apply_audit_coverage' as mark, clock_timestamp();
+select 'T before erp.apply_append_only_guards' as mark, clock_timestamp();
 select erp.apply_append_only_guards();
+select 'T after erp.apply_append_only_guards' as mark, clock_timestamp();
+select 'T before erp.apply_live_config_guards' as mark, clock_timestamp();
 select erp.apply_live_config_guards();
+select 'T after erp.apply_live_config_guards' as mark, clock_timestamp();
+select 'T before erp.apply_execute_grants' as mark, clock_timestamp();
 select erp.apply_execute_grants();
+select 'T after erp.apply_execute_grants' as mark, clock_timestamp();
 
+select 'T before erp.assert_isolation' as mark, clock_timestamp();
 select erp.assert_isolation();
+select 'T after erp.assert_isolation' as mark, clock_timestamp();
+select 'T before erp.assert_audit_coverage' as mark, clock_timestamp();
 select erp.assert_audit_coverage();
+select 'T after erp.assert_audit_coverage' as mark, clock_timestamp();
+select 'T before erp.assert_attribution_coverage' as mark, clock_timestamp();
 select erp.assert_attribution_coverage();
+select 'T after erp.assert_attribution_coverage' as mark, clock_timestamp();
+select 'D pg_proc planner estimate' as mark, c.reltuples, (select count(*) from pg_catalog.pg_proc) as pg_proc_rows, clock_timestamp()
+  from pg_catalog.pg_class c where c.oid = 'pg_catalog.pg_proc'::regclass;
+select 'D analysed' as mark, s.relname, s.last_analyze, s.last_autoanalyze, s.n_live_tup, clock_timestamp()
+  from pg_catalog.pg_stat_all_tables s
+ where s.relid in ('pg_catalog.pg_proc'::regclass, 'erp_meta.public_write_allowance'::regclass,
+                   'erp_meta.security_definer_allowance'::regclass);
+select 'T before erp.assert_public_api_safe' as mark, clock_timestamp();
 select erp.assert_public_api_safe();
+select 'T after erp.assert_public_api_safe' as mark, clock_timestamp();
+select 'T before erp.assert_authorising_doors_are_volatile' as mark, clock_timestamp();
 select erp.assert_authorising_doors_are_volatile();
+select 'T after erp.assert_authorising_doors_are_volatile' as mark, clock_timestamp();
+select 'T before erp.assert_invoker_doors_executable' as mark, clock_timestamp();
 select erp.assert_invoker_doors_executable();
+select 'T after erp.assert_invoker_doors_executable' as mark, clock_timestamp();
+select 'T before erp.assert_no_caller_reachable_internal_routines' as mark, clock_timestamp();
 select erp.assert_no_caller_reachable_internal_routines();
+select 'T after erp.assert_no_caller_reachable_internal_routines' as mark, clock_timestamp();
+select 'T before erp.assert_no_public_execute' as mark, clock_timestamp();
 select erp.assert_no_public_execute();
+select 'T after erp.assert_no_public_execute' as mark, clock_timestamp();
+select 'T before erp.assert_session_context_hygiene' as mark, clock_timestamp();
 select erp.assert_session_context_hygiene();
+select 'T after erp.assert_session_context_hygiene' as mark, clock_timestamp();
+select 'T before erp.assert_no_legacy_refusal_prefix' as mark, clock_timestamp();
 select erp.assert_no_legacy_refusal_prefix();
+select 'T after erp.assert_no_legacy_refusal_prefix' as mark, clock_timestamp();
+select 'T before erp.assert_refusals_name_next_action' as mark, clock_timestamp();
 select erp.assert_refusals_name_next_action();
+select 'T after erp.assert_refusals_name_next_action' as mark, clock_timestamp();
+select 'T before erp.assert_resource_coverage' as mark, clock_timestamp();
 select erp.assert_resource_coverage('en');
+select 'T after erp.assert_resource_coverage' as mark, clock_timestamp();
+select 'T before erp.assert_personal_data_register_sound' as mark, clock_timestamp();
 select erp.assert_personal_data_register_sound();
+select 'T after erp.assert_personal_data_register_sound' as mark, clock_timestamp();
+select 'T before erp.assert_suite_verdicts_strict' as mark, clock_timestamp();
 select erp.assert_suite_verdicts_strict();
+select 'T after erp.assert_suite_verdicts_strict' as mark, clock_timestamp();
+select 'T before erp_test.assert_commercial_email_suite' as mark, clock_timestamp();
 select erp_test.assert_commercial_email_suite();
+select 'T after erp_test.assert_commercial_email_suite' as mark, clock_timestamp();
