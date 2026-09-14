@@ -1282,6 +1282,9 @@ export const FINANCE: ModuleDef = {
           noun: "period",
           nounPlural: "periods",
         },
+        // A period still being worked or reopenable; permanently closed years
+        // are history, reached through Show finished.
+        states: ["future", "open", "closing", "closed"],
         recordArg: "p_fiscal_period_id",
         actionFns: [
           "erp_open_period_close",
