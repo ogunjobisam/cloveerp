@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 
 import type { ErpSession } from "../../lib/erp";
 import type { Scope } from "./shell";
@@ -21,4 +21,23 @@ export function useErpSession() {
   const ctx = useContext(ErpSessionContext);
   if (!ctx) throw new Error("useErpSession must be used inside the authenticated shell");
   return ctx;
+}
+
+/**
+ * Which pages read the company and site chosen in the header.
+ *
+ * Most pages act on the whole organisation and never read that choice; the
+ * header's "Where you are working" said records and totals followed it, which
+ * was only true of creating a document and of Home. So a component that does
+ * read it asks through useScope(), which registers it while it is mounted, and
+ * the header can say plainly when the page in front of you ignores the choice.
+ * Registration is counting, not fetching: nothing is loaded here.
+ */
+export const ScopeUsageContext = createContext<{ register: () => () => void } | null>(null);
+
+export function useScope(): Scope {
+  const { scope } = useErpSession();
+  const usage = useContext(ScopeUsageContext);
+  useEffect(() => (usage ? usage.register() : undefined), [usage]);
+  return scope;
 }
