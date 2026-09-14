@@ -27,6 +27,7 @@ import {
   type PriceItem,
   type QuoteLine,
 } from "../../lib/quote-builder";
+import { QuoteEmail } from "./commercial-email";
 import { Card, ConsoleLink, Fail, INPUT, LINK_BUTTON } from "./kit";
 import type { CommercialState } from "./selling";
 
@@ -146,6 +147,7 @@ function useDoor<A extends Record<string, unknown>, R = unknown>(
       void queryClient.invalidateQueries({ queryKey: ["erp_commercial_quote"] });
       void queryClient.invalidateQueries({ queryKey: ["erp_my_approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["erp_platform_contracts"] });
+      void queryClient.invalidateQueries({ queryKey: ["erp_platform_commercial_emails"] });
     },
   });
 }
@@ -516,6 +518,8 @@ function NewQuote({
   const [years, setYears] = useState("2");
   const [founding, setFounding] = useState(false);
   const [notes, setNotes] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactName, setContactName] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
@@ -546,6 +550,14 @@ function NewQuote({
       });
       if (founding) {
         await callErp("erp_set_quote_programme", { p_document_id: id, p_programme: "founding" });
+      }
+      if (contactEmail.trim()) {
+        // The order form is emailed here the moment the quote is issued.
+        await callErp("erp_set_quote_contact", {
+          p_document_id: id,
+          p_name: contactName.trim() || null,
+          p_email: contactEmail.trim(),
+        });
       }
       void queryClient.invalidateQueries({ queryKey: ["erp_commercial_quotes"] });
       onOpened(id);
@@ -596,6 +608,8 @@ function NewQuote({
                 const q = (enquiries.data ?? []).find((x) => x.id === e.target.value);
                 if (q) {
                   setProspect(q.organisation || q.full_name || "");
+                  setContactEmail(q.email ?? "");
+                  setContactName(q.full_name ?? "");
                   setNotes(
                     `Enquiry from ${q.full_name ?? "someone"}${q.email ? ` <${q.email}>` : ""} on ${day(q.submitted_at)}.${
                       q.message ? ` ${q.message.slice(0, 300)}` : ""
@@ -643,6 +657,33 @@ function NewQuote({
           </select>
         </label>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-medium">
+          Customer email
+          <input
+            className={INPUT}
+            type="email"
+            value={contactEmail}
+            placeholder="dana@okaforfoods.co.uk"
+            onChange={(e) => setContactEmail(e.target.value)}
+          />
+          <span className="mt-1 block font-normal text-muted-foreground">
+            {who === "organisation"
+              ? "Leave it empty to email the order form to the organisation's administrators."
+              : "The order form is emailed here the moment the quote is issued."}
+          </span>
+        </label>
+        <label className="block text-xs font-medium">
+          Contact name
+          <input
+            className={INPUT}
+            value={contactName}
+            placeholder="Dana Okafor"
+            onChange={(e) => setContactName(e.target.value)}
+          />
+        </label>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-xs font-medium">
@@ -1333,6 +1374,19 @@ function QuoteBuilder({
           {errors.map((e, i) => (
             <Fail key={i} error={e} />
           ))}
+
+          {!d.superseded_by || d.order_form ? (
+            <Section
+              title="Emailing the order form"
+              hint="Sent to the customer the moment the quote is issued, with Send again for when it goes astray."
+            >
+              <QuoteEmail
+                documentId={documentId}
+                issued={Boolean(d.order_form)}
+                mayWrite={mayWrite}
+              />
+            </Section>
+          ) : null}
 
           {d.order_form ? (
             <Section

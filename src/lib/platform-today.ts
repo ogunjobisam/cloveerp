@@ -71,6 +71,19 @@ export type OpenInvoiceRow = {
   overdue: boolean;
   days_overdue: number;
 };
+/** What erp_platform_billing_details answers: whether payment details are set, and them. */
+export type BillingDetailsRead = {
+  set: boolean;
+  legal_name?: string | null;
+  registered_address?: string | null;
+  company_number?: string | null;
+  bank_account_name?: string | null;
+  sort_code?: string | null;
+  account_number?: string | null;
+  payment_reference_guidance?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
 export type SupportWindowRow = {
   tenant_code: string;
   tenant_name: string;
@@ -303,6 +316,27 @@ export function supportWindowCards(rows: SupportWindowRow[], now: Date): TodayCa
         codes.length === 1
           ? { section: "customers", view: "organisations", org: codes[0]! }
           : { section: "customers", view: "organisations" },
+    },
+  ];
+}
+
+/**
+ * Payment details, before an invoice goes out without them. Every contract
+ * invoice is emailed when it is issued, and one sent before these are set tells
+ * the customer payment details will follow, which somebody then has to do.
+ */
+export function paymentDetailsCards(details: BillingDetailsRead): TodayCard[] {
+  if (details.set) return [];
+  return [
+    {
+      key: "payment-details",
+      figure: "1",
+      title: "Add payment details before invoices go out",
+      sentence:
+        "Invoices are emailed the moment they are issued, and until the bank details are added each one tells the customer payment details will follow.",
+      tone: "warn",
+      action: "Add payment details",
+      target: { section: "billing", view: "payment" },
     },
   ];
 }

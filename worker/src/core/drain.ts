@@ -1,5 +1,6 @@
 import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { resolveCredential } from "./config.ts";
+import { drainCommercialEmail } from "./commercial.ts";
 import { asPrincipal, type Sql } from "./db.ts";
 import { drainEmail } from "./email.ts";
 import { drainWebhooks } from "./webhook.ts";
@@ -22,6 +23,13 @@ export type DrainReport = {
   emailClaimed: number;
   emailSent: number;
   emailFailed: number;
+  /**
+   * Issued order forms and contract invoices: the platform's own queue, claimed
+   * once a pass rather than per organisation (worker/src/core/commercial.ts).
+   */
+  commercialEmailClaimed: number;
+  commercialEmailSent: number;
+  commercialEmailFailed: number;
   /** Webhook notifications: dispatch queues them, this worker posts them. */
   webhooksClaimed: number;
   webhooksSent: number;
@@ -69,6 +77,9 @@ const empty = (): DrainReport => ({
   emailClaimed: 0,
   emailSent: 0,
   emailFailed: 0,
+  commercialEmailClaimed: 0,
+  commercialEmailSent: 0,
+  commercialEmailFailed: 0,
   webhooksClaimed: 0,
   webhooksSent: 0,
   webhooksFailed: 0,
@@ -658,6 +669,9 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
     await stage(out, "email", t, () => drainEmail(sql, binding, cfg, out));
     await stage(out, "webhooks", t, () => drainWebhooks(sql, binding, cfg, out));
   }
+  // Order forms and invoices belong to the platform, not to one organisation:
+  // once a pass, after every organisation's own mail.
+  await stage(out, "commercial-email", null, () => drainCommercialEmail(sql, cfg, out));
   // The evidence. A pass that drained nothing is still a pass, and the console
   // reads the last one to say whether anybody is draining at all; a worker that
   // cannot record its pass is reported by the exception, not hidden by it.

@@ -66,8 +66,12 @@ export const CONSOLE_SECTIONS = [
   {
     key: "billing",
     label: "Billing",
-    blurb: "What the contracts add up to, and which ones are coming up for renewal.",
-    views: [{ key: "revenue", label: "Revenue and renewals" }],
+    blurb:
+      "What the contracts add up to, which ones are coming up for renewal, and where invoices ask to be paid.",
+    views: [
+      { key: "revenue", label: "Revenue and renewals" },
+      { key: "payment", label: "Payment details" },
+    ],
   },
   {
     key: "platform",

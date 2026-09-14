@@ -434,6 +434,17 @@ jobs:
                  >> "$restore_log" 2>&1 < "$dump"; then
 
               if role_shape | diff -u "$roles_expected" - >> "$restore_log" 2>&1; then
+                # pg_restore brings back the rows, not the statistics about
+                # them, and nothing analysed the restored database, so every
+                # plan after this ran on guesses. On 14 September a migration
+                # that applies to live in seconds took 74 minutes here (run
+                # 34890113380) and an unrelated one 71 (34903462487), while a
+                # full replay of every migration, which autovacuum analyses as
+                # it grows, took 26. Live keeps its statistics; so does this.
+                analyse_started=$(date +%s)
+                $PSQL -c 'analyze'
+                echo "analysed the restored database in $(( $(date +%s) - analyse_started )) s"
+
                 if [[ "$exact_hit" == "true" ]]; then
                   echo "restored the schema these migrations built earlier"
                   exit 0
