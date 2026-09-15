@@ -63,8 +63,8 @@ type NavItem = {
   /** Resource key; `label` is the fallback used until the key resolves. */
   labelKey: string;
   label: string;
-  /** Absent means always visible. */
-  permission?: string;
+  /** Absent means always visible; a list is any of them. */
+  permission?: string | readonly string[];
   /** Offered only inside the platform's own organisation. */
   platformOnly?: boolean;
   group: "home" | TileGroup;

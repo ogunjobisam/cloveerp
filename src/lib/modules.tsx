@@ -4106,7 +4106,8 @@ export type TileDef = {
   titleKey: string;
   title: string;
   blurb: string;
-  permission?: string;
+  /** A list is any of them. */
+  permission?: string | readonly string[];
   group: TileGroup;
   /**
    * Offered only inside the platform's own organisation (v1.5 §17.5). The
@@ -4242,7 +4243,8 @@ export const EXTRA_TILES: TileDef[] = [
     title: "Scanner",
     blurb:
       "The warehouse application: one task at a time, driven by scanning, with a queue that holds your work until the network returns.",
-    permission: "inventory.move",
+    // A scanner operator holds inventory.scan; the warehouse holds inventory.move.
+    permission: ["inventory.scan", "inventory.move"],
     group: "move",
   },
   {
