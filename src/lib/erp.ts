@@ -344,8 +344,18 @@ export const emptySession: ErpSession = {
   permissions: [],
 };
 
-export function hasPermission(session: ErpSession | null, code: string): boolean {
-  return Boolean(session?.permissions?.includes(code));
+/**
+ * Whether the session holds a permission. Given a list, whether it holds any
+ * of them: the scanner opens for inventory.scan or inventory.move alike, and
+ * the database decides the rest.
+ */
+export function hasPermission(
+  session: ErpSession | null,
+  code: string | readonly string[],
+): boolean {
+  const held = session?.permissions;
+  if (!held) return false;
+  return typeof code === "string" ? held.includes(code) : code.some((c) => held.includes(c));
 }
 
 export async function currentSession(): Promise<Session | null> {
