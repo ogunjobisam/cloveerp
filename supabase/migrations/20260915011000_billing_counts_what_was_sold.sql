@@ -82,6 +82,11 @@
 --      now proves the refusal with a full line on a quote of its own.
 --      erp_test.light_users_suite expected the plan's users limit on its
 --      contract, and now expects the contract's: 15 included and 2 extra.
+--      erp_test.starter_pack_acceptance_suite counts 347 planned items, one
+--      more for the Scanner operator template.
+--
+-- First pushed as 20260915010000, whose build failed only on that count. It
+-- was never applied anywhere outside the build, and is replaced by this file.
 --
 -- Proof: erp_test.billing_matches_the_list_suite.
 -- =============================================================================
@@ -168,7 +173,7 @@ declare
   v_def    text;
   v_needle constant text := $n$  perform erp.authorise('inventory.move');$n$;
   v_new    constant text := $n$  -- A scanner operator's inventory.scan opens the scanner as inventory.move
-  -- does (20260915010000). Somebody with neither is refused naming inventory.move.
+  -- does (20260915011000). Somebody with neither is refused naming inventory.move.
   if erp.has_permission('inventory.scan') and not erp.has_permission('inventory.move') then
     perform erp.authorise('inventory.scan');
   else
@@ -200,7 +205,7 @@ declare
   v_scan_only boolean;$n$],
     array[$n$  perform erp.authorise('inventory.move');$n$,
           $n$  -- Somebody holding inventory.scan and not inventory.move applies only
-  -- confirmations of work somebody else planned (20260915010000).
+  -- confirmations of work somebody else planned (20260915011000).
   v_scan_only := erp.has_permission('inventory.scan') and not erp.has_permission('inventory.move');
   if v_scan_only then
     perform erp.authorise('inventory.scan');
@@ -249,7 +254,7 @@ declare
     jsonb_build_array('erp.record_count(uuid,numeric)',
       $n$  perform erp.authorise('inventory.count', null, t.site_id, null,
                         'count_task', p_task_id);$n$,
-      $n$  -- A count task confirmed on the scanner (20260915010000).
+      $n$  -- A count task confirmed on the scanner (20260915011000).
   if erp.scan_confirms('inventory.count', array['count'], null, t.site_id) then
     perform erp.authorise('inventory.scan', null, t.site_id, null,
                           'count_task', p_task_id);
@@ -259,7 +264,7 @@ declare
   end if;$n$),
     jsonb_build_array('erp.complete_warehouse_task(uuid,numeric)',
       $n$  perform erp.authorise('inventory.move', null, t.site_id, null, 'warehouse_task', t.id);$n$,
-      $n$  -- A putaway or replenishment task confirmed on the scanner (20260915010000).
+      $n$  -- A putaway or replenishment task confirmed on the scanner (20260915011000).
   if erp.scan_confirms('inventory.move', array['putaway', 'replenishment'], null, t.site_id) then
     perform erp.authorise('inventory.scan', null, t.site_id, null, 'warehouse_task', t.id);
   else
@@ -268,7 +273,7 @@ declare
     jsonb_build_array('erp.commit_allocation(uuid,uuid,uuid)',
       $n$  perform erp.authorise('sales.despatch', al.entity_id, al.site_id, null,
                         'allocation', p_allocation_id);$n$,
-      $n$  -- A pick confirmed on the scanner (20260915010000).
+      $n$  -- A pick confirmed on the scanner (20260915011000).
   if erp.scan_confirms('sales.despatch', array['pick'], al.entity_id, al.site_id) then
     perform erp.authorise('inventory.scan', al.entity_id, al.site_id, null,
                           'allocation', p_allocation_id);
@@ -279,7 +284,7 @@ declare
     jsonb_build_array('erp.receive_against(uuid,uuid,numeric,uuid)',
       $n$  perform erp.authorise('procurement.receive', rd.entity_id, rd.site_id, null,
                         'document', p_receipt_id);$n$,
-      $n$  -- A receipt line confirmed on the scanner (20260915010000).
+      $n$  -- A receipt line confirmed on the scanner (20260915011000).
   if erp.scan_confirms('procurement.receive', array['receipt'], rd.entity_id, rd.site_id) then
     perform erp.authorise('inventory.scan', rd.entity_id, rd.site_id, null,
                           'document', p_receipt_id);
@@ -317,10 +322,36 @@ values ('base', 'role', 'scanner_operator',
             jsonb_build_object('permission', 'master_data.read'))),
         'Starter Content Packs §3.2, and the price list of 14 September 2026: somebody who only uses '
         'the scanner is a light user. Confirms the counts, put-aways, replenishments, picks and '
-        'receipts somebody else planned; moves nothing on its own authority (20260915010000).',
+        'receipts somebody else planned; moves nothing on its own authority (20260915011000).',
         105)
 on conflict (pack_code, object_kind, object_key) do update set
   payload = excluded.payload, provenance = excluded.provenance, seq = excluded.seq;
+
+-- The acceptance suite counts what the base pack plans on a new organisation,
+-- on purpose: the Scanner operator template is one item more.
+do $acceptance$
+declare
+  v_sig text := 'erp_test.starter_pack_acceptance_suite()';
+  v_def text := pg_get_functiondef('erp_test.starter_pack_acceptance_suite()'::regprocedure);
+  v_n   text := $n$    (res ->> 'items')::integer = 346
+$n$;
+  v_r   text := $r$    -- 347 since 20260915011000: the base pack carries the Scanner operator
+    -- role template, which a new organisation does not have yet.
+    (res ->> 'items')::integer = 347
+$r$;
+begin
+  if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
+    raise exception 'CLOVEERP_ACCEPTANCE_SUITE_UNRECOGNISED: % does not count 346 planned items once', v_sig
+      using hint = 'A later migration recounted the base pack. Read the suite and patch its count.';
+  end if;
+  execute replace(v_def, v_n, v_r);
+
+  if position('integer = 347' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_ACCEPTANCE_SUITE_UNRECOGNISED: % did not take its new count', v_sig
+      using hint = 'The replacement did not land. Compare the needle with the suite''s definition.';
+  end if;
+end
+$acceptance$;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 2. A contract sets its full users limit
@@ -336,7 +367,7 @@ declare
                            where b ->> 'entitlement_code' = 'users') then
       -- The full users sold: what the plan includes and every extra full
       -- user on the quote. A users band, where one is sold, sets the limit
-      -- instead (20260915010000).
+      -- instead (20260915011000).
       insert into erp_meta.contract_entitlement (contract_id, entitlement_code, limit_value, effective_from)
       select v_id, 'users',
              pi.included_users
@@ -454,7 +485,7 @@ declare
         raise exception 'CLOVEERP_QUOTE_USERS_BEYOND_PLAN: the % plan allows % users, and this line would take the quote past it',
           v_plan, v_limit using errcode = '23514';
       end if;$n$;
-  v_new    constant text := $n$      -- Full users and light users are limited apart (20260915010000). The
+  v_new    constant text := $n$      -- Full users and light users are limited apart (20260915011000). The
       -- plan's users limit counts the users it includes and the extra full
       -- users; light users are limited only where the plan states a light
       -- users limit, and no plan on the list does.
@@ -509,7 +540,7 @@ declare
   return query select 'a quote refuses users beyond what its plan allows', v_ok, v_msg;
 
   perform erp.add_quote_line(v_q, 'LIGHT-STANDARD', 5);$n$;
-  v_new    constant text := $n$  -- Light users are not counted against the plan's users (20260915010000),
+  v_new    constant text := $n$  -- Light users are not counted against the plan's users (20260915011000),
   -- so the refusal is proven with full users, on a quote of its own.
   declare
     v_q_full uuid;
@@ -541,7 +572,7 @@ declare
   v_needle constant text := $n$             and res_limits -> 'full' ->> 'limit_from' = 'plan'
              and (res_limits -> 'full' ->> 'limit')::numeric is not distinct from v_plan_users, false),$n$;
   v_new    constant text := $n$             -- The contract sets the full users limit: 15 included and 2 extra
-             -- (20260915010000).
+             -- (20260915011000).
              and res_limits -> 'full' ->> 'limit_from' = 'contract'
              and (res_limits -> 'full' ->> 'limit')::numeric = 17, false),$n$;
 begin
