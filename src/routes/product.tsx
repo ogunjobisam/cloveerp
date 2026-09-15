@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import {
   ArrowRight,
   Banknote,
   Boxes,
   Check,
+  ChevronDown,
   ClipboardCheck,
   Factory,
   FileText,
@@ -139,9 +141,9 @@ function Hero() {
           </div>
           <dl className="mt-9 grid max-w-md grid-cols-3 gap-4">
             {[
-              ["9", "modules, one database"],
-              ["£", "minor-unit money, no floats"],
-              ["100%", "audited actions"],
+              ["240+", "checks pass before any release ships"],
+              ["£395", "a month to start, priced on this page"],
+              ["100%", "of actions audited, and your data exports with you"],
             ].map(([stat, label]) => (
               <div key={label}>
                 <dt className="sr-only">{label}</dt>
@@ -620,6 +622,139 @@ function Pricing() {
   );
 }
 
+type Question = { q: string; a: ReactNode };
+
+/**
+ * What people ask before they buy, answered where they ask it.
+ *
+ * Every answer is something the product does today: the prices are the ones
+ * on the page above, the checks are the ones the build runs, and the support
+ * session an answer describes is the one an organisation can see for itself.
+ * An answer that outran the product would be found out in the first demo.
+ */
+const QUESTIONS: Question[] = [
+  {
+    q: "What does it cost?",
+    a: (
+      <>
+        Starter is £395 a month, Standard £1,095 and Enterprise from £2,750, billed annually and
+        excluding VAT. Each includes a core team — 5, 15 and 40 full users — and extra people are
+        priced above. Month-to-month adds 15%. Founding customers pay 35% less for two years. The
+        prices are here because you should not have to ask a salesperson what something costs.
+      </>
+    ),
+  },
+  {
+    q: "How long does it take to set up?",
+    a: (
+      <>
+        It is an interview, not a project. You answer questions about how your business works — what
+        you make or sell, how you count stock, who approves what — and Clove ERP configures the
+        chart of accounts, document types, numbering and controls to match. You can explore a
+        demonstration company with a month of trading behind it before you commit a single figure of
+        your own.
+      </>
+    ),
+  },
+  {
+    q: "Who is it for?",
+    a: (
+      <>
+        British product businesses: manufacturers, distributors and food producers running one to
+        three companies and several sites, where between five and fifty people need the system.
+        Batch traceability, quality release, planning and MRP are in the Standard plan, not an
+        upgrade. If you need dozens of legal entities in dozens of countries, you want a bigger
+        system than this one.
+      </>
+    ),
+  },
+  {
+    q: "Can we get our data out?",
+    a: (
+      <>
+        Yes, whenever you like. Reports and registers export to open formats from the screens
+        themselves, and the data belongs to you. If you ask for your organisation to be deleted, it
+        is suspended first, and the deletion removes every row belonging to it.
+      </>
+    ),
+  },
+  {
+    q: "Who can see our data?",
+    a: (
+      <>
+        Every organisation is separated by the database itself, not by a filter in the screens, and
+        that separation is proved on every release. Nobody at Clove ERP can look inside your
+        organisation without opening a support session, which names a reason, expires by itself and
+        appears on your own continuity screen while it is open.
+      </>
+    ),
+  },
+  {
+    q: "How do you know a release is sound?",
+    a: (
+      <>
+        Every release builds the whole database from nothing and runs more than 240 checks against
+        it: that no organisation can read another's rows, that every action is audited, that every
+        permission the screens name exists, and that each refusal tells you what to do next. A check
+        that is not run fails the build.
+      </>
+    ),
+  },
+  {
+    q: "What if we outgrow the plan?",
+    a: (
+      <>
+        Move up a plan and keep your data where it is: the plan sets what is switched on and how
+        many people are included, not where anything lives. If you outgrow Clove ERP itself, your
+        data still exports with you, which is the point of saying so twice.
+      </>
+    ),
+  },
+  {
+    q: "How do we start?",
+    a: (
+      <>
+        Book a demo and we will walk through your own processes in a demonstration company. If you
+        would rather try it properly, run a 30-day pilot on your own data for £500, credited against
+        your first year.
+      </>
+    ),
+  },
+];
+
+function Faq() {
+  return (
+    <section className="py-12" id="questions" aria-labelledby="faq-heading">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+        Before you ask
+      </p>
+      <h2
+        id="faq-heading"
+        className="mt-3 max-w-[26ch] font-display text-3xl font-medium leading-tight text-brand text-balance md:text-4xl"
+      >
+        The questions we are asked most.
+      </h2>
+      <div className="mt-8 grid gap-3 md:grid-cols-2">
+        {QUESTIONS.map((item) => (
+          <details
+            key={item.q}
+            className="group rounded-2xl bg-soft/60 p-5 ring-1 ring-line open:bg-soft"
+          >
+            <summary className="flex cursor-pointer items-center justify-between gap-4 font-display text-lg font-medium text-brand marker:content-['']">
+              {item.q}
+              <ChevronDown
+                className="size-4 shrink-0 text-ink/50 transition-transform group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <p className="mt-3 text-sm leading-relaxed text-ink/70 text-pretty">{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
     <footer className="flex flex-col items-center gap-4 py-12 text-center">
@@ -650,6 +785,7 @@ function ProductPage() {
         <Governance />
         <Gallery />
         <Pricing />
+        <Faq />
         <Footer />
       </div>
     </div>
