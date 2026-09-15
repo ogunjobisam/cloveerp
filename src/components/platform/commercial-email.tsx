@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { CommercialDocumentDownload } from "../erp/commercial-document-download";
 import { TOUCH } from "../erp/page";
 import { Pill } from "../erp/panel";
 import { callErp } from "../../lib/erp";
 import {
+  describeDocument,
   describeSend,
   latestSends,
   recipientsSentence,
@@ -65,12 +67,34 @@ export function SendLines({ sends, documentId }: { sends: CommercialSend[]; docu
     <ul className="flex flex-col gap-1">
       {latest.map((s) => {
         const d = describeSend(s);
+        const pdf = describeDocument(s);
         return (
-          <li key={s.id} className="flex flex-wrap items-center gap-1.5 text-xs">
-            <Pill tone={d.tone}>{s.status}</Pill>
-            <span className={d.tone === "bad" ? "text-destructive" : "text-muted-foreground"}>
-              {d.text}
+          <li key={s.id} className="flex flex-col gap-0.5 text-xs">
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Pill tone={d.tone}>{s.status}</Pill>
+              <span className={d.tone === "bad" ? "text-destructive" : "text-muted-foreground"}>
+                {d.text}
+              </span>
             </span>
+            {pdf ? (
+              <span className="flex flex-wrap items-center gap-1.5 pl-1">
+                <span
+                  className={
+                    pdf.tone === "warn"
+                      ? "text-amber-700 dark:text-amber-400"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {pdf.text}
+                </span>
+                {pdf.downloadable ? (
+                  <CommercialDocumentDownload
+                    request={{ scope: "platform", emailId: s.id }}
+                    compact
+                  />
+                ) : null}
+              </span>
+            ) : null}
           </li>
         );
       })}

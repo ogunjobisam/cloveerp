@@ -319,3 +319,26 @@ describe("an invoice email", () => {
     ).toThrow(CommercialEmailError);
   });
 });
+
+describe("the PDF that goes with it", () => {
+  test("the email names the attached file only when there is one", () => {
+    const withOrderForm = composeCommercialEmail(orderForm(), ORIGIN, {
+      attachment: "Order-form-CQ-000123-v2.pdf",
+    });
+    expect(withOrderForm.text).toContain(
+      "The order form is attached as a PDF, Order-form-CQ-000123-v2.pdf",
+    );
+    const withInvoice = composeCommercialEmail(invoice(), ORIGIN, {
+      attachment: "Invoice-INV-1.pdf",
+    });
+    expect(withInvoice.text).toContain("The invoice is attached as a PDF, Invoice-INV-1.pdf.");
+    for (const email of [
+      composeCommercialEmail(orderForm(), ORIGIN),
+      composeCommercialEmail(invoice(), ORIGIN, { attachment: null }),
+      composeCommercialEmail(invoice(), ORIGIN, { attachment: "  " }),
+    ]) {
+      expect(email.text).not.toContain("PDF");
+      expect(email.html).not.toContain("PDF");
+    }
+  });
+});

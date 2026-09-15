@@ -63,7 +63,17 @@ export type EmailRow = {
    * when its lease runs out and it is claimed again.
    */
   idempotency_key?: string | null;
+  /**
+   * Files sent with the message, when the caller has any: a name and the bytes
+   * as base64, which is the shape Resend's API takes.
+   *
+   * Optional. The commercial email queue attaches the order form or invoice as
+   * a PDF (src/lib/pdf/commercial-document.ts); nothing else attaches anything.
+   */
+  attachments?: EmailAttachment[] | null;
 };
+
+export type EmailAttachment = { filename: string; content: string };
 
 /** The request's headers: the key, the content type, and the idempotency key when there is one. */
 export function resendHeaders(apiKey: string, row: Pick<EmailRow, "idempotency_key">): Record<string, string> {
@@ -166,6 +176,7 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
       text: row.body ?? "",
       ...(row.html ? { html: row.html } : {}),
       ...(row.reply_to ? { reply_to: row.reply_to } : {}),
+      ...(row.attachments && row.attachments.length > 0 ? { attachments: row.attachments } : {}),
     }),
   });
 

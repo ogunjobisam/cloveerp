@@ -1034,6 +1034,10 @@ export type Database = {
       }
       erp_my_agreement: { Args: never; Returns: Json }
       erp_my_approvals: { Args: never; Returns: Json }
+      erp_my_commercial_document: {
+        Args: { p_document_id: string; p_kind: string }
+        Returns: Json
+      }
       erp_my_contract_document: {
         Args: { p_document_id: string }
         Returns: Json
@@ -1268,6 +1272,10 @@ export type Database = {
       }
       erp_platform_claim_ownership: {
         Args: { p_display_name?: string }
+        Returns: Json
+      }
+      erp_platform_commercial_document: {
+        Args: { p_email_id: string }
         Returns: Json
       }
       erp_platform_commercial_emails: {
