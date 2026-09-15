@@ -12,11 +12,43 @@ import {
   pickSite,
   reason,
 } from "../../components/erp/actions-bar";
+import { AutoPanel } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
+
+/**
+ * Whether administrators may approve anything here (20260914098000): on by
+ * default, and switched on the form above. What an administrator's approval
+ * did is on each document's page.
+ */
+function AdministratorApproval() {
+  const { ui } = useT();
+  return (
+    <AutoPanel<{
+      allowed: boolean;
+      you_approve_as_administrator: boolean;
+      waiting_change: string | null;
+    }>
+      title="Administrators approving"
+      description="On by default. When allowed, an administrator approving a document decides the tasks still waiting in one press, and every such decision is recorded as made by an administrator. A refused request is never approved over."
+      fn="erp_administrator_approval"
+      empty="The setting could not be read."
+      rowKey={() => "administrator-approval"}
+      columns={[
+        { header: "Setting", cell: (r) => (r.allowed ? ui("Allowed") : ui("Not allowed")) },
+        {
+          header: "For you",
+          cell: (r) =>
+            r.you_approve_as_administrator ? ui("You approve as an administrator") : ui("Not you"),
+        },
+        { header: "Waiting to be promoted", cell: "waiting_change" },
+      ]}
+    />
+  );
+}
 
 export const Route = createFileRoute("/administration/organisation")({
   head: () => ({
@@ -583,8 +615,37 @@ function Organisation() {
             ],
             invalidates,
           },
+          {
+            label: "Let administrators approve anything",
+            description:
+              "Whether a person holding Promote configuration may approve their own requests, journals and changes, and approve at once what is still waiting on others. Switch it off where every approval needs a second person. In a live organisation this raises a change, approved and promoted on the Configuration screen.",
+            permission: "administration.configure",
+            fn: "erp_set_administrator_approval",
+            fields: [
+              {
+                kind: "choice",
+                name: "p_allowed",
+                label: "Administrators may approve anything",
+                required: true,
+                boolean: true,
+                choices: [
+                  { value: "true", label: "Allowed" },
+                  { value: "false", label: "Not allowed" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "p_reason",
+                label: "Why it is changing",
+                hint: "Kept with the change, so the next person knows why the organisation decided it.",
+              },
+            ],
+            invalidates: ["erp_administrator_approval", "erp_change_sets"],
+          },
         ]}
       />
+
+      <AdministratorApproval />
 
       <ActionBar
         title="Cover while somebody is away"

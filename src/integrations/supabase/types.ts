@@ -26,6 +26,7 @@ export type Database = {
         Returns: Json
       }
       erp_accounts: { Args: { p_postable_only?: boolean }; Returns: Json }
+      erp_administrator_approval: { Args: never; Returns: Json }
       erp_add_document_line: {
         Args: {
           p_description?: string
@@ -748,6 +749,10 @@ export type Database = {
       }
       erp_document: { Args: { p_document_id: string }; Returns: Json }
       erp_document_approval_chain: {
+        Args: { p_document_id: string }
+        Returns: Json
+      }
+      erp_document_approval_decisions: {
         Args: { p_document_id: string }
         Returns: Json
       }
@@ -2139,6 +2144,10 @@ export type Database = {
         Returns: Json
       }
       erp_set_active_tenant: { Args: { p_tenant_id: string }; Returns: Json }
+      erp_set_administrator_approval: {
+        Args: { p_allowed: boolean; p_reason?: string }
+        Returns: Json
+      }
       erp_set_capability: {
         Args: {
           p_code: string
