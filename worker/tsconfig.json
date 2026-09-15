@@ -13,7 +13,17 @@
     // extension is written, and this flag is what lets tsc read it.
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    // The commercial email stage loads src/lib/pdf/commercial-document.ts,
+    // which imports pdf-lib and fontkit. From that file a bare specifier would
+    // be looked for above src/, where nothing is installed when this package
+    // is typechecked on its own, so the names point at this package's copies:
+    // the same pinned versions the application uses. The Edge Function maps
+    // the same two names in supabase/functions/import_map.json.
+    "paths": {
+      "pdf-lib": ["./node_modules/pdf-lib"],
+      "@pdf-lib/fontkit": ["./node_modules/@pdf-lib/fontkit"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

@@ -27,6 +27,11 @@ export type CommercialSend = {
   failure_reason: string | null;
   requested_by: string;
   created_at: string;
+  /** Whether a copy of the PDF that went with it is kept (20260915020000). */
+  has_document?: boolean;
+  document_bytes?: number | null;
+  /** Why there is no PDF with it, or no copy of one, when that is so. */
+  document_problem?: string | null;
 };
 
 export type CommercialEmailState = {
@@ -131,4 +136,34 @@ export function recipientsSentence(
   return first.source === "customer_administrator"
     ? `Goes to ${list}, the administrators of the organisation the quote was made for.`
     : `Goes to ${list}, the administrators of the customer's organisation.`;
+}
+
+/** "14 KB": a PDF's size as a person reads it. */
+export function sizeText(bytes: number | null | undefined): string | null {
+  if (bytes == null || !(bytes > 0)) return null;
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * The PDF of a sent message, in a line: that a copy is kept and how big it is,
+ * or why there is none. Nothing for a send that has not gone yet, since its
+ * PDF is made when it goes.
+ */
+export function describeDocument(
+  send: CommercialSend,
+): { tone: SendTone; text: string; downloadable: boolean } | null {
+  if (send.status !== "sent") return null;
+  const problem = (send.document_problem ?? "").trim();
+  if (send.has_document) {
+    const size = sizeText(send.document_bytes);
+    return {
+      tone: problem ? "warn" : "muted",
+      text: `PDF kept${size ? `, ${size}` : ""}${problem ? `; ${problem}` : ""}`,
+      downloadable: true,
+    };
+  }
+  if (problem) return { tone: "warn", text: `No PDF kept: ${problem}`, downloadable: false };
+  return { tone: "muted", text: "Sent before PDFs went with it", downloadable: false };
 }

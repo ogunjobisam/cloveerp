@@ -161,7 +161,12 @@ function usableAddress(value: unknown): string | null {
 /* The order form                                                             */
 /* -------------------------------------------------------------------------- */
 
-function orderFormInput(row: ClaimedCommercialEmail, payload: Dict, origin: string) {
+function orderFormInput(
+  row: ClaimedCommercialEmail,
+  payload: Dict,
+  origin: string,
+  attachment: string | null,
+) {
   const number = need(payload, "document_number", "the order form");
   const customer = need(payload, "customer_name", "the order form");
   const currency = need(payload, "currency", "the order form");
@@ -212,6 +217,11 @@ function orderFormInput(row: ClaimedCommercialEmail, payload: Dict, origin: stri
       validUntil
         ? `It is valid until ${validUntil}. To accept it, reply to this email and say so; to change anything, reply and say what.`
         : "To accept it, reply to this email and say so; to change anything, reply and say what.",
+      ...(attachment
+        ? [
+            `The order form is attached as a PDF, ${attachment}, with a place to sign it for your records.`,
+          ]
+        : []),
     ],
     details,
     primary,
@@ -283,7 +293,12 @@ export function paymentBlock(details: unknown, reference: string): string | null
   ].join("\n");
 }
 
-function invoiceInput(row: ClaimedCommercialEmail, payload: Dict, origin: string) {
+function invoiceInput(
+  row: ClaimedCommercialEmail,
+  payload: Dict,
+  origin: string,
+  attachment: string | null,
+) {
   const reference = need(payload, "reference", "the invoice");
   const customer = need(payload, "customer_name", "the invoice");
   const currency = need(payload, "currency", "the invoice");
@@ -322,6 +337,7 @@ function invoiceInput(row: ClaimedCommercialEmail, payload: Dict, origin: string
       payment
         ? `Please pay by ${due} into the account below, quoting ${reference}.`
         : `Please pay by ${due}. Payment details will follow from our accounts team.`,
+      ...(attachment ? [`The invoice is attached as a PDF, ${attachment}.`] : []),
     ],
     details,
     quote: payment,
@@ -345,19 +361,26 @@ function invoiceInput(row: ClaimedCommercialEmail, payload: Dict, origin: string
 /**
  * The email for one claimed row. Throws CommercialEmailError for a payload it
  * cannot read; the drain fails that row and says why.
+ *
+ * attachment is the file name of the PDF going with the message, when one is
+ * (20260915020000): the email then says it is attached. Without it the email
+ * says nothing about a PDF, so a message whose document could not be made
+ * never points at an attachment it does not carry.
  */
 export function composeCommercialEmail(
   row: ClaimedCommercialEmail,
   origin: string,
+  options: { attachment?: string | null } = {},
 ): CommercialEmail {
+  const attachment = options.attachment?.trim() || null;
   const payload = dict(row.payload, "the payload");
   const kind = payload["kind"] ?? row.email_kind;
   const base = origin.replace(/\/+$/, "");
   const shaped =
     kind === "order_form"
-      ? orderFormInput(row, payload, base)
+      ? orderFormInput(row, payload, base, attachment)
       : kind === "contract_invoice"
-        ? invoiceInput(row, payload, base)
+        ? invoiceInput(row, payload, base, attachment)
         : null;
   if (shaped === null)
     throw new CommercialEmailError(`${String(kind)} is not an order form or an invoice`);

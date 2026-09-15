@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  describeDocument,
   describeSend,
   latestSends,
   recipientLabel,
   recipientsSentence,
+  sizeText,
   sourceWords,
   type CommercialSend,
 } from "./commercial-sends";
@@ -114,5 +116,49 @@ describe("what the console says about a send", () => {
       "Goes to Amy <a@okafor.example>, b@okafor.example and Cal <c@okafor.example>, the administrators of the customer's organisation.",
     );
     expect(sourceWords("something new")).toBe("a recipient");
+  });
+});
+
+describe("the PDF beside a send", () => {
+  test("a sent message with a kept copy offers it, with its size", () => {
+    const d = describeDocument(
+      send({
+        status: "sent",
+        sent_at: "2026-09-14T10:15:00Z",
+        has_document: true,
+        document_bytes: 14911,
+      }),
+    );
+    expect(d).toEqual({ tone: "muted", text: "PDF kept, 15 KB", downloadable: true });
+  });
+
+  test("a sent message without a copy says why, and one from before PDFs says so", () => {
+    expect(
+      describeDocument(
+        send({
+          status: "sent",
+          has_document: false,
+          document_problem: "no storage is configured for the drain, so no copy was kept",
+        }),
+      ),
+    ).toEqual({
+      tone: "warn",
+      text: "No PDF kept: no storage is configured for the drain, so no copy was kept",
+      downloadable: false,
+    });
+    expect(describeDocument(send({ status: "sent" }))?.text).toBe("Sent before PDFs went with it");
+  });
+
+  test("a send that has not gone says nothing about a PDF", () => {
+    expect(describeDocument(send({ status: "queued" }))).toBeNull();
+    expect(describeDocument(send({ status: "failed", has_document: false }))).toBeNull();
+  });
+
+  test("sizes read as a person reads them", () => {
+    expect(sizeText(null)).toBeNull();
+    expect(sizeText(0)).toBeNull();
+    expect(sizeText(900)).toBe("900 bytes");
+    expect(sizeText(26612)).toBe("26 KB");
+    expect(sizeText(3 * 1024 * 1024)).toBe("3.0 MB");
   });
 });

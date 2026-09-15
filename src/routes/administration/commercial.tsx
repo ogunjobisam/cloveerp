@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useState, type ReactNode } from "react";
 
+import { CommercialDocumentDownload } from "../../components/erp/commercial-document-download";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
@@ -197,6 +198,14 @@ type Agreement = {
     account_number: string;
     payment_reference_guidance: string | null;
   } | null;
+  /** The PDFs of the order forms and invoices this organisation was emailed, newest first. */
+  commercial_documents: {
+    kind: "order_form" | "contract_invoice";
+    document_id: string;
+    filename: string;
+    bytes: number | null;
+    sent_at: string;
+  }[];
 };
 
 function day(value: string | null | undefined) {
@@ -281,6 +290,7 @@ function Commercial() {
         sub_processors: d?.sub_processors ?? [],
         service_commitments: d?.service_commitments ?? [],
         payment_details: d?.payment_details ?? null,
+        commercial_documents: d?.commercial_documents ?? [],
       };
     },
     refetchInterval: 60_000,
@@ -454,6 +464,32 @@ function Commercial() {
             </Section>
           ) : null}
 
+          {data.commercial_documents.some((c) => c.kind === "order_form") ? (
+            <Section
+              title="Order forms"
+              description="The order forms Clove ERP sent you, as the PDF that went with the email."
+            >
+              <ul className="flex flex-col divide-y divide-border/50">
+                {data.commercial_documents
+                  .filter((c) => c.kind === "order_form")
+                  .map((c) => (
+                    <li
+                      key={c.document_id}
+                      className="flex flex-wrap items-center justify-between gap-2 py-2"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm">{c.filename}</span>
+                        <span className="text-xs text-muted-foreground">sent {day(c.sent_at)}</span>
+                      </span>
+                      <CommercialDocumentDownload
+                        request={{ scope: "mine", kind: "order_form", documentId: c.document_id }}
+                      />
+                    </li>
+                  ))}
+              </ul>
+            </Section>
+          ) : null}
+
           {data.contract ? (
             <Section
               title={ui("Documents")}
@@ -590,6 +626,7 @@ function Commercial() {
                   ui("Overage"),
                   "Total",
                   "State",
+                  "",
                 ]}
               >
                 {data.invoices.map((i) => {
@@ -601,6 +638,9 @@ function Commercial() {
                       : i.overage_minor;
                   const total =
                     i.status === "scheduled" ? i.subscription_minor + overage : i.total_minor;
+                  const pdf = data.commercial_documents.find(
+                    (c) => c.kind === "contract_invoice" && c.document_id === i.id,
+                  );
                   return (
                     <Fragment key={i.id}>
                       <tr className="border-b border-border/50 align-top last:border-0">
@@ -638,10 +678,21 @@ function Commercial() {
                             {i.status}
                           </Pill>
                         </td>
+                        <td className="py-2">
+                          {pdf ? (
+                            <CommercialDocumentDownload
+                              request={{
+                                scope: "mine",
+                                kind: "contract_invoice",
+                                documentId: i.id,
+                              }}
+                            />
+                          ) : null}
+                        </td>
                       </tr>
                       {openInvoice === i.id ? (
                         <tr className="border-b border-border/50 last:border-0">
-                          <td colSpan={7} className="pb-3">
+                          <td colSpan={8} className="pb-3">
                             {i.lines.length === 0 ? (
                               <p className="text-xs text-muted-foreground">
                                 No overage; the subscription alone.
