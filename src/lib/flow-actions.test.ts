@@ -4,7 +4,13 @@ import { join } from "node:path";
 
 import type { ActionSpec } from "../components/erp/actions-bar";
 import type { FlowSpec } from "../components/erp/process-flow";
-import { actionKey, stageActionKeys, stagedKeys, unstagedActions } from "./flow-actions";
+import {
+  actionKey,
+  recordAnswer,
+  stageActionKeys,
+  stagedKeys,
+  unstagedActions,
+} from "./flow-actions";
 import { MODULES, PLANNING, QUALITY, RELEASE_BATCH } from "./modules";
 
 /**
@@ -53,6 +59,68 @@ describe("stageActionKeys", () => {
 
   test("carries nothing for a step with no verbs", () => {
     expect(stageActionKeys({})).toEqual([]);
+  });
+});
+
+/**
+ * A form does not ask for the document the step has already chosen.
+ *
+ * Receiving is reached from the purchase order step, where an order is in front
+ * of you, and asked which order all over again — a picker of every order sent to
+ * every supplier, to find the one you were looking at. The step hands it over
+ * now; it is still a question, because the goods might be against a different
+ * order, but it is a question that arrives answered.
+ */
+describe("recordAnswer", () => {
+  test("a verb the step names takes the record and stops asking", () => {
+    expect(
+      recordAnswer({ recordArg: "p_document_id" }, act("erp_set_order_behaviour"), "doc-1"),
+    ).toEqual({ prefill: { p_document_id: "doc-1" }, preselect: {} });
+  });
+
+  test("a carried verb takes it under its own name, and still asks", () => {
+    const stage = {
+      recordArg: "p_document_id",
+      carriedArgs: { receive_this_order: "p_order_id" },
+    };
+    expect(
+      recordAnswer(
+        stage,
+        act("erp_create_receipt_from_order", {
+          code: "receive_this_order",
+        }),
+        "doc-1",
+      ),
+    ).toEqual({ prefill: {}, preselect: { p_order_id: "doc-1" } });
+  });
+
+  test("the step's own argument is not sent with a carried verb", () => {
+    // erp_create_receipt_from_order has no p_document_id: sending one would be
+    // a call to a function that does not exist.
+    const answer = recordAnswer(
+      { recordArg: "p_document_id", carriedArgs: { receive_this_order: "p_order_id" } },
+      act("erp_create_receipt_from_order", { code: "receive_this_order" }),
+      "doc-1",
+    );
+    expect(answer.prefill).toEqual({});
+  });
+
+  test("with nothing chosen, nothing is answered either way", () => {
+    expect(
+      recordAnswer(
+        { recordArg: "p_document_id", carriedArgs: { receive_this_order: "p_order_id" } },
+        act("erp_create_receipt_from_order", { code: "receive_this_order" }),
+        "",
+      ),
+    ).toEqual({ prefill: {}, preselect: {} });
+    expect(recordAnswer({ recordArg: "p_document_id" }, act("erp_a"), "")).toEqual({
+      prefill: {},
+      preselect: {},
+    });
+  });
+
+  test("a step with no record argument answers nothing", () => {
+    expect(recordAnswer({}, act("erp_a"), "doc-1")).toEqual({ prefill: {}, preselect: {} });
   });
 });
 
@@ -105,6 +173,32 @@ describe("the module page draws the bar beside the strip", () => {
 
   test("the bar is not switched off by the strip", () => {
     expect(page).not.toContain("!def.flow");
+  });
+});
+
+describe("a step whose verbs are spent points at the one after it", () => {
+  // As above, the source rather than a render: the fault was that the sentence
+  // ended there, and a dead end is a thing you can read in the file.
+  const strip = readFileSync(
+    join(import.meta.dir, "..", "components", "erp", "process-flow.tsx"),
+    "utf8",
+  );
+
+  test("the step after this one is worked out from the chain", () => {
+    expect(strip).toContain("const after = flow.stages[at + 1];");
+  });
+
+  test("the sentence names it", () => {
+    expect(strip).toContain('${ui("The next step is")} ${ui(next.label)}.');
+  });
+
+  test("and there is a way to get there", () => {
+    expect(strip).toContain("nothingApplies && next");
+    expect(strip).toContain('${ui("Go to")} ${ui(next.label).toLowerCase()}');
+  });
+
+  test("the last step of a chain points nowhere", () => {
+    expect(strip).toContain("const next: NextStep | null = after");
   });
 });
 

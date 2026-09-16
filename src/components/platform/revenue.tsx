@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
+import { formatFigure } from "../../lib/money";
 import type { PlatformRole } from "../../lib/platform";
 import { Card, Fail, INPUT } from "./kit";
 
@@ -75,9 +76,16 @@ type Revenue = {
   renewals: Renewal[];
 };
 
+/**
+ * Every figure on this screen is money, and reads as money.
+ *
+ * It used to divide by a hundred and print the number, putting the currency
+ * after it only when a contract had named one. With nothing sold yet no
+ * contract has, so the revenue tiles read "0" — which says nothing about
+ * whether the deployment has sold nothing or has simply not loaded.
+ */
 function money(minor: number | null | undefined, currency?: string) {
-  if (minor == null) return "—";
-  return `${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}${currency ? ` ${currency}` : ""}`;
+  return formatFigure(minor, currency);
 }
 
 function day(value: string | null | undefined) {
@@ -293,6 +301,13 @@ export function Revenue({ role }: { role: PlatformRole }) {
         icon={<TrendingUp className="size-4 text-primary" />}
         description="Read from the contract register. Annual recurring revenue is the sum of every contract in force; nothing here is entered by hand."
       >
+        {/* Zeroes across a screen are ambiguous between "nothing sold" and
+            "nothing read". Say which, before the figures rather than after. */}
+        {d.contracts_in_force === 0 ? (
+          <p className="mb-4 text-sm text-muted-foreground">
+            No contract is in force yet, so every figure below is nil.
+          </p>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Figure label="Annual recurring revenue" value={money(d.arr_minor, currency)} />
           <Figure label="Monthly recurring revenue" value={money(d.mrr_minor, currency)} />

@@ -91,6 +91,27 @@ export function formatMinorWhole(
 }
 
 /**
+ * A figure on a tile, where the currency is not certain to be known.
+ *
+ * The vendor console reads its revenue out of the contract register and takes
+ * the currency from the contracts it finds. With no contracts there is no
+ * currency to find, so annual recurring revenue read `0` — a bare number that
+ * could as well have been pence, or contracts, or a placeholder for a figure
+ * that had not loaded. Nothing sold is not the same as no figure: zero pounds
+ * is £0, and only a missing amount is a dash.
+ */
+export function formatFigure(
+  minor: number | null | undefined,
+  code?: string | null,
+  fallback = "GBP",
+): string {
+  if (minor === null || minor === undefined) return "—";
+  const currency =
+    code !== null && code !== undefined && code.trim() !== "" ? code.trim() : fallback;
+  return formatMinorWhole(minor, currency);
+}
+
+/**
  * Amounts in more than one currency, added up without adding them together.
  *
  * Summing a pound and a dollar gives a number that is neither, so a total over

@@ -33,6 +33,34 @@ export function stageActionKeys(
   ];
 }
 
+/**
+ * How a verb is handed the record the step has already chosen.
+ *
+ * A step answers its verbs with the record on the right, and a form does not
+ * ask a question the screen has answered: `recordArg` names the argument, the
+ * field is not drawn, and the value is sent whatever the form built. That is
+ * right where the step and the verb are about the same record.
+ *
+ * It is wrong where the verb reaches past it. Receiving belongs on the purchase
+ * order step, because that is where somebody stands when the goods arrive — but
+ * the receipt is raised against an order, under a different argument name, and
+ * what turned up at the door is *usually* the order in front of you rather than
+ * always. A verb named in `carriedArgs` takes the chosen record as the argument
+ * named there, arriving filled in and staying the person's to change, and the
+ * step's own `recordArg` is not sent with it.
+ */
+export function recordAnswer(
+  stage: Pick<Stage, "recordArg" | "carriedArgs">,
+  action: Pick<ActionSpec, "code" | "fn">,
+  id: string,
+): { prefill: Record<string, unknown>; preselect: Record<string, string> } {
+  const carried = stage.carriedArgs?.[actionKey(action)];
+  if (carried !== undefined) return { prefill: {}, preselect: id === "" ? {} : { [carried]: id } };
+  if (stage.recordArg !== undefined && id !== "")
+    return { prefill: { [stage.recordArg]: id }, preselect: {} };
+  return { prefill: {}, preselect: {} };
+}
+
 /** The action names any stage of a flow carries. */
 export function stagedKeys(flow: FlowSpec): Set<string> {
   return new Set(flow.stages.flatMap(stageActionKeys));
