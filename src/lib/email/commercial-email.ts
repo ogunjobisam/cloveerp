@@ -355,6 +355,91 @@ function invoiceInput(
 }
 
 /* -------------------------------------------------------------------------- */
+/* The reminder                                                               */
+/* -------------------------------------------------------------------------- */
+
+/** "7 days", and "a day" for one, as a person counts them. */
+export function daysWord(days: number): string {
+  return days === 1 ? "a day" : `${days} days`;
+}
+
+/**
+ * An invoice that is past its due date and not recorded as paid
+ * (20260915070000). The same figures as the invoice itself, said once more:
+ * what is owed, how late it is, how to pay it, and who to reply to. The
+ * payload is the invoice's, with the reminder's number and how overdue it was
+ * when the drain claimed it.
+ *
+ * Polite and factual on purpose. A customer whose payment crossed this email
+ * in the post should not be accused of anything, and the person reading it is
+ * usually not the person who decides when it is paid.
+ */
+function invoiceReminderInput(
+  row: ClaimedCommercialEmail,
+  payload: Dict,
+  origin: string,
+  attachment: string | null,
+) {
+  const reference = need(payload, "reference", "the reminder");
+  const customer = need(payload, "customer_name", "the reminder");
+  const currency = need(payload, "currency", "the reminder");
+  const due = formatDay(payload["due_on"]);
+  if (due === null) throw new CommercialEmailError("the reminder has no due date");
+  const total = formatMoney(payload["total_minor"], currency);
+  if (total === null) throw new CommercialEmailError("the reminder has no total");
+  const overdue = num(payload["days_overdue"]);
+  if (overdue === null || overdue < 1) {
+    throw new CommercialEmailError("the reminder does not say how overdue the invoice is");
+  }
+  const days = Math.floor(overdue);
+  const supplier = text(payload["supplier_name"]) ?? "Clove ERP Ltd";
+  const issued = formatDay(payload["issued_on"]);
+  const start = formatDay(payload["period_start"]);
+  const end = formatDay(payload["period_end"]);
+  const payment = paymentBlock(payload["payment_details"], reference);
+  const replyTo = usableAddress(payload["issuer_email"]) ?? usableAddress(row.reply_address);
+
+  const subject = `Invoice ${oneLine(reference, 60)} is ${daysWord(days)} overdue`;
+  const details: EmailDetail[] = [
+    { label: "Amount due", value: total },
+    { label: "Reference", value: reference },
+    { label: "Due", value: `${due} (${daysWord(days)} ago)` },
+    ...(start && end ? [{ label: "Period", value: `${start} to ${end}` }] : []),
+    ...(issued ? [{ label: "Issued", value: issued }] : []),
+  ];
+
+  const input: EmailInput = {
+    title: subject,
+    lang: "en-GB",
+    organisation: customer,
+    preheader: `${total} on invoice ${reference}, due on ${due}.`,
+    greeting: greeting(row.recipient_name ?? payload["recipient_name"]),
+    heading: subject,
+    intro: [
+      `Invoice ${reference} for ${total} was due on ${due}, and we have not recorded a payment for it.`,
+      payment
+        ? `Please pay ${total} into the account below, quoting ${reference}.`
+        : `Please pay ${total}. Payment details will follow from our accounts team.`,
+      "If you have paid it in the last few days, thank you — a payment can take a day or two to reach us, and this email crossed it.",
+      ...(attachment ? [`The invoice is attached again as a PDF, ${attachment}.`] : []),
+    ],
+    details,
+    quote: payment,
+    primary: { label: "View your invoice", url: `${origin}${INVOICE_PATH}` },
+    secondary: replyTo
+      ? { label: "Reply about this invoice", url: mailto(replyTo, `Invoice ${reference}`) }
+      : null,
+    note: [
+      `Reply to this email if it has been paid, if you need it sent somewhere else, or if something about it is wrong. ${supplier} would rather hear from you than send another reminder.`,
+    ],
+    reason: `You are receiving this because you are the billing contact or an administrator of ${customer} on Clove ERP.`,
+    mandatory:
+      "This email is about an unpaid invoice, so it is sent whatever your email preferences say.",
+  };
+  return { subject, input };
+}
+
+/* -------------------------------------------------------------------------- */
 /* The one entry point                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -381,9 +466,13 @@ export function composeCommercialEmail(
       ? orderFormInput(row, payload, base, attachment)
       : kind === "contract_invoice"
         ? invoiceInput(row, payload, base, attachment)
-        : null;
+        : kind === "invoice_reminder"
+          ? invoiceReminderInput(row, payload, base, attachment)
+          : null;
   if (shaped === null)
-    throw new CommercialEmailError(`${String(kind)} is not an order form or an invoice`);
+    throw new CommercialEmailError(
+      `${String(kind)} is not an order form, an invoice or a reminder`,
+    );
   const rendered = renderEmail(shaped.input);
   return { subject: shaped.subject, text: rendered.text, html: rendered.html };
 }

@@ -6,6 +6,7 @@ import { TOUCH } from "../erp/page";
 import { Pill } from "../erp/panel";
 import { callErp } from "../../lib/erp";
 import {
+  describeDelivery,
   describeDocument,
   describeSend,
   latestSends,
@@ -68,6 +69,7 @@ export function SendLines({ sends, documentId }: { sends: CommercialSend[]; docu
       {latest.map((s) => {
         const d = describeSend(s);
         const pdf = describeDocument(s);
+        const delivery = describeDelivery(s);
         return (
           <li key={s.id} className="flex flex-col gap-0.5 text-xs">
             <span className="flex flex-wrap items-center gap-1.5">
@@ -76,6 +78,19 @@ export function SendLines({ sends, documentId }: { sends: CommercialSend[]; docu
                 {d.text}
               </span>
             </span>
+            {delivery ? (
+              <span
+                className={`pl-1 ${
+                  delivery.tone === "bad"
+                    ? "text-destructive"
+                    : delivery.tone === "warn"
+                      ? "text-amber-700 dark:text-amber-400"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {delivery.text}
+              </span>
+            ) : null}
             {pdf ? (
               <span className="flex flex-wrap items-center gap-1.5 pl-1">
                 <span

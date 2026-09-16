@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  describeDelivery,
   describeDocument,
   describeSend,
   latestSends,
@@ -160,5 +161,38 @@ describe("the PDF beside a send", () => {
     expect(sizeText(900)).toBe("900 bytes");
     expect(sizeText(26612)).toBe("26 KB");
     expect(sizeText(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+});
+
+describe("what became of a message after it left", () => {
+  test("a message the provider has said nothing about says nothing", () => {
+    expect(describeDelivery(send({ status: "sent" }))).toBeNull();
+    expect(describeDelivery(send({ status: "sent", delivery_state: "  " }))).toBeNull();
+  });
+
+  test("delivered and opened read as good news, with the time", () => {
+    const d = describeDelivery(
+      send({ delivery_state: "delivered", delivery_state_at: "2026-09-14T10:15:00Z" }),
+    );
+    expect(d?.tone).toBe("ok");
+    expect(d?.text).toContain("Delivered at ");
+    expect(describeDelivery(send({ delivery_state: "opened" }))?.text).toBe("Opened");
+  });
+
+  test("a bounce says nothing is tried again, and a complaint says nothing more is sent", () => {
+    const bounced = describeDelivery(
+      send({ delivery_state: "bounced", delivery_detail: "Permanent/Suppressed: no such user" }),
+    );
+    expect(bounced?.tone).toBe("bad");
+    expect(bounced?.text).toContain("Permanent/Suppressed: no such user");
+    expect(bounced?.text).toContain("Nothing is tried again for a bounce.");
+    const complained = describeDelivery(send({ delivery_state: "complained" }));
+    expect(complained?.tone).toBe("bad");
+    expect(complained?.text).toContain("until an operator clears it");
+  });
+
+  test("a state the product does not know yet is shown rather than hidden", () => {
+    expect(describeDelivery(send({ delivery_state: "scheduled" }))?.text).toBe("scheduled");
+    expect(describeDelivery(send({ delivery_state: "delayed" }))?.tone).toBe("warn");
   });
 });

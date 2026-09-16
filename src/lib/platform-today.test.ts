@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { CONSOLE_SECTIONS } from "./platform-console";
 import {
   assuranceCards,
+  emailDeliveryCards,
   enquiryCards,
   healthSummary,
   incidentCards,
@@ -16,6 +17,7 @@ import {
   summariseToday,
   supportWindowCards,
   transferCards,
+  type EmailDeliveryRead,
   type OpenInvoiceRow,
   type RevenueRead,
   type TodayCard,
@@ -171,7 +173,7 @@ describe("renewals and invoices", () => {
     expect(one[0]!.figure).toBe("2");
     expect(one[0]!.tone).toBe("bad");
     expect(one[0]!.sentence).toMatch(
-      /600 from Acme Ltd are past the due date; the oldest is 13 days late\.$/,
+      /600 from Acme Ltd are past the due date; the oldest is 13 days late\. No reminder has gone yet\.$/,
     );
     expect(one[0]!.target).toEqual({ section: "customers", view: "organisations", org: "acme" });
     opensARealTab(one[0]!);
@@ -187,10 +189,83 @@ describe("renewals and invoices", () => {
       }),
     ]);
     expect(two[0]!.sentence).toBe(
-      "2 invoices from Acme Ltd and Bolt plc are past the due date; the oldest is 1 day late.",
+      "2 invoices from Acme Ltd and Bolt plc are past the due date; the oldest is 1 day late." +
+        " No reminder has gone yet.",
     );
     expect(two[0]!.target).toEqual({ section: "sales", view: "contracts" });
     opensARealTab(two[0]!);
+  });
+
+  test("the card says how far the chase has got, when it has got anywhere", () => {
+    const chased = invoiceCards([
+      invoice({
+        overdue: true,
+        days_overdue: 15,
+        reminders_sent: 2,
+        last_reminder_at: "2026-09-12T08:00:00Z",
+      }),
+    ]);
+    expect(chased[0]!.sentence).toContain("2 reminders have gone, the last on 12/09/2026.");
+    const once = invoiceCards([
+      invoice({ overdue: true, days_overdue: 2, reminders_sent: 1, last_reminder_at: null }),
+    ]);
+    expect(once[0]!.sentence).toContain("1 reminder has gone.");
+  });
+});
+
+describe("email the provider could not deliver", () => {
+  const quiet: EmailDeliveryRead = { trouble: [], suppressed: [], recent: {} };
+  const bounce = (over: Partial<EmailDeliveryRead["trouble"][number]> = {}) => ({
+    event_id: "evt-1",
+    state: "bounced",
+    occurred_at: "2026-09-14T10:00:00Z",
+    to_address: "gone@okafor.example",
+    matched: "commercial_email",
+    suppressed: true,
+    ...over,
+  });
+
+  test("silence from the provider is not a card", () => {
+    expect(emailDeliveryCards(quiet)).toEqual([]);
+    expect(
+      emailDeliveryCards({
+        ...quiet,
+        trouble: [bounce({ state: "delivered", suppressed: false })],
+      }),
+    ).toEqual([]);
+  });
+
+  test("a bounce names the address and says nothing is sent to it, and opens the queue", () => {
+    const cards = emailDeliveryCards({
+      trouble: [bounce()],
+      suppressed: [
+        {
+          address: "gone@okafor.example",
+          reason: "hard_bounce",
+          suppressed_at: "2026-09-14T10:00:00Z",
+        },
+      ],
+      recent: { bounced: 1, delivered: 40 },
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.title).toBe("An email bounced");
+    expect(cards[0]!.figure).toBe("1");
+    expect(cards[0]!.sentence).toContain("1 email bounced: gone@okafor.example");
+    expect(cards[0]!.sentence).toContain("1 address is suppressed");
+    expect(cards[0]!.tone).toBe("bad");
+    expect(cards[0]!.target).toEqual({ section: "platform", view: "queue" });
+    opensARealTab(cards[0]!);
+  });
+
+  test("a complaint is louder than a bounce and says so", () => {
+    const cards = emailDeliveryCards({
+      trouble: [bounce({ event_id: "evt-2", state: "complained", to_address: "a@b.test" })],
+      suppressed: [],
+      recent: {},
+    });
+    expect(cards[0]!.title).toBe("An email was marked as spam");
+    expect(cards[0]!.sentence).toContain("1 was marked as spam: a@b.test");
+    expect(cards[0]!.sentence).toContain("No address is suppressed.");
   });
 });
 

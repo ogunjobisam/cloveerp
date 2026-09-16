@@ -1274,6 +1274,10 @@ export type Database = {
         Args: { p_display_name?: string }
         Returns: Json
       }
+      erp_platform_clear_email_suppression: {
+        Args: { p_address: string; p_note?: string }
+        Returns: Json
+      }
       erp_platform_commercial_document: {
         Args: { p_email_id: string }
         Returns: Json
@@ -1350,6 +1354,10 @@ export type Database = {
         Returns: string
       }
       erp_platform_diagnostics: { Args: never; Returns: Json }
+      erp_platform_email_delivery: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       erp_platform_disclosures: { Args: never; Returns: Json }
       erp_platform_enquiries: { Args: { p_limit?: number }; Returns: Json }
       erp_platform_ensure_schedule: {

@@ -320,6 +320,80 @@ describe("an invoice email", () => {
   });
 });
 
+function reminder(over: Record<string, unknown> = {}): ClaimedCommercialEmail {
+  const base = invoice();
+  return {
+    ...base,
+    email_id: "33333333-3333-3333-3333-333333333333",
+    email_kind: "invoice_reminder",
+    send_key: "clove-invoice-reminder-x-2-y",
+    payload: {
+      ...(base.payload as Record<string, unknown>),
+      kind: "invoice_reminder",
+      reminder_number: 2,
+      days_overdue: 8,
+      ...over,
+    },
+  };
+}
+
+describe("a reminder for an unpaid invoice", () => {
+  test("says how late it is in the subject and the heading, and what is owed", () => {
+    const email = composeCommercialEmail(reminder(), ORIGIN);
+    expect(email.subject).toBe("Invoice INV-OKAFOR-202609-001 is 8 days overdue");
+    expect(email.text).toContain("Invoice INV-OKAFOR-202609-001 is 8 days overdue");
+    expect(email.text).toContain(
+      "Invoice INV-OKAFOR-202609-001 for £3,951.00 was due on 28 September 2026, and we have not recorded a payment for it.",
+    );
+    expect(email.text).toContain("Amount due: £3,951.00");
+    expect(email.text).toContain("Due: 28 September 2026 (8 days ago)");
+    expect(email.text).toContain("Period: 14 September 2026 to 14 October 2026");
+  });
+
+  test("is polite about a payment that crossed it, and invites a reply", () => {
+    const email = composeCommercialEmail(reminder(), ORIGIN);
+    expect(email.text).toContain(
+      "If you have paid it in the last few days, thank you — a payment can take a day or two to reach us, and this email crossed it.",
+    );
+    expect(email.text).toContain("Reply to this email if it has been paid");
+    expect(email.text).toContain("mailto:sam@cloveerp.com");
+    expect(email.text).not.toContain("failure");
+    expect(email.text).not.toContain("legal");
+  });
+
+  test("a day is a day, and the payment details are the ones the invoice carried", () => {
+    expect(composeCommercialEmail(reminder({ days_overdue: 1 }), ORIGIN).subject).toBe(
+      "Invoice INV-OKAFOR-202609-001 is a day overdue",
+    );
+    const email = composeCommercialEmail(reminder(), ORIGIN);
+    expect(email.text).toContain("Account name: Example Supplier Ltd");
+    expect(email.text).toContain("Payment reference: INV-OKAFOR-202609-001");
+    const noDetails = composeCommercialEmail(reminder({ payment_details: null }), ORIGIN);
+    expect(noDetails.text).toContain("Payment details will follow from our accounts team.");
+  });
+
+  test("says the invoice is attached again only when it is", () => {
+    const withPdf = composeCommercialEmail(reminder(), ORIGIN, {
+      attachment: "Invoice-INV-OKAFOR-202609-001.pdf",
+    });
+    expect(withPdf.text).toContain(
+      "The invoice is attached again as a PDF, Invoice-INV-OKAFOR-202609-001.pdf.",
+    );
+    expect(composeCommercialEmail(reminder(), ORIGIN).text).not.toContain("PDF");
+  });
+
+  test("a reminder that does not say how overdue the invoice is, or has no total, is refused", () => {
+    for (const broken of [
+      { days_overdue: null },
+      { days_overdue: 0 },
+      { total_minor: null },
+      { due_on: null },
+    ]) {
+      expect(() => composeCommercialEmail(reminder(broken), ORIGIN)).toThrow(CommercialEmailError);
+    }
+  });
+});
+
 describe("the PDF that goes with it", () => {
   test("the email names the attached file only when there is one", () => {
     const withOrderForm = composeCommercialEmail(orderForm(), ORIGIN, {

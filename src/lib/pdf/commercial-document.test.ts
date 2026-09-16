@@ -358,6 +358,31 @@ describe("the invoice as a PDF", () => {
   });
 });
 
+describe("a reminder for an unpaid invoice", () => {
+  test("draws the invoice it chases, to the same bytes, under the invoice's own name", async () => {
+    const invoiceBytes = await renderCommercialDocumentPdf(invoicePayload());
+    const reminderBytes = await renderCommercialDocumentPdf(
+      invoicePayload(2, { kind: "invoice_reminder", reminder_number: 2, days_overdue: 8 }),
+    );
+    expect(await sha256Hex(reminderBytes)).toBe(await sha256Hex(invoiceBytes));
+    const text = (await pageTexts(reminderBytes)).join(" ");
+    expect(text).toContain("Invoice");
+    expect(text).not.toContain("overdue");
+    expect(text).not.toContain("reminder");
+    expect(
+      commercialDocumentFilename(invoicePayload(2, { kind: "invoice_reminder", filename: null })),
+    ).toBe("Invoice-INV-OKAFOR-202609-001.pdf");
+  });
+
+  test("keeps its own copy, under its own kind", () => {
+    const id = "0b5a1e3c-5d6f-4a7b-8c9d-0e1f2a3b4c5d";
+    expect(commercialDocumentPath("invoice_reminder", id)).toBe(
+      `commercial/invoice-reminder/${id}.pdf`,
+    );
+    expect(() => commercialDocumentPath("receipt", id)).toThrow(CommercialDocumentError);
+  });
+});
+
 describe("the file around the document", () => {
   test("is named as the database names it, or as it would", () => {
     expect(commercialDocumentFilename(orderFormPayload())).toBe("Order-form-CQ-000123-v2.pdf");

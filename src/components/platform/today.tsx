@@ -11,6 +11,7 @@ import type {
 } from "../../lib/platform";
 import {
   assuranceCards,
+  emailDeliveryCards,
   enquiryCards,
   healthSummary,
   incidentCards,
@@ -23,6 +24,7 @@ import {
   supportWindowCards,
   transferCards,
   type BillingDetailsRead,
+  type EmailDeliveryRead,
   type EnquiryRow,
   type IncidentRow,
   type RevenueRead,
@@ -97,6 +99,10 @@ export function Today() {
     queryKey: ["erp_platform_open_invoices"],
     queryFn: () => callErp<OpenInvoice[]>("erp_platform_open_invoices"),
   });
+  const delivery = useQuery({
+    queryKey: ["erp_platform_email_delivery"],
+    queryFn: () => callErp<EmailDeliveryRead>("erp_platform_email_delivery", { p_limit: 50 }),
+  });
   const payment = useQuery({
     queryKey: ["erp_platform_billing_details"],
     queryFn: () => callErp<BillingDetailsRead>("erp_platform_billing_details"),
@@ -112,6 +118,7 @@ export function Today() {
     source("assurance", "Checks", assurance, (rows) => assuranceCards(rows ?? [])),
     source("revenue", "Renewals", revenue, (d) => (d ? revenueCards(d) : [])),
     source("invoices", "Invoices", invoices, (rows) => invoiceCards(rows ?? [])),
+    source("delivery", "Email delivery", delivery, (d) => (d ? emailDeliveryCards(d) : [])),
     source("enquiries", "Enquiries", enquiries, (rows) => enquiryCards(rows ?? [], now)),
     source("transfers", "Ownership transfers", transfers, (rows) => transferCards(rows ?? [])),
     source("organisations", "Organisations", tenants, (rows) => organisationCards(rows ?? [])),
