@@ -512,11 +512,6 @@ begin
   detail := format('%s rejected decision(s) in the history', jsonb_array_length(v_hist));
   return next;
 
-  raise exception 'CLOVEERP_SUITE_UNDO';
-  exception when others then
-    if sqlerrm <> 'CLOVEERP_SUITE_UNDO' then raise; end if;
-  end;
-
   -- ── 8. Being allowed is not the same as being alone ──────────────────────
   v_cases := v_cases + 1;
   insert into erp.approval_task (tenant_id, approval_request_id, step_code, seq,
@@ -532,6 +527,11 @@ begin
                    erp.may_approve_own(v_admin, v_doc),
                    erp.sole_approver_asked(v_req, v_admin));
   return next;
+
+  raise exception 'CLOVEERP_SUITE_UNDO';
+  exception when others then
+    if sqlerrm <> 'CLOVEERP_SUITE_UNDO' then raise; end if;
+  end;
 
   -- ── 9. Undone ────────────────────────────────────────────────────────────
   v_cases := v_cases + 1;
