@@ -627,3 +627,63 @@ end
 $hold$;
 
 select erp_test.assert_approval_hold_suite();
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- The other two places the same rule is written
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- Excluding the requester when the tasks are made is only the first of three
+-- guards. The second refuses the approve transition on the document, and the
+-- third refuses the decision on the task. All three said the same thing, so all
+-- three have to ask the same question, or the allowance moves the refusal
+-- rather than lifting it.
+do $guards$
+declare
+  v_doc constant text := 'erp.require_document_approval(uuid, text)';
+  v_task constant text := 'erp.decide_approval_task(uuid, boolean, text)';
+  v_def text;
+  v_needle text;
+  v_new text;
+begin
+  -- (a) The approve transition on the document.
+  v_def := pg_get_functiondef(v_doc::regprocedure);
+  v_needle :=
+       E'  if q.requested_by = erp.current_principal_id()\n'
+    || E'     and erp.tenant_is_live(v_tenant)\n'
+    || E'     and exists (select 1 from erp.approval_task t\n'
+    || E'                  where t.tenant_id = v_tenant and t.approval_request_id = q.id\n'
+    || E'                    and t.status <> ''skipped'') then';
+  if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
+    raise exception 'CLOVEERP_SELF_APPROVAL_GUARD_UNRECOGNISED: the guard in % is not the one this migration adds the allowance to', v_doc;
+  end if;
+  v_new := replace(v_def, v_needle,
+       E'  if q.requested_by = erp.current_principal_id()\n'
+    || E'     and erp.tenant_is_live(v_tenant)\n'
+    || E'     and not erp.may_approve_own(q.requested_by, p_document_id)\n'
+    || E'     and exists (select 1 from erp.approval_task t\n'
+    || E'                  where t.tenant_id = v_tenant and t.approval_request_id = q.id\n'
+    || E'                    and t.status <> ''skipped'') then');
+  execute v_new;
+
+  -- (b) The decision on the task.
+  v_def := pg_get_functiondef(v_task::regprocedure);
+  v_needle :=
+       E'  if p_approve\n'
+    || E'     and v_req.object_type = ''document''\n'
+    || E'     and v_req.requested_by = v_actor\n'
+    || E'     and erp.tenant_is_live(v_tenant) then';
+  if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
+    raise exception 'CLOVEERP_SELF_APPROVAL_GUARD_UNRECOGNISED: the guard in % is not the one this migration adds the allowance to', v_task;
+  end if;
+  v_new := replace(v_def, v_needle,
+       E'  if p_approve\n'
+    || E'     and v_req.object_type = ''document''\n'
+    || E'     and v_req.requested_by = v_actor\n'
+    || E'     and erp.tenant_is_live(v_tenant)\n'
+    || E'     and not erp.may_approve_own(v_req.requested_by, v_req.object_id) then');
+  execute v_new;
+end
+$guards$;
+
+select erp.apply_execute_grants();
+select erp.assert_public_api_safe();
