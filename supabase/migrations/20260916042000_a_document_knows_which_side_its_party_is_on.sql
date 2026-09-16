@@ -43,7 +43,12 @@
 
 -- ── 1. Which role the party is standing in ───────────────────────────────────
 
-create or replace function erp.document_type_party_role_kind(p_document_type_id uuid)
+-- The organisation is a parameter rather than erp.current_tenant_id(), because
+-- the caller already knows it and the two do not always agree: a platform
+-- routine acting in a borrowed organisation, or a job, resolves the current
+-- one differently from the row it is writing.
+create or replace function erp.document_type_party_role_kind(
+  p_tenant_id uuid, p_document_type_id uuid)
 returns erp.party_role_kind
 language sql
 stable
@@ -60,12 +65,12 @@ as $$
          end
     from erp.document_type dt
     join erp_ref.document_type bt on bt.code = dt.base_type_code
-   where dt.tenant_id = erp.current_tenant_id() and dt.id = p_document_type_id;
+   where dt.tenant_id = p_tenant_id and dt.id = p_document_type_id;
 $$;
 
-revoke all on function erp.document_type_party_role_kind(uuid) from public, anon, authenticated;
+revoke all on function erp.document_type_party_role_kind(uuid, uuid) from public, anon, authenticated;
 
-comment on function erp.document_type_party_role_kind(uuid) is
+comment on function erp.document_type_party_role_kind(uuid, uuid) is
   'Which role a document of this type stands its party in — customer for a '
   'sales type, supplier for a procurement one, null for a type that trades '
   'with nobody. Taken from the permission the type requires, so the two '
@@ -74,46 +79,46 @@ comment on function erp.document_type_party_role_kind(uuid) is
 
 -- ── 2. The door names it ─────────────────────────────────────────────────────
 
+-- Anchored on the two shortest pieces of the statement that have to be there —
+-- the column it goes next to, and the value it goes next to. A needle that
+-- quotes whole blocks of a body it did not write is a needle that breaks on
+-- indentation, and the first attempt at this migration did.
 do $door$
 declare
   v_sig  constant text := 'erp.create_document(text, uuid, uuid, uuid, date, character, text, jsonb)';
   v_def  text := pg_get_functiondef(v_sig::regprocedure);
   v_new  text;
-  v_dec  constant text := E'  v_number text;\n  v_id     uuid;\nbegin';
-  v_ins  constant text :=
-    E'  insert into erp.document (\n' ||
-    E'    tenant_id, entity_id, site_id, document_type_id, document_number,\n' ||
-    E'    party_id, document_date, currency, their_reference, attributes)\n' ||
-    E'  values (\n' ||
-    E'    v_tenant, p_entity_id, p_site_id, dt.id, v_number, p_party_id,';
+  v_cols constant text := 'party_id, document_date, currency, their_reference, attributes)';
+  v_vals constant text := 'v_number, p_party_id,';
+  v_at   integer;
 begin
-  if (length(v_def) - length(replace(v_def, v_dec, ''))) / length(v_dec) <> 1 then
-    raise exception 'CLOVEERP_CREATE_DOCUMENT_UNRECOGNISED: the declarations of % are not the ones this migration adds to', v_sig;
+  v_at := position('insert into erp.document' in v_def);
+
+  if (length(v_def) - length(replace(v_def, v_cols, ''))) / length(v_cols) <> 1 then
+    raise exception 'CLOVEERP_CREATE_DOCUMENT_UNRECOGNISED: the columns of the insert in % are not the ones this migration adds to. It reads: %',
+      v_sig, substr(v_def, greatest(v_at, 1), 320);
   end if;
-  if (length(v_def) - length(replace(v_def, v_ins, ''))) / length(v_ins) <> 1 then
-    raise exception 'CLOVEERP_CREATE_DOCUMENT_UNRECOGNISED: the insert in % is not the one this migration adds a column to', v_sig;
+  if (length(v_def) - length(replace(v_def, v_vals, ''))) / length(v_vals) <> 1 then
+    raise exception 'CLOVEERP_CREATE_DOCUMENT_UNRECOGNISED: the values of the insert in % are not the ones this migration adds to. It reads: %',
+      v_sig, substr(v_def, greatest(v_at, 1), 320);
   end if;
 
-  v_new := replace(v_def, v_dec, E'  v_number text;\n  v_id     uuid;\n  v_role   uuid;\nbegin');
+  -- The column, beside the party it belongs with.
+  v_new := replace(v_def, v_cols,
+    'party_id, party_role_id, document_date, currency, their_reference, attributes)');
 
-  v_new := replace(v_new, v_ins,
-    E'  -- Which side of the trade this party is on, named on the document\n' ||
-    E'  -- rather than guessed at by whoever reads it later. Null when the\n' ||
-    E'  -- party does not hold the role the type implies: a document that says\n' ||
-    E'  -- nothing is honest, and one that says the wrong thing is not.\n' ||
-    E'  if p_party_id is not null then\n' ||
-    E'    select pr.id into v_role\n' ||
-    E'      from erp.party_role pr\n' ||
-    E'     where pr.tenant_id = v_tenant and pr.party_id = p_party_id\n' ||
-    E'       and pr.status = ''active''\n' ||
-    E'       and pr.role_kind = erp.document_type_party_role_kind(dt.id);\n' ||
-    E'  end if;\n' ||
-    E'\n' ||
-    E'  insert into erp.document (\n' ||
-    E'    tenant_id, entity_id, site_id, document_type_id, document_number,\n' ||
-    E'    party_id, party_role_id, document_date, currency, their_reference, attributes)\n' ||
-    E'  values (\n' ||
-    E'    v_tenant, p_entity_id, p_site_id, dt.id, v_number, p_party_id, v_role,');
+  -- And the value: a scalar read, so the body needs no new variable and the
+  -- declarations are left exactly as they were. Null party, null role.
+  v_new := replace(v_new, v_vals,
+    E'v_number, p_party_id,\n' ||
+    E'    (select pr.id from erp.party_role pr\n' ||
+    E'      where pr.tenant_id = v_tenant and pr.party_id = p_party_id\n' ||
+    E'        and pr.status = ''active''\n' ||
+    E'        and pr.role_kind = erp.document_type_party_role_kind(v_tenant, dt.id)),');
+
+  if v_new = v_def or position('party_role_id' in v_new) = 0 then
+    raise exception 'CLOVEERP_CREATE_DOCUMENT_UNRECOGNISED: % was not changed by this migration', v_sig;
+  end if;
 
   execute v_new;
 end
