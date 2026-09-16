@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20260916150000  A screen reads what the door returns
+-- 20260916180000  A screen reads what the door returns
 -- -----------------------------------------------------------------------------
 -- A panel declares a door and the names it reads off each row in one breath —
 -- fn: "erp_delivery_performance" and cell: "otif_pct" — and nothing compared
@@ -54,14 +54,27 @@
 --
 --   * returns table (…) or out parameters   → those names;
 --   * returns setof <composite>             → that type's columns;
---   * returns jsonb                         → the jsonb_build_object keys the
---                                             body writes, and where the body
---                                             is to_jsonb(x) or
+--   * returns jsonb                         → the jsonb_build_object key PATHS
+--                                             the body writes, and where the
+--                                             body is to_jsonb(x) or
 --                                             jsonb_agg(to_jsonb(x)) over an
 --                                             erp.* function or view, that
 --                                             function's or view's own columns;
 --   * a door that is nothing but a call to one routine takes that routine's
 --     shape.
+--
+-- A door's answer is not always flat, so a key is a PATH.
+-- public.erp_settlement_statement() answers with one object whose 'lines' key
+-- holds an array of objects, each of whose 'candidates' key holds another;
+-- public.erp_analytics_contract() answers with 'views', 'credentials' and
+-- 'findings', three arrays of different shapes. A picker renders one of them —
+-- options: { path: "lines", value: "line_id" } — and line_id is a name of a
+-- lines element, not of the answer. So the walk reports 'lines',
+-- 'lines.line_id', 'lines.candidates', 'lines.candidates.subledger_item_id',
+-- and the harvest asks under the path the declaration names. Union-ing every
+-- nested key into one flat set would have been less work and would have said
+-- that a picker on 'credentials' may read 'module_code', which belongs to
+-- 'views' — the very class of defect this check exists to refuse.
 --
 -- Then, per pair:
 --
@@ -84,7 +97,7 @@
 -- are registered below, and every one of them is a door that cannot answer the
 -- question the screen is asking, not a name that needed correcting.
 --
--- Proof: erp_test.app_column_suite() (8 cases, wrapper pinned) and the build
+-- Proof: erp_test.app_column_suite() (9 cases, wrapper pinned) and the build
 -- step "Every column a screen reads is one its door returns".
 -- =============================================================================
 
@@ -94,7 +107,7 @@
 
 create table if not exists erp_meta.app_column_allowance (
   door          text not null check (door ~ '^erp_[a-z0-9_]+$'),
-  column_name   text not null check (column_name ~ '^[a-z][a-z0-9_]*$'),
+  column_name   text not null check (column_name ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$'),
   reason        text not null check (length(btrim(reason)) >= 40),
   registered_at timestamptz not null default now(),
   primary key (door, column_name)
@@ -143,14 +156,29 @@ insert into erp_meta.app_column_allowance (door, column_name, reason) values
 on conflict (door, column_name) do update set reason = excluded.reason;
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 2. Reading the keys a body builds
+-- 2. Reading the key paths a body builds
 -- ═════════════════════════════════════════════════════════════════════════════
 
 -- Most read doors answer with jsonb_build_object('a', x, 'b', y). The keys are
 -- at the call's own level and in even positions; a literal in an argument's
--- expression, or in a nested build, is not one of this object's keys. A regular
--- expression cannot tell those apart across nested parentheses, so this walks.
-create or replace function erp.jsonb_object_keys_in(p_code text)
+-- expression is not a key. A regular expression cannot tell those apart across
+-- nested parentheses, so this walks.
+--
+-- And a door's answer is not always flat. public.erp_settlement_statement()
+-- answers with one object whose 'lines' key holds an array of objects, each of
+-- whose 'candidates' key holds another; public.erp_analytics_contract() answers
+-- with 'views', 'credentials' and 'findings', three arrays of different shapes.
+-- A picker renders ONE of those arrays — options: { path: "lines", value:
+-- "line_id" } — and line_id is a name of a lines element, not of the answer.
+--
+-- So a key is reported as a path: 'lines', then 'lines.line_id',
+-- 'lines.candidates', 'lines.candidates.subledger_item_id'. Union-ing them all
+-- into one flat set would have been less work and would have said that a picker
+-- on 'credentials' may read 'module_code', which belongs to 'views' — which is
+-- the very class of defect this check exists to refuse. A key's own value is
+-- walked for the nested build it holds, which is what makes the path right.
+create or replace function erp.jsonb_object_paths(
+  p_fragment text, p_prefix text default '', p_depth integer default 0)
 returns text[]
 language plpgsql
 immutable
@@ -158,72 +186,110 @@ set search_path = ''
 as $$
 declare
   c_call constant text := 'jsonb_build_object';
-  v_keys text[] := '{}';
-  v_n    integer := length(coalesce(p_code, ''));
+  v_out  text[] := '{}';
+  v_n    integer := length(coalesce(p_fragment, ''));
   v_i    integer := 1;
   v_at   integer;
+  v_j    integer;
   v_depth integer;
   v_arg  integer;
-  v_start integer;
+  v_from integer;
+  v_key  text;
   v_c    text;
   v_lit  text;
+  v_slice text;
 begin
+  -- 'lines.candidates.subledger_item_id' is the deepest anything reads.
+  if p_depth > 3 then
+    return v_out;
+  end if;
+
   loop
-    v_at := position(c_call in substr(p_code, v_i));
+    v_at := position(c_call in substr(p_fragment, v_i));
     exit when v_at = 0;
-    v_i := v_i + v_at - 1 + length(c_call);
-    while v_i <= v_n and substr(p_code, v_i, 1) ~ '\s' loop
-      v_i := v_i + 1;
+    v_j := v_i + v_at - 1 + length(c_call);
+    -- The default resumption: just past the name, so a call this one is not is
+    -- still found. When the call is walked, resumption moves past its close, so
+    -- a nested build is reached by the recursion and not a second time here.
+    v_i := v_j;
+    while v_j <= v_n and substr(p_fragment, v_j, 1) ~ '\s' loop
+      v_j := v_j + 1;
     end loop;
-    continue when v_i > v_n or substr(p_code, v_i, 1) <> '(';
+    continue when v_j > v_n or substr(p_fragment, v_j, 1) <> '(';
 
     v_depth := 0;
     v_arg := 0;
-    while v_i <= v_n loop
-      v_c := substr(p_code, v_i, 1);
+    v_key := null;
+    v_from := v_j + 1;
+    while v_j <= v_n loop
+      v_c := substr(p_fragment, v_j, 1);
       if v_c = '''' then
-        -- A literal, with '' for an embedded quote.
-        v_start := v_i + 1;
-        v_i := v_i + 1;
-        while v_i <= v_n loop
-          if substr(p_code, v_i, 1) = '''' then
-            exit when substr(p_code, v_i + 1, 1) <> '''';
-            v_i := v_i + 2;
+        -- A literal, with '' for an embedded quote. Stepped over whole, so a
+        -- comma or a bracket inside it is not punctuation.
+        v_j := v_j + 1;
+        while v_j <= v_n loop
+          if substr(p_fragment, v_j, 1) = '''' then
+            exit when substr(p_fragment, v_j + 1, 1) <> '''';
+            v_j := v_j + 2;
             continue;
           end if;
-          v_i := v_i + 1;
+          v_j := v_j + 1;
         end loop;
-        if v_depth = 1 and v_arg % 2 = 0 then
-          v_lit := replace(substr(p_code, v_start, v_i - v_start), '''''', '''');
-          if v_lit ~ '^[a-z][a-z0-9_]*$' and not (v_lit = any(v_keys)) then
-            v_keys := v_keys || v_lit;
-          end if;
-        end if;
-        v_i := v_i + 1;
+        v_j := v_j + 1;
         continue;
       end if;
+
+      v_slice := null;
       if v_c = '(' or v_c = '[' then
         v_depth := v_depth + 1;
+        if v_depth = 1 then
+          v_from := v_j + 1;
+        end if;
       elsif v_c = ')' or v_c = ']' then
         v_depth := v_depth - 1;
-        exit when v_depth = 0;
+        if v_depth = 0 then
+          v_slice := substr(p_fragment, v_from, v_j - v_from);
+        end if;
       elsif v_c = ',' and v_depth = 1 then
-        v_arg := v_arg + 1;
+        v_slice := substr(p_fragment, v_from, v_j - v_from);
       end if;
-      v_i := v_i + 1;
+
+      if v_slice is not null then
+        if v_arg % 2 = 0 then
+          -- An even argument is this object's key.
+          v_lit := substring(v_slice from '^\s*''([a-z][a-z0-9_]*)''(?:::[a-z]+)?\s*$');
+          v_key := v_lit;
+          if v_lit is not null and not (p_prefix || v_lit = any(v_out)) then
+            v_out := v_out || (p_prefix || v_lit);
+          end if;
+        elsif v_key is not null then
+          -- The odd argument is that key's value: whatever it builds is that
+          -- key's own shape.
+          v_out := v_out || erp.jsonb_object_paths(v_slice, p_prefix || v_key || '.', p_depth + 1);
+        end if;
+        if v_depth = 0 then
+          exit;
+        end if;
+        v_arg := v_arg + 1;
+        v_from := v_j + 1;
+      end if;
+      v_j := v_j + 1;
     end loop;
-    v_i := v_i + 1;
+    v_i := v_j + 1;
   end loop;
-  return v_keys;
+
+  return (select coalesce(array_agg(distinct c order by c), '{}'::text[]) from unnest(v_out) c);
 end;
 $$;
-revoke all on function erp.jsonb_object_keys_in(text) from public, anon, authenticated;
+revoke all on function erp.jsonb_object_paths(text, text, integer) from public, anon, authenticated;
 
-comment on function erp.jsonb_object_keys_in(text) is
-  'The keys every jsonb_build_object() in a function body writes, read by '
-  'walking the call rather than by regular expression, so a literal in an '
-  'argument or in a nested build is not mistaken for a key of the object. '
-  'Hand it erp.prosrc_code(prosrc): a key written in a comment is not a key.';
+comment on function erp.jsonb_object_paths(text, text, integer) is
+  'Every key path a function body builds with jsonb_build_object(), read by '
+  'walking the call rather than by regular expression: a top-level key as '
+  'itself, and the keys of a nested build under the key whose value holds it, '
+  'so a picker that renders one array of the answer is judged against that '
+  'array. Hand it erp.prosrc_code(prosrc): a key written in a comment is not a '
+  'key.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 3. What a routine or a relation produces
@@ -305,8 +371,8 @@ begin
     return v_cols;
   end if;
 
-  -- returns jsonb: the keys the body writes, plus whatever it wraps whole.
-  v_cols := erp.jsonb_object_keys_in(v_code);
+  -- returns jsonb: the key paths the body writes, plus whatever it wraps whole.
+  v_cols := erp.jsonb_object_paths(v_code);
 
   for r in
     select m[1] as al
@@ -352,9 +418,10 @@ revoke all on function erp.routine_output_columns(text, text, integer) from publ
 comment on function erp.routine_output_columns(text, text, integer) is
   'Every column name a relation or routine can put in front of a caller, read '
   'from the built database: TABLE parameters, out parameters, a composite '
-  'return type''s columns, or — for a jsonb door — the keys its body builds and '
-  'the columns of whatever it wraps with to_jsonb(). null means it is not a row '
-  'source; an empty array means it answers with json this cannot name.';
+  'return type''s columns, or — for a jsonb door — the key paths its body '
+  'builds (a nested array''s keys under the key that holds it) and the columns '
+  'of whatever it wraps with to_jsonb(). null means it is not a row source; an '
+  'empty array means it answers with json this cannot name.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 4. The judge
@@ -594,7 +661,35 @@ begin
   detail := left(coalesce(v_msg, 'no verdict'), 160);
   return next;
 
-  -- 8. Every registered pair is still one its door cannot answer.
+  -- 8b. A nested array is read under its own path, and a name of one array is
+  -- not a name of another in the same answer. This is the property that makes
+  -- the path walk worth its length: flattening would pass all four of these.
+  case_name := 'a nested array''s names are read under its own path, and not under another array''s';
+  v_msg := erp.assert_app_columns_exist(array[
+    'erp_settlement_statement|lines.line_id',
+    'erp_settlement_statement|lines.candidates.subledger_item_id',
+    'erp_analytics_contract|views.module_code']);
+  v_ok := v_msg like '%3 are names the door returns%';
+  begin
+    -- module_code belongs to views, not to credentials.
+    perform erp.assert_app_columns_exist(array['erp_analytics_contract|credentials.module_code']);
+    v_ok := false;
+  exception when others then
+    v_ok := v_ok and sqlerrm like 'CLOVEERP_APP_COLUMN_DEAD%'
+        and sqlerrm like '%credentials.module_code%';
+  end;
+  begin
+    -- and line_id is a name of a statement's line, not of the statement.
+    perform erp.assert_app_columns_exist(array['erp_settlement_statement|line_id']);
+    v_ok := false;
+  exception when others then
+    v_ok := v_ok and sqlerrm like 'CLOVEERP_APP_COLUMN_DEAD%';
+  end;
+  passed := v_ok;
+  detail := v_msg;
+  return next;
+
+  -- 9. Every registered pair is still one its door cannot answer.
   case_name := 'every pair in the register is still a pair its door cannot answer';
   select count(*), count(*) filter (where r.verdict <> 'allowed')
     into v_registered, v_answerable
@@ -615,7 +710,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 8;
+  c_expected constant integer := 9;
   v_total  integer;
   v_passed integer;
   v_detail text;

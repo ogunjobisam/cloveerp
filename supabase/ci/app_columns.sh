@@ -38,6 +38,17 @@
 # door's, and is not a declaration of that door's shape; only a declaration that
 # says how a row is shown rebinds what r means.
 #
+# A door's answer is not always flat, and a declaration says which part of it it
+# renders. public.erp_settlement_statement() answers with one object whose
+# `lines` key holds an array of objects, each of whose `candidates` key holds
+# another; erp_analytics_contract answers with `views`, `credentials` and
+# `findings`, three arrays of different shapes. A picker names the one it
+# renders — options: { path: "lines", value: "line_id" }, and `within` goes one
+# further — so line_id is harvested as `lines.line_id`, not as `line_id`, and
+# the database is asked for the key path rather than the key. Flattening the
+# answer instead would have said a picker on `credentials` may read
+# `module_code`, which belongs to `views`: the very thing this refuses.
+#
 # Usage: supabase/ci/app_columns.sh [src-dir]   (default: src beside this repo)
 # Reads PSQL from the environment like run_checks.sh. Prints the count.
 set -euo pipefail
@@ -190,6 +201,15 @@ FN_KV = re.compile(r'(?<![\w$.?])fn\s*:\s*"((?:[^"\\]|\\.)*)"')
 FN_IDENT = re.compile(r'(?<![\w$.?])fn\s*:\s*([A-Za-z_$][\w$]*)(?![\w$(])')
 # On the declaration's own level: one name.
 KEY_STR = re.compile(r'(?<![\w$.?])(id|status|value|path)\s*:\s*"([a-z][a-z0-9_]*)"')
+# Which list inside the answer a picker renders. A door that answers with an
+# object of several arrays is read one array at a time, and the names in that
+# declaration are the ARRAY ELEMENT's, not the answer's: path: "lines" with
+# value: "line_id" reads lines[].line_id. `within` goes one further — the
+# candidates of the line chosen above — so its key is a name of the outer
+# element and everything else is a name of the inner one.
+PATH_KEY = re.compile(r'(?<![\w$.?])path\s*:\s*"([a-z][a-z0-9_]*)"')
+WITHIN_KEY = re.compile(r'(?<![\w$.?])within\s*:\s*\{')
+IN_WITHIN = re.compile(r'(?<![\w$.?])(key|path)\s*:\s*"([a-z][a-z0-9_]*)"')
 # On the declaration's own level: a list of names. depth1_text blanks what is
 # inside the brackets, so the key is found there and the list read from source.
 KEY_LIST = re.compile(r'(?<![\w$.?])(title|subtitle|label)\s*:\s*\[')
@@ -240,6 +260,40 @@ def harvest(src, kind, rel, consts, out, unread):
             j += 1
         arrays[m.group(1)] = (o, j)
 
+    def balanced_brace(o):
+        d, j = 0, o
+        while j < n:
+            if kind[j] == "c":
+                if src[j] == "{":
+                    d += 1
+                elif src[j] == "}":
+                    d -= 1
+                    if d == 0:
+                        return j
+            j += 1
+        return n
+
+    def reads_under(text, base):
+        """What this declaration's names are names OF: '' for the answer itself,
+        'lines.' for an element of its lines array, 'lines.candidates.' for an
+        element of that element's candidates. Returns the prefix and the names
+        the path declaration itself reads."""
+        pm = PATH_KEY.search(text)
+        if not pm or kind[base + pm.start()] != "c":
+            return "", []
+        outer, extra = pm.group(1), [pm.group(1)]
+        wm = WITHIN_KEY.search(text)
+        if not wm or kind[base + wm.start()] != "c":
+            return outer + ".", extra
+        o = src.index("{", base + wm.end() - 1)
+        inner = {m.group(1): m.group(2) for m in IN_WITHIN.finditer(src, o, balanced_brace(o))}
+        if "key" in inner:
+            extra.append(outer + "." + inner["key"])
+        if "path" not in inner:
+            return outer + ".", extra
+        extra.append(outer + "." + inner["path"])
+        return outer + "." + inner["path"] + ".", extra
+
     # 1. every declaration that names a door and says how its rows are shown
     scopes = []
     stack = []
@@ -260,7 +314,10 @@ def harvest(src, kind, rel, consts, out, unread):
                 if m2 and kind[start + 1 + m2.start()] == "c" and m2.group(1) in consts:
                     door = consts[m2.group(1)]
             if door and DOOR_RE.match(door) and READING.search(text):
-                scopes.append((start, i, door))
+                prefix, extra = reads_under(text, start + 1)
+                scopes.append((start, i, door, prefix))
+                for name in extra:
+                    out.add((door, name, f"{rel}:{line_of(start)}"))
 
     for m in TAG_RE.finditer(src):
         if kind[m.start()] != "c":
@@ -296,18 +353,20 @@ def harvest(src, kind, rel, consts, out, unread):
         am = re.search(r'(?<![\w$.\-])fn=\s*"(erp_[a-z0-9_]+)"', tag)
         attrs = "".join(tag[k] if depths.get(start + k, 1) == 0 else " " for k in range(len(tag)))
         if am and depths.get(start + am.start(), 1) == 0 and READING.search(attrs):
-            scopes.append((start, i, am.group(1)))
+            # A JSX declaration never names a sub-array: path is an object key
+            # on a picker's options, and no tag carries one.
+            scopes.append((start, i, am.group(1), ""))
 
     if not scopes:
         return
 
     # A declaration that names a const array of columns reads that array too.
-    for (s, e, door) in list(scopes):
+    for (s, e, door, prefix) in list(scopes):
         region = depth1_text(src, kind, s, e) if src[s] == "{" else src[s:e]
         for m in COLUMNS_CONST.finditer(region):
             span = arrays.get(m.group(1))
             if span:
-                scopes.append((span[0], span[1], door))
+                scopes.append((span[0], span[1], door, prefix))
 
     def owner(off):
         """The innermost declaration holding this offset."""
@@ -318,17 +377,21 @@ def harvest(src, kind, rel, consts, out, unread):
         return best
 
     def add(door, name, at):
-        if NAME_RE.match(name):
+        if NAME_RE.match(name.split(".")[-1]):
             out.add((door, name, f"{rel}:{at}"))
 
     # 2. the declaration's own level
-    for (start, end, door) in scopes:
+    for (start, end, door, prefix) in scopes:
         text = depth1_text(src, kind, start, end)
         base = start + 1
         for m in KEY_STR.finditer(text):
             if kind[base + m.start()] != "c":
                 continue
-            add(door, m.group(2), line_of(base + m.start()))
+            # `path` names a key of the answer itself; reads_under has already
+            # recorded it, and prefixing it would read it as its own child.
+            if m.group(1) == "path":
+                continue
+            add(door, prefix + m.group(2), line_of(base + m.start()))
         for m in KEY_LIST.finditer(text):
             if kind[base + m.start()] != "c":
                 continue
@@ -344,7 +407,7 @@ def harvest(src, kind, rel, consts, out, unread):
                 j += 1
             for s in STR_IN_LIST.finditer(src, o, j):
                 if kind[s.start()] == "s":
-                    add(door, s.group(1), line_of(s.start()))
+                    add(door, prefix + s.group(1), line_of(s.start()))
 
     # 3. anywhere inside a declaration
     for pattern, groups in ((CELL_STR, (1,)), (HELPER_1, (1,)), (HELPER_2, (1,)),
@@ -362,7 +425,7 @@ def harvest(src, kind, rel, consts, out, unread):
                 continue
             for g in groups:
                 if m.group(g):
-                    add(o[2], m.group(g), line_of(m.start()))
+                    add(o[2], o[3] + m.group(g), line_of(m.start()))
 
 
 out, unread = set(), []
