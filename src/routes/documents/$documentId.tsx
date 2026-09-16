@@ -214,6 +214,14 @@ function Document() {
           customer receives, through the numbered issue path. */}
       {doc.document_type === "sales_invoice" ? <InvoiceIssue documentId={documentId} /> : null}
 
+      {/* What the supplier charged is a fact on their paperwork, not something
+          to work out from our own rules, so it is typed in from their invoice.
+          Offered on a purchase invoice before it is registered, which is when
+          erp.state_supplier_tax accepts it. */}
+      {doc.document_type === "purchase_invoice" && !doc.is_committed ? (
+        <SupplierTax documentId={documentId} currency={doc.currency} minorUnits={minorUnits} />
+      ) : null}
+
       <Lines
         documentId={documentId}
         lines={data.lines}
@@ -742,6 +750,65 @@ function LineagePanel({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** The tax a supplier's invoice states, typed in from the invoice itself. */
+function SupplierTax({
+  documentId,
+  currency,
+  minorUnits,
+}: {
+  documentId: string;
+  currency: string;
+  minorUnits: number;
+}) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Tax the supplier charged</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            Taken from the supplier's invoice, not worked out here: what they charged is their
+            decision under their own obligations. Spread across the lines by what each is worth, at
+            the rate on their invoice.
+          </Prose>
+        </div>
+
+        <ActionDialog
+          trigger={<ActionButton>State their tax</ActionButton>}
+          title="State the tax the supplier charged"
+          description="The figure on their invoice. Leave it at nothing if they charged none."
+          fn="erp_state_supplier_tax"
+          fields={[
+            { kind: "money", name: "p_tax_minor", label: "Tax charged", currency, required: true },
+            {
+              kind: "text",
+              name: "p_tax_code",
+              label: "Tax code",
+              placeholder: "S",
+              hint: "The code on their invoice. S is the standard rate.",
+            },
+            {
+              kind: "text",
+              name: "p_note",
+              label: "Note",
+              placeholder: "Their invoice number",
+              hint: "Optional. Kept with the determination so the figure can be traced back.",
+            },
+          ]}
+          mapArgs={(v) => ({
+            p_document_id: documentId,
+            // The document's own exponent, not GBP's: a zero-decimal currency
+            // would otherwise store a hundred times what was typed.
+            p_tax_minor: toMinor((v["p_tax_minor"] ?? "") as string, minorUnits),
+            p_tax_code: (v["p_tax_code"] as string) || "S",
+            p_note: (v["p_note"] as string) || null,
+          })}
+          invalidates={["erp_document", "erp_documents"]}
+        />
+      </header>
     </section>
   );
 }
