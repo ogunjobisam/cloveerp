@@ -314,7 +314,7 @@ declare
   v_tenant uuid; v_admin uuid; v_token text;
   v_entity uuid; v_site uuid;
   v_mgr uuid; v_named uuid; v_band uuid;
-  v_dept uuid; v_ver uuid; v_req uuid;
+  v_dept uuid; v_chain uuid; v_ver uuid; v_req uuid;
   v_role uuid;
   v_step_role uuid; v_step_mgr uuid; v_step_named uuid; v_step_band uuid;
   v_who uuid; v_n integer;
@@ -348,11 +348,16 @@ begin
   insert into erp.principal_department (tenant_id, app_user_id, department_id, is_primary, status)
   values (v_tenant, v_admin, v_dept, true, 'active');
 
-  -- A chain version to hang steps on, and a request that names the raiser.
-  select v.id into v_ver
-    from erp.approval_chain_version v
-    join erp.approval_chain c on c.tenant_id = v.tenant_id and c.id = v.approval_chain_id
-   where v.tenant_id = v_tenant order by c.code, v.id limit 1;
+  -- A chain of the suite's own, left in draft. A version that has been in
+  -- force refuses a new step by design (CLOVEERP_APPROVAL_CHAIN_IN_FORCE),
+  -- and borrowing the demonstration's would have been testing the guard.
+  insert into erp.approval_chain (tenant_id, code, name, object_type, entity_id, status)
+  values (v_tenant, 'zz_step_source', 'Step source suite', 'document', v_entity, 'active')
+  returning id into v_chain;
+  insert into erp.approval_chain_version (tenant_id, approval_chain_id, version,
+                                          status, effective_from, value_field)
+  values (v_tenant, v_chain, 1, 'draft', current_date, 'total_minor')
+  returning id into v_ver;
 
   insert into erp.approval_request (
     tenant_id, object_type, object_id, entity_id, site_id,
@@ -370,7 +375,7 @@ begin
   v_cases := v_cases + 1;
   insert into erp.approval_step (tenant_id, approval_chain_version_id, seq, code,
                                  name, approver_kind, role_id)
-  values (v_tenant, v_ver, 91, 'zz_role', 'By role', 'role', v_role)
+  values (v_tenant, v_ver, 1, 'zz_role', 'By role', 'role', v_role)
   returning id into v_step_role;
   select count(*) into v_n
     from erp.step_approvers(v_step_role, 'document', v_entity, v_site, v_req);
@@ -383,7 +388,7 @@ begin
   v_cases := v_cases + 1;
   insert into erp.approval_step (tenant_id, approval_chain_version_id, seq, code,
                                  name, approver_kind, approver_source)
-  values (v_tenant, v_ver, 92, 'zz_mgr', 'By line manager', 'role', 'line_manager')
+  values (v_tenant, v_ver, 2, 'zz_mgr', 'By line manager', 'role', 'line_manager')
   returning id into v_step_mgr;
   select a.app_user_id into v_who
     from erp.step_approvers(v_step_mgr, 'document', v_entity, v_site, v_req) a limit 1;
@@ -397,7 +402,7 @@ begin
   perform erp.assign_named_approver('principal', v_admin, 'document', v_named);
   insert into erp.approval_step (tenant_id, approval_chain_version_id, seq, code,
                                  name, approver_kind, approver_source)
-  values (v_tenant, v_ver, 93, 'zz_named', 'By named assignment', 'role', 'named_assignment')
+  values (v_tenant, v_ver, 3, 'zz_named', 'By named assignment', 'role', 'named_assignment')
   returning id into v_step_named;
   select a.app_user_id into v_who
     from erp.step_approvers(v_step_named, 'document', v_entity, v_site, v_req) a limit 1;
@@ -411,7 +416,7 @@ begin
   perform erp.upsert_approval_band(v_dept, 'document', 1, null, 0, v_band);
   insert into erp.approval_step (tenant_id, approval_chain_version_id, seq, code,
                                  name, approver_kind, approver_source)
-  values (v_tenant, v_ver, 94, 'zz_band', 'By department band', 'role', 'department_band')
+  values (v_tenant, v_ver, 4, 'zz_band', 'By department band', 'role', 'department_band')
   returning id into v_step_band;
   select count(*) into v_n
     from erp.step_approvers(v_step_band, 'document', v_entity, v_site, v_req) a
@@ -435,7 +440,7 @@ begin
   begin
     insert into erp.approval_step (tenant_id, approval_chain_version_id, seq, code,
                                    name, approver_kind, role_id, approver_source)
-    values (v_tenant, v_ver, 95, 'zz_both', 'Both at once', 'role', v_role, 'line_manager');
+    values (v_tenant, v_ver, 5, 'zz_both', 'Both at once', 'role', v_role, 'line_manager');
     v_ok := false; v_msg := 'it was accepted';
   exception when others then
     v_ok := true; v_msg := left(sqlerrm, 80);
