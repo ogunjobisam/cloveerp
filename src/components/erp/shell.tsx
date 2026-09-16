@@ -22,6 +22,7 @@ import {
 } from "../../lib/modules";
 import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
+import { ApprovalsWaitingBadge } from "./approvals-waiting";
 import { CommandPalette } from "./command-palette";
 import { MainMenu } from "./menu";
 import { ServiceBanner } from "./service-banner";
@@ -540,6 +541,11 @@ export function Shell({
               <span className="min-w-0 flex-1 truncate text-sm font-medium md:hidden">
                 {session.tenant?.name ?? "No tenant"}
               </span>
+
+              {/* What is waiting on this person, wherever they are. Renders
+                  nothing at all when nothing is, so an ordinary header is the
+                  header it always was. */}
+              <ApprovalsWaitingBadge />
 
               <div className="ml-auto flex shrink-0 items-center rounded-md border border-input md:hidden">
                 <CommandPalette />

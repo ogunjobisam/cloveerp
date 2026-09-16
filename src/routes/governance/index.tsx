@@ -188,7 +188,7 @@ function Governance() {
         title="My approvals"
         description="Tasks assigned to you, directly or through a role you hold."
         fn="erp_my_approvals"
-        empty="Nothing is waiting on you. Requests appear here when an approval band routes one to you."
+        empty="Nothing is waiting on you. When somebody needs your approval for something, it appears here for you to approve or reject."
         rowKey={(r) => String(r["task_id"])}
         highlight={task ?? null}
         columns={[
@@ -233,6 +233,61 @@ function Governance() {
                 />
               </span>
             ),
+          },
+        ]}
+      />
+
+      {/*
+        What happened to everything else.
+
+        "Is it approved yet?" and "who approved that?" were answerable only on
+        the administrator's organisation screen, which an approver has no
+        reason to open and may not be allowed to. The same door is read here,
+        beside the tasks it becomes history of, so the two halves of one
+        question sit on one screen.
+
+        It is the routing record: each step of each approval, the person it
+        went to, and the person it would have gone to had nobody been covering
+        for them. What was decided is kept against the record itself, so the
+        subject links to it — a document page says "Approved by …" for every
+        step of its own approval.
+
+        The door asks for the audit permission and the panel says so plainly
+        when the account does not hold it. That is deliberate: an approver who
+        cannot read the history should be told the history exists, not shown a
+        screen that pretends it does not.
+      */}
+      <AutoPanel
+        title="Approval history"
+        description="Every approval that has been raised, and each step of it: what it was for, who asked, and who it went to. Open the record to see what was decided."
+        fn="erp_approval_audit"
+        args={{ p_limit: 50 }}
+        empty="Nothing has been through approval yet. Once something has, every step of it is kept here — what it was for, who asked, and who it went to."
+        rowKey={(r) => `${String(r["stamp_id"])}-${String(r["seq"])}`}
+        columns={[
+          { header: "When", cell: (r) => shortDate(r["resolved_at"]) },
+          {
+            header: "Approving",
+            cell: (r) =>
+              r["object_type"] === "document" && typeof r["object_id"] === "string" ? (
+                <Link
+                  to="/documents/$documentId"
+                  params={{ documentId: r["object_id"] }}
+                  className="underline underline-offset-2"
+                >
+                  {approvalSubject(r)}
+                </Link>
+              ) : (
+                approvalSubject(r)
+              ),
+          },
+          { header: "Value", cell: moneyCell("value_minor", "currency"), numeric: true },
+          { header: "Requested by", cell: "requester" },
+          { header: "Step", cell: "seq", numeric: true },
+          { header: "Went to", cell: "approver" },
+          {
+            header: "Covering for",
+            cell: (r) => (r["covered"] === true ? String(r["approver_of_record"] ?? "—") : "—"),
           },
         ]}
       />
