@@ -81,10 +81,10 @@ declare
   v_new  text;
   v_dec  constant text := E'  v_number text;\n  v_id     uuid;\nbegin';
   v_ins  constant text :=
-    E'  insert into erp.document (\n'
-    E'    tenant_id, entity_id, site_id, document_type_id, document_number,\n'
-    E'    party_id, document_date, currency, their_reference, attributes)\n'
-    E'  values (\n'
+    E'  insert into erp.document (\n' ||
+    E'    tenant_id, entity_id, site_id, document_type_id, document_number,\n' ||
+    E'    party_id, document_date, currency, their_reference, attributes)\n' ||
+    E'  values (\n' ||
     E'    v_tenant, p_entity_id, p_site_id, dt.id, v_number, p_party_id,';
 begin
   if (length(v_def) - length(replace(v_def, v_dec, ''))) / length(v_dec) <> 1 then
@@ -97,22 +97,22 @@ begin
   v_new := replace(v_def, v_dec, E'  v_number text;\n  v_id     uuid;\n  v_role   uuid;\nbegin');
 
   v_new := replace(v_new, v_ins,
-    E'  -- Which side of the trade this party is on, named on the document\n'
-    E'  -- rather than guessed at by whoever reads it later. Null when the\n'
-    E'  -- party does not hold the role the type implies: a document that says\n'
-    E'  -- nothing is honest, and one that says the wrong thing is not.\n'
-    E'  if p_party_id is not null then\n'
-    E'    select pr.id into v_role\n'
-    E'      from erp.party_role pr\n'
-    E'     where pr.tenant_id = v_tenant and pr.party_id = p_party_id\n'
-    E'       and pr.status = ''active''\n'
-    E'       and pr.role_kind = erp.document_type_party_role_kind(dt.id);\n'
-    E'  end if;\n'
-    E'\n'
-    E'  insert into erp.document (\n'
-    E'    tenant_id, entity_id, site_id, document_type_id, document_number,\n'
-    E'    party_id, party_role_id, document_date, currency, their_reference, attributes)\n'
-    E'  values (\n'
+    E'  -- Which side of the trade this party is on, named on the document\n' ||
+    E'  -- rather than guessed at by whoever reads it later. Null when the\n' ||
+    E'  -- party does not hold the role the type implies: a document that says\n' ||
+    E'  -- nothing is honest, and one that says the wrong thing is not.\n' ||
+    E'  if p_party_id is not null then\n' ||
+    E'    select pr.id into v_role\n' ||
+    E'      from erp.party_role pr\n' ||
+    E'     where pr.tenant_id = v_tenant and pr.party_id = p_party_id\n' ||
+    E'       and pr.status = ''active''\n' ||
+    E'       and pr.role_kind = erp.document_type_party_role_kind(dt.id);\n' ||
+    E'  end if;\n' ||
+    E'\n' ||
+    E'  insert into erp.document (\n' ||
+    E'    tenant_id, entity_id, site_id, document_type_id, document_number,\n' ||
+    E'    party_id, party_role_id, document_date, currency, their_reference, attributes)\n' ||
+    E'  values (\n' ||
     E'    v_tenant, p_entity_id, p_site_id, dt.id, v_number, p_party_id, v_role,');
 
   execute v_new;
