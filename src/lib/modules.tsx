@@ -1044,12 +1044,21 @@ export const INVENTORY: ModuleDef = {
       compute: (rows) => ({ value: String(rows.length), hint: "product and site positions" }),
     },
     {
-      label: "Below cover",
+      // erp.stock_health_report() answers with a finding in words — "negative
+      // on hand", "committed beyond what is on hand", "expiring within thirty
+      // days", "never moved", "no movement in six months", "healthy". This
+      // used to match "short", "below" and "critical" against a column called
+      // health or status, neither of which the door has ever had, so it
+      // counted nothing for every organisation.
+      label: "Positions with a finding",
       fn: "erp_stock_health",
       compute: (rows) =>
         zeroIsGood(
-          count(rows, (r) => isOneOf(r["health"] ?? r["status"], ["short", "below", "critical"])),
-          "positions under policy",
+          // The empty string is counted as healthy on purpose: a tile whose
+          // arithmetic is true of a row with no such key at all is the fault
+          // this whole change is about.
+          count(rows, (r) => !isOneOf(r["finding"], ["healthy", ""])),
+          "not healthy",
         ),
     },
     {
@@ -1071,7 +1080,7 @@ export const INVENTORY: ModuleDef = {
     fn: "erp_stock_ageing",
     empty:
       "No aged stock to profile. Stock is banded by age here once anything has been on hand long enough to band.",
-    label: (r) => String(r["age_band"] ?? "—"),
+    label: (r) => String(r["bucket"] ?? "—"),
     value: (r) => num(r["quantity"]),
   },
   worklists: [
@@ -1133,14 +1142,16 @@ export const INVENTORY: ModuleDef = {
       empty:
         "Nothing is on hand yet. Receipting a purchase order is what first puts stock into an organisation.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
-      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
+      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_id"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
+        // erp.stock_health_report() carries site_id and no site code; the gap is
+        // in erp_meta.app_column_allowance rather than filled with a uuid.
         { header: "Site", cell: "site_code" },
         { header: "On hand", cell: "on_hand", numeric: true },
         { header: "Available", cell: "available", numeric: true },
-        { header: "Allocated", cell: "allocated", numeric: true },
-        { header: "Status", cell: (r) => <StatusPill value={r["health"] ?? r["status"]} /> },
+        { header: "Allocated", cell: "committed", numeric: true },
+        { header: "Finding", cell: "finding" },
       ],
     },
     {
@@ -1163,11 +1174,12 @@ export const INVENTORY: ModuleDef = {
       description: "How long stock has been standing still.",
       fn: "erp_stock_ageing",
       empty: "No aged stock. Nothing has been on hand long enough to fall into an age band.",
-      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["age_band"] ?? i)}`,
+      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
+        // As on Stock health: erp.stock_ageing_report() has site_id and no code.
         { header: "Site", cell: "site_code" },
-        { header: "Band", cell: "age_band" },
+        { header: "Band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
       ],
     },
@@ -1196,7 +1208,7 @@ export const INVENTORY: ModuleDef = {
       rowKey: (r, i) => String(r["programme_code"] ?? i),
       columns: [
         { header: "Programme", cell: "programme_code" },
-        { header: "Counted", cell: "tasks_counted", numeric: true },
+        { header: "Counted", cell: "tasks", numeric: true },
         { header: "Within tolerance", cell: "within_tolerance", numeric: true },
         { header: "Accuracy %", cell: "accuracy_pct", numeric: true },
       ],
@@ -2087,8 +2099,9 @@ export const PLANNING: ModuleDef = {
           fn: "erp_forecast_versions",
           args: { p_limit: 200 },
           id: "version_id",
-          title: ["code", "version"],
-          subtitle: ["name", "method"],
+          // The door answers with forecast and forecast_name, not code and name.
+          title: ["forecast", "version"],
+          subtitle: ["forecast_name", "method"],
           status: "status",
           noun: "forecast",
           nounPlural: "forecasts",
@@ -2106,8 +2119,9 @@ export const PLANNING: ModuleDef = {
           fn: "erp_forecast_versions",
           args: { p_limit: 200 },
           id: "version_id",
-          title: ["code", "version"],
-          subtitle: ["name", "method"],
+          // The door answers with forecast and forecast_name, not code and name.
+          title: ["forecast", "version"],
+          subtitle: ["forecast_name", "method"],
           status: "status",
           noun: "forecast",
           nounPlural: "forecasts",
@@ -2416,8 +2430,10 @@ export const PLANNING: ModuleDef = {
       fields: [
         codeField("p_forecast_code", "Forecast", "FCST-2026H1", {
           fn: "erp_forecast_versions",
-          value: "code",
-          label: ["code", "name"],
+          // The forecast's own code is `forecast`; asking for `code` offered a
+          // list of blank options and submitted an empty code.
+          value: "forecast",
+          label: ["forecast", "forecast_name"],
         }),
         { kind: "number", name: "p_periods", label: "Periods ahead" },
         { kind: "number", name: "p_buckets", label: "History buckets" },
@@ -2459,7 +2475,11 @@ export const PLANNING: ModuleDef = {
       fn: "erp_planning_exceptions",
       compute: (rows) =>
         zeroIsGood(
-          count(rows, (r) => !r["is_acknowledged"]),
+          // The door says when an exception was acknowledged, not whether it
+          // was. This tested !r["is_acknowledged"], and the negation of a key
+          // no row has is true of every row, so the tile counted every
+          // exception ever raised.
+          count(rows, (r) => !r["acknowledged_at"]),
           "nobody has looked at these",
         ),
     },
@@ -2482,7 +2502,7 @@ export const PLANNING: ModuleDef = {
     description: "Where the plan is inconsistent.",
     fn: "erp_planning_exceptions",
     empty: "No exceptions to profile. The plan is currently consistent with demand and supply.",
-    label: (r) => String(r["exception_kind"] ?? "—"),
+    label: (r) => String(r["kind"] ?? "—"),
     value: () => 1,
   },
   worklists: [
@@ -2495,10 +2515,10 @@ export const PLANNING: ModuleDef = {
       columns: [
         { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
-        { header: "Kind", cell: "exception_kind" },
+        { header: "Kind", cell: "kind" },
         { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
         { header: "Message", cell: "message" },
-        { header: "Acknowledged", cell: "is_acknowledged" },
+        date("Acknowledged", "acknowledged_at"),
       ],
     },
   ],
@@ -2512,7 +2532,7 @@ export const PLANNING: ModuleDef = {
       columns: [
         { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
-        { header: "Kind", cell: "order_kind" },
+        { header: "Kind", cell: "kind" },
         { header: "Quantity", cell: "quantity", numeric: true },
         date("Required", "required_by"),
         date("Release", "release_on"),
@@ -2868,7 +2888,7 @@ export const PRODUCTION: ModuleDef = {
         rows.length === 0
           ? null
           : {
-              value: (sum(rows, "quantity") - sum(rows, "quantity_completed")).toLocaleString(),
+              value: (sum(rows, "quantity") - sum(rows, "completed")).toLocaleString(),
               hint: "ordered less completed",
             },
     },
@@ -2876,7 +2896,7 @@ export const PRODUCTION: ModuleDef = {
       label: "Scrapped",
       fn: "erp_works_orders",
       compute: (rows) => {
-        const s = sum(rows, "quantity_scrapped");
+        const s = sum(rows, "scrapped");
         return { value: s.toLocaleString(), hint: "units", tone: s > 0 ? "warn" : "ok" };
       },
     },
@@ -2887,7 +2907,7 @@ export const PRODUCTION: ModuleDef = {
         const ordered = sum(rows, "quantity");
         if (ordered === 0) return null;
         return {
-          value: `${Math.round((sum(rows, "quantity_completed") / ordered) * 100)}%`,
+          value: `${Math.round((sum(rows, "completed") / ordered) * 100)}%`,
           hint: "of ordered quantity",
         };
       },
@@ -2929,10 +2949,10 @@ export const PRODUCTION: ModuleDef = {
         { header: "Number", cell: "order_number" },
         { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
-        { header: "Kind", cell: "order_kind" },
+        { header: "Kind", cell: "kind" },
         { header: "Ordered", cell: "quantity", numeric: true },
-        { header: "Completed", cell: "quantity_completed", numeric: true },
-        { header: "Scrapped", cell: "quantity_scrapped", numeric: true },
+        { header: "Completed", cell: "completed", numeric: true },
+        { header: "Scrapped", cell: "scrapped", numeric: true },
         date("Due", "planned_end"),
         pill("status"),
       ],
@@ -2953,8 +2973,8 @@ export const PRODUCTION: ModuleDef = {
         { header: "Product", cell: "item" },
         { header: "Site", cell: "site" },
         { header: "Ordered", cell: "quantity", numeric: true },
-        { header: "Completed", cell: "quantity_completed", numeric: true },
-        { header: "Scrapped", cell: "quantity_scrapped", numeric: true },
+        { header: "Completed", cell: "completed", numeric: true },
+        { header: "Scrapped", cell: "scrapped", numeric: true },
         date("Start", "planned_start"),
         date("Due", "planned_end"),
         pill("status"),
@@ -3307,7 +3327,7 @@ export const QUALITY: ModuleDef = {
     fn: "erp_quality_events",
     empty:
       "No quality events to profile. Deviations, complaints and non-conformances are counted here by kind.",
-    label: (r) => String(r["event_kind"] ?? "—"),
+    label: (r) => String(r["kind"] ?? "—"),
     value: () => 1,
   },
   worklists: [
@@ -3317,10 +3337,10 @@ export const QUALITY: ModuleDef = {
       fn: "erp_quality_events",
       empty:
         "No quality events open. Raise one under Actions above when something needs investigating.",
-      rowKey: (r, i) => String(r["event_id"] ?? i),
+      rowKey: (r, i) => String(r["quality_event_id"] ?? i),
       columns: [
         { header: "Reference", cell: "reference" },
-        { header: "Kind", cell: "event_kind" },
+        { header: "Kind", cell: "kind" },
         { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
         { header: "Title", cell: "title" },
         { header: "Product", cell: "item" },
@@ -3339,7 +3359,7 @@ export const QUALITY: ModuleDef = {
         { header: "Title", cell: "title" },
         { header: "Class", cell: "classification" },
         date("Initiated", "initiated_at"),
-        date("Deadline", "regulatory_deadline"),
+        date("Deadline", "deadline_at"),
         pill("status"),
       ],
     },
@@ -3352,11 +3372,14 @@ export const QUALITY: ModuleDef = {
       empty:
         "No supplier is qualified yet. Qualification is recorded against a business partner holding the supplier role.",
       emptyAction: { label: "Open Common data", to: "/master-data" },
-      rowKey: (r, i) => `${String(r["party"] ?? i)}-${i}`,
+      rowKey: (r, i) => `${String(r["party_code"] ?? i)}-${i}`,
       columns: [
-        { header: "Supplier", cell: "party" },
-        date("Qualified", "qualified_at"),
-        date("Valid to", "valid_to"),
+        { header: "Supplier", cell: "party_name" },
+        // erp.supplier_qualification_report() records when a qualification
+        // expires, not when it was granted; the "Qualified" column it never
+        // filled is gone, and how long is left is what the panel is for.
+        date("Valid to", "expires_at"),
+        { header: "Days left", cell: "days_remaining", numeric: true },
         pill("status"),
       ],
     },
@@ -3909,7 +3932,7 @@ export const REPORTING: ModuleDef = {
       fn: "erp_part5_summary",
       compute: (rows) => {
         if (rows.length === 0) return null;
-        const pct = Math.round(avg(rows, "coverage_pct"));
+        const pct = Math.round(avg(rows, "built_pct"));
         return { value: `${pct}%`, hint: "of Part 5, measured", tone: pct >= 90 ? "ok" : "warn" };
       },
     },
@@ -3921,7 +3944,7 @@ export const REPORTING: ModuleDef = {
     empty:
       "Coverage could not be measured. The report itself returned nothing, which is not the same as full coverage.",
     label: (r) => String(r["section"] ?? "—"),
-    value: (r) => num(r["coverage_pct"]),
+    value: (r) => num(r["built_pct"]),
     unit: "%",
   },
   worklists: [
@@ -3936,8 +3959,10 @@ export const REPORTING: ModuleDef = {
       columns: [
         { header: "Record", cell: "left_code" },
         { header: "Candidate", cell: "right_code" },
-        { header: "Score", cell: "similarity", numeric: true },
-        { header: "Basis", cell: "basis" },
+        // erp.duplicate_candidates() matches on a normalised key and returns
+        // the field it matched on and that key. It has never scored anything.
+        { header: "Basis", cell: "matched_on" },
+        { header: "Matched value", cell: "value" },
       ],
     },
   ],
@@ -3968,11 +3993,13 @@ export const REPORTING: ModuleDef = {
       rowKey: (r, i) => `${String(r["section"] ?? i)}-${i}`,
       columns: [
         { header: "Section", cell: "section" },
-        { header: "Title", cell: "title" },
-        { header: "Present", cell: "present", numeric: true },
-        { header: "Expected", cell: "expected", numeric: true },
-        { header: "Coverage %", cell: "coverage_pct", numeric: true },
-        { header: "State", cell: (r) => <StatusPill value={r["state"]} /> },
+        // erp.part5_summary() says section_name, built, total and built_pct,
+        // and has no state of its own: a section is a count of capabilities
+        // built, partial and absent, not one word.
+        { header: "Title", cell: "section_name" },
+        { header: "Present", cell: "built", numeric: true },
+        { header: "Expected", cell: "total", numeric: true },
+        { header: "Coverage %", cell: "built_pct", numeric: true },
       ],
     },
   ],
