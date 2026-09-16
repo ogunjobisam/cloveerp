@@ -28,7 +28,9 @@
 -- A sign-in is bound to one principal by invitation
 -- (CLOVEERP_IDENTITY_ALREADY_BOUND), which is why the suite below builds its
 -- second principal the way the owner's own second organisation was built:
--- platform staff, entering an organisation with a reason.
+-- platform staff entering an organisation with a reason, which is what makes
+-- the principal. The support access on its own does not: entering is what
+-- gives the person a role there, and so what the account menu is listing.
 -- =============================================================================
 
 create or replace function public.erp_my_tenants()
@@ -96,8 +98,8 @@ begin
   insert into erp_meta.platform_staff (email, auth_user_id, display_name, staff_role)
   values ('one@zzmo.test', one, 'Person One', 'owner');
   perform set_config('request.jwt.claims', json_build_object('sub', one)::text, true);
-  perform erp.grant_support_access(rb.tenant_id,
-    'Suite: a person who belongs to two organisations sees both', 1, false, null, null, null);
+  perform public.erp_platform_enter_tenant(rb.tenant_id,
+    'Suite: a person who belongs to two organisations sees both');
 
   perform set_config('request.jwt.claims', json_build_object('sub', one)::text, true);
   res := public.erp_my_tenants();
