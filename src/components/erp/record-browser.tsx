@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { article } from "../../lib/plain-words";
 import { tenantStorageKey } from "../../lib/tenant-storage";
 import { ErrorNote } from "./action";
 import { EmptyState, Prose } from "./page";
@@ -406,7 +407,8 @@ export function RecordBrowser<T>({
           ) : (
             <div className="px-4 py-10 sm:px-5">
               <p className="text-sm text-muted-foreground">
-                Choose a {nounSingular} on the left to see everything recorded about it.
+                Choose {article(nounSingular)} {nounSingular} on the left to see everything recorded
+                about it.
               </p>
             </div>
           )}

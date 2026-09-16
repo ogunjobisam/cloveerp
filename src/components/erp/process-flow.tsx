@@ -7,6 +7,7 @@ import { actionKey, stageActionKeys } from "../../lib/flow-actions";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
+import { article } from "../../lib/plain-words";
 import {
   DOCUMENT_READ,
   describeLine,
@@ -584,6 +585,12 @@ function StageRecord({
                       {line.net_minor !== null && line.net_minor !== undefined
                         ? ` · ${formatMinor(line.net_minor, currency, minorUnits(currency))}`
                         : ""}
+                      {/* The tax the line was determined at, once the document
+                          committed and determined it (20260916030000). A line
+                          with none reads exactly as it did before. */}
+                      {line.tax_minor
+                        ? ` + ${formatMinor(line.tax_minor, currency, minorUnits(currency))} ${ui("Tax")}`
+                        : ""}
                     </span>
                   </li>
                 ))}
@@ -616,7 +623,7 @@ function StageRecord({
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">
           {source
-            ? `Choose a ${source.noun} on the left, and what you can do to it appears here.`
+            ? `Choose ${article(source.noun)} ${source.noun} on the left, and what you can do to it appears here.`
             : "Nothing to choose at this step."}
         </p>
       )}
