@@ -29,9 +29,6 @@ const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOStri
 const QUIET_REVENUE: RevenueRead = {
   renewals: [],
   revenue_at_risk: [],
-  revenue_at_risk_minor: 0,
-  invoices: { issued_minor: 0 },
-  gross_margin: [],
 };
 
 /** A card's button must open a tab that exists. */
@@ -133,10 +130,7 @@ describe("renewals and invoices", () => {
         { status: "quoted", tenant_code: "bolt" },
         { status: "accepted", tenant_code: "core" },
       ],
-      revenue_at_risk: [{ tenant_code: "acme", annual_value_minor: 2_400_000 }],
-      revenue_at_risk_minor: 2_400_000,
-      invoices: { issued_minor: 120_000 },
-      gross_margin: [{ currency: "GBP" }],
+      revenue_at_risk: [{ tenant_code: "acme", annual_value_minor: 2_400_000, currency: "GBP" }],
     });
     // Unpaid invoices are not a revenue card any more: an invoice not yet due
     // needs nobody, and one that is late has a card of its own.
@@ -145,6 +139,22 @@ describe("renewals and invoices", () => {
     expect(cards[0]!.sentence).toContain("acme and bolt");
     expect(cards[1]!.tone).toBe("bad");
     for (const c of cards) opensARealTab(c);
+  });
+
+  test("contracts at risk in two currencies are not added together", () => {
+    const cards = revenueCards({
+      renewals: [],
+      revenue_at_risk: [
+        { tenant_code: "acme", annual_value_minor: 2_400_000, currency: "GBP" },
+        { tenant_code: "kiku", annual_value_minor: 3_000_000, currency: "JPY" },
+      ],
+    });
+    const sentence = cards[0]!.sentence;
+    // Two figures, one per currency. A single number for both would be in
+    // neither, which is what this card used to print.
+    expect(sentence).toContain("£24,000");
+    expect(sentence.split(" + ")).toHaveLength(2);
+    expect(sentence).not.toContain("£54,000");
   });
 
   const invoice = (over: Partial<OpenInvoiceRow>): OpenInvoiceRow => ({

@@ -51,12 +51,20 @@ export type QuoteLine = {
   charge: string | null;
 };
 
-/** The rate for a term, or null when the book has none. */
+/**
+ * The rate for a term, or null when the book has none.
+ *
+ * The currency is named by the caller and has no default. It used to default
+ * to GBP, and every call site in the console took the default — so the builder
+ * read GBP rates off the book whatever currency the quote was in, while
+ * erp.add_quote_line priced the line from the quote's own currency. The screen
+ * and the charge disagreed, silently, and a default is what let them.
+ */
 export function rateFor(
   item: PriceItem,
   book: string,
   term: string,
-  currency = "GBP",
+  currency: string,
 ): number | null {
   const rate = item.rates.find(
     (r) => r.price_book_code === book && r.term_kind === term && r.currency === currency,
@@ -182,8 +190,14 @@ export function termLabel(term: string, months?: number | null): string {
   return "Annual";
 }
 
-/** Pounds, with pence only where there are any. */
-export function money(minor: number | null | undefined, currency = "GBP"): string {
+/**
+ * An amount, with pence only where there are any.
+ *
+ * The currency is named by the caller for the same reason `rateFor` names it:
+ * a default of GBP made every unnamed figure on the quote screen a pound
+ * figure, whatever the quote was actually in.
+ */
+export function money(minor: number | null | undefined, currency: string): string {
   if (minor == null || !Number.isFinite(minor)) return "—";
   const major = minor / 100;
   const whole = Number.isInteger(major);
