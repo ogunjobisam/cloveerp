@@ -324,6 +324,15 @@ on conflict (install_code, to_version, object_kind, object_key) do update
 
 -- ── 4. The word the report now says ──────────────────────────────────────────
 
+insert into erp_ref.resource (key, locale, value, description) values
+  (erp_ref.ui_key('Tax charged'), 'en', 'Tax charged',
+   'A screen string declared at its call site and rendered through ui(). The '
+   'figure on a supplier''s invoice, typed in on the purchase invoice.'),
+  (erp_ref.ui_key('Tax code'), 'en', 'Tax code',
+   'A screen string declared at its call site and rendered through ui(). The '
+   'code the supplier''s invoice puts against that figure.')
+on conflict (key, locale) do nothing;
+
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key('Direction'), 'en', 'Direction',
        'A screen string declared at its call site and rendered through ui(). '
