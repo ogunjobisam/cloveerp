@@ -365,7 +365,7 @@ export function daysWord(days: number): string {
 
 /**
  * An invoice that is past its due date and not recorded as paid
- * (20260915040000). The same figures as the invoice itself, said once more:
+ * (20260915050000). The same figures as the invoice itself, said once more:
  * what is owed, how late it is, how to pay it, and who to reply to. The
  * payload is the invoice's, with the reminder's number and how overdue it was
  * when the drain claimed it.
