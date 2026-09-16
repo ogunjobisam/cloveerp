@@ -643,9 +643,7 @@ function StageRecord({
           {nothingApplies ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {ui("Nothing on this step applies to this record in its current state.")}
-              {next
-                ? ` ${fill(ui("The next step is {step}."), { step: ui(next.label) })}`
-                : ""}
+              {next ? ` ${fill(ui("The next step is {step}."), { step: ui(next.label) })}` : ""}
             </p>
           ) : null}
         </>
