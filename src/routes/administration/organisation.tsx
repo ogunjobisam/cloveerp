@@ -12,12 +12,13 @@ import {
   pickSite,
   reason,
 } from "../../components/erp/actions-bar";
-import { AutoPanel } from "../../components/erp/auto";
+import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
+import { toMinor } from "../../lib/money";
 
 /**
  * Whether administrators may approve anything here (20260914098000): on by
@@ -150,6 +151,34 @@ const OBJECT_TYPES = [
   { value: "supplier_invoice", label: "Supplier invoice" },
   { value: "payment_run", label: "Payment run" },
   { value: "change_request", label: "Change request" },
+];
+
+/**
+ * The kinds of thing the approval engine asks a chain for.
+ *
+ * Not the same list as OBJECT_TYPES above, and the difference matters. A band
+ * and a named assignment are written against a business object — a requisition,
+ * a payment run — because that is what the routing engine is asked about. A
+ * CHAIN is selected by erp.select_approval_chain() and every caller of
+ * erp.request_approval() names one of these: a document, a line on one, an
+ * invoice that will not match, a count variance, a change request. Offering the
+ * band list here would have produced chains nothing ever looks for.
+ */
+const CHAIN_OBJECT_TYPES = [
+  { value: "document", label: "A document — an order, an invoice, a receipt" },
+  { value: "document_line", label: "A line on a document" },
+  { value: "match_exception", label: "An invoice that does not match its order" },
+  { value: "count_task", label: "A stock count that came out different" },
+  { value: "change_request", label: "A change to master data" },
+];
+
+/**
+ * The figure a value threshold on a step reads, by the name it has in the
+ * request context the chain is given.
+ */
+const CHAIN_VALUE_FIELDS = [
+  { value: "total_minor", label: "The total value of the document" },
+  { value: "unit_price_minor", label: "The unit price on the line" },
 ];
 
 const pickDepartment = (
@@ -295,6 +324,25 @@ type Assignment = {
   lower_bound_minor: number | null;
   upper_bound_minor: number | null;
   status: string;
+};
+
+/** One row of erp_approval_chains(): a chain at the version in force. */
+type Chain = {
+  chain_id: string;
+  code: string;
+  name: string;
+  object_type: string;
+  priority: number;
+  chain_status: string;
+  version: number | null;
+  version_status: string | null;
+  effective_from: string | null;
+  value_field: string | null;
+  step_count: number;
+  /** Each step in order, with who it asks — a role, a person, or a source. */
+  approvers: string | null;
+  /** The code of a proposed change to this chain not yet promoted. */
+  waiting_change: string | null;
 };
 
 type Stamp = {
@@ -646,6 +694,182 @@ function Organisation() {
       />
 
       <AdministratorApproval />
+
+      <ActionBar
+        title="Approval chains"
+        note="A chain is the order things are approved in. Bands and named approvers above say who; a chain says how many steps there are, which of them apply, and where each one looks. Composing one raises a change: promoted at once while the organisation is being set up, and left for a second administrator once it is live."
+        actions={[
+          {
+            label: "Compose an approval chain",
+            description:
+              "The steps a request goes through before it may go ahead. A step names the role or the person who approves it, or asks for one of the three that read the organisation: the line manager of whoever raised it, the value bands of their department, or the approver named for them. This writes nothing directly — it raises a change, which the Configuration screen approves and promotes.",
+            permission: "administration.configure",
+            fn: "erp_propose_approval_chain",
+            submitLabel: "Propose the chain",
+            fields: [
+              codeField("p_code", "Code", "purchase_order_value", {
+                fn: "erp_approval_chains",
+                value: "code",
+                label: ["code", "name"],
+              }),
+              {
+                kind: "text",
+                name: "p_name",
+                label: "Name",
+                required: true,
+                placeholder: "Purchase order approval",
+                hint: "What this chain is called on the approvals people see.",
+              },
+              {
+                kind: "choice",
+                name: "p_object_type",
+                label: "Approves",
+                required: true,
+                hint: "The kind of thing this chain is asked about.",
+                choices: CHAIN_OBJECT_TYPES,
+              },
+              {
+                kind: "select",
+                name: "document_type",
+                label: "Only documents of type",
+                required: false,
+                hint: "Leave empty and the chain is considered for every request of the kind above.",
+                options: { fn: "erp_document_types", value: "code", label: ["code", "name"] },
+              },
+              {
+                kind: "choice",
+                name: "p_value_field",
+                label: "The figure a threshold reads",
+                required: false,
+                hint: "Set this where a step only applies above a value. Leave it empty for a chain that does not depend on how much something is worth.",
+                choices: CHAIN_VALUE_FIELDS,
+              },
+              {
+                kind: "rows",
+                name: "p_steps",
+                label: "Steps",
+                addLabel: "Add a step",
+                hint: "One row per step, in the order they are asked. Steps sharing a number are asked at the same time. Name a role or a person, or choose where to look — never both.",
+                columns: [
+                  { name: "seq", label: "Order", kind: "number" },
+                  { name: "code", label: "Code", kind: "text", placeholder: "buying_manager" },
+                  { name: "name", label: "Step", kind: "text", placeholder: "Buying manager" },
+                  {
+                    name: "approver_source",
+                    label: "Where to look",
+                    kind: "select",
+                    options: {
+                      fn: "erp_approval_step_sources",
+                      value: "source",
+                      label: ["name"],
+                    },
+                  },
+                  {
+                    name: "role",
+                    label: "Or the role",
+                    kind: "select",
+                    options: { fn: "erp_roles", value: "code", label: ["name"] },
+                  },
+                  {
+                    name: "user",
+                    label: "Or the person",
+                    kind: "select",
+                    options: { fn: "erp_principals", value: "email", label: ["display_name"] },
+                  },
+                  { name: "min_approvals", label: "Approvals needed", kind: "number" },
+                  { name: "above", label: "Only above", kind: "money", currency: "GBP" },
+                  { name: "escalate_after_hours", label: "Escalate after (hours)", kind: "number" },
+                  {
+                    name: "escalate_to_role",
+                    label: "Escalate to",
+                    kind: "select",
+                    options: { fn: "erp_roles", value: "code", label: ["name"] },
+                  },
+                ],
+              },
+              { kind: "number", name: "p_priority", label: "Priority" },
+              {
+                kind: "text",
+                name: "p_note",
+                label: "Why this chain exists",
+                placeholder: "Agreed at the September board",
+                hint: "Kept with the change, so the next person knows why the organisation decided it.",
+              },
+            ],
+            // The door takes the condition the engine evaluates, not a
+            // sentence, and the form cannot type one. So the two conditions an
+            // organisation actually writes are composed here: the document type
+            // the chain applies to, and the value above which a step fires.
+            // Both are the shapes the module installers already use.
+            mapArgs: (v, picked) => {
+              const valueField = v["p_value_field"] ?? "";
+              const documentType = v["document_type"] ?? "";
+              const steps = (picked?.rows["p_steps"] ?? [])
+                .map((row, i) => {
+                  const step: Record<string, unknown> = {
+                    seq: Number(row["seq"] ?? "") || i + 1,
+                  };
+                  for (const key of [
+                    "code",
+                    "name",
+                    "approver_source",
+                    "role",
+                    "user",
+                    "escalate_to_role",
+                  ] as const) {
+                    const raw = row[key] ?? "";
+                    if (raw !== "") step[key] = raw;
+                  }
+                  for (const key of ["min_approvals", "escalate_after_hours"] as const) {
+                    const raw = row[key] ?? "";
+                    if (raw !== "") step[key] = Number(raw);
+                  }
+                  const above = toMinor(row["above"] ?? "");
+                  if (above !== null)
+                    step["condition"] = {
+                      ">": [{ var: valueField === "" ? "total_minor" : valueField }, above],
+                    };
+                  return step;
+                })
+                // A row holding nothing but the order it was added in is a row
+                // somebody started and abandoned, not a step.
+                .filter((step) => Object.keys(step).length > 1);
+
+              const args: Record<string, unknown> = {
+                p_code: v["p_code"] ?? "",
+                p_name: v["p_name"] ?? "",
+                p_object_type: v["p_object_type"] ?? "",
+                p_steps: steps,
+              };
+              if (valueField !== "") args["p_value_field"] = valueField;
+              if ((v["p_priority"] ?? "") !== "") args["p_priority"] = Number(v["p_priority"]);
+              if ((v["p_note"] ?? "") !== "") args["p_note"] = v["p_note"];
+              if (documentType !== "")
+                args["p_applies_when"] = { "==": [{ var: "document_type" }, documentType] };
+              return args;
+            },
+            invalidates: ["erp_approval_chains", "erp_change_sets"],
+          },
+        ]}
+      />
+
+      <AutoPanel<Chain>
+        title="Approval chains"
+        description="Every chain this organisation holds, at the version in force. A step asking for the line manager, the department value bands or the named approver reads the departments, bands and assignments configured above; a step naming a role or a person does not."
+        fn="erp_approval_chains"
+        empty="No approval chains yet. Compose one under Actions above, or install a module on the Configuration screen and take the chain it brings. Until one exists, nothing is held for approval."
+        rowKey={(r) => r.chain_id}
+        columns={[
+          { header: "Code", cell: "code" },
+          { header: "Name", cell: "name" },
+          { header: "Approves", cell: "object_type" },
+          { header: "Version", cell: "version", numeric: true },
+          { header: "Status", cell: (r) => <StatusPill value={r["version_status"]} /> },
+          { header: "Steps", cell: "step_count", numeric: true },
+          { header: "Who approves", cell: "approvers" },
+          { header: "Waiting to be promoted", cell: "waiting_change" },
+        ]}
+      />
 
       <ActionBar
         title="Cover while somebody is away"
