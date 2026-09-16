@@ -9,13 +9,15 @@
 --      approve anything"; it is the wrong answer to "the person who normally
 --      approves this has left", which is the case that actually happens.
 --
---   2. Whoever raised a document may approve it WHERE NOBODY ELSE CAN. Today
---      that case refuses — CLOVEERP_APPROVAL_NO_OTHER_APPROVER — so a company
---      where the buyer and the approver are one person cannot raise anything
---      at all. That is friction with no safety in it: the alternative on offer
---      was not a second opinion, it was a dead end. Where a second approver
---      does exist the exclusion stands, unchanged, because there the exclusion
---      buys exactly what it was written to buy.
+--   2. Whoever raised a document may approve it WHERE NOBODY ELSE CAN.
+--      20260914098000 already granted exactly this to an administrator, and
+--      stopped there; for everybody else the case still refuses with
+--      CLOVEERP_APPROVAL_NO_OTHER_APPROVER, so a company whose one buyer is
+--      also its one approver cannot raise anything at all unless that person
+--      happens to hold Promote configuration. The allowance is widened to
+--      anybody who is the only candidate. Where a second approver exists the
+--      exclusion stands, unchanged, because there it buys what it was written
+--      to buy.
 --
 --   3. Except where somebody has said those two duties are separate. An
 --      organisation that has written a separation rule pairing the raising of
@@ -199,10 +201,12 @@ do $seq$
 declare
   v_sig constant text := 'erp.open_approval_seq(uuid, integer)';
   v_def text := pg_get_functiondef(v_sig::regprocedure);
+  -- 20260914098000 already let an administrator be asked here rather than
+  -- refused. This is the same for anybody else who is the only person who
+  -- could approve it, so the needle is that migration's replacement, not the
+  -- original.
   v_lone constant text :=
-       E'        if erp.tenant_is_live(v_tenant) then\n'
-    || E'          select r.code into v_role from erp.role r where r.tenant_id = v_tenant and r.id = st.role_id;\n'
-    || E'          raise exception ''CLOVEERP_APPROVAL_NO_OTHER_APPROVER: step % needs somebody other than the person asking, and nobody else holds %'',';
+    E'        if erp.tenant_is_live(v_tenant) and not erp.approves_as_administrator(v_exclude) then';
   v_unstaffed constant text :=
     E'      if v_made = 0 then\n'
     || E'        -- A step whose role has nobody in it would silently stall the request.\n'
@@ -225,10 +229,12 @@ begin
   --     an organisation with a second approver still gets a second opinion,
   --     which is what the exclusion was for and remains right.
   v_new := replace(v_def, v_lone,
-       E'        if erp.tenant_is_live(v_tenant)\n'
-    || E'           and not erp.may_approve_own(v_req.requested_by, v_req.object_id) then\n'
-    || E'          select r.code into v_role from erp.role r where r.tenant_id = v_tenant and r.id = st.role_id;\n'
-    || E'          raise exception ''CLOVEERP_APPROVAL_NO_OTHER_APPROVER: step % needs somebody other than the person asking, and nobody else holds %'',');
+       E'        -- And anybody else who is the only person who could approve it,\n'
+    || E'        -- where the organisation allows that and no separation rule\n'
+    || E'        -- pairs the raising of this document with its approval.\n'
+    || E'        if erp.tenant_is_live(v_tenant)\n'
+    || E'           and not erp.approves_as_administrator(v_exclude)\n'
+    || E'           and not erp.may_approve_own(v_exclude, v_req.object_id) then');
 
   -- (b) Nobody in the step is a reason to ask the administrators, not to stop.
   v_new := replace(v_new, v_unstaffed,
