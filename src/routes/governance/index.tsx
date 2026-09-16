@@ -292,6 +292,44 @@ function Governance() {
         ]}
       />
 
+      {/* The panel above reads the routing stamp, which is written when a
+          request is captured, so it can say who each step went to and not what
+          they decided. This one reads the decision itself. */}
+      <AutoPanel
+        title="Decisions"
+        description="Every approval decided in this organisation, newest first."
+        fn="erp_approval_decisions"
+        args={{ p_limit: 50 }}
+        empty="Nothing has been decided yet. Approvals appear here once somebody approves or rejects them."
+        rowKey={(r) => String(r["task_id"])}
+        columns={[
+          { header: "Decided", cell: (r) => shortDate(r["decided_at"]) },
+          {
+            header: "Approving",
+            cell: (r) =>
+              typeof r["document_id"] === "string" ? (
+                <Link
+                  to="/documents/$documentId"
+                  params={{ documentId: r["document_id"] }}
+                  className="underline underline-offset-2"
+                >
+                  {approvalSubject(r)}
+                </Link>
+              ) : (
+                approvalSubject(r)
+              ),
+          },
+          { header: "Value", cell: moneyCell("value_minor", "currency"), numeric: true },
+          { header: "Step", cell: "step" },
+          { header: "Outcome", cell: "outcome" },
+          { header: "Decided by", cell: "decided_by" },
+          {
+            header: "Own request",
+            cell: (r) => (r["own_request"] === true ? "Yes" : "—"),
+          },
+        ]}
+      />
+
       <AutoPanel
         title="Change requests"
         description="Proposed master data changes and where each one has got to."
