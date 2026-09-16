@@ -328,3 +328,41 @@ select erp.assert_public_api_safe();
 select erp.assert_no_public_execute();
 select erp.assert_ci_coverage();
 select erp_test.assert_determination_posts_suite();
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- The case that asserted a named account always won
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- erp_test.policy_closure_suite() asserted that a posting line naming an
+-- account passes through untouched. That was true while the matrix answered
+-- only a line spelling `determined`, and it is the thing this migration
+-- deliberately ends: a rule that covers the supply now decides, whatever the
+-- line names. The case keeps its subject and asserts the new rule — including
+-- that a line the matrix does NOT cover still keeps its own account, which is
+-- what makes this safe for an organisation that has configured nothing.
+do $closure$
+declare
+  v_sig constant text := 'erp_test.policy_closure_suite()';
+  v_def text := pg_get_functiondef(v_sig::regprocedure);
+  v_needle constant text :=
+       E'  passed := v_code = ''5900''\n'
+    || E'        and erp.posting_line_account_code(jsonb_build_object(''account'', ''1200''), v_doc, v_gl) = ''1200'';\n'
+    || E'  detail := format(''determined → %s (expected 5900); a named account passes through'', coalesce(v_code, ''null''));';
+  v_new text;
+begin
+  if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
+    raise exception 'CLOVEERP_CLOSURE_SUITE_UNRECOGNISED: the case about a named account in % is not the one this migration turns round', v_sig;
+  end if;
+
+  v_new := replace(v_def, v_needle,
+       E'  passed := v_code = ''5900''\n'
+    || E'        and erp.posting_line_account_code(\n'
+    || E'              jsonb_build_object(''account'', ''1200'', ''transaction_type'', ''zz_uncovered''),\n'
+    || E'              v_doc, v_gl) = ''1200'';\n'
+    || E'  detail := format(''determined → %s (expected 5900); an account the matrix does not cover keeps its own'', coalesce(v_code, ''null''));');
+
+  execute v_new;
+end
+$closure$;
+
+select erp_test.assert_policy_closure_suite();
