@@ -24,6 +24,11 @@
 -- erp.set_active_tenant() already refuses everybody but platform staff, and
 -- the menu only offers the picker to them, so what changes here is that they
 -- can see the organisations they are entitled to move between.
+--
+-- A sign-in is bound to one principal by invitation
+-- (CLOVEERP_IDENTITY_ALREADY_BOUND), which is why the suite below builds its
+-- second principal the way the owner's own second organisation was built:
+-- platform staff, entering an organisation with a reason.
 -- =============================================================================
 
 create or replace function public.erp_my_tenants()
@@ -76,15 +81,23 @@ declare
   res jsonb;
 begin
   select * into ra from erp.provision_tenant(v_a, 'My Organisations A', 'one@zzmo.test', 'Person One');
-  select * into rb from erp.provision_tenant(v_b, 'My Organisations B', 'one@zzmo.test', 'Person One');
+  select * into rb from erp.provision_tenant(v_b, 'My Organisations B', 'admin-b@zzmo.test', 'Admin B');
   select * into rc from erp.provision_tenant(v_c, 'My Organisations C', 'two@zzmo.test', 'Person Two');
   insert into auth.users (id, email) values (one, 'one@zzmo.test'), (two, 'two@zzmo.test');
 
+  -- One principal by invitation. A sign-in is bound to one principal that way
+  -- (CLOVEERP_IDENTITY_ALREADY_BOUND), so the second comes the way the owner's
+  -- own second organisation came: platform staff, entering with a reason.
   perform set_config('request.jwt.claims', json_build_object('sub', one)::text, true);
   perform erp.claim_invitation(ra.admin_token);
-  perform erp.claim_invitation(rb.admin_token);
   perform set_config('request.jwt.claims', json_build_object('sub', two)::text, true);
   perform erp.claim_invitation(rc.admin_token);
+
+  insert into erp_meta.platform_staff (email, auth_user_id, display_name, staff_role)
+  values ('one@zzmo.test', one, 'Person One', 'owner');
+  perform set_config('request.jwt.claims', json_build_object('sub', one)::text, true);
+  perform erp.grant_support_access(rb.tenant_id,
+    'Suite: a person who belongs to two organisations sees both', 1, false, null, null, null);
 
   perform set_config('request.jwt.claims', json_build_object('sub', one)::text, true);
   res := public.erp_my_tenants();
@@ -92,7 +105,8 @@ begin
     (select count(*) from jsonb_array_elements(res)) = 2
     and exists (select 1 from jsonb_array_elements(res) x where x ->> 'code' = v_a)
     and exists (select 1 from jsonb_array_elements(res) x where x ->> 'code' = v_b),
-    format('%s organisation(s)', (select count(*) from jsonb_array_elements(res)));
+    format('%s organisation(s): %s', (select count(*) from jsonb_array_elements(res)),
+           coalesce((select string_agg(x ->> 'code', ', ') from jsonb_array_elements(res) x), 'none'));
 
   return query select 'and neither of them is somebody else''s'::text,
     not exists (select 1 from jsonb_array_elements(res) x where x ->> 'code' = v_c),
@@ -125,11 +139,13 @@ begin
   perform erp.begin_tenant_purge(rc.tenant_id);
   delete from erp.tenant where id = rc.tenant_id;
   perform erp.end_tenant_purge();
+  delete from erp_meta.platform_staff where email = 'one@zzmo.test';
   delete from auth.users where id in (one, two);
 
   return query select 'the suite leaves nothing behind'::text,
-    not exists (select 1 from erp.tenant t where t.code in (v_a, v_b, v_c)),
-    'three organisations gone';
+    not exists (select 1 from erp.tenant t where t.code in (v_a, v_b, v_c))
+    and not exists (select 1 from erp_meta.platform_staff st where st.email = 'one@zzmo.test'),
+    'three organisations and the staff row gone';
 end;
 $$;
 
