@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
-import { formatFigure } from "../../lib/money";
+import { formatFigure, formatMinorTotals } from "../../lib/money";
 import type { PlatformRole } from "../../lib/platform";
 import { Card, Fail, INPUT } from "./kit";
 
@@ -38,12 +38,25 @@ type Renewal = {
   quote_document_id: string | null;
 };
 
+/**
+ * One amount, and the currency it is in.
+ *
+ * The report returns a list of these wherever it used to return a single
+ * number. It had been summing minor units over every contract in force with no
+ * group by currency, and this screen then labelled the result with whatever
+ * currency the first gross-margin row happened to carry — so a yen contract and
+ * a pound contract came back as one figure in neither. Every money key on this
+ * screen is a list for that reason, and is rendered through formatMinorTotals,
+ * which prints one figure per currency rather than adding them up.
+ */
+type Amount = { currency: string; minor: number };
+
 type Revenue = {
-  arr_minor: number;
-  mrr_minor: number;
+  arr_by_currency: Amount[];
+  mrr_by_currency: Amount[];
   contracts_in_force: number;
-  average_contract_value_minor: number;
-  by_plan: { plan_code: string; contracts: number; arr_minor: number }[];
+  average_contract_value_by_currency: Amount[];
+  by_plan: { plan_code: string; currency: string; contracts: number; arr_minor: number }[];
   by_capability: { capability_code: string; contracts: number }[];
   gross_margin: {
     tenant_code: string;
@@ -59,19 +72,20 @@ type Revenue = {
     lapsed: number;
     renewal_rate_pct: number | null;
   };
-  churn: { contracts_ended_last_12_months: number; arr_lost_minor: number };
+  churn: { contracts_ended_last_12_months: number; arr_lost_by_currency: Amount[] };
   revenue_at_risk: {
     tenant_code: string;
     annual_value_minor: number;
+    currency: string;
     notice_deadline: string;
     renewal_status: string | null;
   }[];
-  revenue_at_risk_minor: number;
+  revenue_at_risk_by_currency: Amount[];
   invoices: {
-    scheduled_minor: number;
-    issued_minor: number;
-    paid_minor: number;
-    overage_issued_minor: number;
+    scheduled_by_currency: Amount[];
+    issued_by_currency: Amount[];
+    paid_by_currency: Amount[];
+    overage_issued_by_currency: Amount[];
   };
   renewals: Renewal[];
 };
@@ -86,6 +100,18 @@ type Revenue = {
  */
 function money(minor: number | null | undefined, currency?: string) {
   return formatFigure(minor, currency);
+}
+
+/**
+ * A figure that may be in more than one currency.
+ *
+ * Summing a pound and a dollar gives a number that is neither, so this prints
+ * one amount per currency side by side rather than a single total. With one
+ * currency sold — which is every deployment so far — it reads exactly as it
+ * did before.
+ */
+function totals(rows: Amount[]) {
+  return formatMinorTotals(rows);
 }
 
 function day(value: string | null | undefined) {
@@ -292,7 +318,6 @@ export function Revenue({ role }: { role: PlatformRole }) {
   if (q.isPending) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (q.error || !q.data) return q.error ? <Fail error={q.error} /> : null;
   const d = q.data;
-  const currency = d.gross_margin[0]?.currency;
 
   return (
     <div className="flex flex-col gap-6">
@@ -309,12 +334,12 @@ export function Revenue({ role }: { role: PlatformRole }) {
           </p>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Figure label="Annual recurring revenue" value={money(d.arr_minor, currency)} />
-          <Figure label="Monthly recurring revenue" value={money(d.mrr_minor, currency)} />
+          <Figure label="Annual recurring revenue" value={totals(d.arr_by_currency)} />
+          <Figure label="Monthly recurring revenue" value={totals(d.mrr_by_currency)} />
           <Figure label="Contracts in force" value={String(d.contracts_in_force)} />
           <Figure
             label="Average contract value"
-            value={money(d.average_contract_value_minor, currency)}
+            value={totals(d.average_contract_value_by_currency)}
           />
           <Figure
             label="Renewal rate, last 12 months"
@@ -327,18 +352,18 @@ export function Revenue({ role }: { role: PlatformRole }) {
           />
           <Figure
             label="Churn, last 12 months"
-            value={money(d.churn.arr_lost_minor, currency)}
+            value={totals(d.churn.arr_lost_by_currency)}
             hint={`${d.churn.contracts_ended_last_12_months} contract(s) ended`}
           />
           <Figure
             label="Revenue at risk"
-            value={money(d.revenue_at_risk_minor, currency)}
+            value={totals(d.revenue_at_risk_by_currency)}
             hint="within the next two notice windows, no renewal accepted"
           />
           <Figure
             label="Overage invoiced"
-            value={money(d.invoices.overage_issued_minor, currency)}
-            hint={`scheduled ${money(d.invoices.scheduled_minor)} · issued ${money(d.invoices.issued_minor)} · paid ${money(d.invoices.paid_minor)}`}
+            value={totals(d.invoices.overage_issued_by_currency)}
+            hint={`scheduled ${totals(d.invoices.scheduled_by_currency)} · issued ${totals(d.invoices.issued_by_currency)} · paid ${totals(d.invoices.paid_by_currency)}`}
           />
         </div>
 
@@ -351,11 +376,18 @@ export function Revenue({ role }: { role: PlatformRole }) {
               <p className="mt-1 text-sm text-muted-foreground">No contract is in force.</p>
             ) : (
               <Table columns={["Plan", "Contracts", "ARR"]}>
+                {/* A plan sold in two currencies is two rows. Each amount
+                    carries its own symbol, which is what tells them apart. */}
                 {d.by_plan.map((p) => (
-                  <tr key={p.plan_code} className="border-b border-border/50 last:border-0">
+                  <tr
+                    key={`${p.plan_code}-${p.currency}`}
+                    className="border-b border-border/50 last:border-0"
+                  >
                     <td className="py-1.5 pr-4 font-mono text-xs">{p.plan_code}</td>
                     <td className="py-1.5 pr-4 text-sm tabular-nums">{p.contracts}</td>
-                    <td className="py-1.5 text-sm tabular-nums">{money(p.arr_minor, currency)}</td>
+                    <td className="py-1.5 text-sm tabular-nums">
+                      {money(p.arr_minor, p.currency)}
+                    </td>
                   </tr>
                 ))}
               </Table>
@@ -466,7 +498,7 @@ export function Revenue({ role }: { role: PlatformRole }) {
                 >
                   <td className="py-1.5 pr-4 font-mono text-xs">{x.tenant_code}</td>
                   <td className="py-1.5 pr-4 text-sm tabular-nums">
-                    {money(x.annual_value_minor, currency)}
+                    {money(x.annual_value_minor, x.currency)}
                   </td>
                   <td className="py-1.5 pr-4 text-xs">{day(x.notice_deadline)}</td>
                   <td className="py-1.5">

@@ -1,4 +1,4 @@
-import { formatMinorWhole } from "./money";
+import { formatMinorTotals, formatMinorWhole } from "./money";
 import type { SectionKey, ViewKey } from "./platform-console";
 
 /**
@@ -42,10 +42,15 @@ export type EnquiryRow = {
 };
 export type RevenueRead = {
   renewals: { status: string; tenant_code: string }[];
-  revenue_at_risk: { tenant_code: string; annual_value_minor: number }[];
-  revenue_at_risk_minor: number;
-  invoices: { issued_minor: number };
-  gross_margin: { currency: string }[];
+  /**
+   * Each contract at risk with the currency it is in.
+   *
+   * The card used to add `revenue_at_risk_minor` — one number summed across
+   * every currency in the register — and label it with whatever currency the
+   * first gross-margin row carried. Both are gone: the rows say what they are
+   * worth and in what, and formatMinorTotals adds each currency to itself.
+   */
+  revenue_at_risk: { tenant_code: string; annual_value_minor: number; currency: string }[];
 };
 export type IncidentRow = { code: string; title: string; state: string; overdue: boolean };
 export type TransferRow = { status: string; is_mine_to_answer: boolean };
@@ -225,7 +230,6 @@ export function enquiryCards(rows: EnquiryRow[], now: Date): TodayCard[] {
 }
 
 export function revenueCards(revenue: RevenueRead): TodayCard[] {
-  const currency = revenue.gross_margin[0]?.currency ?? "GBP";
   const cards: TodayCard[] = [];
 
   const undecided = revenue.renewals.filter(
@@ -250,7 +254,12 @@ export function revenueCards(revenue: RevenueRead): TodayCard[] {
       key: "at-risk",
       figure: String(revenue.revenue_at_risk.length),
       title: plural(revenue.revenue_at_risk.length, "Contract at risk", "Contracts at risk"),
-      sentence: `${formatMinorWhole(revenue.revenue_at_risk_minor, currency)} a year from ${listNames(codes)} is near its notice deadline with no renewal agreed.`,
+      sentence: `${formatMinorTotals(
+        revenue.revenue_at_risk.map((r) => ({
+          minor: r.annual_value_minor,
+          currency: r.currency,
+        })),
+      )} a year from ${listNames(codes)} is near its notice deadline with no renewal agreed.`,
       tone: "bad",
       action: "Open renewals",
       target: { section: "billing", view: "revenue" },

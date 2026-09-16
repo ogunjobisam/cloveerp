@@ -148,6 +148,8 @@ type Agreement = {
     currency: string;
     subscription_minor: number;
     overage_minor: number;
+    /** Onboarding, implementation, a pilot: charged once, on this invoice. */
+    one_off_minor: number;
     total_minor: number;
     status: string;
     issued_at: string | null;
@@ -624,20 +626,17 @@ function Commercial() {
                   "Due",
                   ui("Subscription"),
                   ui("Overage"),
+                  ui("One-off"),
                   "Total",
                   "State",
                   "",
                 ]}
               >
                 {data.invoices.map((i) => {
-                  const overage =
-                    i.status === "scheduled"
-                      ? i.lines
-                          .filter((l) => l.kind === "overage")
-                          .reduce((a, l) => a + l.net_minor, 0)
-                      : i.overage_minor;
-                  const total =
-                    i.status === "scheduled" ? i.subscription_minor + overage : i.total_minor;
+                  // Straight from the door. This screen used to add the
+                  // subscription to the overage it summed out of the lines,
+                  // which left the one-off charge out of a scheduled invoice's
+                  // total and left it without a column on every invoice.
                   const pdf = data.commercial_documents.find(
                     (c) => c.kind === "contract_invoice" && c.document_id === i.id,
                   );
@@ -661,13 +660,16 @@ function Commercial() {
                           {money(i.subscription_minor, i.currency)}
                         </td>
                         <td className="py-2 pr-4 text-sm tabular-nums">
-                          {money(overage, i.currency)}
+                          {money(i.overage_minor, i.currency)}
                           {i.lines.some((l) => l.kind === "overage" && l.unpriced) ? (
                             <Pill tone="bad">unpriced</Pill>
                           ) : null}
                         </td>
                         <td className="py-2 pr-4 text-sm tabular-nums">
-                          {money(total, i.currency)}
+                          {money(i.one_off_minor, i.currency)}
+                        </td>
+                        <td className="py-2 pr-4 text-sm tabular-nums">
+                          {money(i.total_minor, i.currency)}
                         </td>
                         <td className="py-2">
                           <Pill
@@ -692,7 +694,7 @@ function Commercial() {
                       </tr>
                       {openInvoice === i.id ? (
                         <tr className="border-b border-border/50 last:border-0">
-                          <td colSpan={8} className="pb-3">
+                          <td colSpan={9} className="pb-3">
                             {i.lines.length === 0 ? (
                               <p className="text-xs text-muted-foreground">
                                 No overage; the subscription alone.

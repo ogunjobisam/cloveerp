@@ -1029,7 +1029,7 @@ function QuoteBuilder({
                       >
                         <span className="text-sm font-semibold">{p.name}</span>
                         <span className="text-lg font-semibold tabular-nums">
-                          {money(rateFor(p, book, d.term_kind))}
+                          {money(rateFor(p, book, d.term_kind, d.currency), d.currency)}
                           <span className="ml-1 text-xs font-normal text-muted-foreground">
                             {unit}
                           </span>
@@ -1054,7 +1054,7 @@ function QuoteBuilder({
                       caption="Extra full users"
                       hint={
                         fullUser
-                          ? `${money(rateFor(fullUser, book, d.term_kind))} each ${unit}`
+                          ? `${money(rateFor(fullUser, book, d.term_kind, d.currency), d.currency)} each ${unit}`
                           : "Not on the price list"
                       }
                       value={lineFor(lines, fullUser?.code)?.quantity ?? 0}
@@ -1065,7 +1065,7 @@ function QuoteBuilder({
                       caption="Light users"
                       hint={
                         lightUser
-                          ? `${money(rateFor(lightUser, book, d.term_kind))} each ${unit}`
+                          ? `${money(rateFor(lightUser, book, d.term_kind, d.currency), d.currency)} each ${unit}`
                           : "Not on the price list"
                       }
                       value={lineFor(lines, lightUser?.code)?.quantity ?? 0}
@@ -1084,7 +1084,7 @@ function QuoteBuilder({
                         <Stepper
                           key={x.code}
                           caption={x.name}
-                          hint={`${money(rateFor(x, book, d.term_kind))} each ${unit}`}
+                          hint={`${money(rateFor(x, book, d.term_kind, d.currency), d.currency)} each ${unit}`}
                           value={lineFor(lines, x.code)?.quantity ?? 0}
                           disabled={pending}
                           onChange={(n) => void setQuantity(x, n)}
@@ -1104,7 +1104,7 @@ function QuoteBuilder({
                   <div className="flex flex-col gap-2">
                     {[...oneOff, ...support].map((x) => {
                       const on = Boolean(lineFor(lines, x.code));
-                      const rate = rateFor(x, book, d.term_kind);
+                      const rate = rateFor(x, book, d.term_kind, d.currency);
                       return (
                         <label
                           key={x.code}
@@ -1128,10 +1128,10 @@ function QuoteBuilder({
                           </span>
                           <span className="shrink-0 text-sm tabular-nums">
                             {x.percent_of_recurring
-                              ? `${x.percent_of_recurring}%, at least ${money(rate)}`
+                              ? `${x.percent_of_recurring}%, at least ${money(rate, d.currency)}`
                               : x.charge === "one_off"
-                                ? `${money(rate)} once`
-                                : `${money(rate)} ${unit}`}
+                                ? `${money(rate, d.currency)} once`
+                                : `${money(rate, d.currency)} ${unit}`}
                           </span>
                         </label>
                       );
@@ -1188,7 +1188,9 @@ function QuoteBuilder({
                       ) : null}
                     </td>
                     <td className="py-2 pr-3 text-sm tabular-nums">{l.quantity}</td>
-                    <td className="py-2 pr-3 text-sm tabular-nums">{money(l.list_minor)}</td>
+                    <td className="py-2 pr-3 text-sm tabular-nums">
+                      {money(l.list_minor, d.currency)}
+                    </td>
                     <td className="py-2 pr-3 text-sm">
                       {editable && l.kind !== "legislation_pack" ? (
                         <DiscountInput
@@ -1205,7 +1207,9 @@ function QuoteBuilder({
                         </span>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-sm tabular-nums">{money(l.quoted_minor)}</td>
+                    <td className="py-2 pr-3 text-sm tabular-nums">
+                      {money(l.quoted_minor, d.currency)}
+                    </td>
                     <td className="py-2 pr-3 text-sm">
                       {l.margin_pct == null ? (
                         "—"
@@ -1235,12 +1239,12 @@ function QuoteBuilder({
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">Subscription, {unit}</dt>
                 <dd className="font-semibold tabular-nums">
-                  {money(d.margin.totals.recurring_minor)}
+                  {money(d.margin.totals.recurring_minor, d.currency)}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">Charged once</dt>
-                <dd className="tabular-nums">{money(d.margin.totals.one_off_minor)}</dd>
+                <dd className="tabular-nums">{money(d.margin.totals.one_off_minor, d.currency)}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">Margin</dt>
@@ -1393,7 +1397,7 @@ function QuoteBuilder({
               title="Order form"
               hint={`Issued ${day(d.order_form.rendered_at)} · fingerprint ${d.order_form.checksum.slice(0, 12)}`}
             >
-              <OrderForm content={d.order_form.content} />
+              <OrderForm content={d.order_form.content} currency={d.currency} />
             </Section>
           ) : null}
         </div>
@@ -1443,7 +1447,7 @@ function DiscountInput({
 }
 
 /** The order form as the customer read it: its lines and totals, not its JSON. */
-function OrderForm({ content }: { content: unknown }) {
+function OrderForm({ content, currency }: { content: unknown; currency: string }) {
   const record =
     typeof content === "object" && content !== null ? (content as Record<string, unknown>) : {};
   const total = orderFormTotal(content);
@@ -1468,7 +1472,7 @@ function OrderForm({ content }: { content: unknown }) {
         "Valid until",
         typeof record["valid_until"] === "string" ? day(record["valid_until"]) : null,
       )}
-      {fact("Total", total == null ? null : money(total))}
+      {fact("Total", total == null ? null : money(total, currency))}
     </dl>
   );
 }
