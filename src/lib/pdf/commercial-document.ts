@@ -26,7 +26,19 @@ import fontkit from "@pdf-lib/fontkit";
 import { NOTO_SANS_BOLD_BASE64, NOTO_SANS_REGULAR_BASE64, fontBytes } from "./fonts.ts";
 import { formatMinor } from "../money.ts";
 
-export type CommercialDocumentKind = "order_form" | "contract_invoice";
+export type CommercialDocumentKind = "order_form" | "contract_invoice" | "invoice_reminder";
+
+/**
+ * A reminder carries the invoice it chases (20260915030000), so it draws the
+ * same document from the same figures: what the customer is asked to pay is
+ * the invoice, and a second piece of paper saying something slightly different
+ * is how a dispute starts.
+ */
+function documentKind(kind: unknown): "order_form" | "contract_invoice" | null {
+  if (kind === "order_form") return "order_form";
+  if (kind === "contract_invoice" || kind === "invoice_reminder") return "contract_invoice";
+  return null;
+}
 
 /** A payload this file cannot make a document of. The message says what was wrong. */
 export class CommercialDocumentError extends Error {}
@@ -166,7 +178,7 @@ export function commercialDocumentFilename(payload: unknown, kind?: string | nul
   const given = str(p["filename"]);
   if (given && /^[A-Za-z0-9._-]+\.pdf$/.test(given)) return given;
   const safe = (v: string) => v.replace(/[^A-Za-z0-9-]+/g, "-");
-  if ((p["kind"] ?? kind) === "order_form") {
+  if (documentKind(p["kind"] ?? kind) === "order_form") {
     return `Order-form-${safe(str(p["document_number"]) ?? "quote")}-v${str(p["quote_version"]) ?? "1"}.pdf`;
   }
   return `Invoice-${safe(str(p["reference"]) ?? "invoice")}.pdf`;
@@ -176,7 +188,8 @@ export function commercialDocumentFilename(payload: unknown, kind?: string | nul
 export function commercialDocumentPath(kind: string, emailId: string): string {
   if (!/^[0-9a-f-]{36}$/.test(emailId))
     throw new CommercialDocumentError(`${emailId} is not an email id`);
-  return `commercial/${kind === "order_form" ? "order-form" : "contract-invoice"}/${emailId}.pdf`;
+  if (documentKind(kind) === null) throw new CommercialDocumentError(`${kind} keeps no document`);
+  return `commercial/${kind.replace(/_/g, "-")}/${emailId}.pdf`;
 }
 
 /** Bytes as base64, for an email attachment. */
@@ -652,9 +665,9 @@ function invoice(sheet: Sheet, payload: Dict): string {
 export async function renderCommercialDocumentPdf(payload: unknown): Promise<Uint8Array> {
   const p = dict(payload);
   if (!p) throw new CommercialDocumentError("the payload is not an object");
-  const kind = p["kind"];
-  if (kind !== "order_form" && kind !== "contract_invoice") {
-    throw new CommercialDocumentError(`${String(kind)} is not an order form or an invoice`);
+  const kind = documentKind(p["kind"]);
+  if (kind === null) {
+    throw new CommercialDocumentError(`${String(p["kind"])} is not an order form or an invoice`);
   }
 
   const pdf = await PDFDocument.create();

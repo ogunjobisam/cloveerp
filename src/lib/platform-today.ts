@@ -70,6 +70,25 @@ export type OpenInvoiceRow = {
   due_on: string;
   overdue: boolean;
   days_overdue: number;
+  /** How far the chase has got (20260915030000). */
+  reminders_sent?: number | null;
+  last_reminder_at?: string | null;
+};
+
+/** What erp_platform_email_delivery answers, as far as Today needs it. */
+export type EmailDeliveryRead = {
+  trouble: {
+    event_id: string;
+    state: string;
+    occurred_at: string;
+    to_address: string | null;
+    matched: string;
+    suppressed: boolean;
+    tenant_code?: string | null;
+    detail?: string | null;
+  }[];
+  suppressed: { address: string; reason: string; suppressed_at: string; note?: string | null }[];
+  recent?: Record<string, number> | null;
 };
 /** What erp_platform_billing_details answers: whether payment details are set, and them. */
 export type BillingDetailsRead = {
@@ -263,18 +282,69 @@ export function invoiceCards(rows: OpenInvoiceRow[]): TodayCard[] {
   const what = amount
     ? `${amount} from ${listNames(customers)}`
     : `${late.length} invoices from ${listNames(customers)}`;
+  // What the chase has already done about it, so that "nobody has told them"
+  // and "they have been told four times" are not the same card.
+  const chased = late.reduce((sum, i) => sum + (i.reminders_sent ?? 0), 0);
+  const last = late
+    .map((i) => i.last_reminder_at)
+    .filter((when): when is string => typeof when === "string" && when !== "")
+    .sort()
+    .at(-1);
+  const chase =
+    chased === 0
+      ? " No reminder has gone yet."
+      : ` ${chased} ${plural(chased, "reminder has", "reminders have")} gone${
+          last ? `, the last on ${new Date(last).toLocaleDateString("en-GB")}` : ""
+        }.`;
   return [
     {
       key: "overdue-invoices",
       figure: String(late.length),
       title: plural(late.length, "Invoice overdue", "Invoices overdue"),
-      sentence: `${what} ${plural(late.length, "is", "are")} past the due date; the oldest is ${oldest} ${plural(oldest, "day", "days")} late.`,
+      sentence: `${what} ${plural(late.length, "is", "are")} past the due date; the oldest is ${oldest} ${plural(oldest, "day", "days")} late.${chase}`,
       tone: "bad",
       action: codes.length === 1 ? "Open the organisation" : "Open contracts",
       target:
         codes.length === 1
           ? { section: "customers", view: "organisations", org: codes[0]! }
           : { section: "sales", view: "contracts" },
+    },
+  ];
+}
+
+/**
+ * Email the provider could not deliver, or that somebody marked as spam.
+ *
+ * A bounce is a fact rather than a failure — nothing is retried for it — but
+ * somebody has to know, because an invoice nobody received is an invoice
+ * nobody pays. A complaint matters more: the address is suppressed, so the
+ * next message to it is cancelled rather than sent.
+ */
+export function emailDeliveryCards(read: EmailDeliveryRead): TodayCard[] {
+  const trouble = read.trouble ?? [];
+  const bounced = trouble.filter((t) => t.state === "bounced");
+  const complained = trouble.filter((t) => t.state === "complained");
+  if (bounced.length === 0 && complained.length === 0) return [];
+  const addresses = [...new Set(trouble.map((t) => t.to_address).filter(Boolean))] as string[];
+  const stopped = (read.suppressed ?? []).length;
+  const words = [
+    bounced.length > 0
+      ? `${bounced.length} ${plural(bounced.length, "email", "emails")} bounced`
+      : null,
+    complained.length > 0 ? `${complained.length} was marked as spam` : null,
+  ].filter(Boolean) as string[];
+  return [
+    {
+      key: "email-not-delivered",
+      figure: String(bounced.length + complained.length),
+      title: complained.length > 0 ? "An email was marked as spam" : "An email bounced",
+      sentence:
+        `${words.join(" and ")}: ${listNames(addresses.slice(0, 3))}` +
+        (addresses.length > 3 ? ` and ${addresses.length - 3} more` : "") +
+        `. ${stopped === 0 ? "No address is suppressed." : `${stopped} ${plural(stopped, "address is", "addresses are")} suppressed, so nothing more is sent to ${plural(stopped, "it", "them")} until an operator clears ${plural(stopped, "it", "them")}.`}`,
+      tone: complained.length > 0 || stopped > 0 ? "bad" : "warn",
+      action: "Open jobs and queue",
+      target: { section: "platform", view: "queue" },
     },
   ];
 }

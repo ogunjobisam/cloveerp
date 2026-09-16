@@ -73,6 +73,21 @@ import_map = "./functions/import_map.json"
 verify_jwt = false
 import_map = "./functions/import_map.json"
 
+# What the email provider says afterwards.
+#
+# verify_jwt is false for the reason dispatch has it false: Resend sends no
+# Authorization header, so a gateway JWT check would refuse every event before
+# the function ran. The gate is the signature — Resend signs each request the
+# way Svix does, and the function verifies it against the signing secret in the
+# vault (cloveerp_resend_webhook_secret) before it records anything. Until that
+# secret is set, every request is refused.
+#
+# import_map because it reaches worker/src/core/db.ts, which imports the bare
+# specifier "postgres".
+[functions.resend_webhook]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
 # Passwords.
 #
 # The two settings the CLI carries. Leaked-password protection (checking a new

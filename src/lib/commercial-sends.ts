@@ -32,6 +32,10 @@ export type CommercialSend = {
   document_bytes?: number | null;
   /** Why there is no PDF with it, or no copy of one, when that is so. */
   document_problem?: string | null;
+  /** What the provider said became of it (20260915030000). */
+  delivery_state?: string | null;
+  delivery_state_at?: string | null;
+  delivery_detail?: string | null;
 };
 
 export type CommercialEmailState = {
@@ -166,4 +170,40 @@ export function describeDocument(
   }
   if (problem) return { tone: "warn", text: `No PDF kept: ${problem}`, downloadable: false };
   return { tone: "muted", text: "Sent before PDFs went with it", downloadable: false };
+}
+
+/**
+ * What the provider said became of a message, in a line.
+ *
+ * Nothing until it says something: an email the provider has not answered
+ * about is "sent", which is what the line above already says. A bounce and a
+ * complaint are the two a person must act on, so they are the loud ones.
+ */
+export function describeDelivery(send: CommercialSend): { tone: SendTone; text: string } | null {
+  const state = (send.delivery_state ?? "").trim();
+  if (state === "") return null;
+  const when = send.delivery_state_at ? ` at ${whenText(send.delivery_state_at)}` : "";
+  const detail = (send.delivery_detail ?? "").trim();
+  switch (state) {
+    case "delivered":
+      return { tone: "ok", text: `Delivered${when}` };
+    case "opened":
+      return { tone: "ok", text: `Opened${when}` };
+    case "delayed":
+      return { tone: "warn", text: `Delivery delayed${when}${detail ? `: ${detail}` : ""}` };
+    case "bounced":
+      return {
+        tone: "bad",
+        text: `Bounced${when}${detail ? `: ${detail}` : ""}. Nothing is tried again for a bounce.`,
+      };
+    case "complained":
+      return {
+        tone: "bad",
+        text: `Marked as spam${when}. Nothing more is sent to this address until an operator clears it.`,
+      };
+    case "sent":
+      return { tone: "muted", text: `The provider took it${when}` };
+    default:
+      return { tone: "muted", text: `${state}${when}` };
+  }
 }
