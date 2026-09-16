@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260916420000  What a screen writes is read
+-- 20260916430000  What a screen writes is read
 -- -----------------------------------------------------------------------------
 -- The twin of 20260916180000. That one refuses a name a screen READS off a door
 -- that does not return it. This one refuses a value a screen WRITES that
@@ -129,17 +129,29 @@ set lock_timeout = '30s';
 --
 -- ── THE REGISTER ─────────────────────────────────────────────────────────────
 --
--- Forty-five columns are grandfathered in erp_meta.write_only_column, each with
--- a written reason. Twenty of them are deliberate — a note somebody typed for
--- the next person to read, a label, an audit copy, a secret reference handed to
--- the dispatch worker. Twenty-five are defects, and their reasons say so in
+-- Thirty-eight columns are grandfathered in erp_meta.write_only_column, each
+-- with a written reason. Nineteen of them are deliberate — a note somebody typed
+-- for the next person to read, a label, an audit copy, a secret reference handed
+-- to the dispatch worker. Nineteen are defects, and their reasons say so in
 -- those words, with the date. A defect dressed up as a decision is how this
 -- class survived twice already.
 --
--- The list is the check's own answer, not a guess: an earlier version of this
--- migration, numbered 20260916400000, was refused by its own assertion on the
--- build for leaving erp.app_user.family_name out. That version reached no
--- environment and is replaced by this one rather than edited.
+-- That list is the check's own answer and not a guess, and it took the check two
+-- refusals to get there. A first version numbered 20260916400000 was refused for
+-- leaving erp.app_user.family_name out of the register; a second, 20260916420000,
+-- was refused for keeping seven rows the database no longer agreed with — four
+-- columns something had started to decide on, and three the walk no longer sees
+-- a maintenance door write from a value its caller supplies. Neither version
+-- reached any environment, and each is replaced rather than edited.
+--
+-- One of those seven is worth saying out loud, because it is where this rule is
+-- weaker than a person. erp.location.count_class was named in the audit as a
+-- setting cycle counting never consults, and it is: the count programme reads
+-- its own selector. But erp.stock_audit_lines() carries the column out beside a
+-- status, in a position this rule counts as deciding, so the check calls it read
+-- and does not refuse it. A rule over text cannot always tell a report's column
+-- from a rule's input, and this one errs towards READ — which is the direction
+-- that makes its findings trustworthy and its silence worth less than an audit.
 --
 -- A NEW write-only column fails the build. So does a register row that has
 -- stopped being true — one whose column something now reads, or that no door
@@ -579,7 +591,7 @@ on conflict (schema_name, function_name) do update set rationale = excluded.rati
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 6. What is written into the dark today
 -- -----------------------------------------------------------------------------
--- Twenty deliberate, twenty-five defects. The defects say so.
+-- Nineteen deliberate, nineteen defects. The defects say so.
 -- ═════════════════════════════════════════════════════════════════════════════
 
 insert into erp_meta.write_only_column (schema_name, table_name, column_name, rationale) values
@@ -609,8 +621,6 @@ insert into erp_meta.write_only_column (schema_name, table_name, column_name, ra
    'Deliberate, and the one case where "nothing in the database reads it" is the point. It is a reference to a secret — env:// or vault:// — and erp.claim_webhook_batch() hands it to the dispatch worker, which resolves it outside the database. The database must never be able to decide anything from it.'),
   ('erp', 'party_posting_class', 'reason',
    'Deliberate, for the same reason as erp.item_posting_class.reason: why this customer or supplier sits in this posting class, kept for the person who has to explain it.'),
-  ('erp', 'printer', 'physical_location',
-   'Deliberate. Where in the building the printer is, so somebody can walk to it. Routing decides on the print route and the site; a sentence like "goods-in, by the dock door" is for a human being.'),
   ('erp', 'reason_code', 'name',
    'Deliberate. What the reason code is called in the list a person picks from. The code is what documents carry and what rules match on.'),
   ('erp', 'report_pack', 'description',
@@ -629,8 +639,6 @@ insert into erp_meta.write_only_column (schema_name, table_name, column_name, ra
   -- ── Known gaps. Nothing reads these YET. Found 16 September 2026. ─────────
   ('erp', 'account_determination', 'dimensions',
    'A KNOWN GAP as at 16 September 2026, not a decision. The screen offers dimensions to narrow a determination rule to, and erp.determine_account() hands them straight back out without ever matching on them, so a rule scoped to one cost centre applies everywhere. Nothing reads it yet.'),
-  ('erp', 'approval_band', 'escalate_after',
-   'A KNOWN GAP as at 16 September 2026. "Escalate if nobody has decided within" is offered on the approval bands screen and written down, and erp.resolve_approval_chain() passes it out untouched: no timer reads it and nothing has ever escalated because of it. Nothing reads it yet.'),
   ('erp', 'approval_band', 'is_parallel',
    'A KNOWN GAP as at 16 September 2026. The band says its approvers may decide in parallel rather than in turn, and the engine that raises the tasks never asks. Every band is sequential in practice. Nothing reads it yet.'),
   ('erp', 'approval_band', 'tolerance_pct',
@@ -641,10 +649,6 @@ insert into erp_meta.write_only_column (schema_name, table_name, column_name, ra
    'A KNOWN GAP as at 16 September 2026. A code template can be scoped to one company, and erp.compose_code() picks the template by code alone, so a template meant for one company composes codes for all of them. Nothing reads it yet.'),
   ('erp', 'cost_model', 'basis',
    'A KNOWN GAP as at 16 September 2026. The basis a cost model works on is chosen on the costing screen and consulted by no valuation: erp.stock_valuation_layer is written the same way whatever it says. Nothing reads it yet.'),
-  ('erp', 'item', 'lifecycle',
-   'A KNOWN GAP as at 16 September 2026. An item''s lifecycle — draft, active, obsolete — is offered when the item is created and gates nothing; every rule that could use it reads status instead. An obsolete item can still be ordered. Nothing reads it yet.'),
-  ('erp', 'item', 'min_remaining_shelf_life_days',
-   'A KNOWN GAP as at 16 September 2026. "Do not accept stock with less remaining life than" is on the item controls screen, and no receipt, allocation or picking rule consults it. Short-dated stock is accepted and issued as if the field were empty. Nothing reads it yet.'),
   ('erp', 'item_supplier', 'split_pct',
    'A KNOWN GAP as at 16 September 2026, named in the audit that prompted this check. "Sourcing split %" splits nothing: erp_resolve_item_supplier() picks one supplier by preference rank and planning raises one order. Nothing reads it yet.'),
   ('erp', 'item_supplier', 'supplier_item_code',
@@ -653,12 +657,6 @@ insert into erp_meta.write_only_column (schema_name, table_name, column_name, ra
    'A KNOWN GAP as at 16 September 2026. How long a job may go without being heard from before somebody should be told. erp.claim_job_runs() and the scheduler''s own integrity check never read it, so a job that stops running quietly stops running quietly. Nothing reads it yet.'),
   ('erp', 'location', 'capacity',
    'A KNOWN GAP as at 16 September 2026, named in the audit that prompted this check. "Holds at most" is offered on the location screen and put-away has never consulted it; erp.resolve_storage_locations() will send stock to a full bin. Nothing reads it yet.'),
-  ('erp', 'location', 'count_class',
-   'A KNOWN GAP as at 16 September 2026, named in the audit that prompted this check. The A/B/C class that is supposed to decide how often a location is counted. Cycle counting reads the count programme''s own selector and never this. Nothing reads it yet.'),
-  ('erp', 'price_item', 'legislation_pack_code',
-   'A KNOWN GAP as at 16 September 2026. A priced line can name the legislation pack it entitles the customer to, and nothing provisions or checks the pack when the line is sold. Nothing reads it yet.'),
-  ('erp', 'price_item', 'support_severity_code',
-   'A KNOWN GAP as at 16 September 2026. The support severity a priced line entitles the customer to. No incident, no response target and no contract entitlement consults it. Nothing reads it yet.'),
   ('erp', 'printer', 'default_stock',
    'A KNOWN GAP as at 16 September 2026. The label stock loaded in the printer by default, which erp.render_label() never asks for: every render uses the template''s own size and may not fit what is in the tray. Nothing reads it yet.'),
   ('erp', 'reason_code', 'requires_approval',
