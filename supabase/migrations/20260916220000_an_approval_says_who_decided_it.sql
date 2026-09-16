@@ -578,3 +578,52 @@ select erp.assert_no_public_execute();
 select erp.assert_resource_coverage('en');
 select erp.assert_ci_coverage();
 select erp_test.assert_approval_policy_suite();
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- The two cases that asserted the old answer
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- erp_test.approval_hold_suite() proved the behaviour this migration changes:
+-- that the person submitting is not asked, and that a live organisation where
+-- only they hold the approving role refuses the submission. Both were true and
+-- worth asserting while they were the rule. Both are false now, on purpose. A
+-- suite that asserts the old answer fails the moment the answer changes, which
+-- is exactly what it is for — so the cases keep their place and their subject,
+-- and assert the new answer instead.
+do $hold$
+declare
+  v_sig constant text := 'erp_test.approval_hold_suite()';
+  v_def text := pg_get_functiondef(v_sig::regprocedure);
+  v_one constant text :=
+       E'  case_name := ''submitting asks the approving role''''s other holder, and not the person who submitted'';\n'
+    || E'  passed := coalesce(v_state is null and v_tasks = 1 and v_task_to = v_second and v_task_role = ''purchasing'', false);';
+  v_two constant text :=
+       E'  case_name := ''where only the person submitting holds the approving role, a live organisation refuses the submission'';\n'
+    || E'  passed := coalesce(v_state is null and v_so_err like ''CLOVEERP_APPROVAL_NO_OTHER_APPROVER%''\n'
+    || E'            and v_so_state = ''draft'', false);';
+  v_new text;
+begin
+  if (length(v_def) - length(replace(v_def, v_one, ''))) / length(v_one) <> 1 then
+    raise exception 'CLOVEERP_HOLD_SUITE_UNRECOGNISED: the case about who is asked in % is not the one this migration turns round', v_sig;
+  end if;
+  if (length(v_def) - length(replace(v_def, v_two, ''))) / length(v_two) <> 1 then
+    raise exception 'CLOVEERP_HOLD_SUITE_UNRECOGNISED: the case about the lone approver in % is not the one this migration turns round', v_sig;
+  end if;
+
+  -- The submitter is asked as well, so the role's other holder is asked too and
+  -- there are two tasks rather than one.
+  v_new := replace(v_def, v_one,
+       E'  case_name := ''submitting asks everybody who holds the approving role, the person who submitted included'';\n'
+    || E'  passed := coalesce(v_state is null and v_tasks = 2 and v_task_role = ''purchasing'', false);');
+
+  -- And a lone approver approves instead of being refused.
+  v_new := replace(v_new, v_two,
+       E'  case_name := ''where only the person submitting holds the approving role, they are asked rather than refused'';\n'
+    || E'  passed := coalesce(v_state is null and v_so_err is null\n'
+    || E'            and v_so_state = ''pending_approval'', false);');
+
+  execute v_new;
+end
+$hold$;
+
+select erp_test.assert_approval_hold_suite();
