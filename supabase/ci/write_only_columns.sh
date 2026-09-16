@@ -39,7 +39,7 @@
 # second is refused unless erp_meta.write_only_column says, in writing, why it
 # is written anyway.
 #
-# The migration 20260916400000 carries the scope this covers and the imprecision
+# The migration 20260916420000 carries the scope this covers and the imprecision
 # it accepts, at length, including why `select *` and to_jsonb(t) are not
 # counted as reads.
 #

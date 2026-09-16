@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260916400000  What a screen writes is read
+-- 20260916420000  What a screen writes is read
 -- -----------------------------------------------------------------------------
 -- The twin of 20260916180000. That one refuses a name a screen READS off a door
 -- that does not return it. This one refuses a value a screen WRITES that
@@ -129,12 +129,17 @@ set lock_timeout = '30s';
 --
 -- ── THE REGISTER ─────────────────────────────────────────────────────────────
 --
--- Forty-four columns are grandfathered in erp_meta.write_only_column, each with
--- a written reason. Nineteen of them are deliberate — a note somebody typed for
+-- Forty-five columns are grandfathered in erp_meta.write_only_column, each with
+-- a written reason. Twenty of them are deliberate — a note somebody typed for
 -- the next person to read, a label, an audit copy, a secret reference handed to
 -- the dispatch worker. Twenty-five are defects, and their reasons say so in
 -- those words, with the date. A defect dressed up as a decision is how this
 -- class survived twice already.
+--
+-- The list is the check's own answer, not a guess: an earlier version of this
+-- migration, numbered 20260916400000, was refused by its own assertion on the
+-- build for leaving erp.app_user.family_name out. That version reached no
+-- environment and is replaced by this one rather than edited.
 --
 -- A NEW write-only column fails the build. So does a register row that has
 -- stopped being true — one whose column something now reads, or that no door
@@ -574,7 +579,7 @@ on conflict (schema_name, function_name) do update set rationale = excluded.rati
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 6. What is written into the dark today
 -- -----------------------------------------------------------------------------
--- Nineteen deliberate, twenty-five defects. The defects say so.
+-- Twenty deliberate, twenty-five defects. The defects say so.
 -- ═════════════════════════════════════════════════════════════════════════════
 
 insert into erp_meta.write_only_column (schema_name, table_name, column_name, rationale) values
@@ -582,6 +587,8 @@ insert into erp_meta.write_only_column (schema_name, table_name, column_name, ra
   -- ── Deliberate: a note, a label, an audit copy, a hand-off ────────────────
   ('erp', 'account_determination', 'note',
    'Deliberate. The sentence whoever wrote the rule left for whoever reads it next, shown beside the rule on the account determination screen. A note is for a person; the determination is not supposed to branch on prose.'),
+  ('erp', 'app_user', 'family_name',
+   'Deliberate, and the other half of given_name below. Kept so a person can be addressed properly on a document; what the product shows and sorts by is display_name, which erp.update_profile() derives from the two when the caller leaves it blank.'),
   ('erp', 'app_user', 'given_name',
    'Deliberate. The parts of a name, kept so a person can be addressed properly on a document. What the product shows and sorts by is display_name, which erp.update_profile() derives from these when the caller leaves it blank.'),
   ('erp', 'batch', 'supplier_party_id',
