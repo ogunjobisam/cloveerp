@@ -584,6 +584,12 @@ function StageRecord({
                       {line.net_minor !== null && line.net_minor !== undefined
                         ? ` · ${formatMinor(line.net_minor, currency, minorUnits(currency))}`
                         : ""}
+                      {/* The tax the line was determined at, once the document
+                          committed and determined it (20260916030000). A line
+                          with none reads exactly as it did before. */}
+                      {line.tax_minor
+                        ? ` + ${formatMinor(line.tax_minor, currency, minorUnits(currency))} ${ui("Tax")}`
+                        : ""}
                     </span>
                   </li>
                 ))}
