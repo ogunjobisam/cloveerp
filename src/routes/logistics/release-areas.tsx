@@ -111,7 +111,7 @@ function ReleaseAreas() {
 
       <ActionBar
         title="Marshalling areas"
-        note="An area is a scope, not a place on a map: a site, a location, and optionally the channel, order type and product classes it serves."
+        note="An area is a scope, not a place on a map: a site, a location, the order type and the product classes it serves. A wave will not take a line the area does not serve."
         actions={[
           {
             label: "Add or amend a marshalling area",
@@ -150,7 +150,7 @@ function ReleaseAreas() {
                 name: "p_channel_code",
                 label: "Channel",
                 placeholder: "WHOLESALE",
-                hint: "Leave empty to serve every channel.",
+                hint: "A label for the people who work in this area. Nothing is matched against it: the area serves every channel.",
               },
               {
                 ...pickDocumentType(undefined, "p_order_type_code", "Order type", false),
@@ -161,7 +161,12 @@ function ReleaseAreas() {
                 "Product classes",
                 "Tick every class this serves. None ticked serves any product.",
               ),
-              { kind: "number", name: "p_min_quantity", label: "Minimum" },
+              {
+                kind: "number",
+                name: "p_min_quantity",
+                label: "Minimum",
+                hint: "The level the area is kept at. A replenishment raised for a wave never leaves it below this.",
+              },
               { kind: "number", name: "p_max_quantity", label: "Maximum" },
               { kind: "number", name: "p_ageing_hours", label: "Ageing (hours)" },
               {
@@ -221,6 +226,18 @@ function ReleaseAreas() {
               pickWave(),
               pickItem(),
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+              {
+                kind: "select",
+                name: "p_document_id",
+                label: "Order this line is for",
+                hint: "Optional. A marshalling area set up for one order type only takes lines from an order of that type.",
+                options: {
+                  fn: "erp_documents",
+                  args: { p_limit: 200, p_actionable: true },
+                  value: "document_id",
+                  label: ["document_number", "document_type", "party"],
+                },
+              },
             ],
             invalidates,
           },
