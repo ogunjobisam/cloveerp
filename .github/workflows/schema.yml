@@ -694,6 +694,28 @@ jobs:
         # functions it reaches and refuses a pair the chain never authorises.
         run: supabase/ci/app_gates.sh
 
+      - name: Every column a screen reads is one its door returns
+        # A panel declares a door and the names it reads off each row in the
+        # same breath, and nothing compared the two. The renderer shows a
+        # missing key as an em dash and the arithmetic reads it as zero, so a
+        # name the door never emits does not fail — it produces a confident,
+        # permanently wrong number. Logistics OTIF was 0% and red for every
+        # organisation against a door that says on_time_pct; works orders
+        # showed 0 completed and 0 scrapped against completed and scrapped;
+        # planning's "Unacknowledged" counted every exception ever raised,
+        # because !r["is_acknowledged"] is true of every row of a door that
+        # emits acknowledged_at. Thirty-five names on sixteen doors.
+        #
+        # TypeScript cannot see this — every row is Record<string, unknown> —
+        # and no suite can: one that proves a door returns the right figures
+        # agrees with a screen that asks it for a name it has not got. This
+        # extracts every (door, column) pair from src and hands the list to
+        # erp.assert_app_columns_exist(), which derives what each door can
+        # produce from the BUILT DATABASE — table parameters, jsonb_build_object
+        # keys, the columns of whatever a to_jsonb() door wraps — so a rename in
+        # a migration fails here on the day it lands.
+        run: supabase/ci/app_columns.sh
+
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
         # with no code impact. That is only true of strings erp_ref.resource
