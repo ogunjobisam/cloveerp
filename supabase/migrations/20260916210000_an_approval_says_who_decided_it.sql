@@ -56,6 +56,17 @@ on conflict (code) do update set
   max_scope_level = excluded.max_scope_level, is_singleton = excluded.is_singleton,
   default_value = excluded.default_value, consequence = excluded.consequence;
 
+-- The config type names a key, and a key with no words is a setting the
+-- terminology screen offers and never shows. The sibling setting
+-- (20260914098000) carries both locales, so this one does too.
+insert into erp_ref.resource (key, locale, value, module_code, description) values
+  ('config.approval.self_approval', 'en', 'Somebody may approve what they raised', 'administration',
+   'The setting that lets the person who raised something satisfy an approval step they are an approver for.'),
+  ('config.approval.self_approval', 'de', 'Eigene Anforderungen dürfen genehmigt werden', 'administration',
+   'The setting that lets the person who raised something satisfy an approval step they are an approver for.')
+on conflict (key, locale) do update set
+  value = excluded.value, module_code = excluded.module_code, description = excluded.description;
+
 create or replace function erp.self_approval_allowed()
 returns boolean
 language sql
