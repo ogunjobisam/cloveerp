@@ -324,6 +324,21 @@ on conflict (install_code, to_version, object_kind, object_key) do update
 
 -- ── 4. The word the report now says ──────────────────────────────────────────
 
+insert into erp_ref.resource (key, locale, value, description)
+select erp_ref.ui_key(v.text), 'en', v.text,
+       'A screen string declared at its call site and rendered through ui(). ' || v.why
+  from (values
+    ('State the tax the supplier charged',
+     'The dialog where the figure on a supplier''s invoice is typed in.'),
+    ('The figure on their invoice. Leave it at nothing if they charged none.',
+     'Said under that dialog''s heading, because a supplier who charged nothing is a normal case and not an omission.'),
+    ('The code on their invoice. S is the standard rate.',
+     'Said under the tax code, because the code is theirs and not ours to choose.'),
+    ('Optional. Kept with the determination so the figure can be traced back.',
+     'Said under the note, because a tax figure nobody can trace is one nobody can defend.')
+) as v(text, why)
+on conflict (key, locale) do nothing;
+
 insert into erp_ref.resource (key, locale, value, description) values
   (erp_ref.ui_key('Tax charged'), 'en', 'Tax charged',
    'A screen string declared at its call site and rendered through ui(). The '
