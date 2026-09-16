@@ -109,11 +109,14 @@ select erp.register_refusal(
   'A rule in force decides which accounts a document reaches and on which side. One that lists no lines would let a document post a journal with nothing in it, so the ledger would be silently short of what the document did.',
   'Give the rule at least one line to debit and one to credit, of equal value, then put it in force.');
 
-select erp.register_refusal(
-  'CLOVEERP_POSTING_RULE_NOT_IN_THIS_ORGANISATION',
-  'A question about a posting rule that belongs to another organisation.',
-  'Rules are held by the organisation that promoted them. Asking about one from inside a different organisation finds nothing, and finding nothing is not the same as a rule that raises nothing.',
-  'Ask again from inside the organisation that holds the rule.');
+-- CLOVEERP_POSTING_RULE_NOT_IN_THIS_ORGANISATION is deliberately not in that
+-- register. The register is what the screens read and what an organisation
+-- renames, and erp.refusal_report() reads the source of every routine that is
+-- not an assertion to prove each registered code is actually raised somewhere.
+-- This one is raised only inside the assertion below — nobody using the
+-- product can meet it, because it means the check asked the wrong
+-- organisation. It carries its next action on the raise instead, which is the
+-- other half of what that report accepts.
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 2. The assertion promotion runs tells the two faults apart
@@ -532,16 +535,16 @@ begin
   -- whichever way the run goes: a suite that leaves an organisation behind on
   -- the live database is a suite nobody may run there.
   begin
-    select count(*) = 0 into v_words
+    select count(*) = 1 into v_words
       from erp_ref.refusal f
-     where f.code in ('CLOVEERP_POSTING_RULE_EMPTY', 'CLOVEERP_POSTING_RULE_NOT_IN_THIS_ORGANISATION')
-       and (erp_test.sounds_internal(f.refused)
-            or erp_test.sounds_internal(f.why)
-            or erp_test.sounds_internal(f.next_action));
+     where f.code = 'CLOVEERP_POSTING_RULE_EMPTY'
+       and not erp_test.sounds_internal(f.refused)
+       and not erp_test.sounds_internal(f.why)
+       and not erp_test.sounds_internal(f.next_action);
     v_words := coalesce(v_words, false)
-               and (select count(*) from erp_ref.refusal f
-                     where f.code in ('CLOVEERP_POSTING_RULE_EMPTY',
-                                      'CLOVEERP_POSTING_RULE_NOT_IN_THIS_ORGANISATION')) = 2;
+               and not exists (select 1 from erp.refusal_report() r
+                                where r.token = 'CLOVEERP_POSTING_RULE_EMPTY'
+                                  and r.finding is not null);
 
     select * into ra from erp.provision_tenant(
       v_acode, 'Posting rules raise lines', 'admin@' || v_acode || '.test', 'Suite Admin');
@@ -631,9 +634,9 @@ begin
     end if;
   end;
 
-  case_name := 'the refusals this holds are registered in the words of the people they refuse';
+  case_name := 'the refusal this holds is registered, raised somewhere, and in the words of the people it refuses';
   passed := coalesce(v_words, false);
-  detail := 'a rule in force that raises nothing, and a rule that is not this organisation''s to read';
+  detail := 'a rule in force that raises nothing';
   return next;
 
   case_name := 'a list that is absent, empty or not a list is what raising nothing means';
