@@ -29,7 +29,7 @@ import { formatMinor } from "../money.ts";
 export type CommercialDocumentKind = "order_form" | "contract_invoice" | "invoice_reminder";
 
 /**
- * A reminder carries the invoice it chases (20260915030000), so it draws the
+ * A reminder carries the invoice it chases (20260915040000), so it draws the
  * same document from the same figures: what the customer is asked to pay is
  * the invoice, and a second piece of paper saying something slightly different
  * is how a dispute starts.
