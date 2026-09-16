@@ -198,6 +198,10 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   document_date: "Document date",
   required_date: "Required by",
   total_minor: "Total",
+  // Total keeps its meaning — the net the approval bands and the credit check
+  // are about — and the tax sits beside it (20260916030000).
+  tax_minor: "Tax",
+  gross_minor: "Total with tax",
 };
 
 /**
@@ -212,7 +216,22 @@ export function partyLabel(partyRole: string | undefined): string {
 }
 
 /** Fields a document's record shows, in this order. Its number and state head the panel. */
-const DOCUMENT_FIELDS = ["party", "document_date", "required_date", "total_minor"];
+const DOCUMENT_FIELDS = [
+  "party",
+  "document_date",
+  "required_date",
+  "total_minor",
+  "tax_minor",
+  "gross_minor",
+];
+
+/**
+ * Fields a document shows only when it has them. A required date belongs to an
+ * order and not to an invoice; tax and the gross belong to a document that
+ * carries tax, and erp_document leaves both keys out where there is none, so a
+ * document without tax reads exactly as it did before.
+ */
+const DOCUMENT_FIELDS_WHEN_PRESENT = new Set(["required_date", "tax_minor", "gross_minor"]);
 
 const TIMESTAMP = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -279,7 +298,7 @@ export function summariseRecord(
   partyRole?: string,
 ): RecordField[] {
   if (source.fn === DOCUMENT_READ) {
-    return DOCUMENT_FIELDS.filter((k) => k !== "required_date" || row[k]).map((k) =>
+    return DOCUMENT_FIELDS.filter((k) => !DOCUMENT_FIELDS_WHEN_PRESENT.has(k) || row[k]).map((k) =>
       fieldOf(k, row[k], row, minorUnits, partyRole),
     );
   }
@@ -302,6 +321,9 @@ export type DocumentLine = {
   description: string | null;
   quantity: number;
   net_minor: number | null;
+  /** Null on every line until the document commits and its tax is determined. */
+  tax_minor?: number | null;
+  tax_rate_pct?: number | string | null;
 };
 
 /** One line of a document, in a sentence's worth of words. */
