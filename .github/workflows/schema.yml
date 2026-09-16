@@ -716,6 +716,30 @@ jobs:
         # a migration fails here on the day it lands.
         run: supabase/ci/app_columns.sh
 
+      - name: Every value a screen writes is read by something
+        # The twin of the step above, and the worse half. A name the door does
+        # not return renders as an em dash, and somebody eventually asks. A
+        # control that writes a value nothing consults renders perfectly: the
+        # field saves, the value is still there next time, and the behaviour it
+        # promises never happens. One audit on 16 September found an entire
+        # approval-bands screen that changed who approves nothing, the account
+        # determination matrix, a location's "Holds at most" that put-away has
+        # never consulted, four fields on erp.release_area that nothing tests,
+        # a "Sourcing split %" that splits nothing, and a reason code's
+        # requires_note enforced by nothing.
+        #
+        # No suite can see it, and every one of those columns HAS a suite: one
+        # that writes a setting and reads it back proves the write and agrees
+        # perfectly with a product that never consults the value again. So
+        # erp.assert_write_only_columns() derives both halves from the BUILT
+        # DATABASE — the columns a maintenance door can write, walked one or two
+        # hops into the routines it delegates to, and the names anything uses in
+        # a where, a case, a join predicate, an order by, an arithmetic
+        # expression or an argument handed on — and refuses a column in the
+        # first set and not the second unless erp_meta.write_only_column says in
+        # writing why it is written anyway.
+        run: supabase/ci/write_only_columns.sh
+
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
         # with no code impact. That is only true of strings erp_ref.resource
