@@ -188,13 +188,22 @@ describe("a step whose verbs are spent points at the one after it", () => {
     expect(strip).toContain("const after = flow.stages[at + 1];");
   });
 
+  // One whole sentence with the name put into it, not a fragment joined to a
+  // name: a translator has to be able to move the name within the sentence.
   test("the sentence names it", () => {
-    expect(strip).toContain('${ui("The next step is")} ${ui(next.label)}.');
+    expect(strip).toContain('fill(ui("The next step is {step}."), { step: ui(next.label) })');
   });
 
   test("and there is a way to get there", () => {
     expect(strip).toContain("nothingApplies && next");
-    expect(strip).toContain('${ui("Go to")} ${ui(next.label).toLowerCase()}');
+    expect(strip).toContain('fill(ui("Go to {step}"), { step: ui(next.label) })');
+  });
+
+  // The step is called whatever the organisation calls it, and that name is put
+  // in as it was written. Lowercasing it would make "Companies House-style
+  // entity structure" read "companies house-style entity structure".
+  test("the name of the step is not recased", () => {
+    expect(strip).not.toContain("ui(next.label).toLowerCase()");
   });
 
   test("the last step of a chain points nowhere", () => {

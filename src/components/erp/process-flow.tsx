@@ -6,6 +6,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { actionKey, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
 import { article } from "../../lib/plain-words";
 import {
@@ -642,7 +643,9 @@ function StageRecord({
           {nothingApplies ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {ui("Nothing on this step applies to this record in its current state.")}
-              {next ? ` ${ui("The next step is")} ${ui(next.label)}.` : ""}
+              {next
+                ? ` ${fill(ui("The next step is {step}."), { step: ui(next.label) })}`
+                : ""}
             </p>
           ) : null}
         </>
@@ -710,7 +713,7 @@ function StageRecord({
             onClick={next.go}
             className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-3 text-sm font-medium`}
           >
-            {`${ui("Go to")} ${ui(next.label).toLowerCase()}`}
+            {fill(ui("Go to {step}"), { step: ui(next.label) })}
           </button>
         ) : null}
       </div>
