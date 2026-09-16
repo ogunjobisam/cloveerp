@@ -402,9 +402,9 @@ begin
        E'  -- A demonstration of a British manufacturer is a registered company:\n'
     || E'  -- unregistered, it would determine no tax and show a prospect a product\n'
     || E'  -- that cannot do VAT. The number is a demonstration''s number.\n'
-    || E'  if not exists (select 1 from erp.entity_tax_registration r\n'
-    || E'                  where r.tenant_id = p_tenant_id\n'
-    || E'                    and upper(r.registration_type) like ''VAT%'') then\n'
+    || E'  if not exists (select 1 from erp.entity_tax_registration etr\n'
+    || E'                  where etr.tenant_id = p_tenant_id\n'
+    || E'                    and upper(etr.registration_type) like ''VAT%'') then\n'
     || E'    insert into erp.entity_tax_registration (\n'
     || E'      tenant_id, entity_id, jurisdiction, registration_type,\n'
     || E'      registration_number, valid_from)\n'
@@ -569,7 +569,7 @@ begin
 
   -- ── 2. Without the registration nothing is determined, rules or no rules ──
   v_cases := v_cases + 1;
-  delete from erp.entity_tax_registration r where r.tenant_id = v_tenant;
+  delete from erp.entity_tax_registration etr where etr.tenant_id = v_tenant;
   v_plain := erp.create_document('sales_invoice', v_entity, v_site, v_cust,
                                  current_date, v_ccy, 'ZZTL-UNREGISTERED', '{}'::jsonb);
   perform erp.add_document_line(v_plain, v_item, 1, 10000, 'a supply by a company that is not registered');
@@ -649,11 +649,11 @@ begin
   -- ── 7. The return and the ledger agree ───────────────────────────────────
   v_cases := v_cases + 1;
   case_name := 'no posted document has determined tax its journal does not carry';
-  passed := not exists (select 1 from erp.tax_outside_the_ledger_report() r
-                         where r.finding like 'the tax on a posted document%');
-  detail := coalesce((select string_agg(r.reference, ', ')
-                        from erp.tax_outside_the_ledger_report() r
-                       where r.finding like 'the tax on a posted document%'),
+  passed := not exists (select 1 from erp.tax_outside_the_ledger_report() tl
+                         where tl.finding like 'the tax on a posted document%');
+  detail := coalesce((select string_agg(tl.reference, ', ')
+                        from erp.tax_outside_the_ledger_report() tl
+                       where tl.finding like 'the tax on a posted document%'),
                      'nothing outside the ledger');
   return next;
 
