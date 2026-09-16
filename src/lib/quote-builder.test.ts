@@ -65,10 +65,14 @@ describe("the book as choices", () => {
 
   test("a rate is for a book, a term and a currency", () => {
     const starter = BOOK[1]!;
-    expect(rateFor(starter, "CLOVE-LIST", "annual")).toBe(474000);
-    expect(rateFor(starter, "CLOVE-LIST", "monthly")).toBe(45425);
-    expect(rateFor(starter, "CLOVE-LIST", "multi_year")).toBeNull();
-    expect(rateFor(starter, "OTHER", "annual")).toBeNull();
+    expect(rateFor(starter, "CLOVE-LIST", "annual", "GBP")).toBe(474000);
+    expect(rateFor(starter, "CLOVE-LIST", "monthly", "GBP")).toBe(45425);
+    expect(rateFor(starter, "CLOVE-LIST", "multi_year", "GBP")).toBeNull();
+    expect(rateFor(starter, "OTHER", "annual", "GBP")).toBeNull();
+    // The book prices in GBP, so a quote in another currency has no rate on it
+    // rather than the pound one. The screen used to show the pound one while
+    // erp.add_quote_line priced from the quote's currency.
+    expect(rateFor(starter, "CLOVE-LIST", "annual", "USD")).toBeNull();
   });
 
   test("users are priced for the quote's own plan", () => {
@@ -140,10 +144,10 @@ describe("words and defaults", () => {
     expect(partyCodeFor("A very long company name indeed", "ffff")).toBe("A-VERY-LONG-COMP-FFFF");
   });
 
-  test("money reads as pounds, with pence only when there are some", () => {
-    expect(money(109500)).toBe("£1,095");
-    expect(money(45425)).toBe("£454.25");
-    expect(money(null)).toBe("—");
+  test("money says which currency it is in, with pence only when there are some", () => {
+    expect(money(109500, "GBP")).toBe("£1,095");
+    expect(money(45425, "GBP")).toBe("£454.25");
+    expect(money(null, "GBP")).toBe("—");
     expect(money(10000, "EUR")).toBe("100 EUR");
   });
 
