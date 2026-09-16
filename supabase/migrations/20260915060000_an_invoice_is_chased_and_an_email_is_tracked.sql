@@ -155,7 +155,7 @@ as $$
   -- The latest stored copy of each order form and invoice the organisation was
   -- sent: invoices of its own contracts, and order forms of quotes made for it
   -- or that its contracts were made from. A reminder carries the invoice that
-  -- is already listed, so it adds nothing here (20260915050000).
+  -- is already listed, so it adds nothing here (20260915060000).
   select distinct on (x.kind, x.document_id)
          x.id, x.kind, x.document_id, erp.commercial_document_filename(x.kind, x.document_id),
          x.document_bytes, x.sent_at
@@ -191,7 +191,7 @@ declare
     'kind', 'contract_invoice',$n$;
   v_new    constant text := $n$  return erp.without_cost_or_margin(jsonb_build_object(
     -- A reminder carries the invoice it chases, its number, and how overdue the
-    -- invoice was when the drain claimed it (20260915050000).
+    -- invoice was when the drain claimed it (20260915060000).
     'kind', e.kind,
     'reminder_number', case when e.kind = 'invoice_reminder' then e.send_number end,
     'days_overdue', case when e.kind = 'invoice_reminder'
@@ -220,7 +220,7 @@ declare
    where (p_kind = 'order_form' and e.quote_document_id = p_document_id)
       or (p_kind = 'contract_invoice' and e.contract_invoice_id = p_document_id);$n$;
   v_new    constant text := $n$  -- Among sends of this kind: a reminder is numbered among reminders, so
-  -- chasing an invoice does not renumber the invoice (20260915050000).
+  -- chasing an invoice does not renumber the invoice (20260915060000).
   select coalesce(max(e.send_number), 0) + 1 into v_send
     from erp_meta.commercial_email e
    where e.kind = p_kind
@@ -473,7 +473,7 @@ alter table erp_meta.commercial_email add constraint commercial_email_delivery_s
       and delivery_state_at is not null));
 
 comment on column erp_meta.commercial_email.delivery_state is
-  'The last thing the provider said about this message (20260915050000): sent, '
+  'The last thing the provider said about this message (20260915060000): sent, '
   'delayed, delivered, opened, complained or bounced. status is what the queue '
   'did; this is what became of it afterwards.';
 
@@ -762,7 +762,7 @@ declare
      and (j.demonstration or j.gone);$n$;
   v_new    constant text := $n$  -- Nothing is sent for a demonstration, for a document that no longer
   -- exists, or to an address the provider has told us to stop writing to
-  -- (20260915050000).
+  -- (20260915060000).
   with judged as (
     select ce.id,
            (erp.commercial_document_is_demonstration(ce.kind, coalesce(ce.quote_document_id, ce.contract_invoice_id))
@@ -829,7 +829,7 @@ declare
   v_def    text := pg_get_functiondef('public.erp_platform_open_invoices()'::regprocedure);
   v_needle constant text := $n$             'days_overdue', greatest(current_date - i.due_on, 0))$n$;
   v_new    constant text := $n$             'days_overdue', greatest(current_date - i.due_on, 0),
-             -- How far the chase has got (20260915050000).
+             -- How far the chase has got (20260915060000).
              'reminders_sent', s.reminders_sent, 'last_reminder_at', s.last_reminder_at)$n$;
   v_from   constant text := $n$      from erp_meta.contract_invoice i
       join erp_meta.contract c on c.id = i.contract_id$n$;
@@ -1417,11 +1417,14 @@ begin
     insert into erp_meta.contract
       (tenant_id, tenant_code, platform_tenant_id, quote_document_id, quote_number, quote_version,
        customer_legal_name, platform_legal_name, plan_code, term_kind, currency, annual_value_minor,
-       commencement, initial_term_months, current_term_start, current_term_end, governing_law, status)
+       commencement, initial_term_months, current_term_start, current_term_end, governing_law, status,
+       created_by)
     values (v_customer, v_ccode, v_platform, gen_random_uuid(), 'ZZTRACK-1', 1,
             'Tracking Customer Ltd', 'Clove ERP Ltd', (select p.code from erp_meta.plan p order by p.code limit 1),
             'annual', 'GBP', 1200000, current_date, 12, current_date, current_date + 365,
-            'England and Wales', 'active')
+            'England and Wales', 'active',
+            -- A contract says who wrote it, and this one was written by a suite.
+            'owner@' || v_pcode || '.test')
     returning id into v_contract;
     insert into erp_meta.contract_invoice
       (contract_id, tenant_id, tenant_code, seq, reference, period_start, period_end, due_on,

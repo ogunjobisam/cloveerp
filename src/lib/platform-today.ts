@@ -70,7 +70,7 @@ export type OpenInvoiceRow = {
   due_on: string;
   overdue: boolean;
   days_overdue: number;
-  /** How far the chase has got (20260915050000). */
+  /** How far the chase has got (20260915060000). */
   reminders_sent?: number | null;
   last_reminder_at?: string | null;
 };

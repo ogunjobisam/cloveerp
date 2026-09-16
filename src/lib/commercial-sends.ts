@@ -32,7 +32,7 @@ export type CommercialSend = {
   document_bytes?: number | null;
   /** Why there is no PDF with it, or no copy of one, when that is so. */
   document_problem?: string | null;
-  /** What the provider said became of it (20260915050000). */
+  /** What the provider said became of it (20260915060000). */
   delivery_state?: string | null;
   delivery_state_at?: string | null;
   delivery_detail?: string | null;
