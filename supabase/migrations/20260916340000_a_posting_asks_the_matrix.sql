@@ -242,7 +242,9 @@ begin
     -- Which refusal arrives first is the matrix's business: no rule covers
     -- the supply, or the item carries no class to write a rule against. The
     -- case is that it refuses rather than posting something plausible.
-    v_ok := sqlerrm like 'ERPWARE_DETERMINATION_FAILED%'
+    -- CLOVEERP_, not ERPWARE_: 20260904980000 rewrote every refusal prefix in
+    -- the live bodies, so the code in the defining file is not the code raised.
+    v_ok := sqlerrm like 'CLOVEERP_DETERMINATION_FAILED%'
          or sqlerrm like 'CLOVEERP_POSTING_CLASS_MISSING%';
     v_msg := left(sqlerrm, 80);
   end;
