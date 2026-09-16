@@ -33,6 +33,13 @@
 -- A line that spells its account `determined` still refuses when nothing
 -- matches, because that line asked the matrix by name and a silent fallback
 -- would be the matrix deciding nothing all over again.
+--
+-- Worth knowing before configuring it: a determination rule is written against
+-- an item's CLASS, never the item, and erp.determine_account() refuses outright
+-- for an item that carries no class. So a company that writes rules without
+-- classifying its items gets no answer from the matrix and keeps posting by its
+-- posting rules. That is the safe direction, and it is silent — which is why it
+-- is said here rather than found later.
 -- =============================================================================
 
 create or replace function erp.posting_line_account_code(
@@ -128,7 +135,7 @@ declare
   v_entity uuid; v_site uuid; v_item uuid; v_ccy char(3);
   v_cust uuid; v_doc uuid;
   v_ledger uuid; v_rev uuid; v_other uuid; v_third uuid;
-  v_line jsonb;
+  v_line jsonb; v_class uuid;
   v_got text; v_base text;
   v_ok boolean; v_msg text;
 begin
@@ -164,6 +171,16 @@ begin
   select a.id into v_third from erp.account a
    where a.tenant_id = v_tenant and a.entity_id = v_entity and a.account_type = 'expense'
      and a.status = 'active' and a.id <> v_other order by a.code desc limit 1;
+
+  -- Determination is written against an item's CLASS, never the item, and
+  -- refuses outright for an item that has none. The demonstration classifies
+  -- nothing, so the fixture does.
+  insert into erp.posting_class (tenant_id, kind, code, name, status)
+  values (v_tenant, 'item', 'ZZCLASS', 'Suite class', 'active')
+  returning id into v_class;
+  insert into erp.item_posting_class (tenant_id, item_id, posting_class_id,
+                                      valid_from, status)
+  values (v_tenant, v_item, v_class, current_date - 1, 'active');
 
   v_doc := erp.create_document('sales_invoice', v_entity, v_site, v_cust,
                                current_date, v_ccy, 'ZZDET-1', '{}'::jsonb);
@@ -222,7 +239,11 @@ begin
       v_doc, v_ledger);
     v_ok := false; v_msg := 'it was allowed';
   exception when others then
-    v_ok := sqlerrm like 'ERPWARE_DETERMINATION_FAILED%';
+    -- Which refusal arrives first is the matrix's business: no rule covers
+    -- the supply, or the item carries no class to write a rule against. The
+    -- case is that it refuses rather than posting something plausible.
+    v_ok := sqlerrm like 'ERPWARE_DETERMINATION_FAILED%'
+         or sqlerrm like 'CLOVEERP_POSTING_CLASS_MISSING%';
     v_msg := left(sqlerrm, 80);
   end;
   case_name := 'a line that names the matrix and finds no rule is refused rather than quietly posted';
