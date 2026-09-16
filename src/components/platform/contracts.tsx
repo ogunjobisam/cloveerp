@@ -5,6 +5,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
+import { formatFigure } from "../../lib/money";
 import type { PlatformRole } from "../../lib/platform";
 import { describeChanges, describeTermination, describeUplift } from "../../lib/contract-terms";
 import { DraftAmendment } from "./amendment-form";
@@ -137,9 +138,9 @@ type Position = {
   notices: { kind: string; due_on: string; raised_at: string }[];
 };
 
+/** Money reads as money here too, and the same way it reads everywhere else. */
 function money(minor: number | null | undefined, currency?: string) {
-  if (minor == null) return "—";
-  return `${(minor / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}${currency ? ` ${currency}` : ""}`;
+  return formatFigure(minor, currency);
 }
 
 function day(value: string | null | undefined) {

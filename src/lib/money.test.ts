@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatMinor, minorUnitsOf, toMinor, type Currency } from "./money";
+import { formatFigure, formatMinor, minorUnitsOf, toMinor, type Currency } from "./money";
 
 /**
  * The first test in this repository's front end.
@@ -47,6 +47,26 @@ describe("display", () => {
     expect(formatMinor(12345, "ZZZZ", 2)).toBe("123.45 ZZZZ"));
   test("a null amount is zero rather than blank", () =>
     expect(formatMinor(null, "GBP", 2)).toContain("0.00"));
+});
+
+/**
+ * The vendor console's revenue tiles read "0" on a deployment with nothing
+ * sold: it took the currency from the first contract in force, and with no
+ * contracts there was none to take. A bare nought says nothing about whether
+ * that is pounds, pence, or a figure that never loaded.
+ */
+describe("a figure whose currency may not be known", () => {
+  test("nothing sold still reads as money", () => expect(formatFigure(0)).toBe("£0"));
+  test("and so does a figure whose currency is blank", () =>
+    expect(formatFigure(123400, "")).toBe("£1,234"));
+  test("a currency that is known is the one used", () =>
+    expect(formatFigure(123400, "USD")).toContain("1,234"));
+  test("only a missing amount is a dash", () => {
+    expect(formatFigure(null)).toBe("—");
+    expect(formatFigure(undefined, "GBP")).toBe("—");
+  });
+  test("a tile is read at a glance, so the pence are dropped", () =>
+    expect(formatFigure(123456, "GBP")).toBe("£1,235"));
 });
 
 describe("input, which is the direction that writes to the ledger", () => {

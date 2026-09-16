@@ -849,6 +849,7 @@ export function ActionDialog({
   fields: declaredFields,
   mapArgs,
   prefill,
+  preselect,
   context,
   emptyNote,
 
@@ -877,6 +878,16 @@ export function ActionDialog({
    * regardless of what the form built.
    */
   prefill?: Record<string, unknown>;
+  /**
+   * Answers the surrounding screen has, offered rather than assumed.
+   *
+   * `prefill` takes the question away, which is right when the screen's answer
+   * is the only possible one. Where it is merely the likely one — the goods
+   * that turned up are usually, not always, against the purchase order in front
+   * of you — the field arrives holding this value and stays the person's to
+   * change. The form sends what it shows, so changing it changes what is sent.
+   */
+  preselect?: Record<string, string>;
   /**
    * What this form is acting on, in words.
    *
@@ -920,7 +931,12 @@ export function ActionDialog({
     () => (permitted ? registerActionOpener(fn, () => setOpen(true)) : undefined),
     [fn, permitted],
   );
-  const [values, setValues] = useState<Record<string, string>>(() => initialValues(fields));
+  // What the form starts holding: its declared defaults, then the answers the
+  // screen already has. Cheap enough to build each render, and a caller whose
+  // preselection follows a changing record keys the dialog by that record, so a
+  // different one starts the form again rather than leaving the old answer in.
+  const opening = { ...initialValues(fields), ...(preselect ?? {}) };
+  const [values, setValues] = useState<Record<string, string>>(() => opening);
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
 
@@ -1004,7 +1020,7 @@ export function ActionDialog({
 
   // An open form with something typed into it is work in progress, and
   // leaving the screen must ask before it is thrown away.
-  const untouched = useMemo(() => JSON.stringify(initialValues(fields)), [fields]);
+  const untouched = JSON.stringify(opening);
   useUnsavedGuard(
     open &&
       (JSON.stringify(values) !== untouched ||
@@ -1026,7 +1042,7 @@ export function ActionDialog({
     },
     onSuccess: ({ result, args }) => {
       invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
-      setValues(initialValues(fields));
+      setValues(opening);
       setLists({});
       setRows({});
       setOpen(false);

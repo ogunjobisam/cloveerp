@@ -18,7 +18,12 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow } from "../../components/erp/process-flow";
-import { GOODS_IN_LIST, PURCHASING_KPIS, RECEIVE_AN_ORDER } from "../../lib/modules";
+import {
+  GOODS_IN_LIST,
+  PURCHASING_KPIS,
+  RECEIVE_AN_ORDER,
+  RECEIVE_THIS_ORDER,
+} from "../../lib/modules";
 import { useT } from "../../lib/i18n";
 import { approvalSubject } from "../../lib/plain-words";
 
@@ -652,7 +657,7 @@ function Procurement() {
             },
             {
               label: "Purchase order",
-              hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent.",
+              hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent. Once it is sent, the goods are received from here.",
               fedBy:
                 "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
 
@@ -661,11 +666,23 @@ function Procurement() {
               // with its approvers, one approved and not sent, and one the
               // supplier is delivering against.
               states: ["draft", "pending_approval", "approved", "sent", "partially_received"],
-              // The behaviour of an order is fixed once the supplier has it.
-              actionStates: { erp_set_order_behaviour: ["draft", "pending_approval", "approved"] },
+              actionStates: {
+                // The behaviour of an order is fixed once the supplier has it.
+                erp_set_order_behaviour: ["draft", "pending_approval", "approved"],
+                // And from the moment they have it, the goods can turn up. A
+                // sent order offered nothing at all before this, so the step a
+                // buyer stands on when the van arrives was the one step with
+                // nothing to press.
+                receive_this_order: ["sent", "partially_received"],
+              },
               partyRole: "supplier",
               recordArg: "p_document_id",
+              // Receiving calls the order p_order_id, and what arrived is
+              // usually — not always — against the order in front of you, so it
+              // arrives chosen and stays changeable.
+              carriedArgs: { receive_this_order: "p_order_id" },
               actionFn: "erp_set_order_behaviour",
+              actionFns: ["receive_this_order"],
             },
             {
               label: "Goods receipt",
@@ -740,7 +757,7 @@ function Procurement() {
             },
           ],
         }}
-        actions={PROCUREMENT_ACTIONS}
+        actions={[...PROCUREMENT_ACTIONS, RECEIVE_THIS_ORDER]}
       />
 
       <ActionBar

@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
-import { actionKey, stageActionKeys } from "../../lib/flow-actions";
+import { actionKey, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
 import { article } from "../../lib/plain-words";
 import {
@@ -103,6 +104,15 @@ export type Stage = {
   list?: StageList;
   /** Which argument the chosen record fills on this stage's verbs. */
   recordArg?: string;
+  /**
+   * Verbs that arrive holding the chosen record instead of hiding the question,
+   * keyed as the verb is named and valued by the argument it fills.
+   *
+   * `recordArg` answers a verb and takes its question away. A verb here is
+   * answered and still asked: the picker opens on this record, and somebody
+   * receiving against a different order can say so. See `recordAnswer`.
+   */
+  carriedArgs?: Record<string, string>;
   /** The verb that moves the chosen record on, by function name. */
   actionFn?: string;
   /** Further verbs for the chosen record. */
@@ -128,6 +138,16 @@ export type FlowSpec = {
   note?: string;
   stages: Stage[];
 };
+
+/**
+ * The step after this one, and the way to it.
+ *
+ * A record whose step has nothing left to do for it has not stopped — it has
+ * moved on. The panel names where to, and the button puts the reader there,
+ * because "Nothing on this step applies" on its own reads as a fault rather
+ * than as progress.
+ */
+type NextStep = { label: string; go: () => void };
 
 /** How many rows a stage read may return. Beyond this the footer says so. */
 const CAP = 200;
@@ -222,12 +242,14 @@ function actionStaysOpen(action: ActionSpec): boolean {
 function StageAction({
   action,
   prefill,
+  preselect,
   permitted,
   context,
   settled,
 }: {
   action: ActionSpec;
   prefill: Record<string, unknown>;
+  preselect?: Record<string, string>;
   permitted: boolean;
   context?: string;
   settled?: string | null;
@@ -263,6 +285,7 @@ function StageAction({
       {...(action.mapArgs ? { mapArgs: action.mapArgs } : {})}
       {...(action.emptyNote ? { emptyNote: action.emptyNote } : {})}
       prefill={prefill}
+      {...(preselect && Object.keys(preselect).length > 0 ? { preselect } : {})}
       {...(context ? { context } : {})}
 
       invalidates={action.invalidates ?? []}
@@ -454,20 +477,20 @@ function StageRecord({
   row,
   recordActions,
   createAction,
+  next,
 }: {
   stage: Stage;
   source: StageList | undefined;
   row: Row | null;
   recordActions: ActionSpec[];
   createAction: ActionSpec | undefined;
+  next: NextStep | null;
 }) {
   const { ui } = useT();
   const { session } = useErpSession();
   const { currencies } = useCurrencies();
   const permitted = (a: ActionSpec) => !a.permission || hasPermission(session, a.permission);
   const id = row && source ? String(row[source.id] ?? "") : "";
-  const prefill: Record<string, unknown> =
-    stage.recordArg && id ? { [stage.recordArg]: id } : ({} as Record<string, unknown>);
   const summary =
     row && source
       ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
@@ -614,9 +637,13 @@ function StageRecord({
             />
           ) : null}
 
+          {/* A step whose verbs are all spent is not a dead end: this record
+              has been worked here and belongs to the step after this one. Say
+              which, and put the way there beside the sentence. */}
           {nothingApplies ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {ui("Nothing on this step applies to this record in its current state.")}
+              {next ? ` ${fill(ui("The next step is {step}."), { step: ui(next.label) })}` : ""}
             </p>
           ) : null}
         </>
@@ -629,16 +656,25 @@ function StageRecord({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {offered.map(({ action, offer }) => (
-          <StageAction
-            key={actionKey(action)}
-            action={action}
-            prefill={prefill}
-            permitted={permitted(action)}
-            settled={offer === "settled" ? settled : null}
-            {...(summary ? { context: summary } : {})}
-          />
-        ))}
+        {offered.map(({ action, offer }) => {
+          const answer = recordAnswer(stage, action, id);
+          const carried = Object.keys(answer.preselect).length > 0;
+          return (
+            <StageAction
+              // Keyed by the record as well, so a form that arrives holding the
+              // chosen one starts again when a different one is chosen.
+              key={`${actionKey(action)}:${id}`}
+              action={action}
+              prefill={answer.prefill}
+              preselect={answer.preselect}
+              permitted={permitted(action)}
+              settled={offer === "settled" ? settled : null}
+              // A form that shows the record in its own picker does not need a
+              // box above it saying the same thing.
+              {...(summary && !carried ? { context: summary } : {})}
+            />
+          );
+        })}
         {isDocument ? (
           <Link
             to="/documents/$documentId"
@@ -669,13 +705,30 @@ function StageRecord({
             {ui(stage.toLabel ?? "Open")}
           </Link>
         ) : null}
+        {nothingApplies && next ? (
+          <button
+            type="button"
+            onClick={next.go}
+            className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-3 text-sm font-medium`}
+          >
+            {fill(ui("Go to {step}"), { step: ui(next.label) })}
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
 
 /** The workbench for one chosen stage: its list on the left, its record on the right. */
-function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[] }) {
+function StageWorkbench({
+  stage,
+  actions,
+  next,
+}: {
+  stage: Stage;
+  actions: ActionSpec[];
+  next: NextStep | null;
+}) {
   const [showFinished, setShowFinished] = useState(false);
   const { source, rows, capped, isPending, error } = useStageRows(stage, showFinished);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -712,6 +765,7 @@ function StageWorkbench({ stage, actions }: { stage: Stage; actions: ActionSpec[
         source={source}
         row={row}
         recordActions={recordActions}
+        next={next}
         {...(createAction ? { createAction } : { createAction: undefined })}
       />
     </div>
@@ -800,7 +854,12 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
     return specs.some((a) => !a.permission || hasPermission(session, a.permission));
   };
 
-  const stage = flow.stages[Math.min(chosen, flow.stages.length - 1)];
+  const at = Math.min(chosen, flow.stages.length - 1);
+  const stage = flow.stages[at];
+  // Where work goes from here. The last step of a chain has nowhere further to
+  // point, and says so by pointing nowhere.
+  const after = flow.stages[at + 1];
+  const next: NextStep | null = after ? { label: after.label, go: () => setChosen(at + 1) } : null;
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
@@ -824,7 +883,9 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
         {stage ? <p className="mt-2 text-xs text-muted-foreground">{ui(stage.hint)}</p> : null}
       </div>
 
-      {stage ? <StageWorkbench key={stage.label} stage={stage} actions={actions} /> : null}
+      {stage ? (
+        <StageWorkbench key={stage.label} stage={stage} actions={actions} next={next} />
+      ) : null}
     </section>
   );
 }
