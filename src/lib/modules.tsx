@@ -1985,8 +1985,11 @@ export const FINANCE: ModuleDef = {
       empty:
         "No taxable transactions this quarter. A document that carries tax appears here once it is posted.",
       rowKey: (r, i) =>
-        `${String(r["jurisdiction"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
+        `${String(r["direction"] ?? i)}-${String(r["jurisdiction"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
       columns: [
+        // Charged on what was sold, or suffered on what was bought. Separate
+        // boxes on every return, so separate rows here.
+        { header: "Direction", cell: "direction" },
         { header: "Jurisdiction", cell: "jurisdiction" },
         { header: "Code", cell: "tax_code" },
         { header: "Rate %", cell: "rate_pct", numeric: true },
