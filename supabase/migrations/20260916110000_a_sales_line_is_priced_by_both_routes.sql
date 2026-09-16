@@ -88,7 +88,7 @@ declare
   v_tenant uuid; v_admin uuid; v_token text;
   v_entity uuid; v_site uuid; v_item uuid; v_ccy char(3);
   v_cust uuid; v_supp uuid;
-  v_listed bigint;
+  v_listed bigint; v_uom uuid;
   v_doc uuid; v_full uuid; v_po uuid;
   v_added bigint; v_byform bigint; v_typed bigint; v_pline bigint;
 begin
@@ -117,12 +117,21 @@ begin
      and pr.role_kind = 'supplier' and pr.status = 'active'
    where p.tenant_id = v_tenant order by p.code limit 1;
 
-  -- An item the catalogue has a price for, so "unpriced" has an answer.
+  -- An item with a selling price on it. The demonstration seeds purchase
+  -- prices and not sales ones, so the fixture puts the price there itself
+  -- rather than asserting against whatever the demonstration happens to hold.
   select i.id into v_item
     from erp.item i
    where i.tenant_id = v_tenant and i.status = 'active'::erp.record_status
-     and (select r.amount_minor from erp.resolve_price(i.id, v_cust, 1, current_date, v_site) r limit 1) > 0
    order by i.code limit 1;
+  select coalesce(i.sales_uom_id, i.stock_uom_id) into v_uom
+    from erp.item i where i.id = v_item;
+
+  insert into erp.item_price (tenant_id, item_id, price_kind, price_list_code,
+                              currency, amount_minor, per_quantity, uom_id,
+                              min_quantity, valid_from)
+  values (v_tenant, v_item, 'sales_list', 'ZZ-LIST', v_ccy, 4500, 1, v_uom, 0,
+          current_date - 10);
 
   select r.amount_minor into v_listed
     from erp.resolve_price(v_item, v_cust, 1, current_date, v_site) r limit 1;
