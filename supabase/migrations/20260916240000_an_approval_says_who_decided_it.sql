@@ -9,13 +9,13 @@
 --      approve anything"; it is the wrong answer to "the person who normally
 --      approves this has left", which is the case that actually happens.
 --
---   2. Whoever raised a document may approve it, when they are themselves an
---      approver for that step. Today they are excluded outright: v_exclude
---      takes the requester out before the tasks are made, and if nobody else
---      holds the role the request refuses. For a company where the buyer and
---      the approver are one person — which is most small companies, and is the
---      owner's own — that is friction with no safety in it, because the
---      alternative offered is not a second opinion, it is a dead end.
+--   2. Whoever raised a document may approve it WHERE NOBODY ELSE CAN. Today
+--      that case refuses — CLOVEERP_APPROVAL_NO_OTHER_APPROVER — so a company
+--      where the buyer and the approver are one person cannot raise anything
+--      at all. That is friction with no safety in it: the alternative on offer
+--      was not a second opinion, it was a dead end. Where a second approver
+--      does exist the exclusion stands, unchanged, because there the exclusion
+--      buys exactly what it was written to buy.
 --
 --   3. Except where somebody has said those two duties are separate. An
 --      organisation that has written a separation rule pairing the raising of
@@ -199,8 +199,10 @@ do $seq$
 declare
   v_sig constant text := 'erp.open_approval_seq(uuid, integer)';
   v_def text := pg_get_functiondef(v_sig::regprocedure);
-  v_excl constant text :=
-    E'  v_exclude := case when v_req.object_type = ''document'' then v_req.requested_by end;';
+  v_lone constant text :=
+       E'        if erp.tenant_is_live(v_tenant) then\n'
+    || E'          select r.code into v_role from erp.role r where r.tenant_id = v_tenant and r.id = st.role_id;\n'
+    || E'          raise exception ''CLOVEERP_APPROVAL_NO_OTHER_APPROVER: step % needs somebody other than the person asking, and nobody else holds %'',';
   v_unstaffed constant text :=
     E'      if v_made = 0 then\n'
     || E'        -- A step whose role has nobody in it would silently stall the request.\n'
@@ -211,23 +213,22 @@ declare
     || E'      end if;';
   v_new text;
 begin
-  if (length(v_def) - length(replace(v_def, v_excl, ''))) / length(v_excl) <> 1 then
-    raise exception 'CLOVEERP_APPROVAL_SEQ_UNRECOGNISED: the requester exclusion in % is not the one this migration changes', v_sig;
+  if (length(v_def) - length(replace(v_def, v_lone, ''))) / length(v_lone) <> 1 then
+    raise exception 'CLOVEERP_APPROVAL_SEQ_UNRECOGNISED: the lone-approver refusal in % is not the one this migration changes', v_sig;
   end if;
   if (length(v_def) - length(replace(v_def, v_unstaffed, ''))) / length(v_unstaffed) <> 1 then
     raise exception 'CLOVEERP_APPROVAL_SEQ_UNRECOGNISED: the unstaffed refusal in % is not the one this migration replaces', v_sig;
   end if;
 
-  -- (a) The person who asked is excluded only where the organisation says so.
-  v_new := replace(v_def, v_excl,
-       E'  -- Whoever asks may also answer, where the organisation allows it and no\n'
-    || E'  -- separation rule pairs the raising of this document with its approval.\n'
-    || E'  -- Excluding them outright offered no second opinion, only a dead end in\n'
-    || E'  -- every company where the buyer and the approver are one person.\n'
-    || E'  v_exclude := case\n'
-    || E'    when v_req.object_type = ''document''\n'
-    || E'     and not erp.may_approve_own(v_req.requested_by, v_req.object_id)\n'
-    || E'    then v_req.requested_by end;');
+  -- (a) Where the person who asked is the ONLY person who could approve, they
+  --     are asked rather than refused. Everywhere else the exclusion stands:
+  --     an organisation with a second approver still gets a second opinion,
+  --     which is what the exclusion was for and remains right.
+  v_new := replace(v_def, v_lone,
+       E'        if erp.tenant_is_live(v_tenant)\n'
+    || E'           and not erp.may_approve_own(v_req.requested_by, v_req.object_id) then\n'
+    || E'          select r.code into v_role from erp.role r where r.tenant_id = v_tenant and r.id = st.role_id;\n'
+    || E'          raise exception ''CLOVEERP_APPROVAL_NO_OTHER_APPROVER: step % needs somebody other than the person asking, and nobody else holds %'',');
 
   -- (b) Nobody in the step is a reason to ask the administrators, not to stop.
   v_new := replace(v_new, v_unstaffed,
@@ -594,30 +595,18 @@ do $hold$
 declare
   v_sig constant text := 'erp_test.approval_hold_suite()';
   v_def text := pg_get_functiondef(v_sig::regprocedure);
-  v_one constant text :=
-       E'  case_name := ''submitting asks the approving role''''s other holder, and not the person who submitted'';\n'
-    || E'  passed := coalesce(v_state is null and v_tasks = 1 and v_task_to = v_second and v_task_role = ''purchasing'', false);';
   v_two constant text :=
        E'  case_name := ''where only the person submitting holds the approving role, a live organisation refuses the submission'';\n'
     || E'  passed := coalesce(v_state is null and v_so_err like ''CLOVEERP_APPROVAL_NO_OTHER_APPROVER%''\n'
     || E'            and v_so_state = ''draft'', false);';
   v_new text;
 begin
-  if (length(v_def) - length(replace(v_def, v_one, ''))) / length(v_one) <> 1 then
-    raise exception 'CLOVEERP_HOLD_SUITE_UNRECOGNISED: the case about who is asked in % is not the one this migration turns round', v_sig;
-  end if;
   if (length(v_def) - length(replace(v_def, v_two, ''))) / length(v_two) <> 1 then
     raise exception 'CLOVEERP_HOLD_SUITE_UNRECOGNISED: the case about the lone approver in % is not the one this migration turns round', v_sig;
   end if;
 
-  -- The submitter is asked as well, so the role's other holder is asked too and
-  -- there are two tasks rather than one.
-  v_new := replace(v_def, v_one,
-       E'  case_name := ''submitting asks everybody who holds the approving role, the person who submitted included'';\n'
-    || E'  passed := coalesce(v_state is null and v_tasks = 2 and v_task_role = ''purchasing'', false);');
-
   -- And a lone approver approves instead of being refused.
-  v_new := replace(v_new, v_two,
+  v_new := replace(v_def, v_two,
        E'  case_name := ''where only the person submitting holds the approving role, they are asked rather than refused'';\n'
     || E'  passed := coalesce(v_state is null and v_so_err is null\n'
     || E'            and v_so_state = ''pending_approval'', false);');
