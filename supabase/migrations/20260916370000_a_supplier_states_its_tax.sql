@@ -197,6 +197,17 @@ comment on function public.erp_state_supplier_tax(uuid, bigint, text, text) is
   'and reconciled. Asks procurement.match, the permission that registers a '
   'supplier bill in the first place.';
 
+-- A door that writes says so, and says under what.
+insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
+  ('erp_state_supplier_tax', 'erp.authorise',
+   'Records the tax a supplier''s invoice states on the lines of that invoice, '
+   'under procurement.match — the permission that registers a supplier bill in '
+   'the first place. It writes erp.tax_determination and the tax columns of '
+   'erp.document_line for one purchase document, and derives nothing: the '
+   'figure is the one on the supplier''s paperwork (20260916320000).')
+on conflict (function_name) do update set gate = excluded.gate,
+                                          rationale = excluded.rationale;
+
 select erp.assert_public_api_safe();
 
 -- ── 2. The return tells input from output ────────────────────────────────────
