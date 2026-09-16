@@ -110,6 +110,28 @@ type RuleRow = {
   is_blocked: boolean;
 };
 
+type HoldRow = {
+  hold_id: string;
+  site: string;
+  item: string;
+  item_name: string | null;
+  batch: string | null;
+  location: string;
+  location_name: string | null;
+  quantity: number;
+  reason: string;
+};
+
+/**
+ * Why put-away left a pallet where it was. The door answers with a code so the
+ * words stay in the terminology layer rather than in the database.
+ */
+function holdReason(code: string, ui: (text: string) => string): string {
+  return code === "every_place_is_full"
+    ? ui("Every place it belongs in is full")
+    : ui("Nowhere at this site has room for it");
+}
+
 const pickRule = () =>
   pickFrom(
     "erp_storage_rules",
@@ -123,7 +145,7 @@ const pickPlace = (label = "Location") => pickLocation("p_location_id", label, t
 
 function WarehouseLayout() {
   const { ui } = useT();
-  const invalidates = ["erp_locations", "erp_storage_rules"];
+  const invalidates = ["erp_locations", "erp_storage_rules", "erp_putaway_holds"];
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -404,6 +426,31 @@ function WarehouseLayout() {
                   ) : (
                     <Pill tone="ok">{ui("In force")}</Pill>
                   )}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <DataPanel<HoldRow>
+        title={ui("Nothing could be put away")}
+        description={ui(
+          "Stock standing in goods-in that put-away left where it is, because nowhere has room for it. Raise what a place holds, make room in it, or add a storage rule naming somewhere else.",
+        )}
+        fn="erp_putaway_holds"
+        empty={ui("Nothing is waiting. Everything received has had somewhere to go.")}
+      >
+        {(rows) => (
+          <Table columns={[ui("Site"), ui("Product"), ui("Place"), ui("Quantity"), ui("Why")]}>
+            {rows.map((h) => (
+              <tr key={h.hold_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{h.site}</td>
+                <td className="py-2 pr-4">{h.item_name ? `${h.item} — ${h.item_name}` : h.item}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{h.location}</td>
+                <td className="py-2 pr-4 tabular-nums">{h.quantity}</td>
+                <td className="py-2 pr-4">
+                  <Pill tone="warn">{holdReason(h.reason, ui)}</Pill>
                 </td>
               </tr>
             ))}
