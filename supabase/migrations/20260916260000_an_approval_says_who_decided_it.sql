@@ -162,6 +162,34 @@ comment on function erp.may_approve_own(uuid, uuid) is
   'approval: the organisation allows it, and no separation rule pairs the '
   'permission that raised it with one they hold.';
 
+-- The policy says whether somebody MAY approve their own. This says whether
+-- they are the only person who WAS asked. The owner's rule needs both: a
+-- company with a second approver still waits for them, and only a person
+-- nobody else can relieve decides their own.
+create or replace function erp.sole_approver_asked(p_request_id uuid, p_app_user_id uuid)
+returns boolean
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select not exists (
+    select 1
+      from erp.approval_task t
+     where t.tenant_id = erp.current_tenant_id()
+       and t.approval_request_id = p_request_id
+       and t.status <> 'skipped'
+       and t.assignee_user_id is distinct from p_app_user_id);
+$$;
+
+revoke all on function erp.sole_approver_asked(uuid, uuid) from public, anon, authenticated;
+
+comment on function erp.sole_approver_asked(uuid, uuid) is
+  'Whether this person is the only one asked on this request. Beside '
+  'erp.may_approve_own(), which says whether the organisation would allow them '
+  'to decide their own at all: a second approver still gets to be the second '
+  'opinion the exclusion was written for.';
+
 -- ── 2. And who is asked when the answer is nobody ────────────────────────────
 
 create or replace function erp.organisation_administrators()
@@ -489,7 +517,23 @@ begin
     if sqlerrm <> 'CLOVEERP_SUITE_UNDO' then raise; end if;
   end;
 
-  -- ── 8. Undone ────────────────────────────────────────────────────────────
+  -- ── 8. Being allowed is not the same as being alone ──────────────────────
+  v_cases := v_cases + 1;
+  insert into erp.approval_task (tenant_id, approval_request_id, step_code, seq,
+                                 assignee_user_id, status)
+  values (v_tenant, v_req, 'zz_second', 1,
+          (select u.id from erp.app_user u
+            where u.tenant_id = v_tenant and u.id <> v_admin
+            order by u.created_at limit 1), 'pending');
+  case_name := 'somebody the organisation would let approve their own is still not alone once a colleague is asked';
+  passed := erp.may_approve_own(v_admin, v_doc)
+        and not erp.sole_approver_asked(v_req, v_admin);
+  detail := format('may approve own %s, sole approver asked %s',
+                   erp.may_approve_own(v_admin, v_doc),
+                   erp.sole_approver_asked(v_req, v_admin));
+  return next;
+
+  -- ── 9. Undone ────────────────────────────────────────────────────────────
   v_cases := v_cases + 1;
   case_name := 'the fixture was undone';
   passed := not exists (select 1 from erp.tenant where code = 'zz-approval-policy')
@@ -497,8 +541,8 @@ begin
   detail := 'zz-approval-policy rolled back with its rule, request and decision';
   return next;
 
-  if v_cases <> 8 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: approval_policy_suite ran % cases, expected 8', v_cases;
+  if v_cases <> 9 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: approval_policy_suite ran % cases, expected 9', v_cases;
   end if;
 end;
 $$;
@@ -525,8 +569,8 @@ begin
   if v_fail > 0 then
     raise exception E'CLOVEERP_APPROVAL_POLICY_SUITE_FAILED: %/% case(s) failed\n%', v_fail, v_all, v_detail;
   end if;
-  if v_all <> 8 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: approval_policy_suite ran % cases, expected 8', v_all;
+  if v_all <> 9 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: approval_policy_suite ran % cases, expected 9', v_all;
   end if;
   return format('an approval says who decided it: %s/%s cases passed', v_all, v_all);
 end;
@@ -654,7 +698,8 @@ begin
   v_new := replace(v_def, v_needle,
        E'  if q.requested_by = erp.current_principal_id()\n'
     || E'     and erp.tenant_is_live(v_tenant)\n'
-    || E'     and not erp.may_approve_own(q.requested_by, p_document_id)\n'
+    || E'     and not (erp.may_approve_own(q.requested_by, p_document_id)\n'
+    || E'              and erp.sole_approver_asked(q.id, q.requested_by))\n'
     || E'     and exists (select 1 from erp.approval_task t\n'
     || E'                  where t.tenant_id = v_tenant and t.approval_request_id = q.id\n'
     || E'                    and t.status <> ''skipped'') then');
@@ -675,7 +720,8 @@ begin
     || E'     and v_req.object_type = ''document''\n'
     || E'     and v_req.requested_by = v_actor\n'
     || E'     and erp.tenant_is_live(v_tenant)\n'
-    || E'     and not erp.may_approve_own(v_req.requested_by, v_req.object_id) then');
+    || E'     and not (erp.may_approve_own(v_req.requested_by, v_req.object_id)\n'
+    || E'              and erp.sole_approver_asked(v_req.id, v_req.requested_by)) then');
   execute v_new;
 end
 $guards$;
