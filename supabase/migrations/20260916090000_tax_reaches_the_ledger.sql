@@ -755,3 +755,45 @@ select erp.assert_no_public_execute();
 select erp.assert_writes_name_their_rows();
 select erp.assert_ci_coverage();
 select erp_test.assert_tax_reaches_the_ledger_suite();
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- The case that asserted the gap
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- erp_test.invoice_tax_suite() case 9 proved the gap was named rather than
+-- hidden: it asserted that a posted invoice with determined tax DID appear in
+-- erp.tax_outside_the_ledger_report(). That was true and worth asserting while
+-- the tax stayed out of the ledger. It is false now, and a suite that asserts
+-- the absence of a fix is a suite that fails the moment the fix lands. The case
+-- keeps its number and asserts the same subject from the other side.
+do $case9$
+declare
+  v_sig constant text := 'erp_test.invoice_tax_suite()';
+  v_def text := pg_get_functiondef(v_sig::regprocedure);
+  v_needle constant text :=
+    E'  case_name := ''the product names every document whose determined tax reached no tax account, rather than hiding it'';\n'
+    || E'  passed := exists (select 1 from erp.tax_outside_the_ledger_report() r\n'
+    || E'                     where r.finding like ''tax was determined on a posted document%''\n'
+    || E'                       and r.reference = (select d.document_number from erp.document d where d.id = v_inv2));';
+  v_new text;
+begin
+  if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
+    raise exception 'CLOVEERP_TAX_SUITE_UNRECOGNISED: the case that asserted the gap in % is not the one this migration turns round', v_sig;
+  end if;
+
+  v_new := replace(v_def, v_needle,
+       E'  case_name := ''the tax determined on an issued invoice reaches a tax control account, and none is left outside the ledger'';\n'
+    || E'  passed := not exists (select 1 from erp.tax_outside_the_ledger_report() tl\n'
+    || E'                         where tl.finding like ''the tax on a posted document%'')\n'
+    || E'        and (select coalesce(sum(jl.credit_minor - jl.debit_minor), 0)\n'
+    || E'               from erp.journal j\n'
+    || E'               join erp.journal_line jl on jl.tenant_id = j.tenant_id and jl.journal_id = j.id\n'
+    || E'               join erp.account a on a.tenant_id = jl.tenant_id and a.id = jl.account_id\n'
+    || E'              where j.tenant_id = v_tenant and j.document_id = v_inv2\n'
+    || E'                and a.control_kind = ''tax'') = erp.document_tax_minor(v_inv2);');
+
+  execute v_new;
+end
+$case9$;
+
+select erp_test.assert_invoice_tax_suite();
