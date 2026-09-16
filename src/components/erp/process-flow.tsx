@@ -7,6 +7,7 @@ import { actionKey, stageActionKeys } from "../../lib/flow-actions";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
+import { article } from "../../lib/plain-words";
 import {
   DOCUMENT_READ,
   describeLine,
@@ -616,7 +617,7 @@ function StageRecord({
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">
           {source
-            ? `Choose a ${source.noun} on the left, and what you can do to it appears here.`
+            ? `Choose ${article(source.noun)} ${source.noun} on the left, and what you can do to it appears here.`
             : "Nothing to choose at this step."}
         </p>
       )}

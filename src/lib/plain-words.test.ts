@@ -12,6 +12,7 @@ import {
   describeWarehouseTask,
   documentIdInPath,
   documentOutcome,
+  article,
   localIsoDate,
   quarterToDate,
   movedOnWord,
@@ -279,6 +280,20 @@ describe("the Close step's periods", () => {
     expect(periodRank(period("2026-10", "open"), today)).toBe(3);
     expect(periodRank(period("2026-09", "future"), today)).toBe(3);
     expect(periodRank(period("2024-12", "permanently_closed"), today)).toBe(4);
+  });
+
+  test("a step names an event, not a event", () => {
+    expect(article("event")).toBe("an");
+    expect(article("invoice")).toBe("an");
+    expect(article("order")).toBe("an");
+    expect(article("document")).toBe("a");
+    expect(article("works order")).toBe("a");
+    expect(article("pallet")).toBe("a");
+    // Sound, not spelling.
+    expect(article("unit")).toBe("a");
+    expect(article("user")).toBe("a");
+    expect(article("hour")).toBe("an");
+    expect(article("")).toBe("a");
   });
 
   test("today is the reader's own date, as the database writes one", () => {

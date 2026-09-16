@@ -69,6 +69,26 @@ export function soundsInternal(text: string): boolean {
  * Only when the sentence starts with a letter, after any opening quote or
  * bracket: "2 of 40 cases" stays as it is rather than becoming "2 Of 40".
  */
+/**
+ * "a" or "an", for a noun a screen is about to name.
+ *
+ * Quality control's step panel said "Choose a event on the left" because the
+ * sentence was built from the step's own noun and the article was a letter in
+ * a template. Sound, not spelling, decides the word, so the exceptions are
+ * listed rather than guessed: a "u" that says "you" takes "a", and an "h" that
+ * is not spoken takes "an".
+ */
+const SOUNDED_CONSONANT = /^(?:uni|use|user|uk|one|euro)/i;
+const SILENT_H = /^(?:hour|honest|honour)/i;
+
+export function article(noun: string): "a" | "an" {
+  const word = noun.trim().toLowerCase();
+  if (word === "") return "a";
+  if (SILENT_H.test(word)) return "an";
+  if (SOUNDED_CONSONANT.test(word)) return "a";
+  return /^[aeiou]/.test(word) ? "an" : "a";
+}
+
 export function capitalise(text: string): string {
   return text
     .trim()
