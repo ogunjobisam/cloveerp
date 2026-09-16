@@ -1018,6 +1018,8 @@ type Invoice = {
   currency: string;
   subscription_minor: number;
   overage_minor: number;
+  /** Onboarding, implementation, a pilot: charged once, on this invoice. */
+  one_off_minor: number;
   total_minor: number;
   status: string;
   issued_at: string | null;
@@ -1031,6 +1033,15 @@ type Invoice = {
  * frequency, each invoice reconciled against the metering when it is issued.
  * A scheduled invoice shows the overage it would carry today from the same
  * meters the customer sees, so nothing on the issued invoice is a surprise.
+ *
+ * Every figure below comes from the door as it is. The overage on a scheduled
+ * invoice used to be added up here, in TypeScript, out of the lines — while
+ * Total was read straight off the row, where at scheduling time it is the
+ * subscription and nothing else. A row could read Subscription £1,095 /
+ * Overage £250 / Total £1,095, and the one-off charge in the total had no
+ * column at all. erp.contract_invoice_as_shown() now decides all three in one
+ * place, so the customer's own view and this screen cannot differ and neither
+ * of them does arithmetic over money.
  */
 function Invoices({
   contractId,
@@ -1080,7 +1091,7 @@ function Invoices({
   return (
     <Card
       title="Invoices"
-      description="Generated from the term and the billing frequency. Issuing reconciles the period against the metering and prices any overage from the book; a scheduled invoice shows the overage it would carry today."
+      description="Generated from the term and the billing frequency. Issuing reconciles the period against the metering and prices any overage from the book; a scheduled invoice shows the overage it would carry today, and a total that includes it."
       action={
         mayWrite && inForce ? (
           <button
@@ -1119,6 +1130,7 @@ function Invoices({
             "Due",
             "Subscription",
             "Overage",
+            "One-off",
             "Total",
             "State",
             "Emailed",
@@ -1145,17 +1157,13 @@ function Invoices({
                   {money(i.subscription_minor, i.currency)}
                 </td>
                 <td className="py-2 pr-4 text-sm tabular-nums">
-                  {i.status === "scheduled"
-                    ? money(
-                        i.lines
-                          .filter((l) => l.kind === "overage")
-                          .reduce((a, l) => a + l.net_minor, 0),
-                        i.currency,
-                      )
-                    : money(i.overage_minor, i.currency)}
+                  {money(i.overage_minor, i.currency)}
                   {i.lines.some((l) => l.kind === "overage" && l.unpriced) ? (
                     <Pill tone="bad">unpriced</Pill>
                   ) : null}
+                </td>
+                <td className="py-2 pr-4 text-sm tabular-nums">
+                  {money(i.one_off_minor, i.currency)}
                 </td>
                 <td className="py-2 pr-4 text-sm tabular-nums">
                   {money(i.total_minor, i.currency)}
@@ -1225,7 +1233,7 @@ function Invoices({
               </tr>
               {open === i.id ? (
                 <tr className="border-b border-border/50 last:border-0">
-                  <td colSpan={9} className="pb-3">
+                  <td colSpan={10} className="pb-3">
                     <InvoiceLines lines={i.lines} currency={i.currency} />
                   </td>
                 </tr>

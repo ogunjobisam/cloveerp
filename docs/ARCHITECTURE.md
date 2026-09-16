@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:policies -->367<!-- /count --> row-security policies and
 <!-- count:triggers -->819<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->402<!-- /count --> migrations and
-<!-- count:sql_lines -->252219<!-- /count --> lines of SQL.
+<!-- count:migrations -->403<!-- /count --> migrations and
+<!-- count:sql_lines -->252708<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -92,7 +92,7 @@ Where a rule must have exceptions, the exceptions are enumerated with a written
 rationale rather than left to judgement, and an assertion refuses an exception
 nobody wrote down:
 
-- **`erp_meta.security_definer_allowance`** — <!-- count:definer_allowances -->198<!-- /count --> entries. A `SECURITY DEFINER` function runs as the owner, who bypasses row-level security. Every one in the product schemas is listed with the reason it needs the privilege.
+- **`erp_meta.security_definer_allowance`** — <!-- count:definer_allowances -->199<!-- /count --> entries. A `SECURITY DEFINER` function runs as the owner, who bypasses row-level security. Every one in the product schemas is listed with the reason it needs the privilege.
 - **`erp_meta.public_write_allowance`** — <!-- count:write_allowances -->487<!-- /count --> entries. The doors permitted to be volatile, each naming the gate it reaches. A volatile `public.erp_*` function that is not listed fails the build; so does one whose gate no longer authorises.
 - **`erp_meta.check_run_exemption`** — the catalogue checks CI cannot run without an argument, each naming what drives it instead.
 - **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->20<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->3<!-- /count --> waiting for their screen with the path recorded.
@@ -150,7 +150,7 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->4353<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->4354<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->683<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 

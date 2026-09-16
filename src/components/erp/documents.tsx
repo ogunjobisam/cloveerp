@@ -42,6 +42,13 @@ type DocType = {
   base_type_code: string;
   requires_party: boolean;
   requires_site: boolean;
+  /**
+   * The currency a document of this type is opened in: the base currency of
+   * the company the type belongs to, which is what `erp.create_document` gives
+   * a document when the caller names none. Null only when the type names no
+   * company, and such a type cannot open a document at all.
+   */
+  currency: string | null;
   /** The permission `erp.open_document` will actually authorise. */
   create_permission: string;
 };
@@ -199,6 +206,19 @@ export function NewDocumentAction({
   const scope = useScope();
   const { currencies } = useCurrencies();
 
+  // The currency this document will be opened in, and the exponent that goes
+  // with it. Both used to be the literal "GBP": the boxes said (GBP) whatever
+  // the company trades in, and — the part that reached the ledger — a price
+  // typed against a currency with no decimal places, JPY or KRW, was
+  // multiplied by a hundred on its way to p_unit_price_minor. The sibling
+  // screen, src/routes/documents/$documentId.tsx, has always used the
+  // document's own currency; this one could not, because until now
+  // erp_document_types did not say what it would be. p_currency is sent as
+  // well, so what the form converted by and what the database opens the
+  // document in are the same answer rather than two that happen to agree.
+  const currency = type.currency ?? "";
+  const minorUnits = minorUnitsOf(currencies, type.currency);
+
   return (
     <ActionDialog
       trigger={<ActionButton>{label ?? "New"}</ActionButton>}
@@ -239,7 +259,7 @@ export function NewDocumentAction({
           label: "Lines",
           addLabel: "Add a line",
           hint: "Everything this document is for. A line left without a price takes the agreed price for that partner and product, where there is one.",
-          total: { quantity: "quantity", price: "unit_price_minor", currency: "GBP" },
+          total: { quantity: "quantity", price: "unit_price_minor", currency },
           columns: [
             {
               name: "item_id",
@@ -252,7 +272,7 @@ export function NewDocumentAction({
               name: "unit_price_minor",
               label: "Unit price",
               kind: "money",
-              currency: "GBP",
+              currency,
               placeholder: "1.85",
             },
             // The product's own description arrives the moment the product is
@@ -275,15 +295,13 @@ export function NewDocumentAction({
         p_site_id: v["p_site_id"] || scope.siteId || session.sites[0]?.id || null,
         p_their_ref: v["p_their_ref"] || null,
         p_required_date: v["p_required_date"] || null,
+        p_currency: type.currency,
         p_lines: (picked?.rows["p_lines"] ?? [])
           .filter((row) => (row["item_id"] ?? "") !== "")
           .map((row) => ({
             item_id: row["item_id"],
             quantity: Number(row["quantity"] ?? 0),
-            unit_price_minor: toMinor(
-              row["unit_price_minor"] ?? "",
-              minorUnitsOf(currencies, "GBP"),
-            ),
+            unit_price_minor: toMinor(row["unit_price_minor"] ?? "", minorUnits),
             // A cleared box is no description: null, so the line takes the
             // product's.
             description: row["description"] || null,
