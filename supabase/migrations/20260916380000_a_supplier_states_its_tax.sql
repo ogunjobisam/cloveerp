@@ -60,6 +60,7 @@ declare
   v_left   bigint := p_tax_minor;
   v_share  bigint;
   v_n      integer := 0;
+  v_rate   numeric;
   r        record;
 begin
   select * into d from erp.document where tenant_id = v_tenant and id = p_document_id;
@@ -98,6 +99,13 @@ begin
       using errcode = '23514';
   end if;
 
+  -- One rate for the invoice, because that is what the supplier charged. A
+  -- rate worked out per line from its rounded share would differ in the fourth
+  -- decimal between lines, and the return groups by rate — so one supplier's
+  -- VAT would arrive as two rows at 20.0120% and 19.9760%, neither of which is
+  -- a rate anybody charges. The apportionment is allocation, not a rate.
+  v_rate := round(p_tax_minor::numeric * 100 / v_net, 4);
+
   -- Stated once, apportioned by what each line is worth. The last line takes
   -- whatever rounding left over, so the lines add to the figure on the
   -- supplier's invoice rather than to something near it.
@@ -122,9 +130,7 @@ begin
       taxable_minor, tax_minor, currency, jurisdiction, rule_code,
       determination_inputs, determined_at)
     values (
-      v_tenant, d.entity_id, p_document_id, r.id, p_tax_code,
-      case when r.net_minor = 0 then 0
-           else round(v_share::numeric * 100 / r.net_minor, 4) end,
+      v_tenant, d.entity_id, p_document_id, r.id, p_tax_code, v_rate,
       r.net_minor, v_share, coalesce(d.currency, 'GBP'),
       (select p.country_code from erp.party p
         where p.tenant_id = v_tenant and p.id = d.party_id),
@@ -134,9 +140,7 @@ begin
       now());
 
     update erp.document_line
-       set tax_code = p_tax_code, tax_rate_pct =
-             case when r.net_minor = 0 then 0
-                  else round(v_share::numeric * 100 / r.net_minor, 4) end,
+       set tax_code = p_tax_code, tax_rate_pct = v_rate,
            tax_minor = v_share, updated_at = now()
      where id = r.id;
 
@@ -383,9 +387,14 @@ begin
   perform erp.add_document_line(v_pinv, v_item, 1, 3334, 'and the rest');
   v_n := erp.state_supplier_tax(v_pinv, 2000, 'S', 'suite: what the bill says');
   v_tax := erp.document_tax_minor(v_pinv);
-  case_name := 'the tax a supplier charged is spread across the lines and still adds to what they charged';
-  passed := v_n = 3 and v_tax = 2000;
-  detail := format('%s line(s), %s recorded against %s stated', v_n, v_tax, 2000);
+  case_name := 'the tax a supplier charged is spread across the lines, adds to what they charged, and keeps one rate';
+  passed := v_n = 3 and v_tax = 2000
+        and (select count(distinct td.rate_pct) from erp.tax_determination td
+              where td.document_id = v_pinv) = 1;
+  detail := format('%s line(s), %s recorded against %s stated, %s distinct rate(s)',
+                   v_n, v_tax, 2000,
+                   (select count(distinct td.rate_pct) from erp.tax_determination td
+                     where td.document_id = v_pinv));
   return next;
 
   -- ── 2. And the rate is theirs, not ours ──────────────────────────────────
