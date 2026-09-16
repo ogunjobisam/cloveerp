@@ -1,6 +1,7 @@
 import { ClientOnly, Navigate, createFileRoute } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 
+import { ApprovalsWaiting } from "../components/erp/approvals-waiting";
 import { FirstRun } from "../components/erp/first-run";
 import { Gate } from "../components/erp/gate";
 import { hasStoredSession } from "../lib/erp";
@@ -148,6 +149,9 @@ function Overview() {
       >
         {where}
       </PageHeader>
+
+      {/* Somebody else is waiting on this before any step of your own. */}
+      <ApprovalsWaiting />
 
       <FirstRun />
 
