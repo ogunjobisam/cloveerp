@@ -24,7 +24,7 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 | **Foundation, B1–B10** | Complete, and every later Part built on it.                                                                                                                                                                                                                                  |
 | **Modules**            | <!-- count:modules -->13<!-- /count --> installable modules, each a change set of rules, lifecycles and approval chains promoted through B6 exactly as a customer's own change would be.                                                                                     |
 | **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
-| **Interface**          | An application over a curated API of <!-- count:doors -->670<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
+| **Interface**          | An application over a curated API of <!-- count:doors -->671<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
 | **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->267<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 
 Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
@@ -35,7 +35,7 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:triggers -->819<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
 <!-- count:migrations -->411<!-- /count --> migrations and
-<!-- count:sql_lines -->258295<!-- /count --> lines of SQL.
+<!-- count:sql_lines -->258316<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -110,7 +110,7 @@ nobody wrote down:
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
 | `erp_test`    | <!-- count:suites -->179<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
-| `public`      | <!-- count:doors -->670<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
+| `public`      | <!-- count:doors -->671<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 
 Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`; `pg_cron` and `pg_net`
 where the host has them.
@@ -150,8 +150,8 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->4422<!-- /count --> English strings, a German core pack
-of <!-- count:de_strings -->686<!-- /count -->, a tenant's own terms under
+<!-- count:en_strings -->4419<!-- /count --> English strings, a German core pack
+of <!-- count:de_strings -->684<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 
 **B6 — Change promotion.** Configuration in a live environment cannot be edited
