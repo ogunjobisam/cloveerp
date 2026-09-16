@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260916530000  Three settings that decide something
+-- 20260916590000  Settings that decide something
 -- -----------------------------------------------------------------------------
 -- 20260916430000 built the check that finds a control writing into the dark and
 -- registered thirty-eight columns it found. Nineteen of those are deliberate.
@@ -14,9 +14,33 @@ set lock_timeout = '30s';
 --   B. erp.job.max_silence_seconds — how long a job may go unheard from.
 --   C. erp.printer.default_stock — the label stock loaded in the tray.
 --
--- A fourth, erp.change_set_item.effective_from, stays registered. Its rationale
--- is corrected rather than removed, and section 5 says why and what honouring it
+-- And a fourth the first attempt uncovered, described under D below.
+--
+-- erp.change_set_item.effective_from stays registered. Its rationale is
+-- corrected rather than removed, and section 6 says why and what honouring it
 -- would take.
+--
+-- ── WHY THIS IS NOT 20260916530000 ───────────────────────────────────────────
+--
+-- A first version under that number was refused by its own last assertion, and
+-- the reason is worth keeping because it is the check being better than the
+-- person who wrote it.
+--
+-- erp.code_template.item_classes — "Only for product classes", ticked on the
+-- coding screen — was counted as read, and the only thing reading it was an
+-- accident. erp.routine_decided_names() treats every name inside a 200-character
+-- window after an `order by` as read, which its own comment says is deliberate
+-- and errs towards READ. In public.erp_code_templates() the words
+-- `'item_classes'` sat at character 199 of that window. Rewriting the door to
+-- carry the company pushed them to 213, and a column nothing had ever consulted
+-- stopped being read.
+--
+-- So the column was never read, and closing three write-only settings revealed
+-- a fourth. It is closed here rather than registered, in section D, because
+-- registering it would be writing a defect down as a decision — which
+-- 20260916430000 exists to stop.
+--
+-- The 530000 file reached no environment and is replaced rather than edited.
 --
 -- ── A. A code pattern belongs to a company, and versioning ignored that ───────
 --
@@ -144,6 +168,20 @@ set lock_timeout = '30s';
 -- refused. A size stated without a unit is read in millimetres, which is the
 -- unit the template's page size already uses.
 --
+-- ── D. A code pattern says which products it is for, and nothing asked ───────
+--
+-- erp.code_template.item_classes is the list of product classes a pattern
+-- applies to — "Tick every class this applies to. None ticked applies to every
+-- product." It is offered on the coding screen, written by the door, carried in
+-- the export and in the change set, and consulted by nothing: a product of any
+-- class could always be created against any pattern, including one ticked for
+-- one class alone.
+--
+-- public.erp_create_classified_item() now asks. A pattern that names no class
+-- still applies to every product, exactly as the words under the field say. A
+-- pattern that names classes and does not name this product's is refused,
+-- before the sequence is consumed, so a refusal costs no number.
+--
 -- ── What is NOT changed ──────────────────────────────────────────────────────
 --
 --   * erp.compose_code() still takes a template id and composes from it. The
@@ -156,7 +194,7 @@ set lock_timeout = '30s';
 --     Nothing about which jobs are silent changes.
 --   * A printer whose stock is blank, or stated in words, prints as before.
 --
--- Proof: erp_test.settings_that_decide_suite() (9 cases, wrapper pinned), and
+-- Proof: erp_test.settings_that_decide_suite() (11 cases, wrapper pinned), and
 -- the three rows removed from erp_meta.write_only_column, which the build
 -- refuses to hold once something reads the column.
 -- =============================================================================
@@ -343,6 +381,63 @@ comment on function public.erp_code_templates() is
   'scoped to and a company''s own ahead of the pattern that applies to every '
   'company. Two patterns of the same code in different companies are two rows, '
   'which is what they have always been in the table and never been on a screen.';
+
+-- ── 1.6 D. A pattern ticked for one kind of product is only for that kind ────
+
+do $ct_classes$
+declare
+  v_def text := pg_catalog.pg_get_functiondef('public.erp_create_classified_item'::regproc);
+  v_da  text := E'  v_missing  text[];\n'
+             || E'  r          record;';
+  v_db  text := E'  v_missing  text[];\n'
+             || E'  v_tcode    text;\n'
+             || E'  v_classes  text[];\n'
+             || E'  v_applies  boolean;\n'
+             || E'  r          record;';
+  v_ca  text := '  perform erp.authorise(''master_data.write'');';
+  v_cb  text := v_ca || E'\n'
+             || E'\n'
+             || E'  -- The classes ticked against the pattern, which until now were written and\n'
+             || E'  -- read by nothing: a product of any class could be created against a pattern\n'
+             || E'  -- ticked for one. Asked before the sequence is consumed, so a refusal costs\n'
+             || E'  -- no number. A pattern that names no class applies to every product, which\n'
+             || E'  -- is what the words under the field say.\n'
+             || E'  select ct.code, ct.item_classes,\n'
+             || E'         ct.item_classes is null or p_item_class = any (ct.item_classes)\n'
+             || E'    into v_tcode, v_classes, v_applies\n'
+             || E'    from erp.code_template ct\n'
+             || E'   where ct.tenant_id = v_tenant and ct.id = p_template_id;\n'
+             || E'\n'
+             || E'  if not coalesce(v_applies, true) then\n'
+             || E'    raise exception\n'
+             || E'      ''CLOVEERP_TEMPLATE_NOT_FOR_THIS_CLASS: the code pattern % is for %, and this is a %'',\n'
+             || E'      v_tcode, array_to_string(v_classes, '', ''), p_item_class\n'
+             || E'      using errcode = ''23514'',\n'
+             || E'            hint = ''Choose a code pattern that covers this kind of product, or tick this kind against the pattern.'';\n'
+             || E'  end if;';
+begin
+  if (length(v_def) - length(replace(v_def, v_da, ''))) / length(v_da) <> 1
+     or (length(v_def) - length(replace(v_def, v_ca, ''))) / length(v_ca) <> 1 then
+    raise exception
+      'CLOVEERP_CLASSIFIED_ITEM_UNRECOGNISED: public.erp_create_classified_item() is not the text this migration patches'
+      using hint = 'Read the live body with pg_get_functiondef and anchor on what is there now.';
+  end if;
+  v_def := replace(v_def, v_da, v_db);
+  v_def := replace(v_def, v_ca, v_cb);
+  execute v_def;
+end
+$ct_classes$;
+
+comment on function public.erp_create_classified_item(text, text, uuid, jsonb, boolean) is
+  'Creates a product classified first and coded from that classification. The '
+  'code pattern must be one that covers this kind of product: a pattern ticked '
+  'for one class composed codes for every class until 16 September 2026, which '
+  'is the whole reason the class list was offered.';
+
+select erp.register_refusal('CLOVEERP_TEMPLATE_NOT_FOR_THIS_CLASS',
+  'Creating a product from a code pattern that is not for that kind of product.',
+  'A code pattern can be ticked for particular kinds of product, and the words under that field say a pattern with none ticked applies to every product. This pattern names some kinds and this product is not one of them, so the code it would compose would say the product is something it is not.',
+  'Choose a pattern that covers this kind of product, or open the pattern and tick this kind against it.');
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 2. B. Silence reaches a person
@@ -597,6 +692,7 @@ declare
   v_first  jsonb;
   v_rows   jsonb;
   v_ok     boolean; v_msg text;
+  v_ok2    boolean; v_msg2 text;
   res      jsonb;
 begin
   begin
@@ -696,9 +792,37 @@ begin
                      'no ZZCT pattern was offered');
   return next;
 
+  -- ── 5. A pattern ticked for one kind of product is only for that kind ────
+  v_cases := v_cases + 1;
+  perform erp.upsert_code_template('ZZCTCLASS', 'Finished goods only',
+    '[{"kind":"literal","text":"FIN"},{"kind":"sequence","length":4}]'::jsonb,
+    'finished', 'upper', null);
+  begin
+    perform public.erp_create_classified_item('Suite product', 'raw',
+      (select ct.id from erp.code_template ct
+        where ct.tenant_id = v_tenant and ct.code = 'ZZCTCLASS'),
+      '{}'::jsonb, false);
+    v_ok := false; v_msg := 'a pattern for finished goods composed a raw product''s code';
+  exception when others then
+    v_ok := sqlerrm like 'CLOVEERP_TEMPLATE_NOT_FOR_THIS_CLASS%';
+    v_msg := left(sqlerrm, 90);
+  end;
+  begin
+    perform public.erp_create_classified_item('Suite product', 'raw', v_t1,
+                                              '{}'::jsonb, false);
+    v_ok2 := true; v_msg2 := 'accepted';
+  exception when others then
+    v_ok2 := sqlerrm not like 'CLOVEERP_TEMPLATE_NOT_FOR_THIS_CLASS%';
+    v_msg2 := left(sqlerrm, 60);
+  end;
+  case_name := 'a pattern ticked for one kind of product refuses another kind, and a pattern with none ticked takes every kind';
+  passed := v_ok and v_ok2;
+  detail := format('ticked: %s; unticked: %s', v_msg, v_msg2);
+  return next;
+
   -- ═══ B. Silence reaches a person ══════════════════════════════════════════
 
-  -- ── 5. The budget is what decides ────────────────────────────────────────
+  -- ── 6. The budget is what decides ────────────────────────────────────────
   --
   -- Three jobs on one schedule, each three hours quiet. The only thing that
   -- differs between the first two is the budget, so the budget is the only
@@ -737,14 +861,14 @@ begin
                      'the job was not reported silent');
   return next;
 
-  -- ── 6. A job somebody switched off does not alarm ────────────────────────
+  -- ── 7. A job somebody switched off does not alarm ────────────────────────
   v_cases := v_cases + 1;
   case_name := 'a job deliberately switched off is not silent, because nothing promised it would run';
   passed := not exists (select 1 from erp.silent_jobs() s where s.job_code = 'zz_quiet');
   detail := 'zz_quiet is as quiet as it was asked to be';
   return next;
 
-  -- ── 7. And a person is told ──────────────────────────────────────────────
+  -- ── 8. And a person is told ──────────────────────────────────────────────
   v_cases := v_cases + 1;
   perform * from erp.report_silent_jobs();
   case_name := 'silence raises an event, and the route every organisation has carries it to the administrators';
@@ -812,7 +936,7 @@ begin
     if sqlerrm <> 'CLOVEERP_SUITE_UNDO' then raise; end if;
   end;
 
-  -- ── 10. Undone ───────────────────────────────────────────────────────────
+  -- ── 11. Undone ───────────────────────────────────────────────────────────
   v_cases := v_cases + 1;
   case_name := 'the fixture was undone';
   passed := not exists (select 1 from erp.tenant where code = 'zz-settings')
@@ -821,8 +945,8 @@ begin
   detail := 'zz-settings rolled back with its patterns, its jobs and its printers';
   return next;
 
-  if v_cases <> 10 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: settings_that_decide_suite ran % cases, expected 10', v_cases;
+  if v_cases <> 11 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: settings_that_decide_suite ran % cases, expected 11', v_cases;
   end if;
 end;
 $$;
@@ -850,8 +974,8 @@ begin
     raise exception E'CLOVEERP_SETTINGS_THAT_DECIDE_SUITE_FAILED: %/% case(s) failed\n%',
       v_fail, v_all, v_detail;
   end if;
-  if v_all <> 10 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: settings_that_decide_suite ran % cases, expected 10', v_all;
+  if v_all <> 11 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: settings_that_decide_suite ran % cases, expected 11', v_all;
   end if;
   return format('three settings that decide something: %s/%s cases passed', v_all, v_all);
 end;
