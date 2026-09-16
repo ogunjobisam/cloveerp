@@ -116,7 +116,16 @@ export function Diagnostics() {
                     )}
                   </td>
                   <td className="py-3 pr-4 text-xs text-muted-foreground">
-                    {r?.ok ? r.summary : r ? `${r.findings.length} finding(s)` : ""}
+                    {r?.ok
+                      ? r.summary
+                      : r
+                        ? // A check that failed says why, even when its report
+                          // found nothing to list: on 16 September one failed
+                          // with twenty organisation-scoped findings inside its
+                          // message and an empty report, and the screen said
+                          // "0 finding(s)" and nothing else.
+                          (r.detail ?? "").split("\n")[0] || `${r.findings.length} finding(s)`
+                        : ""}
                   </td>
                   <td className="py-3 pr-0 text-right">
                     <button
@@ -127,13 +136,13 @@ export function Diagnostics() {
                     >
                       Run
                     </button>
-                    {r && !r.ok && r.findings.length > 0 ? (
+                    {r && !r.ok && (r.findings.length > 0 || Boolean(r.detail)) ? (
                       <button
                         type="button"
                         onClick={() => setOpen(open === c.code ? null : c.code)}
                         className={`${TOUCH} ml-2 rounded-md border border-input px-3 text-xs font-medium hover:bg-muted`}
                       >
-                        {open === c.code ? "Hide" : "Findings"}
+                        {open === c.code ? "Hide" : r.findings.length > 0 ? "Findings" : "Why"}
                       </button>
                     ) : null}
                   </td>
@@ -141,7 +150,9 @@ export function Diagnostics() {
                 {open === c.code && r ? (
                   <tr className="border-b border-border/60">
                     <td colSpan={4} className="py-3">
-                      <p className="mb-2 text-xs text-muted-foreground">{r.detail}</p>
+                      <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                        {r.detail}
+                      </p>
                       <ul className="flex flex-col gap-1">
                         {r.findings.map((f, i) => (
                           <li
