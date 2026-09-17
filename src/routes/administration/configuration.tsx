@@ -475,6 +475,7 @@ function Configuration() {
                 label: "Requires a note",
                 required: true,
                 boolean: true,
+                hint: "A reason that needs a note refuses a blank one wherever the reason is given with a note beside it, as a customer return is.",
                 choices: [
                   { value: "false", label: "No" },
                   { value: "true", label: "Yes" },
@@ -486,6 +487,7 @@ function Configuration() {
                 label: "Requires approval",
                 required: true,
                 boolean: true,
+                hint: "A reason that needs an approval raises one for a person to answer, and is refused where nothing in this organisation approves that kind of thing.",
                 choices: [
                   { value: "false", label: "No" },
                   { value: "true", label: "Yes" },
