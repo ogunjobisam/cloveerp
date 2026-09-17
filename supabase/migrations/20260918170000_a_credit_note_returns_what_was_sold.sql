@@ -172,6 +172,23 @@
 -- CR GRNI 100, DR payable 100. Stock down £100, payables down £100, GRNI flat.
 --
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Two suites that count what the installers install
+--
+-- erp_test.finance_suite() counts the posting rules promotion installs and
+-- erp_test.sales_suite() counts the lifecycles, and both stand their
+-- organisation up with erp.configure_finance(), erp.configure_procurement() and
+-- erp.configure_sales() — not erp.configure_procurement_controls(). So the
+-- customer credit note lands in both of those organisations and the supplier
+-- one lands in neither, and each total moves by exactly one: five posting rules
+-- become six, seven lifecycles become eight.
+--
+-- Both are restated rather than relaxed. Counting by name instead of by total
+-- would let both cases survive the next addition untouched, and surviving it is
+-- the failure: the total is the only thing in the build that says an installer
+-- now installs something it did not, and it is what caught this change. So the
+-- number moves and the sentence beside it says what the extra one is.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
 -- What this does not do
 --
 -- Input tax is not credited back. erp.determine_document_tax() determines tax
@@ -305,7 +322,7 @@ begin
        E'      p_document_id, ln.id,\n'
     || E'      -- Why, where the document says why. Six movement types declare\n'
     || E'      -- requires_reason and erp.apply_stock_movement() refuses every one\n'
-    || E'      -- of them without a reason code; until 20260918140000 no document\n'
+    || E'      -- of them without a reason code; until 20260918170000 no document\n'
     || E'      -- type named any of the six, so this bridge could write a movement\n'
     || E'      -- of a type it could never have written. A return names one, and\n'
     || E'      -- the refusal still stands for a document that carries none.\n'
@@ -1584,7 +1601,83 @@ $wrap$;
 
 revoke all on function erp_test.assert_credit_note_suite() from public, anon;
 
--- ── 11. The generators, then the checks that read what changed ───────────────
+-- ── 11. The two suites this disturbs, answered ───────────────────────────────
+
+-- erp_test.finance_suite() and erp_test.sales_suite() both stand an
+-- organisation up with erp.configure_finance(), erp.configure_procurement() and
+-- erp.configure_sales() — and not erp.configure_procurement_controls() — then
+-- count what promotion installed. The customer credit note lands in both of
+-- those organisations and the supplier one lands in neither, so each total
+-- moves by exactly one: five posting rules become six, seven lifecycles become
+-- eight.
+--
+-- They are restated rather than relaxed. Counting the rules and lifecycles by
+-- name instead would make both cases survive the next addition untouched, and
+-- surviving it is the failure: a bare total is the only thing in the build that
+-- says "an installer now installs something it did not", and it is what caught
+-- this change. A number that has to be acknowledged is the point of the case,
+-- so the number moves and the sentence beside it says what the extra one is.
+--
+-- Both bodies are needled on their deployed definitions: 20260914062000 put the
+-- second administrator into one and erp_test.approve_document() into the other,
+-- and re-emitting from any file would drop them. Each is asserted still present
+-- afterwards.
+
+do $finsuite$
+declare
+  v_def text := pg_get_functiondef('erp_test.finance_suite()'::regprocedure);
+  v_old text := $p$  return query select 'promotion installs five posting rules',
+    (select count(*) from erp.posting_rule pr
+      where pr.tenant_id = r.tenant_id and pr.status = 'active') = 5,
+    'receipt, delivery, invoice, and a commitment rule for each order type';$p$;
+  v_new text := $q$  return query select 'promotion installs six posting rules',
+    (select count(*) from erp.posting_rule pr
+      where pr.tenant_id = r.tenant_id and pr.status = 'active') = 6,
+    'receipt, delivery, invoice, a commitment rule for each order type, and the '
+    'customer credit note that reverses the invoice (20260918170000)';$q$;
+begin
+  if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
+    raise exception 'CLOVEERP_FINANCE_SUITE_UNRECOGNISED: the posting rule count in erp_test.finance_suite() is not the one this migration restates';
+  end if;
+
+  execute replace(v_def, v_old, v_new);
+
+  if position('erp_test.approve_document(v_so' in
+              pg_get_functiondef('erp_test.finance_suite()'::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_FINANCE_SUITE_PATCH_LOST: the rewrite dropped the approval 20260914062000 put into erp_test.finance_suite()';
+  end if;
+end
+$finsuite$;
+
+do $salesuite$
+declare
+  v_def text := pg_get_functiondef('erp_test.sales_suite()'::regprocedure);
+  v_old text := $p$  return query select 'promotion installs seven lifecycles across both modules',
+    (select count(*) from erp.state_machine m
+      where m.tenant_id = r.tenant_id and m.status='active') = 7,
+    'requisition, purchase order, goods receipt, quotation, sales order, '
+    'delivery, sales invoice';$p$;
+  v_new text := $q$  return query select 'promotion installs eight lifecycles across both modules',
+    (select count(*) from erp.state_machine m
+      where m.tenant_id = r.tenant_id and m.status='active') = 8,
+    'requisition, purchase order, goods receipt, quotation, sales order, '
+    'delivery, sales invoice, and the credit note that reverses the invoice '
+    '(20260918170000)';$q$;
+begin
+  if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
+    raise exception 'CLOVEERP_SALES_SUITE_UNRECOGNISED: the lifecycle count in erp_test.sales_suite() is not the one this migration restates';
+  end if;
+
+  execute replace(v_def, v_old, v_new);
+
+  if position('Decided by the second administrator' in
+              pg_get_functiondef('erp_test.sales_suite()'::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_SALES_SUITE_PATCH_LOST: the rewrite dropped the second administrator 20260914062000 put into erp_test.sales_suite()';
+  end if;
+end
+$salesuite$;
+
+-- ── 12. The generators, then the checks that read what changed ───────────────
 
 select erp.apply_row_security();
 select erp.apply_platform_internal_security();
@@ -1616,3 +1709,7 @@ select erp.assert_inventory_sane();
 select erp.assert_write_only_columns();
 
 select erp_test.assert_credit_note_suite();
+-- The two the credit note disturbs, proved here rather than left to the
+-- catalogue: a count restated wrongly is a forty-minute build to find.
+select erp_test.assert_finance_suite();
+select erp_test.assert_sales_suite();
