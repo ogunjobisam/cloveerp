@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260917120000  Stock moves between sites
+-- 20260917130000  Stock moves between sites
 -- -----------------------------------------------------------------------------
 -- A company with two warehouses could not move a pallet from one to the other.
 --
@@ -161,7 +161,7 @@ set lock_timeout = '30s';
 -- erp.upgrade_module_configuration() applies them.
 -- erp.ensure_demo_configuration() takes the upgrade where one is outstanding.
 --
--- Proof: erp_test.site_transfer_suite() (11 cases, wrapper pinned) — both
+-- Proof: erp_test.site_transfer_suite() (12 cases, wrapper pinned) — both
 -- sites' quantities before, in transit and after; the stock standing in
 -- transit at the despatching site; the valuation moving between sites to the
 -- penny; the company's total valuation unchanged; NO P&L ACCOUNT MOVED BY A
@@ -1126,7 +1126,7 @@ declare
              || E'    -- row, in one site, at the first committed state — which for a\n'
              || E'    -- transfer order is "approved", before anything has been loaded. It\n'
              || E'    -- cannot say what a transfer does, so the transfer says it itself:\n'
-             || E'    -- erp.despatch_transfer() and erp.receive_transfer() (20260917120000).\n'
+             || E'    -- erp.despatch_transfer() and erp.receive_transfer() (20260917130000).\n'
              || E'    if bt.affects_stock and dt.base_type_code <> ''transfer_order''\n';
   v_hits integer;
 begin
@@ -1290,7 +1290,7 @@ update erp_ref.module_installer
    set current_version = 4,
        description = 'Version 2 (20260906050000) added the stock adjustments account and the '
                      'stock_adjustment posting rule; version 3 (20260906143000) the '
-                     'consignment_consumption rule; version 4 (20260917120000) the transfer '
+                     'consignment_consumption rule; version 4 (20260917130000) the transfer '
                      'order — its lifecycle, its numbering rule and its document type — so '
                      'stock can move between two sites.'
  where install_code = 'inventory-operations';
@@ -1314,7 +1314,7 @@ declare
   v_def text := pg_get_functiondef('erp.ensure_demo_configuration(uuid,uuid)'::regprocedure);
   v_n   text := E'    v_did := v_did || ''"tax posting"''::jsonb;\n  end if;\n';
   v_r   text := E'    v_did := v_did || ''"tax posting"''::jsonb;\n  end if;\n\n'
-             || E'  -- Stock can move between sites (20260917120000). An organisation\n'
+             || E'  -- Stock can move between sites (20260917130000). An organisation\n'
              || E'  -- configured before that holds the inventory module without the\n'
              || E'  -- transfer order; the register says what is missing and this takes it.\n'
              || E'  if exists (select 1 from erp.module_installation i\n'
@@ -1419,9 +1419,9 @@ select erp.register_refusal('CLOVEERP_NO_ARRIVAL_PLACE',
   'Add a goods-in location to the receiving site on the Warehouse layout screen.');
 
 select erp.register_refusal('CLOVEERP_TRANSFER_COST_UNKNOWN',
-  'Moving a transfer''s value when the costing store did not say exactly what left.',
-  'A transfer must give the receiving site precisely what the despatching site gave up, or the company''s total valuation changes without a journal and the inventory reconciliation fails. Quantity times the unit cost is not that figure — the unit is the rounded display of it — so the exact figure is read from what the costing function noted.',
-  'erp.note_cost() stamps that figure; a costing function that has stopped calling it has to be repaired before a transfer can move value exactly.');
+  'Moving a transfer''s value when the costing records did not say exactly what the goods were worth.',
+  'The receiving site has to be given precisely what the despatching site gave up. A transfer raises no accounting entry, so if the two figures differ by even a penny the company''s stock value changes with nothing to explain it, and the check that holds stock value against the inventory account stops agreeing. The quantity times the unit cost is not precise enough: the unit cost shown is a rounded figure. The exact amount is taken from the costing records instead, and this refusal means they did not give one.',
+  'Nothing you can set will put this right: it means the part of Clove ERP that works out what stock cost has stopped answering. Report it. Until it is fixed, move the goods by adjusting the count down at one site and up at the other, and value them there.');
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 10. The words on the screen
@@ -1544,6 +1544,7 @@ declare
   v_a_bulk  uuid; v_b_in uuid; v_c_site uuid;
   v_uom     uuid; v_item uuid;
   v_doc     uuid; v_res jsonb; v_fifo_item uuid; v_fifo_doc uuid;
+  v_planned integer;
   v_qty_a   numeric; v_qty_b numeric; v_transit numeric;
   v_val_a   bigint; v_val_b bigint; v_val_a0 bigint; v_total0 bigint; v_total1 bigint;
   v_pl0     bigint; v_pl1 bigint; v_journals integer;
@@ -1564,6 +1565,39 @@ begin
 
   select e.id, e.base_currency into v_entity, v_ccy
     from erp.entity e where e.tenant_id = v_tenant order by e.code limit 1;
+
+  -- ── 1. An organisation that already exists takes it from the register ────
+  --
+  -- The demonstration, and every organisation configured before today, holds
+  -- the inventory module without the transfer order. Put this one back into
+  -- that state — the module at version 3, the document type gone — and take
+  -- the upgrade the way an administrator takes it, through the register.
+  v_cases := v_cases + 1;
+  delete from erp.document_type dt
+   where dt.tenant_id = v_tenant and dt.code = 'transfer_order';
+  update erp.module_installation i set installer_version = 3
+   where i.tenant_id = v_tenant and i.install_code = 'inventory-operations';
+
+  select count(*) into v_planned
+    from erp.plan_module_upgrade('inventory-operations') p
+   where p.object_kind = 'document_type' and p.object_key = 'transfer_order';
+  perform erp.upgrade_module_configuration('inventory-operations');
+
+  case_name := 'an organisation that already exists takes the transfer order from the upgrade register';
+  passed := v_planned = 1
+        and exists (select 1 from erp.document_type dt
+                     where dt.tenant_id = v_tenant and dt.code = 'transfer_order'
+                       and dt.base_type_code = 'transfer_order'
+                       and dt.state_machine_code = 'transfer_order'
+                       and dt.stock_movement_type = 'transfer_despatch'
+                       and dt.numbering_rule_id is not null)
+        and (select i.installer_version from erp.module_installation i
+              where i.tenant_id = v_tenant and i.install_code = 'inventory-operations') = 4;
+  detail := format('%s document type(s) planned, organisation now at version %s',
+                   v_planned,
+                   (select i.installer_version from erp.module_installation i
+                     where i.tenant_id = v_tenant and i.install_code = 'inventory-operations'));
+  return next;
 
   -- Two sites of this company, and a third belonging to a second company.
   insert into erp.site (tenant_id, entity_id, code, name, site_type, country_code, status)
@@ -1613,7 +1647,7 @@ begin
    where jl.tenant_id = v_tenant and j.status = 'posted'
      and a.account_type in ('income'::erp.account_type, 'expense'::erp.account_type);
 
-  -- ── 1. A transfer order is raised between two sites ──────────────────────
+  -- ── 2. A transfer order is raised between two sites ──────────────────────
   v_cases := v_cases + 1;
   v_res := erp.raise_transfer_order(v_a, v_b,
              jsonb_build_array(jsonb_build_object('item_id', v_item, 'quantity', 20)));
@@ -1629,7 +1663,7 @@ begin
                    v_res ->> 'to_site', v_res ->> 'lines', v_res ->> 'state');
   return next;
 
-  -- ── 2. Nothing has moved yet ─────────────────────────────────────────────
+  -- ── 3. Nothing has moved yet ─────────────────────────────────────────────
   --
   -- Approved is a transfer order's FIRST COMMITTED state, which is where
   -- erp.transition_document() posts the stock side of every other document
@@ -1649,7 +1683,7 @@ begin
                      where m.tenant_id = v_tenant and m.document_id = v_doc));
   return next;
 
-  -- ── 3. Despatched: off the shelf, into transit, still at site A ──────────
+  -- ── 4. Despatched: off the shelf, into transit, still at site A ──────────
   v_cases := v_cases + 1;
   v_res := erp.despatch_transfer(v_doc);
   select coalesce(sum(b.quantity), 0) into v_qty_a
@@ -1668,7 +1702,7 @@ begin
                    v_qty_a, v_transit, v_qty_b, v_res ->> 'state');
   return next;
 
-  -- ── 4. In transit, the value is still the despatching site's ─────────────
+  -- ── 5. In transit, the value is still the despatching site's ─────────────
   v_cases := v_cases + 1;
   select coalesce(sum(v.value_minor), 0)::bigint into v_val_a
     from erp.stock_valuation_report() v where v.site_id = v_a;
@@ -1679,7 +1713,7 @@ begin
   detail := format('ZZ-A %s (was %s), ZZ-B %s', v_val_a, v_val_a0, v_val_b);
   return next;
 
-  -- ── 5. Received: both sites' quantities are right ────────────────────────
+  -- ── 6. Received: both sites' quantities are right ────────────────────────
   v_cases := v_cases + 1;
   v_res := erp.receive_transfer(v_doc);
   select coalesce(sum(b.quantity), 0) into v_qty_a
@@ -1698,7 +1732,7 @@ begin
                    v_qty_a, v_qty_b, v_transit, v_res ->> 'state');
   return next;
 
-  -- ── 6. The valuation moved between the sites, to the penny ───────────────
+  -- ── 7. The valuation moved between the sites, to the penny ───────────────
   v_cases := v_cases + 1;
   select coalesce(sum(v.value_minor), 0)::bigint into v_val_a
     from erp.stock_valuation_report() v where v.site_id = v_a;
@@ -1711,7 +1745,7 @@ begin
                    v_res ->> 'value_moved_minor');
   return next;
 
-  -- ── 7. The company holds exactly what it held ────────────────────────────
+  -- ── 8. The company holds exactly what it held ────────────────────────────
   v_cases := v_cases + 1;
   select coalesce(sum(v.value_minor), 0)::bigint into v_total1
     from erp.stock_valuation_report() v;
@@ -1720,7 +1754,7 @@ begin
   detail := format('%s before, %s after', v_total0, v_total1);
   return next;
 
-  -- ── 8. No profit and loss account moved by a penny ───────────────────────
+  -- ── 9. No profit and loss account moved by a penny ───────────────────────
   v_cases := v_cases + 1;
   select coalesce(sum(jl.base_debit_minor - jl.base_credit_minor), 0)::bigint into v_pl1
     from erp.journal_line jl
@@ -1736,7 +1770,7 @@ begin
                    v_pl0, v_pl1, v_journals);
   return next;
 
-  -- ── 9. Two companies is a sale, not a transfer ───────────────────────────
+  -- ── 10. Two companies is a sale, not a transfer ───────────────────────────
   v_cases := v_cases + 1;
   insert into erp.entity (tenant_id, code, name, base_currency, status)
   values (v_tenant, 'ZZ2', 'Second company', v_ccy, 'active'::erp.record_status)
@@ -1758,7 +1792,7 @@ begin
   detail := v_msg;
   return next;
 
-  -- ── 10. A product costed in layers moves its layers ──────────────────────
+  -- ── 11. A product costed in layers moves its layers ──────────────────────
   --
   -- The other path through erp.transfer_cost(), and the one where the value
   -- is not a single number to be moved but a stack of receipts. Two receipts
@@ -1818,7 +1852,7 @@ begin
     if sqlerrm <> 'CLOVEERP_SUITE_UNDO' then raise; end if;
   end;
 
-  -- ── 11. Undone ───────────────────────────────────────────────────────────
+  -- ── 12. Undone ───────────────────────────────────────────────────────────
   v_cases := v_cases + 1;
   case_name := 'the fixture was undone';
   passed := not exists (select 1 from erp.tenant where code = 'zz-site-transfer')
@@ -1827,8 +1861,8 @@ begin
   detail := 'zz-site-transfer rolled back with both its depots, its transfer and its ledger';
   return next;
 
-  if v_cases <> 11 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 11', v_cases;
+  if v_cases <> 12 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 12', v_cases;
   end if;
 end;
 $$;
@@ -1856,8 +1890,8 @@ begin
     raise exception E'CLOVEERP_SITE_TRANSFER_SUITE_FAILED: %/% case(s) failed\n%',
       v_fail, v_all, v_detail;
   end if;
-  if v_all <> 11 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 11', v_all;
+  if v_all <> 12 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 12', v_all;
   end if;
   return format('stock moves between sites: %s/%s cases passed', v_all, v_all);
 end;
@@ -1866,7 +1900,99 @@ $$;
 revoke all on function erp_test.assert_site_transfer_suite() from public, anon;
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 12. The generators, then the assertions
+-- 12. Two suites this one moved the goalposts for
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Both are counts, both were right when they were written, and both are now
+-- counting something this migration changed. Neither is silenced: each is
+-- narrowed or restated to what its own case name says, in the same migration
+-- that made the old number wrong.
+
+-- ── The base pack plans one item fewer ──────────────────────────────────────
+--
+-- erp_test.starter_pack_acceptance_suite() counts what the base pack plans on
+-- a new organisation. The pack ships the transfer order's lifecycle, and so
+-- now does the inventory installer — so on an organisation that has installed
+-- inventory the pack finds that one already there and plans 346 rather than
+-- 347. The advisory count is unchanged: an item already held was already
+-- being reported that way.
+
+do $acceptance$
+declare
+  v_sig text := 'erp_test.starter_pack_acceptance_suite()';
+  v_def text := pg_get_functiondef('erp_test.starter_pack_acceptance_suite()'::regprocedure);
+  v_n   text := $n$    (res ->> 'items')::integer = 347
+$n$;
+  v_r   text := $r$    -- 346 since 20260917130000: the inventory installer now ships the
+    -- transfer order's lifecycle, so the base pack finds one of its own state
+    -- machines already installed and plans one item fewer.
+    (res ->> 'items')::integer = 346
+$r$;
+begin
+  if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
+    raise exception 'CLOVEERP_ACCEPTANCE_SUITE_UNRECOGNISED: % does not count 347 planned items once', v_sig
+      using hint = 'A later migration recounted the base pack. Read the suite and patch its count.';
+  end if;
+  execute replace(v_def, v_n, v_r);
+
+  if position('integer = 346' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_ACCEPTANCE_SUITE_UNRECOGNISED: % did not take its new count', v_sig
+      using hint = 'The replacement did not land. Compare the needle with the suite''s definition.';
+  end if;
+end
+$acceptance$;
+
+-- ── The upgrade plan is no longer all posting rules ─────────────────────────
+--
+-- erp_test.module_upgrade_suite() checked that the plan holds EVERY registered
+-- upgrade item plus one account per company. That was the same arithmetic as
+-- "every registered item" only while every registered item was a posting rule,
+-- which the fixture deletes before planning so that all of them are offered.
+-- Version 4 registers a lifecycle, a numbering rule and a document type, and
+-- an organisation configured today already holds some of them — so the planner
+-- rightly leaves those out, and the old sum counted them as missing.
+--
+-- The case is narrowed to what its own name says: the posting rules, and one
+-- account per company. That an existing organisation is offered the transfer
+-- order it does not hold is proved directly, on its own fixture, by the first
+-- case of erp_test.site_transfer_suite().
+
+do $upgrade$
+declare
+  v_sig text := 'erp_test.module_upgrade_suite()';
+  v_def text := pg_get_functiondef('erp_test.module_upgrade_suite()'::regprocedure);
+  v_n   text :=
+       E'      v_n = (select count(*) from erp_ref.module_upgrade_item ui where ui.install_code = ''inventory-operations'' and ui.to_version > 1)\n'
+    || E'          + (select count(*) from erp_ref.module_upgrade_account ua where ua.install_code = ''inventory-operations'' and ua.to_version > 1)\n'
+    || E'            * (select count(*) from erp.entity e where e.tenant_id = v_tenant and e.status = ''active'')\n';
+  v_r   text :=
+       E'      -- Counted per kind since 20260917130000. The register carries kinds\n'
+    || E'      -- this fixture does not undo — version 4 registers the transfer\n'
+    || E'      -- order''s lifecycle, numbering rule and document type — and an\n'
+    || E'      -- organisation that already holds one is rightly not offered it.\n'
+    || E'      (select count(*) from erp.plan_module_upgrade(''inventory-operations'') p where p.object_kind = ''posting_rule'')\n'
+    || E'        = (select count(*) from erp_ref.module_upgrade_item ui where ui.install_code = ''inventory-operations'' and ui.to_version > 1 and ui.object_kind = ''posting_rule'')\n'
+    || E'      and (select count(*) from erp.plan_module_upgrade(''inventory-operations'') p where p.object_kind = ''account'')\n'
+    || E'        = (select count(*) from erp_ref.module_upgrade_account ua where ua.install_code = ''inventory-operations'' and ua.to_version > 1)\n'
+    || E'          * (select count(*) from erp.entity e where e.tenant_id = v_tenant and e.status = ''active'')\n';
+begin
+  if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
+    raise exception 'CLOVEERP_MODULE_UPGRADE_SUITE_UNRECOGNISED: % does not sum the whole plan once', v_sig
+      using hint = 'Read the suite: its second case is the one that counts what the plan names.';
+  end if;
+  execute replace(v_def, v_n, v_r);
+
+  v_def := pg_get_functiondef(v_sig::regprocedure);
+  if position(E'p.object_kind = ''posting_rule'')\n        = (select count(*)' in v_def) = 0
+     or position('stock_adjustment' in v_def) = 0 then
+    raise exception 'CLOVEERP_MODULE_UPGRADE_SUITE_UNRECOGNISED: % did not take the narrowed count', v_sig
+      using hint = 'The replacement did not land. Compare the needle with the suite''s definition.';
+  end if;
+end
+$upgrade$;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 13. The generators, then the assertions
 -- ═════════════════════════════════════════════════════════════════════════════
 
 select erp.apply_row_security();
@@ -1878,6 +2004,9 @@ select erp.apply_live_config_guards();
 select erp.apply_execute_grants();
 
 select erp_test.assert_site_transfer_suite();
+select erp_test.assert_module_upgrade_suite();
+select erp_test.assert_starter_pack_acceptance();
+select erp_test.assert_plain_words_suite();
 
 select erp.assert_write_only_columns();
 select erp.assert_public_api_safe();
