@@ -653,6 +653,44 @@ jobs:
         # organisation's history still shows it. D35 and D36, by the log.
         run: supabase/ci/incident_rehearsal.sh
 
+      - name: The seeded month is closed
+        # The v1 Definition of Done states one master gate: after a seeded
+        # month is posted AND THE PERIOD CLOSED, the four ties hold. The build
+        # did the first half. seed_demo.sql above posts a month of trading into
+        # ci-demo and the catalogue asserts the ties over it — but nothing in
+        # .github or supabase/ci had ever called erp.close_period(), on
+        # anything. Every close in the repository happened inside a suite that
+        # builds a throwaway organisation and posts a handful of documents into
+        # it, so the four close tasks made unwaivable on 17 September
+        # (20260918400000, and the ageing task of 20260918510000) had never
+        # once been asked about real data.
+        #
+        # Ties asserted outside a close are the weaker claim. A close puts the
+        # same assertions THROUGH THE CONTROL: erp.complete_close_task() runs
+        # each task's blocking check where it cannot be ticked past, and refuses
+        # a waiver on the four that carry a tie. This step ticks every task with
+        # no waiver reason, so the month closes on its own figures or the build
+        # goes red with the difference named. There is deliberately no way to
+        # waive from it.
+        #
+        # After the rehearsals rather than before the catalogue: the close is
+        # the last thing that writes to ci-demo, so nothing downstream has to
+        # care that one of its months has shut.
+        run: supabase/ci/close_month.sh
+
+      - name: The four ties hold three times running
+        # The Definition of Done's exit criterion, which is not the same
+        # sentence as its gate: the four ties hold on a freshly seeded month,
+        # THREE CONSECUTIVE RUNS. run_checks.sh walks the catalogue once, and
+        # one run cannot tell a tie that holds from a tie that happens to hold
+        # this time — 20260916610000 is what that looks like when it bites.
+        #
+        # Three separate psql sessions, three transactions, three snapshots,
+        # and the answers compared with each other as well as read. The four
+        # are not listed: they are read back from the close tasks the month was
+        # closed on, so a fifth tie is run by this the day it lands.
+        run: supabase/ci/ties_thrice.sh
+
       - name: Every door has a home
         # The application calls the database by bare string, and nothing
         # compared those strings with the schema: the generated types file is
