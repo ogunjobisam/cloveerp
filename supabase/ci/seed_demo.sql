@@ -43,15 +43,29 @@ select erp.seed_demo_history(:'from_date'::date + 25, null, 1) ->> 'built' as sl
 
 -- The month moves stock between the company's two sites every Wednesday
 -- (20260918100000), sends goods back to a supplier every Tuesday and credits a
--- customer every Friday (20260918220000); erp_test.demo_site_transfer_suite()
--- and erp_test.demo_history_suite() hold the seeder to all three.
+-- customer every Friday (20260918220000), receives half of an order every
+-- Monday, and every Thursday registers a supplier's bill above the agreed
+-- price and delivers half of a customer's order (20260918600000);
+-- erp_test.demo_site_transfer_suite() and erp_test.demo_history_suite() hold
+-- the seeder to all six.
 select 'ci-demo: ' || count(*) || ' documents, '
        || count(*) filter (where dt.base_type_code = 'transfer_order')
        || ' of them transfers between sites, '
        || count(*) filter (where dt.code = 'sales_credit_note')
        || ' credit notes to customers, '
        || count(*) filter (where dt.code = 'purchase_credit_note')
-       || ' returns to suppliers' as seeded
+       || ' returns to suppliers, '
+       || count(*) filter (where dt.code = 'purchase_order'
+                             and erp.object_current_state('document', d.id) = 'partially_received')
+       || ' orders received in part, '
+       || count(*) filter (where dt.code = 'purchase_invoice')
+       || ' supplier bills, '
+       || count(*) filter (where dt.code = 'sales_order'
+                             and erp.object_current_state('document', d.id) = 'confirmed'
+                             and exists (select 1 from erp.document_relation r
+                                          where r.tenant_id = d.tenant_id and r.to_document_id = d.id
+                                            and r.relation_kind = 'fulfils' and r.to_line_id is not null))
+       || ' orders delivered in part' as seeded
   from erp.document d
   join erp.document_type dt on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
  where d.tenant_id = :'tenant_id';
