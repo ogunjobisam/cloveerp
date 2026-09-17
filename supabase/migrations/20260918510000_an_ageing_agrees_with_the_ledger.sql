@@ -590,10 +590,12 @@ on conflict (code) do update set
   detail_arguments = excluded.detail_arguments, blurb = excluded.blurb,
   runs_in_ci = excluded.runs_in_ci, seq = excluded.seq;
 
-select erp.register_refusal('CLOVEERP_AGEING_DOES_NOT_EQUAL_CONTROL',
-  'Saying the books tie while the receivables or payables ageing and its control account in the ledger show different totals.',
-  'The ageing is the list of who owes the company money and whom the company owes; the control account is the same money in the ledger. If the two differ by a penny, either something reached the account without saying whose money it is, or the ageing leaves something out, and a period closed over that difference reports debts nobody can chase or pay.',
-  'Open the ageing and the trial balance for the company named, find the amount on the control account that no invoice, bill, credit or payment explains, and put it through the sales or purchase ledger or reverse it. Then run the check again.');
+-- The refusal is not registered in erp_ref.refusal. It is raised only by an
+-- assert_ routine, which erp.refusal_report() deliberately does not count as a
+-- raise — the build is the one that acts on it — so a register row would read
+-- as raised nowhere and refuse the migration. Its next action travels as the
+-- hint on the raise instead, which is where whoever reads a failed build sees
+-- it. erp.assert_trial_balance_balances() (20260918400000) does the same.
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. The close carries it, and it is not waived
@@ -1373,8 +1375,13 @@ begin
     select count(*) into v_catalogued
       from erp.ci_check_catalogue() c
      where c.qualified_name = 'erp.assert_ageing_equals_control';
-    select f.next_action into v_next from erp_ref.refusal f
-     where f.code = 'CLOVEERP_AGEING_DOES_NOT_EQUAL_CONTROL';
+    -- The next action is the hint on the raise, not a register row: see the
+    -- note where the refusal would otherwise have been registered.
+    v_next := case
+                when position('or reverse it' in
+                       pg_get_functiondef('erp.assert_ageing_equals_control()'::regprocedure)) > 0
+                then 'the raise names its next action in its hint: put it through the sales or purchase ledger, or reverse it'
+              end;
 
     v_cases := v_cases + 1;
     case_name := 'the register drives the tie for every organisation, the structural phase does not run it without one, and its refusal says what to do';
@@ -1383,15 +1390,14 @@ begin
                 where d.kind = 'assertion' and d.scope = 'tenant'
                   and d.function_name <> 'assert_whole_database_reconciles') = 11
           and v_next like '%reverse it%'
-          and exists (select 1 from erp_ref.resource r
-                       where r.locale = 'en'
-                         and r.key = erp_ref.refusal_key('CLOVEERP_AGEING_DOES_NOT_EQUAL_CONTROL', 'next_action'));
+          and not exists (select 1 from erp_ref.refusal f
+                           where f.code = 'CLOVEERP_AGEING_DOES_NOT_EQUAL_CONTROL');
     detail := coalesce(v_state, format('%s register row, %s catalogue rows, %s tenant assertions in the loop; next action: %s',
       v_registered, v_catalogued,
       (select count(*) from erp_meta.diagnostic_check d
         where d.kind = 'assertion' and d.scope = 'tenant'
           and d.function_name <> 'assert_whole_database_reconciles'),
-      left(coalesce(v_next, 'nothing registered'), 80)), 'no answer');
+      left(coalesce(v_next, 'no hint on the raise names a next action'), 80)), 'no answer');
     return next;
 
     perform set_config('request.jwt.claims', '', true);
