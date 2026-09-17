@@ -81,6 +81,7 @@ type Template = {
   version: number;
   segments: unknown;
   next_value: number;
+  entity_code: string | null;
   status: string;
 };
 
@@ -315,6 +316,18 @@ function Classification() {
                 "Tick every class this applies to. None ticked applies to every product.",
               ),
               {
+                ...pickFrom(
+                  "erp_entities",
+                  "entity_id",
+                  ["code", "name"],
+                  "p_entity_id",
+                  "Only for one company",
+                  undefined,
+                  false,
+                ),
+                hint: "Leave this empty for a pattern every company uses. A pattern for one company is amended on its own, and never versions another company's pattern of the same code.",
+              },
+              {
                 kind: "choice",
                 name: "p_casing",
                 label: "Casing",
@@ -496,6 +509,7 @@ function Classification() {
             columns={[
               ui("Code"),
               ui("Name"),
+              ui("Company"),
               ui("Version"),
               ui("Segments"),
               ui("Next number"),
@@ -506,6 +520,11 @@ function Classification() {
               <tr key={t.template_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{t.code}</td>
                 <td className="py-2 pr-4">{t.name}</td>
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {t.entity_code ?? (
+                    <span className="text-muted-foreground">{ui("Every company")}</span>
+                  )}
+                </td>
                 <td className="py-2 pr-4 tabular-nums">{t.version}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{JSON.stringify(t.segments)}</td>
                 <td className="py-2 pr-4 tabular-nums">{t.next_value}</td>
