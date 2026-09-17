@@ -324,8 +324,13 @@ begin
     from erp.ledger l where l.tenant_id = v_tenant and l.is_primary order by l.code limit 1;
   select s.id into v_site from erp.site s where s.tenant_id = v_tenant order by s.code limit 1;
   select u.id into v_uom from erp.uom u where u.tenant_id = v_tenant order by u.code limit 1;
-  select i.id into v_item from erp.item i
-   where i.tenant_id = v_tenant and i.status = 'active'::erp.record_status order by i.code limit 1;
+  -- Its own product, not the demonstration's. erp.ensure_demo_configuration
+  -- already gives its products a default supplier, and
+  -- erp.item_supplier(tenant, item, site) is unique where is_default — so
+  -- borrowing one and adding a default to it collides with the seed.
+  insert into erp.item (tenant_id, code, name, stock_uom_id, status)
+  values (v_tenant, 'ZZPS-ITEM', 'Something bought in', v_uom, 'active'::erp.record_status)
+  returning id into v_item;
   select p.id into v_supp from erp.party p
     join erp.party_role pr on pr.tenant_id = p.tenant_id and pr.party_id = p.id
      and pr.role_kind = 'supplier' and pr.status = 'active'
