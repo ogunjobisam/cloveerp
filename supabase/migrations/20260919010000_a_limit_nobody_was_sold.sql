@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919000000  A limit nobody was sold
+-- 20260919010000  A limit nobody was sold
 -- -----------------------------------------------------------------------------
 -- 20260904190000 gave every plan seven numbers. Five of them are on the price
 -- list at src/routes/product.tsx: full users, light users, companies, sites,
@@ -71,19 +71,23 @@ set lock_timeout = '30s';
 --                       of Done requires them enforced.
 --
 -- ─────────────────────────────────────────────────────────────────────────────
--- The overage engine follows them out
+-- The overage engine stops having anything to reconcile
 --
 -- erp.invoice_overage_lines() is the only routine that named the two codes
--- outright. With the register rows gone its loop is over nothing and every
--- invoice is the subscription alone — so the behaviour is already right the
--- moment the rows go. What is not right is a body that still names them: a
--- reader would take it for a volume band the product sells, and the price list
--- promises there is none. It is re-emitted returning no lines, with the reason
--- in it. Reinstating volume pricing then means registering a kind, pricing a
--- band on the book and putting it on the price list — together, which is the
--- order that failed here.
+-- outright. With the register rows gone its loop is over nothing, so it returns
+-- no lines and every invoice is the subscription alone: the behaviour is right
+-- the moment the rows go, without the routine being touched.
 --
--- What is NOT re-emitted: src/lib/pdf/commercial-document.ts and
+-- The first version of this migration re-emitted it anyway, on the grounds that
+-- a body naming two codes the register no longer holds reads as a volume band
+-- the product sells. The build refused that, and section 4 carries the reason
+-- at length: the band arithmetic inside it is the only thing in the schema that
+-- consults erp.price_item.band_from, and deleting it turned the price-book
+-- screen's "Band from" field into a control that changes nothing. Removing an
+-- undisclosed cap is not a licence to leave a new hole behind. The routine
+-- keeps its body and gets a new comment.
+--
+-- What is NOT touched either: src/lib/pdf/commercial-document.ts and
 -- src/lib/email/commercial-email.ts still render an overage line, and their
 -- tests still fixture one. erp_meta.contract_invoice.lines is stored jsonb; an
 -- invoice issued before today keeps whatever it was issued with, and it must
@@ -263,17 +267,39 @@ $usage$;
 -- 4. An invoice charges the subscription and nothing per transaction
 -- ═════════════════════════════════════════════════════════════════════════════
 --
--- 20260904620000 is the only definition of this routine and nothing has
--- replaced it since; the guard below reads the live body and refuses if it is
--- not the one this migration expects. Re-emitted rather than patched, because
--- every line of the old body — the loop, the month walk, the band lookup, the
--- per-unit division — exists to price an excess over a volume the product no
--- longer sells.
+-- erp.invoice_overage_lines() walks each month of an invoice period against the
+-- two entitlement kinds it names and prices whatever the organisation used
+-- beyond its band. With both rows out of the register that loop has nothing to
+-- iterate: it returns no lines, erp.issue_contract_invoice() records an overage
+-- of nought, and every invoice is its subscription and whatever was charged
+-- once. Section 2 is what makes that true; this section changes no behaviour.
 --
--- The signature, language, volatility and security context are unchanged, so
--- the grants, the definer allowance and every caller stay exactly as they were.
--- erp.issue_contract_invoice() still records overage_minor; it is now always
--- nought, which is what "no per-transaction fees" means when written down.
+-- The routine is deliberately NOT re-emitted, and the reason is worth writing
+-- down because the first version of this migration got it wrong. That version
+-- replaced the body with one that returned no lines, arguing that a body naming
+-- two codes the register no longer holds reads as a volume band the product
+-- sells. The build refused it:
+--
+--   CLOVEERP_WRITE_ONLY_COLUMN: erp.price_item.band_from —
+--   erp_set_up_selling writes it and nothing decides on it
+--
+-- The per-unit division in this routine — amount_minor / greatest(band_to −
+-- coalesce(band_from, 1) + 1, 1) — is the only arithmetic anywhere in the
+-- schema that consults band_from. Delete it and the price-book screen's "Band
+-- from" field becomes a control that saves, says it saved and changes nothing,
+-- which is the same class of defect as a limit nobody was sold. Removing an
+-- undisclosed cap is not a licence to leave a new hole behind.
+--
+-- So the reconciliation stays exactly as 20260904620000 wrote it, over an empty
+-- register, and only its comment changes. The guard below reads the live body
+-- and refuses if it is not that one — a later rewrite would take the band
+-- arithmetic with it and would have to answer the same question.
+--
+-- One thing this leaves standing, reported rather than fixed: the band columns
+-- and every band kind the price-book screen offers exist for bands the
+-- published price list does not sell. That is a question about what the product
+-- charges for, not about an undisclosed limit, and it belongs to whoever
+-- answers the first.
 
 do $overage$
 declare
@@ -281,48 +307,29 @@ declare
 begin
   if position('documents_per_month' in v_def) = 0
      or position('movements_per_month' in v_def) = 0
-     or position('volume_band' in v_def) = 0 then
+     or position('volume_band' in v_def) = 0
+     or position('coalesce(pi.band_from, 1)' in v_def) = 0 then
     raise exception 'CLOVEERP_BODY_UNRECOGNISED: erp.invoice_overage_lines(uuid) is not the body 20260904620000 left'
-      using hint = 'Something replaced it after 20260904620000. Read the live body before re-emitting this one.';
+      using hint = 'Something replaced it after 20260904620000. Read the live body: this migration relies on '
+                   'its loop having nothing to iterate, and on its band arithmetic being the reader of '
+                   'erp.price_item.band_from that erp.assert_write_only_columns() counts.';
+  end if;
+  if exists (select 1 from erp_meta.entitlement_kind k
+              where k.code in ('documents_per_month', 'movements_per_month')) then
+    raise exception 'CLOVEERP_REGISTER_UNRECOGNISED: a volume kind is still registered, so this loop still has something to reconcile';
   end if;
 end
 $overage$;
 
-create or replace function erp.invoice_overage_lines(p_invoice_id uuid)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = ''
-as $$
-begin
-  -- 20260919000000: there is nothing to reconcile.
-  --
-  -- This routine used to walk each month of an invoice period against
-  -- documents_per_month and movements_per_month, and price whatever the
-  -- organisation had used beyond its band. Neither is an entitlement any more:
-  -- they were caps no customer was ever quoted, and the price list says in as
-  -- many words that there are no per-transaction fees.
-  --
-  -- It keeps its signature, its callers and its place in the register so that a
-  -- volume band the product genuinely sells one day has somewhere to be
-  -- reconciled — but putting one back means registering the kind, pricing the
-  -- band on the book AND putting it on the price list, in that order. Doing the
-  -- first two and not the third is exactly what this migration exists to undo.
-  --
-  -- The invoice is still read, so the routine still touches the
-  -- platform-internal table its definer allowance exists for. It returns no
-  -- lines either way: there is no volume to be over.
-  perform 1 from erp_meta.contract_invoice i where i.id = p_invoice_id;
-  return '[]'::jsonb;
-end;
-$$;
-
 comment on function erp.invoice_overage_lines is
-  'Specification v1.5 §17.10 reconciled an invoice period against the metering. '
-  'Since 20260919000000 no entitlement is metered by volume — the two that were '
-  'appeared on no price list — so an invoice carries its subscription and '
-  'nothing else, and this returns no lines.';
+  'Specification v1.5 §17.10 reconciles an invoice period against the metering '
+  'for every entitlement measured by volume. Since 20260919010000 there is no '
+  'such entitlement — the two there were appeared on no price list, and the '
+  'price list promises no per-transaction fees — so this iterates nothing and '
+  'an invoice carries its subscription and whatever was charged once. The '
+  'reconciliation is kept whole rather than deleted: it is where a volume band '
+  'belongs if one is ever registered, priced on the book AND published '
+  'together, and its band arithmetic is what reads erp.price_item.band_from.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. The metering suite reads the meter
@@ -407,7 +414,7 @@ $n$  return query select 'and the organisation can read its own meters',
               and m.quantity = 8 and k.unit = 'documents'),
     '§18.2: the number on an invoice is one the customer has already seen, in the unit the meter names';
 
-  -- ── 20260919000000 a volume is measured, never limited ────────────────────
+  -- ── 20260919010000 a volume is measured, never limited ────────────────────
 
   perform erp.record_meter('documents_posted', 5000, v_tenant);
   perform erp.record_meter('movements_recorded', 200000, v_tenant);
@@ -483,7 +490,7 @@ $n$  if v_total <> 24 then
       using errcode = 'P0001',
             detail = coalesce(v_detail, 'every case that ran passed; the suite stopped short'),
             hint = 'A suite that reports n/n without saying what n should be '
-                   'cannot notice a test that stopped running. 20260919000000 '
+                   'cannot notice a test that stopped running. 20260919010000 '
                    'added three cases for the volume limits it removed.';
   end if;$n$;
 begin
@@ -533,7 +540,7 @@ declare
     and exists (select 1 from jsonb_array_elements(res -> 'lines') x where x ->> 'kind' = 'overage' and (x ->> 'over')::numeric = 10000 and (x ->> 'unit_minor')::numeric = 10),
     '10,000 documents over 50,000 at 10p each from the DOCS-100K band';$n$,
           $n$  -- The customer posts a great many documents this month; the meter the
-  -- platform already keeps says so, and since 20260919000000 that is all it
+  -- platform already keeps says so, and since 20260919010000 that is all it
   -- does. There is no volume band to exceed and none on the price list.
   perform erp.record_meter('documents_posted', 60000, v_customer);
   select i.id into v_inv from erp_meta.contract_invoice i where i.contract_id = v_contract and i.period_start <= current_date and i.period_end > current_date;
