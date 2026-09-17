@@ -42,10 +42,16 @@ select erp.seed_demo_history(:'from_date'::date + 20, null, 1) ->> 'built' as sl
 select erp.seed_demo_history(:'from_date'::date + 25, null, 1) ->> 'built' as slice_6;
 
 -- The month moves stock between the company's two sites every Wednesday
--- (20260918100000); erp_test.demo_site_transfer_suite() holds the seeder to it.
+-- (20260918100000), sends goods back to a supplier every Tuesday and credits a
+-- customer every Friday (20260918200000); erp_test.demo_site_transfer_suite()
+-- and erp_test.demo_history_suite() hold the seeder to all three.
 select 'ci-demo: ' || count(*) || ' documents, '
        || count(*) filter (where dt.base_type_code = 'transfer_order')
-       || ' of them transfers between sites' as seeded
+       || ' of them transfers between sites, '
+       || count(*) filter (where dt.code = 'sales_credit_note')
+       || ' credit notes to customers, '
+       || count(*) filter (where dt.code = 'purchase_credit_note')
+       || ' returns to suppliers' as seeded
   from erp.document d
   join erp.document_type dt on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
  where d.tenant_id = :'tenant_id';
