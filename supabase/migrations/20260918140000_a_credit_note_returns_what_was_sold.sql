@@ -80,6 +80,34 @@
 -- will now ask any credit_reference type for a movement type.
 --
 -- ─────────────────────────────────────────────────────────────────────────────
+-- A return says why, and until now the bridge could not carry the answer
+--
+-- erp_ref.movement_type has carried requires_reason since 0023, and
+-- erp.apply_stock_movement() has refused a movement of such a type without a
+-- reason code for just as long: CLOVEERP_MOVEMENT_REASON_REQUIRED. Six of the
+-- eighteen movement types declare it, and both return types are among them —
+-- "goods going back" and "goods coming back from a customer" are exactly the
+-- movements nobody should be able to make without saying why.
+--
+-- erp.post_document_stock() has never written a reason code on to a movement.
+-- It did not have to: of the movement types a document type actually bound,
+-- none of them required one. So the bridge could write movements of twelve
+-- types and would have been refused on any of the other six, and no suite could
+-- see it, because nothing could raise a document that moved one.
+--
+-- A credit note is the first. It already refuses to be raised without a reason
+-- code (CLOVEERP_CREDIT_NEEDS_A_REASON), so the answer exists; what was missing
+-- was a route from the document to the movement. The document carries it in
+-- erp.document.attributes, where erp.create_document() has always been able to
+-- put anything, and the bridge reads it from there. A document that carries
+-- none still meets the refusal, which is the point of the column.
+--
+-- The doors also ask erp.check_reason_code(), as 20260916520000 asks every door
+-- that takes a reason code with a note beside it to: a reason the organisation
+-- registered as needing a note is refused without one, and a code it does not
+-- keep insists on nothing.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Two permissions the stock bridge got wrong, and nothing could notice
 --
 -- erp.post_document_stock() decides who may move the stock with
@@ -159,7 +187,7 @@
 -- carry. That is the honest consequence of giving the returned goods no
 -- document of their own, and it is what the two DoD cases ask for.
 --
--- Proof: erp_test.credit_note_suite() (18 cases), which builds its own site,
+-- Proof: erp_test.credit_note_suite() (19 cases), which builds its own site,
 -- supplier, customer and products, receives a hundred at a cost, sells ten at a
 -- price, credits them back, and reads the ledger and the valuation layer.
 -- =============================================================================
@@ -230,6 +258,14 @@ declare
     || E'        ln.batch_id, null);';
   v_perm constant text :=
     E'    case when mt.direction = ''in'' then ''procurement.receive'' else ''sales.despatch'' end,';
+  -- The column list and the values tail of the movement insert, as
+  -- 20260905010000 left them when it stamped occurred_at.
+  v_cols constant text :=
+       E'      document_id, document_line_id, occurred_at)\n'
+    || E'    values (';
+  v_vals constant text :=
+       E'      p_document_id, ln.id,\n'
+    || E'      -- When it happened,';
   v_new text;
 begin
   if (length(v_def) - length(replace(v_def, v_cost, ''))) / length(v_cost) <> 1 then
@@ -237,6 +273,13 @@ begin
   end if;
   if (length(v_def) - length(replace(v_def, v_perm, ''))) / length(v_perm) <> 1 then
     raise exception 'CLOVEERP_BRIDGE_UNRECOGNISED: the movement permission in % is not the one this migration changes', v_sig;
+  end if;
+  if (length(v_def) - length(replace(v_def, v_cols, ''))) / length(v_cols) <> 1
+     or (length(v_def) - length(replace(v_def, v_vals, ''))) / length(v_vals) <> 1 then
+    raise exception 'CLOVEERP_BRIDGE_UNRECOGNISED: the movement insert in % is not the one this migration adds a reason to', v_sig;
+  end if;
+  if position('reason_code' in v_def) > 0 then
+    raise exception 'CLOVEERP_BRIDGE_UNRECOGNISED: % already carries a reason on to its movements', v_sig;
   end if;
 
   v_new := replace(v_def, v_cost,
@@ -254,12 +297,28 @@ begin
     || E'         when mt.direction = ''in'' then ''procurement.receive''\n'
     || E'         else ''sales.despatch'' end,');
 
+  v_new := replace(v_new, v_cols,
+       E'      document_id, document_line_id, reason_code, occurred_at)\n'
+    || E'    values (');
+
+  v_new := replace(v_new, v_vals,
+       E'      p_document_id, ln.id,\n'
+    || E'      -- Why, where the document says why. Six movement types declare\n'
+    || E'      -- requires_reason and erp.apply_stock_movement() refuses every one\n'
+    || E'      -- of them without a reason code; until 20260918140000 no document\n'
+    || E'      -- type named any of the six, so this bridge could write a movement\n'
+    || E'      -- of a type it could never have written. A return names one, and\n'
+    || E'      -- the refusal still stands for a document that carries none.\n'
+    || E'      nullif(btrim(coalesce(d.attributes ->> ''reason_code'', '''')), ''''),\n'
+    || E'      -- When it happened,');
+
   execute v_new;
 
   v_def := pg_get_functiondef(v_sig::regprocedure);
   if position('erp.ensure_site_location(d.site_id)' in v_def) = 0
      or position('if not v_owned then' in v_def) = 0
      or position('occurred_at' in v_def) = 0
+     or position('reason_code' in v_def) = 0
      or position('quarantine_on_receipt' in v_def) = 0 then
     raise exception 'CLOVEERP_BRIDGE_PATCH_LOST: % no longer carries a patch it had before this migration', v_sig;
   end if;
@@ -317,6 +376,11 @@ begin
       using errcode = '23514';
   end if;
 
+  -- A reason the organisation keeps in its register says what it insists on.
+  -- One it does not keep insists on nothing, which is what lets a returns code
+  -- be the customer's own words on the day.
+  perform erp.check_reason_code('RETURN_CUSTOMER', p_reason_code, p_reason);
+
   -- The permission that raises an invoice raises the credit that reverses it.
   perform erp.authorise('sales.invoice', d.entity_id, d.site_id, null,
                         'document', p_document_id);
@@ -345,6 +409,17 @@ begin
 
   v_cn := erp.open_document('sales_credit_note', d.party_id, d.entity_id, v_site,
                             d.document_number, null, d.currency);
+
+  -- The reason travels with the document, because the movement it will write
+  -- is of a type that requires one and the bridge reads it from here.
+  update erp.document
+     set attributes = coalesce(attributes, '{}'::jsonb)
+                      || jsonb_build_object('reason_code', btrim(p_reason_code))
+                      || case when coalesce(btrim(p_reason), '') = ''
+                              then '{}'::jsonb
+                              else jsonb_build_object('reason', btrim(p_reason)) end,
+         updated_at = now()
+   where tenant_id = v_tenant and id = v_cn;
 
   for ln in
     select sl.id            as source_line_id,
@@ -417,7 +492,8 @@ begin
     insert into erp.document_relation (
       tenant_id, from_document_id, to_document_id, relation_kind,
       from_line_id, to_line_id, quantity)
-    select v_tenant, v_cn, gl.document_id, 'returns', v_line, gl.id, ln.qty
+    select v_tenant, v_cn, gl.document_id,
+           'returns'::erp.document_relation_kind, v_line, gl.id, ln.qty
       from erp.document_line gl
      where gl.tenant_id = v_tenant and gl.id = ln.goods_line_id
     on conflict do nothing;
@@ -437,7 +513,7 @@ begin
   if v_base = 'invoice_reference' then
     insert into erp.document_relation (
       tenant_id, from_document_id, to_document_id, relation_kind)
-    values (v_tenant, v_cn, p_document_id, 'credits')
+    values (v_tenant, v_cn, p_document_id, 'credits'::erp.document_relation_kind)
     on conflict do nothing;
   end if;
 
@@ -531,6 +607,8 @@ begin
       using errcode = '23514';
   end if;
 
+  perform erp.check_reason_code('RETURN_SUPPLIER', p_reason_code, p_reason);
+
   -- Sending goods back to a supplier is a buying decision, which is the
   -- permission erp_ref.document_type already gives return_to_supplier.
   perform erp.authorise('procurement.order', d.entity_id, d.site_id, null,
@@ -545,6 +623,15 @@ begin
 
   v_cn := erp.open_document('purchase_credit_note', d.party_id, d.entity_id,
                             d.site_id, d.document_number, null, d.currency);
+
+  update erp.document
+     set attributes = coalesce(attributes, '{}'::jsonb)
+                      || jsonb_build_object('reason_code', btrim(p_reason_code))
+                      || case when coalesce(btrim(p_reason), '') = ''
+                              then '{}'::jsonb
+                              else jsonb_build_object('reason', btrim(p_reason)) end,
+         updated_at = now()
+   where tenant_id = v_tenant and id = v_cn;
 
   for ln in
     select rl.id as goods_line_id, rl.line_no, rl.item_id, rl.description,
@@ -592,7 +679,8 @@ begin
     insert into erp.document_relation (
       tenant_id, from_document_id, to_document_id, relation_kind,
       from_line_id, to_line_id, quantity)
-    values (v_tenant, v_cn, p_document_id, 'returns', v_line, ln.goods_line_id, ln.qty)
+    values (v_tenant, v_cn, p_document_id, 'returns'::erp.document_relation_kind,
+            v_line, ln.goods_line_id, ln.qty)
     on conflict do nothing;
 
     v_n := v_n + 1;
@@ -619,7 +707,7 @@ begin
   if v_order is not null then
     insert into erp.document_relation (
       tenant_id, from_document_id, to_document_id, relation_kind)
-    values (v_tenant, v_cn, v_order, 'returns')
+    values (v_tenant, v_cn, v_order, 'returns'::erp.document_relation_kind)
     on conflict do nothing;
   end if;
 
@@ -1097,7 +1185,7 @@ volatile
 set search_path = ''
 as $suite$
 declare
-  c_expected constant integer := 18;
+  c_expected constant integer := 19;
   v_cases  integer := 0;
   v_tag    text := substr(md5(gen_random_uuid()::text), 1, 6);
   a1       uuid := gen_random_uuid();
@@ -1112,7 +1200,7 @@ declare
   v_value  bigint; v_cost bigint;
   v_rev text; v_ar text; v_inv_acc text; v_cos text; v_grni text; v_ap text;
   v_dr bigint; v_cr bigint;
-  v_msg1 text; v_msg2 text;
+  v_msg1 text; v_msg2 text; v_reason text;
   v_ret_docs integer;
   v_order_seen boolean;
 begin
@@ -1248,8 +1336,9 @@ begin
     return next;
 
     -- ── The customer credit note ────────────────────────────────────────────
-    v_step := 'the invoice is credited and the goods come back';
+    v_step := 'a credit note is raised against the invoice';
     v_ccn := erp.raise_customer_credit_note(v_inv, 'damaged', 'Two cases crushed in transit');
+    v_step := 'the credit note is issued, which posts its stock and its journal';
     perform erp.transition_document(v_ccn, 'issue', 'credit note suite');
 
     select coalesce(sum(b.quantity), 0) into v_qty2
@@ -1270,6 +1359,19 @@ begin
     case_name := 'the goods came back at what they cost, not at what they sold for';
     passed := v_state is null and v_cost = 10000;
     detail := format('the return movement cost %s; the despatch cost 10000 and the sale was 25000', v_cost);
+    return next;
+
+    -- return_from_customer declares requires_reason, so the movement could not
+    -- have been written at all without one. This says the reason is the one the
+    -- credit note was raised with, rather than anything the bridge invented.
+    select string_agg(distinct m.reason_code, ',') into v_reason
+      from erp.stock_movement m
+     where m.tenant_id = rb.tenant_id and m.document_id = v_ccn and not m.is_reversal;
+
+    v_cases := v_cases + 1;
+    case_name := 'the movement says why the goods came back';
+    passed := v_state is null and v_reason = 'damaged';
+    detail := format('the return movement carries reason %s', coalesce(v_reason, 'nothing'));
     return next;
 
     select c.value_minor into v_value
@@ -1336,7 +1438,7 @@ begin
     return next;
 
     -- ── The supplier credit note ────────────────────────────────────────────
-    v_step := 'ten of the hundred go back to the supplier';
+    v_step := 'a supplier credit note is raised against the receipt';
     v_scn := erp.raise_supplier_credit_note(
       v_grn, 'wrong_item', 'Ten of the hundred were the wrong grade',
       jsonb_build_array(jsonb_build_object(
@@ -1344,6 +1446,7 @@ begin
                      where l.tenant_id = rb.tenant_id and l.document_id = v_grn
                      order by l.line_no limit 1),
         'quantity', 10)));
+    v_step := 'the supplier credit note is issued';
     perform erp.transition_document(v_scn, 'issue', 'credit note suite');
 
     select coalesce(sum(b.quantity), 0) into v_qty3
@@ -1435,9 +1538,15 @@ begin
   detail := coalesce(v_state, 'zzcn rolled back with its products, its parties and its credit notes');
   return next;
 
+  -- The count guard says what stopped the fixture. Without this the wrapper
+  -- never sees a row, so the message this suite caught into v_state — and the
+  -- step that produced it — never reaches the build log, and every break costs
+  -- a run to find.
   if v_cases <> c_expected then
-    raise exception 'CLOVEERP_CREDIT_NOTE_SUITE_SHRANK: % case(s), expected %', v_cases, c_expected
-      using detail = 'A case was added or lost. Update the count deliberately.';
+    raise exception 'CLOVEERP_CREDIT_NOTE_SUITE_SHRANK: % case(s), expected %; the fixture stopped %',
+      v_cases, c_expected,
+      coalesce(v_state, 'nowhere, so a case was added or lost')
+      using detail = coalesce(v_state, 'A case was added or lost. Update the count deliberately.');
   end if;
 end;
 $suite$;
@@ -1451,7 +1560,7 @@ volatile
 set search_path = ''
 as $wrap$
 declare
-  c_expected constant integer := 18;
+  c_expected constant integer := 19;
   v_all integer; v_fail integer; v_detail text;
 begin
   create temp table if not exists _credit_note on commit drop as
