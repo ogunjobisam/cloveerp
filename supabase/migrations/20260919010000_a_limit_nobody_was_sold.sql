@@ -667,11 +667,13 @@ select erp.assert_customer_view_sound();
 -- catalogue: a restated figure that is wrong costs a whole build to find.
 select erp_test.assert_metering_suite();
 select erp_test.assert_commercial_suite();
--- erp_test.assert_commercial_renewal_suite() is NOT run here. Its fixture
--- designates its own throwaway tenant as the platform's organisation, which an
--- empty build allows and a live database refuses — clove-erp already holds that
--- role, so the deploy of 20260919010000 died on
--- CLOVEERP_PLATFORM_ORGANISATION_ALREADY_DESIGNATED at this statement and the
--- migration rolled back whole. The suite is in erp.ci_check_catalogue() and runs
--- on every build, which is where a fixture that stands up a second platform
--- organisation belongs. A migration runs only what a live database can answer.
+-- erp_test.assert_commercial_renewal_suite() is deliberately NOT run here, and
+-- removing this call is the edit that 20260919020000 repairs. The suite's
+-- fixture designates its own throwaway tenant as the platform's organisation:
+-- an empty build has none, so it passes; a live database has clove-erp, so it
+-- refuses the second. The deploy of this migration died on that statement with
+-- CLOVEERP_PLATFORM_ORGANISATION_ALREADY_DESIGNATED and rolled back whole, so
+-- no database has ever carried this version. The suite is in
+-- erp.ci_check_catalogue() and runs on every build, which is where a fixture
+-- that must be the only platform organisation belongs. A migration runs only
+-- what a live database can answer.
