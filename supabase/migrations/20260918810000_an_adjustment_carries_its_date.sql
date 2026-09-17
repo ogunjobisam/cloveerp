@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260918800000  An adjustment carries its date
+-- 20260918810000  An adjustment carries its date
 -- -----------------------------------------------------------------------------
 -- Six of the Definition of Done's seven seeded transactions are in the month
 -- and asserted. The seventh, a stock adjustment, could not be seeded at all,
@@ -260,9 +260,14 @@ set lock_timeout = '30s';
 -- month's weekend counts in the books, which is the four-tie proof for a
 -- backdated adjustment.
 --
--- Collateral, restated with the reason. supabase/ci/seed_demo.sql reports the
--- weekend counts beside the transfers, the credit notes, the part receipts, the
--- bills and the part deliveries; its document total grows by one a Saturday.
+-- Collateral, restated with the reason. erp_test.site_transfer_suite()'s first
+-- case reads inventory-operations back at version 4 after taking the upgrade;
+-- the register now carries this as version 5, so it reads 5, and the number is
+-- moved with the sentence that says why rather than the case being loosened to
+-- read the version by name. supabase/ci/seed_demo.sql reports the weekend
+-- counts beside the transfers, the credit notes, the part receipts, the bills
+-- and the part deliveries; its document total grows by one a Saturday.
+-- e2e/routes.ts gains the screen, as every new screen adds a line there.
 -- erp_test.starter_pack_acceptance_suite() is NOT disturbed: the base pack
 -- ships no stock adjustment lifecycle, so the inventory installer shipping one
 -- takes nothing off the pack's plan.
@@ -927,7 +932,7 @@ declare
              || E'    -- moves nothing. It also posts at the FIRST committed state, which\n'
              || E'    -- for an adjustment is "approved" — before anybody has agreed the\n'
              || E'    -- stock really is what it says. erp.post_stock_adjustment() writes\n'
-             || E'    -- the legs itself, on the document''s own date (20260918800000).\n'
+             || E'    -- the legs itself, on the document''s own date (20260918810000).\n'
              || E'    if bt.affects_stock and dt.base_type_code not in (''transfer_order'', ''adjustment'')\n';
   v_hits integer;
 begin
@@ -1016,7 +1021,7 @@ update erp_ref.module_installer
                      'stock_adjustment posting rule; version 3 (20260906143000) the '
                      'consignment_consumption rule; version 4 (20260917130000) the transfer '
                      'order — its lifecycle, its numbering rule and its document type — so '
-                     'stock can move between two sites; version 5 (20260918800000) the stock '
+                     'stock can move between two sites; version 5 (20260918810000) the stock '
                      'adjustment document, so a correction to the shelf carries its own date, '
                      'its reason and an approval.'
  where install_code = 'inventory-operations';
@@ -1114,7 +1119,7 @@ declare
   v_n    constant text := E'  end loop days;\n';
   v_r    constant text := $r$  -- ── The weekend count ────────────────────────────────────────────────────
   -- Every Saturday the warehouse counts the product its bulk store holds most
-  -- of and finds it one short (20260918800000). Raised through
+  -- of and finds it one short (20260918810000). Raised through
   -- erp.raise_stock_adjustment() under COUNT_VARIANCE, dated that Saturday,
   -- approved and posted through erp.post_stock_adjustment(), so the movement
   -- and its journal both carry the day the count was taken.
@@ -1898,7 +1903,7 @@ declare
   v_o1 constant text := $o1$  v_left numeric; v_residue bigint; v_ppv bigint; g record;
 $o1$;
   v_r1 constant text := $q1$  v_left numeric; v_residue bigint; v_ppv bigint; g record;
-  -- What the weekend count found (20260918800000)
+  -- What the weekend count found (20260918810000)
   v_adj_code text; v_counted bigint;
 $q1$;
 
@@ -1908,7 +1913,7 @@ $q1$;
 $o2$;
   v_r2 constant text := $q2$  -- ── 8j. The month adjusts stock ───────────────────────────────────────────
   -- Every Saturday the warehouse counts and writes one unit off
-  -- (20260918800000), dated that Saturday under that day's reference, through
+  -- (20260918810000), dated that Saturday under that day's reference, through
   -- the doors a person uses. The movement and its journal both carry the day
   -- of the count, and the cost reaches the stock adjustments account.
   v_adj_code := erp.tenant_account_code('stock_adjustment');
@@ -2033,7 +2038,97 @@ end
 $wrapper$;
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 16. The generators, then the assertions
+-- 16. The suite this one moved the goalposts for
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- erp_test.site_transfer_suite()'s first case puts an organisation back to
+-- inventory-operations version 3 with its transfer order removed, takes the
+-- upgrade the way an administrator takes it, and reads the version back. It
+-- read 4 because 4 was the register's latest; the register now carries the
+-- stock adjustment as 5, so the same organisation arrives at 5.
+--
+-- Restated rather than relaxed, in the migration that made the old number
+-- wrong. The claim the case exists to make is untouched: an organisation that
+-- already exists IS offered the transfer order by the upgrade register, and
+-- holds it afterwards with its base type, its lifecycle, its numbering rule and
+-- its movement type.
+--
+-- The count of planned items does not move, and that was read rather than
+-- assumed: the case counts
+--
+--     plan_module_upgrade('inventory-operations') where object_kind =
+--     'document_type' AND object_key = 'transfer_order'
+--
+-- so it was already asking for its own document type by name and not for
+-- "however many the planner offers". The stock adjustment is a second document
+-- type from the same installer, and the planner rightly offers it too — but not
+-- under that key, so the answer is still one.
+--
+-- Only the version moves, and the detail string now says why it moved, so the
+-- next person reading a build log is told rather than left to find out.
+-- Reading the version by name instead of by number would let the case survive
+-- the next addition untouched, and surviving it is the failure: this number is
+-- the only thing in the build that says the inventory installer now installs
+-- something it did not.
+
+do $transfer_case$
+declare
+  v_sig constant text := 'erp_test.site_transfer_suite()';
+  v_def text := pg_get_functiondef('erp_test.site_transfer_suite()'::regprocedure);
+  -- The verdict's last line, which is the only place the version is a number.
+  -- The same subquery appears again in the detail below, without the "= 4;".
+  v_n1  constant text := $n1$        and (select i.installer_version from erp.module_installation i
+              where i.tenant_id = v_tenant and i.install_code = 'inventory-operations') = 4;
+$n1$;
+  v_r1  constant text := $r1$        -- 5 since 20260918810000: the register carries the stock adjustment
+        -- as inventory-operations version 5, so an organisation put back to 3
+        -- and upgraded arrives at 5 rather than 4. What the case asks the
+        -- planner for, and what it reads back, is still the transfer order:
+        -- the count above names its own object_key, so a second document type
+        -- from the same installer does not change it.
+        and (select i.installer_version from erp.module_installation i
+              where i.tenant_id = v_tenant and i.install_code = 'inventory-operations') = 5;
+$r1$;
+  -- What the build log says when it passes, and when it does not.
+  v_n2  constant text := $n2$  detail := format('%s document type(s) planned, organisation now at version %s',
+$n2$;
+  v_r2  constant text := $r2$  detail := format('%s transfer order document type(s) planned, organisation now at version %s (5 rather than 4 since the stock adjustment joined the same installer)',
+$r2$;
+  v_hits integer;
+begin
+  v_hits := (length(v_def) - length(replace(v_def, v_n1, ''))) / length(v_n1);
+  if v_hits <> 1 then
+    raise exception
+      'CLOVEERP_SITE_TRANSFER_SUITE_UNRECOGNISED: % reads the module version back % time(s), not once',
+      v_sig, v_hits
+      using hint = 'A later migration restated the suite. Read its first case and patch its version.';
+  end if;
+  v_hits := (length(v_def) - length(replace(v_def, v_n2, ''))) / length(v_n2);
+  if v_hits <> 1 then
+    raise exception
+      'CLOVEERP_SITE_TRANSFER_SUITE_UNRECOGNISED: % reports its upgrade % time(s), not once',
+      v_sig, v_hits;
+  end if;
+
+  execute replace(replace(v_def, v_n1, v_r1), v_n2, v_r2);
+
+  -- The new version took, and the rest of the suite is still in it.
+  v_def := pg_get_functiondef(v_sig::regprocedure);
+  if position('''inventory-operations'') = 5;' in v_def) = 0
+     or position('transfer order document type(s) planned' in v_def) = 0
+     or position('transfer_despatch' in v_def) = 0
+     or position('CLOVEERP_TRANSFER_CROSSES_COMPANIES' in v_def) = 0
+     or position('the oldest 30 at 20 each go' in v_def) = 0
+     or position('v_cases <> 12' in v_def) = 0 then
+    raise exception
+      'CLOVEERP_SITE_TRANSFER_SUITE_UNRECOGNISED: % did not take its new version, or the rewrite dropped a case',
+      v_sig;
+  end if;
+end
+$transfer_case$;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 17. The generators, then the assertions
 -- ═════════════════════════════════════════════════════════════════════════════
 
 select erp.apply_row_security();
@@ -2046,6 +2141,7 @@ select erp.apply_execute_grants();
 
 select erp_test.assert_stock_adjustment_suite();
 select erp_test.assert_demo_history_suite();
+select erp_test.assert_site_transfer_suite();
 select erp_test.assert_plain_words_suite();
 
 select erp.assert_write_only_columns();
