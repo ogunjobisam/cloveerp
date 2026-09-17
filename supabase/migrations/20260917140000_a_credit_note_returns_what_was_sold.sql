@@ -1053,8 +1053,11 @@ $demo$;
 -- Both doors live on the document a person is already looking at: you credit an
 -- invoice from the invoice, and you send goods back from the receipt that
 -- brought them. There is no new screen because there is no new place to stand.
-select erp_meta.add_help_actions('/documents',
-  array['erp_raise_customer_credit_note', 'erp_raise_supplier_credit_note']);
+-- /documents has never carried a help topic: every door rendered on the document
+-- screen is registered under the module it belongs to, and these follow that.
+-- A customer credit note is a sales act; sending goods back is a procurement one.
+select erp_meta.add_help_actions('/sales', array['erp_raise_customer_credit_note']);
+select erp_meta.add_help_actions('/procurement', array['erp_raise_supplier_credit_note']);
 
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key(v.text), 'en', v.text,
