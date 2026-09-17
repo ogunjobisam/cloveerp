@@ -88,6 +88,8 @@ type Line = {
   unit_price_minor: number;
   net_minor: number;
   item: string | null;
+  /** What the supplier calls the product, stamped on the line when it was raised. */
+  supplier_item_code: string | null;
 };
 
 type Lineage = {
@@ -584,11 +586,14 @@ function Lines({
             No lines yet. A document with no lines has no value to approve or post.
           </p>
         ) : (
-          <Table columns={["#", "Product", "Description", "Qty", "Unit", "Net", ""]}>
+          <Table columns={["#", "Product", "Their code", "Description", "Qty", "Unit", "Net", ""]}>
             {lines.map((l) => (
               <tr key={l.line_id} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{l.line_no}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{l.item ?? "—"}</td>
+                {/* What the supplier calls it. Blank on anything they do not
+                    supply, which is every sales line. */}
+                <td className="py-2 pr-4 font-mono text-xs">{l.supplier_item_code ?? "—"}</td>
                 <td className="py-2 pr-4">{l.description ?? "—"}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{l.quantity}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{money(l.unit_price_minor)}</td>
