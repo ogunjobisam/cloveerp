@@ -43,7 +43,7 @@ select erp.seed_demo_history(:'from_date'::date + 25, null, 1) ->> 'built' as sl
 
 -- The month moves stock between the company's two sites every Wednesday
 -- (20260918100000), sends goods back to a supplier every Tuesday and credits a
--- customer every Friday (20260918200000); erp_test.demo_site_transfer_suite()
+-- customer every Friday (20260918210000); erp_test.demo_site_transfer_suite()
 -- and erp_test.demo_history_suite() hold the seeder to all three.
 select 'ci-demo: ' || count(*) || ' documents, '
        || count(*) filter (where dt.base_type_code = 'transfer_order')

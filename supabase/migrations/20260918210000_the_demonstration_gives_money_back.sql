@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260918200000  The demonstration gives money back
+-- 20260918210000  The demonstration gives money back
 -- -----------------------------------------------------------------------------
 -- The Definition of Done's master gate asks for a seeded trading month holding
 -- one of each of seven transactions. Two of them are a supplier credit note and
@@ -82,11 +82,18 @@ set lock_timeout = '30s';
 --
 -- ── 3. PROOF ─────────────────────────────────────────────────────────────────
 --
--- erp_test.demo_history_suite() gains four cases and a second five-day call, so
--- it seeds the ten days the build seeds first rather than five: five
--- consecutive days can miss two weekdays, and a month that holds a credit note
--- by luck is exactly what the DoD audit found for part despatch. Ten days hold
--- every weekday. The suite now says the register is there, that the month
+-- erp_test.demo_history_suite() gains four cases and two more five-day calls,
+-- so it seeds the fifteen days the build seeds first rather than five. Five
+-- consecutive days can miss two weekdays entirely, and a month that holds a
+-- credit note by luck is exactly what the DoD audit found for part despatch.
+-- Ten would hold every weekday once, which is not enough either: a credit note
+-- needs a document behind it, and the seeder dates a receipt two to five days
+-- after the day it builds it and an invoice one to four, so a weekday that
+-- falls in the first days of the month can have nothing to credit. Fifteen
+-- days hold every weekday at least twice, and the second time is at least a
+-- week in, by which point the whole first week is behind it. That is the
+-- reason for the number, not a taste for round ones.
+-- The suite now says the register is there, that the month
 -- credits a customer and returns goods to a supplier — each issued, on its own
 -- weekday, under that day's reference, with the reason on the movement and the
 -- journal against it — and that stock, the subledger and inventory still
@@ -105,7 +112,7 @@ declare
   -- The head of the master data section. Reason codes are master data, and the
   -- unit is the first thing the section makes.
   v_n    constant text := E'  v_uom := erp.ensure_base_uom(p_tenant_id, p_principal);\n';
-  v_r    constant text := $r$  -- The reasons a return is allowed to give (20260918200000). Six of the
+  v_r    constant text := $r$  -- The reasons a return is allowed to give (20260918210000). Six of the
   -- eighteen movement types refuse a movement without a reason code and both
   -- return types are among them, so an organisation that credits anybody needs
   -- a register to choose from, and erp.ensure_demo_configuration() applies no
@@ -196,7 +203,7 @@ declare
   v_n    constant text := E'  end loop days;\n';
   v_r    constant text := $r$  -- ── What should not have come, going back ────────────────────────────────
   -- Every Tuesday the goods-in team sends a tenth of one receipt line back to
-  -- the supplier it came from (20260918200000): raised against the receipt
+  -- the supplier it came from (20260918210000): raised against the receipt
   -- through erp.raise_supplier_credit_note() under a reason the organisation
   -- keeps in its register, and issued, so the goods leave the bulk store at
   -- what they cost and what we owe the supplier falls by what is credited.
@@ -267,7 +274,7 @@ declare
 
   -- ── The week's returns, credited ─────────────────────────────────────────
   -- Every Friday a quarter of one line of the week's most recent sales invoice
-  -- comes back (20260918200000): raised through
+  -- comes back (20260918210000): raised through
   -- erp.raise_customer_credit_note() under a reason the organisation keeps,
   -- and issued, so revenue reverses, the customer owes less, and the goods
   -- return to the shelf at what they cost rather than at what they sold for.
@@ -398,7 +405,7 @@ declare
   v_o1 constant text := $o1$  v_old_at timestamptz; v_old_on date; v_new_at timestamptz;
 $o1$;
   v_r1 constant text := $q1$  v_old_at timestamptz; v_old_on date; v_new_at timestamptz;
-  -- What the month gave back (20260918200000)
+  -- What the month gave back (20260918210000)
   v_back   numeric; v_gone numeric; v_dr bigint; v_cr bigint;
 $q1$;
 
@@ -430,10 +437,15 @@ $o2$;
                    and rc.requires_note),
     format('%s return reason(s); erp_ref.reason_code holds seven of each', v_n);
 
-  -- Five more days, in the call the build makes. A credit note hangs on a
-  -- named weekday and five consecutive days can miss two of them; ten hold
-  -- every one.
+  -- Ten more days, in the calls the build makes. A credit note hangs on a
+  -- named weekday, and five consecutive days can miss two of them. Ten would
+  -- hold every weekday once, and once is not enough: the seeder dates a
+  -- receipt two to five days after the day it builds it and an invoice one to
+  -- four, so a weekday falling in the first days of the month has nothing
+  -- behind it yet to credit. Fifteen hold every weekday twice, the second time
+  -- with the whole first week behind it.
   perform erp.seed_demo_history(v_slice + 5, v_slice + 9, 1);
+  perform erp.seed_demo_history(v_slice + 10, v_slice + 14, 1);
   set constraints all immediate;
 
   -- ── 8b. The month credits a customer ───────────────────────────────────────
