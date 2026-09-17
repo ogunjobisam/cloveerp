@@ -20,7 +20,7 @@
   "legislation_packs": 4,
   "locales_with_strings": 3,
   "meta_tables": 71,
-  "migrations": 430,
+  "migrations": 431,
   "modules": 13,
   "part5_absent": 1,
   "part5_built": 97,
@@ -36,7 +36,7 @@
   "promotable_surfaces": 43,
   "ref_tables": 76,
   "spec_version": "v1.6",
-  "sql_lines": 276627,
+  "sql_lines": 276740,
   "suites": 192,
   "triggers": 822,
   "write_allowances": 496
