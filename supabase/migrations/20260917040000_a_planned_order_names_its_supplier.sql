@@ -350,8 +350,10 @@ begin
 
   insert into erp.item_supplier (tenant_id, item_id, party_id, preference_rank,
                                  is_default, is_approved_for_use, status, valid_from)
-  values (v_tenant, v_item, v_other, 9, false, true, 'active'::erp.record_status, current_date - 1),
-         (v_tenant, v_item, v_supp,  1, true,  true, 'active'::erp.record_status, current_date - 1);
+  -- Starting well before today: case 3 expires one of them to yesterday, and
+  -- erp.item_supplier checks valid_to > valid_from.
+  values (v_tenant, v_item, v_other, 9, false, true, 'active'::erp.record_status, current_date - 30),
+         (v_tenant, v_item, v_supp,  1, true,  true, 'active'::erp.record_status, current_date - 30);
 
   -- ── 1. The rule picks the default ahead of the also-ran ──────────────────
   v_cases := v_cases + 1;
