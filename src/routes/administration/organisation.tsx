@@ -170,6 +170,10 @@ const CHAIN_OBJECT_TYPES = [
   { value: "match_exception", label: "An invoice that does not match its order" },
   { value: "count_task", label: "A stock count that came out different" },
   { value: "change_request", label: "A change to master data" },
+  // A reason code marked as needing an approval raises one against the return
+  // (20260916520000), and refuses the return outright when no chain routes one.
+  // Offering the kind here is what makes that refusal something to act on.
+  { value: "customer_return", label: "A customer return — goods a customer sent back" },
 ];
 
 /**
@@ -567,6 +571,7 @@ function Organisation() {
                 name: "p_is_parallel",
                 label: "Approvers act",
                 boolean: true,
+                hint: "In parallel asks everybody the approver rule above can find, at the same time, and any one of them may approve. In sequence asks the first one it finds.",
                 choices: [
                   { value: "false", label: "In sequence" },
                   { value: "true", label: "In parallel" },
@@ -596,7 +601,12 @@ function Organisation() {
                   { value: "escalate_to_manager", label: "Escalate to the department manager" },
                 ],
               },
-              { kind: "number", name: "p_tolerance_pct", label: "Re-approval tolerance (%)" },
+              {
+                kind: "number",
+                name: "p_tolerance_pct",
+                label: "Overshoot tolerance (%)",
+                hint: "A request that passes the ceiling above by no more than this percentage is approved by this band rather than sent up to the one above it. Leave it empty and anything over the ceiling escalates.",
+              },
             ],
             invalidates,
           },
