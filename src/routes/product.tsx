@@ -563,9 +563,10 @@ function Pricing() {
         One price for your organisation, with your core team included.
       </h2>
       <p className="mt-4 max-w-[62ch] text-base leading-relaxed text-ink/70 text-pretty">
-        Add people as you grow. Light users — people who only approve, look at reports or use the
-        scanner — cost a fraction of a full user. No per-transaction fees, and your data always
-        exports with you.
+        Add people as you grow. Light users — people who look at reports, count stock, use the
+        scanner or approve a product or supplier record — cost a fraction of a full user. Approving
+        an order, a payment or a discount commits money, so that is a full user. No per-transaction
+        fees, and your data always exports with you.
       </p>
 
       <div className="mt-8 grid gap-4 md:grid-cols-3">
