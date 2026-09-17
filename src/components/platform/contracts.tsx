@@ -1030,9 +1030,10 @@ type Invoice = {
 
 /**
  * §17.10: the invoice schedule generated from the term and the billing
- * frequency, each invoice reconciled against the metering when it is issued.
- * A scheduled invoice shows the overage it would carry today from the same
- * meters the customer sees, so nothing on the issued invoice is a surprise.
+ * frequency. Since 20260919000000 nothing is metered against a limit — the two
+ * volume caps that were appeared on no price list — so an invoice is its
+ * subscription and whatever was charged once, and the overage column is there
+ * for invoices issued before that.
  *
  * Every figure below comes from the door as it is. The overage on a scheduled
  * invoice used to be added up here, in TypeScript, out of the lines — while
@@ -1091,7 +1092,7 @@ function Invoices({
   return (
     <Card
       title="Invoices"
-      description="Generated from the term and the billing frequency. Issuing reconciles the period against the metering and prices any overage from the book; a scheduled invoice shows the overage it would carry today, and a total that includes it."
+      description="Generated from the term and the billing frequency. The subscription is the whole of each invoice: the product sells no per-transaction band, so issuing prices no overage. The overage column carries what invoices issued before 19 September 2026 were charged."
       action={
         mayWrite && inForce ? (
           <button

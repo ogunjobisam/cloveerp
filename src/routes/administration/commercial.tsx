@@ -613,7 +613,7 @@ function Commercial() {
           <Section
             title={ui("What you will pay next")}
             description={ui(
-              "Each invoice in the schedule, and the metering behind any overage. A scheduled invoice shows the overage it would carry today, from the same meters you see above.",
+              "Each invoice in the schedule and what it is made of. The subscription is the whole of it: there are no per-transaction fees, so nothing you do in a month changes what you pay for it.",
             )}
           >
             {data.invoices.length === 0 ? (
@@ -814,7 +814,7 @@ function Commercial() {
 
           <Section
             title="Meters"
-            description="The readings usage is charged and limited from, most recent period first. A reading is taken by the platform's own job and is not editable from anywhere."
+            description="What the platform measured this organisation doing, most recent period first. A reading is taken by the platform's own job, is not editable from anywhere, and is not a limit: nothing here caps what you may do or adds to what you pay."
           >
             {data.meters.length === 0 ? (
               <p className="text-sm text-muted-foreground">No reading has been taken yet.</p>
