@@ -126,17 +126,17 @@ comment on column erp_ref.permission.seat is
   'them. light: it only reads or reports, approves a master data record, or '
   'records a count. full: it creates, changes, posts, configures, administers, '
   'or approves something that commits money — an order, a payment, a discount '
-  '(20260918900000). Null is unclassified, is counted as full by '
+  '(20260918910000). Null is unclassified, is counted as full by '
   'erp.person_seats(), and fails erp.assert_every_permission_has_a_seat().';
 
 update erp_meta.entitlement_kind
    set counts_what = 'erp.app_user rows of kind person with status active whose current roles reach a full permission: creating, changing, posting, configuring, administering, or approving something that commits money (erp.person_seat() is full)',
-       note = 'What a plan includes, and what an extra full user adds to. Until 20260914095000 this counted every active person; light users are counted apart now. Since 20260918900000 it also counts whoever approves a purchase order, a payment or a discount, because those commit the company. erp.require_entitlement() refuses on it where it is called, and no invitation or grant calls it.'
+       note = 'What a plan includes, and what an extra full user adds to. Until 20260914095000 this counted every active person; light users are counted apart now. Since 20260918910000 it also counts whoever approves a purchase order, a payment or a discount, because those commit the company. erp.require_entitlement() refuses on it where it is called, and no invitation or grant calls it.'
  where code = 'users';
 
 update erp_meta.entitlement_kind
    set counts_what = 'erp.app_user rows of kind person with status active whose current roles reach only light permissions: reading and reporting, approving master data records, counting stock, using the scanner (erp.person_seat() is light)',
-       note = 'Sold per person beside the plan, which includes none. Measured so an organisation is billed as sold; nothing refuses on it. Approving an order, a payment or a discount is not a light action (20260918900000).'
+       note = 'Sold per person beside the plan, which includes none. Measured so an organisation is billed as sold; nothing refuses on it. Approving an order, a payment or a discount is not a light action (20260918910000).'
  where code = 'light_users';
 
 do $hint$
@@ -144,7 +144,7 @@ declare
   v_sig    constant text := 'erp.assert_every_permission_has_a_seat()';
   v_def    text := pg_get_functiondef(v_sig::regprocedure);
   v_needle constant text := 'light if it only reads or reports, decides an approval or records a count; full otherwise.';
-  v_new    constant text := 'light if it only reads or reports, approves a master data record or records a count; full otherwise. Approving something that commits money — an order, a payment, a discount — is full (20260918900000).';
+  v_new    constant text := 'light if it only reads or reports, approves a master data record or records a count; full otherwise. Approving something that commits money — an order, a payment, a discount — is full (20260918910000).';
 begin
   if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
     raise exception 'CLOVEERP_BODY_UNRECOGNISED: % does not carry the 20260914095000 hint exactly once', v_sig
@@ -182,7 +182,7 @@ begin
       ($n$  s_support uuid := gen_random_uuid();
 $n$,
        $r$  s_support uuid := gen_random_uuid();
-  -- The master data approver (20260918900000), who approves records and
+  -- The master data approver (20260918910000), who approves records and
   -- commits nothing, and whose seat is therefore still light.
   s_md      uuid := gen_random_uuid();
 $r$),
@@ -203,7 +203,7 @@ $r$),
 $n$,
        $r$                   ('zz_configurer', 'administration.read'), ('zz_configurer', 'administration.configure'),
                    -- Approving a product or a supplier record commits nothing
-                   -- on its own, so this role is light (20260918900000).
+                   -- on its own, so this role is light (20260918910000).
                    ('zz_md_approver', 'master_data.read'), ('zz_md_approver', 'master_data.approve')) as x(role_code, perm)
 $r$),
       -- The invitation.
@@ -254,7 +254,7 @@ declare
     coalesce(v_msg is null and v_seats ->> 'approver' = 'light', false),
     coalesce(v_msg, v_seats::text);
 $n$;
-  v_new  constant text := $n$  -- Until 20260918900000 this case read "a person who only approves is
+  v_new  constant text := $n$  -- Until 20260918910000 this case read "a person who only approves is
   -- light", and it was true: every approval was a light permission. Approving
   -- a purchase order commits the company to a supplier's price, approving a
   -- payment releases cash, approving a discount gives away margin, and the
@@ -278,7 +278,7 @@ $n$;
   v_count constant text := $n$             and v_full = 4 and v_light = 4 and v_disagree is null
 $n$;
   v_count_new constant text := $n$             -- Five full: the administrator, the approver who commits money
-             -- (20260918900000), the poster, the configurer and the one who
+             -- (20260918910000), the poster, the configurer and the one who
              -- does both. Four light: the reporter, the counter, the person
              -- whose posting ended yesterday, and the master data approver.
              and v_full = 5 and v_light = 4 and v_disagree is null
@@ -319,7 +319,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  -- Fourteen until 20260918900000, which restated the approver's case and
+  -- Fourteen until 20260918910000, which restated the approver's case and
   -- added the master data approver's.
   c_expected constant integer := 15;
   v_total  integer;
@@ -368,7 +368,7 @@ declare
 begin
 $n$;
   v_dec_new constant text := $n$  v_approved4 text;
-  -- The light user who tries to approve an order (20260918900000).
+  -- The light user who tries to approve an order (20260918910000).
   a4            uuid := gen_random_uuid();
   v_light_role  uuid;
   v_light       uuid;
@@ -398,7 +398,7 @@ $n$;
     end;
     perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
 
-    -- SEC-03 (20260918900000). A light user tries the door that approves a
+    -- SEC-03 (20260918910000). A light user tries the door that approves a
     -- purchase order. The role is made while the organisation is put back into
     -- its bootstrap window, because a live organisation changes a role through
     -- a promoted change set and this is a fixture, not a change.
@@ -492,7 +492,9 @@ begin
   -- (20260914098000), and the lone approver who is asked rather than refused
   -- (20260916270000).
   v_def := pg_get_functiondef(v_sig::regprocedure);
-  if position('nobody changes their own roles once the organisation is live' in v_def) = 0
+  -- Each phrase is one the earlier patch wrote on a single line: a comment
+  -- broken over two lines is never a substring of the body.
+  if position('nobody changes their own roles' in v_def) = 0
      or position('erp_test.administrator_approval_off(r.tenant_id)' in v_def) = 0
      or position('they are asked rather than refused' in v_def) = 0
      or position('a light user is refused the door that approves a purchase order' in v_def) = 0 then
@@ -508,7 +510,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  -- Sixteen until 20260918900000, which added the light user at the door.
+  -- Sixteen until 20260918910000, which added the light user at the door.
   c_expected constant integer := 17;
   v_total  integer;
   v_failed integer;
@@ -567,7 +569,7 @@ $n$;
     ok_signed := ok_signed and coalesce(d.err_state = '42501' and d.err_message like 'CLOVEERP_PERMISSION_DENIED: finance.post%', false);
     msg_signed := msg_signed || '; viewer reverses: ' || coalesce(d.err_message, d.outcome::text, 'no answer');
 
-    -- SEC-03 (20260918900000). The viewer holds finance.read and nothing else,
+    -- SEC-03 (20260918910000). The viewer holds finance.read and nothing else,
     -- which is a light seat, and erp_approve_journal is the door that writes
     -- 'posted'. The journal it is tried on is the one the clerk submitted; the
     -- case below that lists journals reads it as submitted still.
@@ -630,7 +632,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  -- Sixteen until 20260918900000, which added the light user at the door that
+  -- Sixteen until 20260918910000, which added the light user at the door that
   -- posts.
   c_expected constant integer := 17;
   v_total  integer;
