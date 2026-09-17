@@ -1047,7 +1047,7 @@ function QuoteBuilder({
               {plan ? (
                 <Section
                   title="People"
-                  hint={`${planItem?.included_users ?? 0} full users come with the plan. Light users only approve, read reports or use the scanner.`}
+                  hint={`${planItem?.included_users ?? 0} full users come with the plan. Light users read reports, count stock, use the scanner or approve a product or supplier record. Approving an order, a payment or a discount is a full user.`}
                 >
                   <div className="grid gap-3 md:grid-cols-2">
                     <Stepper
