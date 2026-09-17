@@ -2,7 +2,9 @@
  * Full and light users, as the console shows them for one organisation.
  *
  * The price list sells full users (a plan includes some, more are extra) and
- * light users (people who only approve, look at reports or count stock). The
+ * light users (people who look at reports, count stock, use the scanner or
+ * approve a product or supplier record; approving an order, a payment or a
+ * discount commits money and is a full user). The
  * database decides who is which — erp.person_seat() reads the permissions each
  * person's roles reach — and public.erp_platform_seats() returns the counts
  * with each limit and where it came from. This file only words them. Pure, so
