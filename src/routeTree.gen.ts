@@ -45,6 +45,7 @@ import { Route as FinanceJournalsRouteImport } from './routes/finance/journals'
 import { Route as FinanceStatementsRouteImport } from './routes/finance/statements'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
+import { Route as InventoryAdjustmentsRouteImport } from './routes/inventory/adjustments'
 import { Route as InventoryAuditRouteImport } from './routes/inventory/audit'
 import { Route as InventoryForecastRouteImport } from './routes/inventory/forecast'
 import { Route as InventoryTransfersRouteImport } from './routes/inventory/transfers'
@@ -260,6 +261,11 @@ const InventoryIndexRoute = InventoryIndexRouteImport.update({
   path: '/inventory/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InventoryAdjustmentsRoute = InventoryAdjustmentsRouteImport.update({
+  id: '/inventory/adjustments',
+  path: '/inventory/adjustments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InventoryAuditRoute = InventoryAuditRouteImport.update({
   id: '/inventory/audit',
   path: '/inventory/audit',
@@ -428,6 +434,7 @@ export interface FileRoutesByFullPath {
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/finance/journals': typeof FinanceJournalsRoute
   '/finance/statements': typeof FinanceStatementsRoute
+  '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/transfers': typeof InventoryTransfersRoute
@@ -492,6 +499,7 @@ export interface FileRoutesByTo {
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/finance/journals': typeof FinanceJournalsRoute
   '/finance/statements': typeof FinanceStatementsRoute
+  '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/transfers': typeof InventoryTransfersRoute
@@ -557,6 +565,7 @@ export interface FileRoutesById {
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/finance/journals': typeof FinanceJournalsRoute
   '/finance/statements': typeof FinanceStatementsRoute
+  '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
   '/inventory/transfers': typeof InventoryTransfersRoute
@@ -623,6 +632,7 @@ export interface FileRouteTypes {
     | '/finance/dimensions'
     | '/finance/journals'
     | '/finance/statements'
+    | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
     | '/inventory/transfers'
@@ -687,6 +697,7 @@ export interface FileRouteTypes {
     | '/finance/dimensions'
     | '/finance/journals'
     | '/finance/statements'
+    | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
     | '/inventory/transfers'
@@ -751,6 +762,7 @@ export interface FileRouteTypes {
     | '/finance/dimensions'
     | '/finance/journals'
     | '/finance/statements'
+    | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
     | '/inventory/transfers'
@@ -816,6 +828,7 @@ export interface RootRouteChildren {
   FinanceDimensionsRoute: typeof FinanceDimensionsRoute
   FinanceJournalsRoute: typeof FinanceJournalsRoute
   FinanceStatementsRoute: typeof FinanceStatementsRoute
+  InventoryAdjustmentsRoute: typeof InventoryAdjustmentsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
   InventoryForecastRoute: typeof InventoryForecastRoute
   InventoryTransfersRoute: typeof InventoryTransfersRoute
@@ -1101,6 +1114,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inventory/adjustments': {
+      id: '/inventory/adjustments'
+      path: '/inventory/adjustments'
+      fullPath: '/inventory/adjustments'
+      preLoaderRoute: typeof InventoryAdjustmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inventory/audit': {
       id: '/inventory/audit'
       path: '/inventory/audit'
@@ -1320,6 +1340,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceDimensionsRoute: FinanceDimensionsRoute,
   FinanceJournalsRoute: FinanceJournalsRoute,
   FinanceStatementsRoute: FinanceStatementsRoute,
+  InventoryAdjustmentsRoute: InventoryAdjustmentsRoute,
   InventoryAuditRoute: InventoryAuditRoute,
   InventoryForecastRoute: InventoryForecastRoute,
   InventoryTransfersRoute: InventoryTransfersRoute,
