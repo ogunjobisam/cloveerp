@@ -4412,6 +4412,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "catalogue",
   },
   {
+    path: "/inventory/transfers",
+    titleKey: "nav.inventory_transfers",
+    title: "Site transfers",
+    blurb:
+      "Stock moving between your own warehouses: raised, approved, despatched, and booked in when it arrives, with the value crossing at the last step.",
+    permission: "inventory.move",
+    group: "move",
+  },
+  {
     path: "/inventory/audit",
     titleKey: "nav.inventory_audit",
     title: "Stock audit",
