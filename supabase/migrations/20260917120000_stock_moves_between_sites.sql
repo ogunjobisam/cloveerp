@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260917110000  Stock moves between sites
+-- 20260917120000  Stock moves between sites
 -- -----------------------------------------------------------------------------
 -- A company with two warehouses could not move a pallet from one to the other.
 --
@@ -98,17 +98,27 @@ set lock_timeout = '30s';
 -- proportional share of the value on hand, the last unit taking the remainder".
 -- Giving the receiving site quantity × the rounded unit would lose up to half
 -- a penny per unit on every transfer. erp.transfer_cost() therefore moves the
--- figure rather than the rate:
+-- figure rather than the rate, by whichever of three routes the two sites'
+-- costing methods call for — and each of the three is exact:
 --
---   FIFO  — the layers move. Each layer consumed at the despatching site is
---           reopened at the receiving one with the same unit cost and the same
---           received_at, so the goods keep their cost AND their age. Exact by
---           construction, and it is what FIFO means: a van journey is not a
---           new receipt.
---   average and standard — erp.issue_cost() decides what leaves, to the penny,
+--   FIFO to FIFO — the layers move. Each layer consumed at the despatching
+--           site is reopened at the receiving one with the same unit cost and
+--           the same received_at, so the goods keep their cost AND their age.
+--           It is what FIFO means: a van journey is not a new receipt.
+--   to a value on hand — erp.issue_cost() decides what leaves, to the penny,
 --           and exactly that is added to the receiving site's value on hand.
---           The average there is then recomputed from the value, the way
---           erp.receive_cost() recomputes it.
+--           The average there is recomputed from the value, the way
+--           erp.receive_cost() recomputes it; a standard rate is left alone,
+--           because arriving stock does not restate what somebody set.
+--   to a layer — where the receiving site keeps its value in layers and the
+--           despatching site did not, a layer is opened for exactly what left.
+--           A rate in whole minor units cannot always state an exact figure
+--           over a given quantity, so where it cannot, two layers are opened
+--           and the remainder is carried by the units that bear it. The pair
+--           is worth precisely what left and nothing is rounded away.
+--
+-- The three between them cover every pairing of the three costing methods, so
+-- there is no combination of two sites for which the value arrives wrong.
 --
 -- Standard costing has one consequence worth stating plainly: where the two
 -- sites carry different standards, the receiving site's value on hand is what
@@ -151,11 +161,14 @@ set lock_timeout = '30s';
 -- erp.upgrade_module_configuration() applies them.
 -- erp.ensure_demo_configuration() takes the upgrade where one is outstanding.
 --
--- Proof: erp_test.site_transfer_suite() (10 cases, wrapper pinned) — both
+-- Proof: erp_test.site_transfer_suite() (11 cases, wrapper pinned) — both
 -- sites' quantities before, in transit and after; the stock standing in
 -- transit at the despatching site; the valuation moving between sites to the
 -- penny; the company's total valuation unchanged; NO P&L ACCOUNT MOVED BY A
--- PENNY; a transfer between companies refused; the fixture undone.
+-- PENNY and no journal raised at all; approving moving nothing, which is where
+-- the generic bridge would have posted; a product kept in cost layers moving
+-- its layers rather than an average; a transfer between companies refused;
+-- the fixture undone.
 -- =============================================================================
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -231,7 +244,7 @@ begin
   insert into erp.location (
     tenant_id, site_id, code, name, location_type, is_pickable, status)
   values (v_tenant, p_site_id, 'TRANSIT', 'In transit',
-          'transit'::erp.location_type, false, 'active')
+          'transit'::erp.location_type, false, 'active'::erp.record_status)
   on conflict (tenant_id, site_id, code) do nothing;
 
   select l.id into v_id
@@ -306,14 +319,21 @@ set search_path = ''
 as $$
 declare
   v_tenant  uuid := erp.require_tenant_id();
-  v_from    erp.costing_method := erp.costing_method_for(p_item_id, p_from_site_id);
-  v_to      erp.costing_method := erp.costing_method_for(p_item_id, p_to_site_id);
+  -- NOT v_from and v_to. erp.missing_relation_report() looks for a schema-
+  -- qualified name after from, join, update, into or delete from, and its
+  -- pattern has no word boundary in front — so a variable whose name ends in
+  -- "from", declared as an erp type, reads to it as a table that does not
+  -- exist. erp.costing_method is a type, and the check was right to be
+  -- suspicious of the shape.
+  v_method_out erp.costing_method := erp.costing_method_for(p_item_id, p_from_site_id);
+  v_method_in  erp.costing_method := erp.costing_method_for(p_item_id, p_to_site_id);
   ic        erp.item_cost%rowtype;
   r         record;
   v_left    numeric := p_quantity;
   v_take    numeric;
   v_total   bigint := 0;
   v_unit    bigint;
+  v_rem     numeric;
   v_last    jsonb;
 begin
   if p_quantity <= 0 then
@@ -322,7 +342,7 @@ begin
             hint = 'A transfer line carries a quantity greater than nought.';
   end if;
 
-  if v_from = 'fifo' then
+  if v_method_out = 'fifo' and v_method_in = 'fifo' then
     -- The layers move. A lorry does not re-cost what it carries, and it does
     -- not make the goods younger either, so received_at travels with them.
     for r in
@@ -386,6 +406,32 @@ begin
   -- Read, so nothing downstream stamps a movement from it by accident.
   perform set_config('erp.last_cost', '', true);
 
+  if v_method_in = 'fifo' then
+    -- The receiving site keeps its value in layers and the despatching site
+    -- did not, so a layer is opened for exactly what left. A rate in whole
+    -- minor units cannot always say an exact figure over a given quantity, so
+    -- where it cannot, the remainder is carried by the units that bear it: the
+    -- two layers together are worth precisely v_total and nothing is rounded
+    -- away. sum(remaining × unit_cost_minor) is what values them.
+    v_unit := floor(v_total::numeric / p_quantity)::bigint;
+    v_rem  := v_total - (p_quantity * v_unit);
+    if v_rem > 0 then
+      insert into erp.stock_valuation_layer (
+        tenant_id, item_id, site_id, quantity, remaining, unit_cost_minor, currency)
+      values (v_tenant, p_item_id, p_to_site_id,
+              p_quantity - v_rem, p_quantity - v_rem, v_unit, p_currency);
+      insert into erp.stock_valuation_layer (
+        tenant_id, item_id, site_id, quantity, remaining, unit_cost_minor, currency)
+      values (v_tenant, p_item_id, p_to_site_id, v_rem, v_rem, v_unit + 1, p_currency);
+    else
+      insert into erp.stock_valuation_layer (
+        tenant_id, item_id, site_id, quantity, remaining, unit_cost_minor, currency)
+      values (v_tenant, p_item_id, p_to_site_id,
+              p_quantity, p_quantity, v_unit, p_currency);
+    end if;
+    return v_total;
+  end if;
+
   select * into ic from erp.item_cost c
    where c.tenant_id = v_tenant and c.item_id = p_item_id
      and c.site_id is not distinct from p_to_site_id
@@ -395,7 +441,7 @@ begin
     insert into erp.item_cost (
       tenant_id, item_id, site_id, method, unit_cost_minor, currency,
       quantity_on_hand, value_minor)
-    values (v_tenant, p_item_id, p_to_site_id, v_to,
+    values (v_tenant, p_item_id, p_to_site_id, v_method_in,
             round(v_total / p_quantity)::bigint, p_currency,
             p_quantity, v_total);
   else
@@ -405,7 +451,7 @@ begin
            unit_cost_minor  = case
              -- A standard is a rate somebody set; arriving stock does not
              -- change it. The value on hand is what arrived.
-             when v_to = 'standard' then unit_cost_minor
+             when v_method_in = 'standard' then unit_cost_minor
              when quantity_on_hand + p_quantity = 0 then unit_cost_minor
              else round((value_minor + v_total) / (quantity_on_hand + p_quantity))::bigint
            end,
@@ -422,10 +468,11 @@ revoke all on function erp.transfer_cost(uuid, uuid, uuid, numeric, character)
 
 comment on function erp.transfer_cost is
   'Moves what stock is worth from one site to another and returns the exact '
-  'figure moved, in minor units. FIFO moves the layers, keeping their cost and '
-  'their age; average and standard take exactly what erp.issue_cost() says '
-  'left and add exactly that. The company''s total valuation does not change, '
-  'which is what lets a transfer post no journal.';
+  'figure moved, in minor units. FIFO to FIFO moves the layers, keeping their '
+  'cost and their age; otherwise exactly what erp.issue_cost() says left is '
+  'added at the far end, to a value on hand or to a layer as that site keeps '
+  'its value. The company''s total does not change, which is what lets a '
+  'transfer post no journal.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. Raising, despatching and receiving
@@ -1079,7 +1126,7 @@ declare
              || E'    -- row, in one site, at the first committed state — which for a\n'
              || E'    -- transfer order is "approved", before anything has been loaded. It\n'
              || E'    -- cannot say what a transfer does, so the transfer says it itself:\n'
-             || E'    -- erp.despatch_transfer() and erp.receive_transfer() (20260917110000).\n'
+             || E'    -- erp.despatch_transfer() and erp.receive_transfer() (20260917120000).\n'
              || E'    if bt.affects_stock and dt.base_type_code <> ''transfer_order''\n';
   v_hits integer;
 begin
@@ -1123,6 +1170,15 @@ $bridge$;
 -- exist. erp.plan_module_upgrade() skips what an organisation already holds,
 -- so an organisation whose base pack already installed the lifecycle takes
 -- only the numbering rule and the document type.
+--
+-- The lifecycle is the base pack's, with one addition: the three transitions
+-- OUT OF DRAFT carry inventory.move, the permission that raises a transfer
+-- order in the first place. erp.assert_document_create_permissions() refuses a
+-- document type "that may be raised by nobody who can then move it", and the
+-- pack ships its transitions with no permission at all — so a warehouse could
+-- have opened a transfer order and then been unable to approve, cancel or
+-- query it. The later steps stay open, as the pack has them: the doors that
+-- take them ask inventory.move themselves, at both sites.
 
 create or replace function erp.transfer_order_pack_items()
 returns jsonb
@@ -1144,18 +1200,18 @@ as $$
           jsonb_build_object('code','discrepancy','name','Discrepancy','is_initial',false,'is_terminal',false,'is_committed',false,'sort_order',500),
           jsonb_build_object('code','cancelled','name','Cancelled','is_initial',false,'is_terminal',true,'is_committed',false,'sort_order',510)),
         'transitions', jsonb_build_array(
-          jsonb_build_object('code','approved','name','Approved','from','draft','to','approved','sort_order',10),
+          jsonb_build_object('code','approved','name','Approved','from','draft','to','approved','required_permission','inventory.move','sort_order',10),
           jsonb_build_object('code','issued','name','Issued','from','approved','to','issued','sort_order',20),
           jsonb_build_object('code','in_transit','name','In transit','from','issued','to','in_transit','sort_order',30),
           jsonb_build_object('code','received','name','Received','from','in_transit','to','received','sort_order',40),
           jsonb_build_object('code','closed','name','Closed','from','received','to','closed','sort_order',50),
-          jsonb_build_object('code','draft_to_discrepancy','name','Discrepancy','from','draft','to','discrepancy','sort_order',500),
+          jsonb_build_object('code','draft_to_discrepancy','name','Discrepancy','from','draft','to','discrepancy','required_permission','inventory.move','sort_order',500),
           jsonb_build_object('code','approved_to_discrepancy','name','Discrepancy','from','approved','to','discrepancy','sort_order',500),
           jsonb_build_object('code','issued_to_discrepancy','name','Discrepancy','from','issued','to','discrepancy','sort_order',500),
           jsonb_build_object('code','in_transit_to_discrepancy','name','Discrepancy','from','in_transit','to','discrepancy','sort_order',500),
           jsonb_build_object('code','received_to_discrepancy','name','Discrepancy','from','received','to','discrepancy','sort_order',500),
           jsonb_build_object('code','discrepancy_to_received','name','Resume at received','from','discrepancy','to','received','sort_order',505),
-          jsonb_build_object('code','draft_to_cancelled','name','Cancelled','from','draft','to','cancelled','sort_order',510),
+          jsonb_build_object('code','draft_to_cancelled','name','Cancelled','from','draft','to','cancelled','required_permission','inventory.move','sort_order',510),
           jsonb_build_object('code','approved_to_cancelled','name','Cancelled','from','approved','to','cancelled','sort_order',510),
           jsonb_build_object('code','issued_to_cancelled','name','Cancelled','from','issued','to','cancelled','sort_order',510),
           jsonb_build_object('code','in_transit_to_cancelled','name','Cancelled','from','in_transit','to','cancelled','sort_order',510),
@@ -1234,7 +1290,7 @@ update erp_ref.module_installer
    set current_version = 4,
        description = 'Version 2 (20260906050000) added the stock adjustments account and the '
                      'stock_adjustment posting rule; version 3 (20260906143000) the '
-                     'consignment_consumption rule; version 4 (20260917110000) the transfer '
+                     'consignment_consumption rule; version 4 (20260917120000) the transfer '
                      'order — its lifecycle, its numbering rule and its document type — so '
                      'stock can move between two sites.'
  where install_code = 'inventory-operations';
@@ -1258,7 +1314,7 @@ declare
   v_def text := pg_get_functiondef('erp.ensure_demo_configuration(uuid,uuid)'::regprocedure);
   v_n   text := E'    v_did := v_did || ''"tax posting"''::jsonb;\n  end if;\n';
   v_r   text := E'    v_did := v_did || ''"tax posting"''::jsonb;\n  end if;\n\n'
-             || E'  -- Stock can move between sites (20260917110000). An organisation\n'
+             || E'  -- Stock can move between sites (20260917120000). An organisation\n'
              || E'  -- configured before that holds the inventory module without the\n'
              || E'  -- transfer order; the register says what is missing and this takes it.\n'
              || E'  if exists (select 1 from erp.module_installation i\n'
@@ -1487,11 +1543,10 @@ declare
   v_a       uuid; v_b uuid; v_c uuid;
   v_a_bulk  uuid; v_b_in uuid; v_c_site uuid;
   v_uom     uuid; v_item uuid;
-  v_doc     uuid; v_res jsonb;
+  v_doc     uuid; v_res jsonb; v_fifo_item uuid; v_fifo_doc uuid;
   v_qty_a   numeric; v_qty_b numeric; v_transit numeric;
   v_val_a   bigint; v_val_b bigint; v_val_a0 bigint; v_total0 bigint; v_total1 bigint;
   v_pl0     bigint; v_pl1 bigint; v_journals integer;
-  v_state   text;
   v_ok      boolean; v_msg text;
 begin
   begin
@@ -1512,25 +1567,25 @@ begin
 
   -- Two sites of this company, and a third belonging to a second company.
   insert into erp.site (tenant_id, entity_id, code, name, site_type, country_code, status)
-  values (v_tenant, v_entity, 'ZZ-A', 'Alpha depot', 'warehouse'::erp.site_type, 'GB', 'active')
+  values (v_tenant, v_entity, 'ZZ-A', 'Alpha depot', 'warehouse'::erp.site_type, 'GB', 'active'::erp.record_status)
   returning id into v_a;
   insert into erp.site (tenant_id, entity_id, code, name, site_type, country_code, status)
-  values (v_tenant, v_entity, 'ZZ-B', 'Beta depot', 'warehouse'::erp.site_type, 'GB', 'active')
+  values (v_tenant, v_entity, 'ZZ-B', 'Beta depot', 'warehouse'::erp.site_type, 'GB', 'active'::erp.record_status)
   returning id into v_b;
 
   insert into erp.location (tenant_id, site_id, code, name, location_type, is_pickable, status)
-  values (v_tenant, v_a, 'ZZ-A-BULK', 'Alpha bulk', 'bulk'::erp.location_type, true, 'active')
+  values (v_tenant, v_a, 'ZZ-A-BULK', 'Alpha bulk', 'bulk'::erp.location_type, true, 'active'::erp.record_status)
   returning id into v_a_bulk;
   insert into erp.location (tenant_id, site_id, code, name, location_type, is_pickable, status)
-  values (v_tenant, v_a, 'ZZ-A-OUT', 'Alpha despatch', 'despatch'::erp.location_type, false, 'active');
+  values (v_tenant, v_a, 'ZZ-A-OUT', 'Alpha despatch', 'despatch'::erp.location_type, false, 'active'::erp.record_status);
   insert into erp.location (tenant_id, site_id, code, name, location_type, is_pickable, status)
-  values (v_tenant, v_b, 'ZZ-B-IN', 'Beta goods in', 'receiving'::erp.location_type, false, 'active')
+  values (v_tenant, v_b, 'ZZ-B-IN', 'Beta goods in', 'receiving'::erp.location_type, false, 'active'::erp.record_status)
   returning id into v_b_in;
 
   select u.id into v_uom from erp.uom u where u.tenant_id = v_tenant order by u.code limit 1;
 
-  insert into erp.item (tenant_id, code, name, item_class, stock_uom_id, status)
-  values (v_tenant, 'ZZ-TRF-1', 'Transferable widget', 'finished_good', v_uom, 'active')
+  insert into erp.item (tenant_id, code, name, stock_uom_id, status)
+  values (v_tenant, 'ZZ-TRF-1', 'Transferable widget', v_uom, 'active'::erp.record_status)
   returning id into v_item;
 
   -- Fifty units at 500 a unit at site A, arriving as a valued receipt so the
@@ -1575,14 +1630,20 @@ begin
   return next;
 
   -- ── 2. Nothing has moved yet ─────────────────────────────────────────────
+  --
+  -- Approved is a transfer order's FIRST COMMITTED state, which is where
+  -- erp.transition_document() posts the stock side of every other document
+  -- that moves stock. Read after the transition, because reading before it
+  -- would prove nothing about it.
   v_cases := v_cases + 1;
+  perform erp.transition_document(v_doc, 'approved', 'suite');
   select coalesce(sum(b.quantity), 0) into v_qty_a
     from erp.stock_balance b where b.tenant_id = v_tenant and b.site_id = v_a;
-  case_name := 'approving and raising move no stock: the generic posting bridge is held off';
-  perform erp.transition_document(v_doc, 'approved', 'suite');
+  case_name := 'approving moves no stock: the generic posting bridge is held off at the first committed state';
   passed := v_qty_a = 50
         and not exists (select 1 from erp.stock_movement m
-                         where m.tenant_id = v_tenant and m.document_id = v_doc);
+                         where m.tenant_id = v_tenant and m.document_id = v_doc)
+        and erp.document_state_code(v_doc) = 'approved';
   detail := format('%s on hand at ZZ-A, %s movement(s) against the order', v_qty_a,
                    (select count(*) from erp.stock_movement m
                      where m.tenant_id = v_tenant and m.document_id = v_doc));
@@ -1678,11 +1739,11 @@ begin
   -- ── 9. Two companies is a sale, not a transfer ───────────────────────────
   v_cases := v_cases + 1;
   insert into erp.entity (tenant_id, code, name, base_currency, status)
-  values (v_tenant, 'ZZ2', 'Second company', v_ccy, 'active')
+  values (v_tenant, 'ZZ2', 'Second company', v_ccy, 'active'::erp.record_status)
   returning id into v_c;
   perform erp.ensure_entity_party(v_c);
   insert into erp.site (tenant_id, entity_id, code, name, site_type, country_code, status)
-  values (v_tenant, v_c, 'ZZ-C', 'Gamma depot', 'warehouse'::erp.site_type, 'GB', 'active')
+  values (v_tenant, v_c, 'ZZ-C', 'Gamma depot', 'warehouse'::erp.site_type, 'GB', 'active'::erp.record_status)
   returning id into v_c_site;
   begin
     perform erp.raise_transfer_order(v_a, v_c_site,
@@ -1697,14 +1758,67 @@ begin
   detail := v_msg;
   return next;
 
-  v_state := erp.document_state_code(v_doc);
+  -- ── 10. A product costed in layers moves its layers ──────────────────────
+  --
+  -- The other path through erp.transfer_cost(), and the one where the value
+  -- is not a single number to be moved but a stack of receipts. Two receipts
+  -- at different prices, so a transfer that took the average would be visibly
+  -- wrong: 40 units cost 1200 and the oldest 30 of them cost 800.
+  v_cases := v_cases + 1;
+  insert into erp.item (tenant_id, code, name, stock_uom_id, status)
+  values (v_tenant, 'ZZ-TRF-2', 'Layered widget', v_uom, 'active'::erp.record_status)
+  returning id into v_fifo_item;
+
+  insert into erp.costing_policy (tenant_id, code, name, method, item_id, status)
+  values (v_tenant, 'zz_fifo', 'Layered widget in layers', 'fifo'::erp.costing_method,
+          v_fifo_item, 'active'::erp.record_status);
+
+  perform erp.receive_cost(v_fifo_item, v_a, 30, 20, v_ccy);
+  insert into erp.stock_movement (
+    tenant_id, entity_id, site_id, movement_type, item_id,
+    to_location_id, to_status, quantity, uom_id, unit_cost_minor, currency, reason_code)
+  values (v_tenant, v_entity, v_a, 'receipt_no_order', v_fifo_item,
+          v_a_bulk, 'available'::erp.stock_status, 30, v_uom, 20, v_ccy, 'OPENING');
+  perform erp.receive_cost(v_fifo_item, v_a, 10, 60, v_ccy);
+  insert into erp.stock_movement (
+    tenant_id, entity_id, site_id, movement_type, item_id,
+    to_location_id, to_status, quantity, uom_id, unit_cost_minor, currency, reason_code)
+  values (v_tenant, v_entity, v_a, 'receipt_no_order', v_fifo_item,
+          v_a_bulk, 'available'::erp.stock_status, 10, v_uom, 60, v_ccy, 'OPENING');
+
+  select coalesce(sum(v.value_minor), 0)::bigint into v_total0
+    from erp.stock_valuation_report() v;
+
+  v_res := erp.raise_transfer_order(v_a, v_b,
+             jsonb_build_array(jsonb_build_object('item_id', v_fifo_item, 'quantity', 30)));
+  v_fifo_doc := (v_res ->> 'document_id')::uuid;
+  perform erp.transition_document(v_fifo_doc, 'approved', 'suite');
+  perform erp.despatch_transfer(v_fifo_doc);
+  v_res := erp.receive_transfer(v_fifo_doc);
+
+  select coalesce(sum(v.value_minor), 0)::bigint into v_total1
+    from erp.stock_valuation_report() v;
+  select coalesce(sum(l.remaining * l.unit_cost_minor), 0)::bigint into v_val_b
+    from erp.stock_valuation_layer l
+   where l.tenant_id = v_tenant and l.item_id = v_fifo_item and l.site_id = v_b;
+  select coalesce(sum(l.remaining * l.unit_cost_minor), 0)::bigint into v_val_a
+    from erp.stock_valuation_layer l
+   where l.tenant_id = v_tenant and l.item_id = v_fifo_item and l.site_id = v_a;
+
+  case_name := 'a product kept in cost layers moves the layers: the oldest 30 at 20 each go, the 10 at 60 stay';
+  passed := v_val_b = 600 and v_val_a = 600
+        and (v_res ->> 'value_moved_minor')::bigint = 600
+        and v_total1 = v_total0;
+  detail := format('ZZ-B layers %s, ZZ-A layers %s, %s moved, total %s then %s',
+                   v_val_b, v_val_a, v_res ->> 'value_moved_minor', v_total0, v_total1);
+  return next;
 
   raise exception 'CLOVEERP_SUITE_UNDO';
   exception when others then
     if sqlerrm <> 'CLOVEERP_SUITE_UNDO' then raise; end if;
   end;
 
-  -- ── 10. Undone ───────────────────────────────────────────────────────────
+  -- ── 11. Undone ───────────────────────────────────────────────────────────
   v_cases := v_cases + 1;
   case_name := 'the fixture was undone';
   passed := not exists (select 1 from erp.tenant where code = 'zz-site-transfer')
@@ -1713,8 +1827,8 @@ begin
   detail := 'zz-site-transfer rolled back with both its depots, its transfer and its ledger';
   return next;
 
-  if v_cases <> 10 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 10', v_cases;
+  if v_cases <> 11 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 11', v_cases;
   end if;
 end;
 $$;
@@ -1742,8 +1856,8 @@ begin
     raise exception E'CLOVEERP_SITE_TRANSFER_SUITE_FAILED: %/% case(s) failed\n%',
       v_fail, v_all, v_detail;
   end if;
-  if v_all <> 10 then
-    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 10', v_all;
+  if v_all <> 11 then
+    raise exception 'CLOVEERP_SUITE_SHRANK: site_transfer_suite ran % cases, expected 11', v_all;
   end if;
   return format('stock moves between sites: %s/%s cases passed', v_all, v_all);
 end;
