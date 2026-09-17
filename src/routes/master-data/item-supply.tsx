@@ -60,7 +60,7 @@ function ItemSupply() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={ui("Product-suppliers")}>
         {ui(
-          "One supplier is the default for a product at a site; the rest are ranked alternatives. A regulated product cannot default to a supplier that is not on the approved list, and the sourcing split may not exceed the whole requirement.",
+          "One supplier is the default for a product at a site; the rest are ranked alternatives. A regulated product cannot default to a supplier that is not on the approved list, and the shares recorded against a product's suppliers may not add to more than the whole.",
         )}
       </PageHeader>
 
@@ -98,7 +98,7 @@ function ItemSupply() {
                 kind: "number",
                 name: "p_split_pct",
                 label: "Sourcing split (%)",
-                hint: "Leave empty unless the requirement is deliberately divided.",
+                hint: "A share recorded for the buyer, not a division the system performs: purchasing resolves one supplier. The shares against a product may not add to more than the whole.",
               },
               {
                 kind: "choice",
