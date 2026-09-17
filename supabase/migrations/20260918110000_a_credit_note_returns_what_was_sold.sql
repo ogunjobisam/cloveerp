@@ -695,13 +695,13 @@ comment on function public.erp_raise_supplier_credit_note(uuid, text, text, json
   'Raises a credit note against a goods receipt, in draft, with the goods on it.';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
-  ('erp_raise_customer_credit_note', 'erp.authorise',
+  ('erp_raise_customer_credit_note', 'erp.raise_customer_credit_note',
    'Raises a sales credit note in draft against the despatch or invoice it '
    'reverses, under sales.invoice — the permission that raised the invoice in '
    'the first place. It writes erp.document, erp.document_line, '
    'erp.document_relation and erp.customer_return; nothing posts until the '
    'credit note is issued, which is a transition with its own guard.'),
-  ('erp_raise_supplier_credit_note', 'erp.authorise',
+  ('erp_raise_supplier_credit_note', 'erp.raise_supplier_credit_note',
    'Raises a purchase credit note in draft against the goods receipt it '
    'reverses, under procurement.order — the permission erp_ref.document_type '
    'already gives the return_to_supplier base type. It writes erp.document, '
