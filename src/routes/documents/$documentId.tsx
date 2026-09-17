@@ -224,6 +224,26 @@ function Document() {
         <SupplierTax documentId={documentId} currency={doc.currency} minorUnits={minorUnits} />
       ) : null}
 
+      {/* A credit note starts from the document that moved the goods, because
+          that is the only place their cost is recorded. Offered once the
+          despatch or the invoice has committed, which is when there is anything
+          to reverse; erp.raise_customer_credit_note refuses anything else by
+          name. */}
+      {(doc.document_type === "delivery" || doc.document_type === "sales_invoice") &&
+      doc.is_committed ? (
+        <CreditCustomer
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
+
+      {doc.document_type === "goods_receipt" && doc.is_committed ? (
+        <CreditSupplier
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
+
       <Lines
         documentId={documentId}
         lines={data.lines}
@@ -755,6 +775,113 @@ function LineagePanel({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * Crediting a customer, from the despatch or the invoice that billed it.
+ *
+ * The whole document is credited. Crediting part of one is a matter of
+ * quantities per line, which this dialog has no shape for; the door takes them,
+ * so the API can, and the screen will when there is a line editor to put them
+ * in.
+ */
+function CreditCustomer({ documentId, context }: { documentId: string; context: string }) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Give this back</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            A credit note reverses what was billed and puts the goods back on the shelf at what they
+            cost rather than at what they sold for. It is left in draft; issuing it is what moves
+            the money and the stock.
+          </Prose>
+        </div>
+
+        <ActionDialog
+          trigger={<ActionButton>Credit this</ActionButton>}
+          title="Credit the customer and take the goods back"
+          description="Reverses this despatch: the customer owes less, revenue goes back, and the goods return to the shelf at what they cost rather than at what they sold for. A part return is valued at the average of what the whole despatch cost."
+          permission="sales.invoice"
+          fn="erp_raise_customer_credit_note"
+          context={context}
+          fields={[
+            {
+              kind: "text",
+              name: "p_reason_code",
+              label: "Why it came back",
+              placeholder: "damaged",
+              hint: "A short code you can count later: damaged, wrong item, over-ordered.",
+              required: true,
+            },
+            {
+              kind: "text",
+              name: "p_reason",
+              label: "What the customer said",
+              placeholder: "Two cases crushed in transit",
+              hint: "Optional, and the only thing anybody will remember six months later.",
+            },
+          ]}
+          mapArgs={(v) => ({
+            p_document_id: documentId,
+            p_reason_code: (v["p_reason_code"] as string) || "",
+            p_reason: (v["p_reason"] as string) || null,
+          })}
+          invalidates={["erp_document", "erp_documents"]}
+        />
+      </header>
+    </section>
+  );
+}
+
+/** Sending goods back to the supplier who sent them, against the receipt. */
+function CreditSupplier({ documentId, context }: { documentId: string; context: string }) {
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Send this back</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            A supplier credit note takes the goods off the shelf at what they cost and reduces what
+            we owe by what the supplier is crediting. It is left in draft; issuing it is what moves
+            the stock and the money.
+          </Prose>
+        </div>
+
+        <ActionDialog
+          trigger={<ActionButton>Send back</ActionButton>}
+          title="Credit the supplier and send the goods back"
+          description="Reverses this receipt: the goods leave at what they cost, what we owe the supplier falls by what they are crediting, and the purchase order's history shows the return."
+          permission="procurement.order"
+          fn="erp_raise_supplier_credit_note"
+          context={context}
+          fields={[
+            {
+              kind: "text",
+              name: "p_reason_code",
+              label: "Why it is going back",
+              placeholder: "wrong_item",
+              hint: "A short code you can count later: damaged, wrong item, over-supplied.",
+              required: true,
+            },
+            {
+              kind: "text",
+              name: "p_reason",
+              label: "What we told the supplier",
+              placeholder: "Wrong grade on ten of the hundred",
+              hint: "Optional, and the only thing anybody will remember six months later.",
+            },
+          ]}
+          mapArgs={(v) => ({
+            p_document_id: documentId,
+            p_reason_code: (v["p_reason_code"] as string) || "",
+            p_reason: (v["p_reason"] as string) || null,
+          })}
+          invalidates={["erp_document", "erp_documents"]}
+        />
+      </header>
     </section>
   );
 }
