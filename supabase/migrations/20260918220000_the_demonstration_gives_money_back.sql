@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260918210000  The demonstration gives money back
+-- 20260918220000  The demonstration gives money back
 -- -----------------------------------------------------------------------------
 -- The Definition of Done's master gate asks for a seeded trading month holding
 -- one of each of seven transactions. Two of them are a supplier credit note and
@@ -112,34 +112,32 @@ declare
   -- The head of the master data section. Reason codes are master data, and the
   -- unit is the first thing the section makes.
   v_n    constant text := E'  v_uom := erp.ensure_base_uom(p_tenant_id, p_principal);\n';
-  v_r    constant text := $r$  -- The reasons a return is allowed to give (20260918210000). Six of the
+  v_r    constant text := $r$  -- The reasons a return is allowed to give (20260918220000). Six of the
   -- eighteen movement types refuse a movement without a reason code and both
   -- return types are among them, so an organisation that credits anybody needs
   -- a register to choose from, and erp.ensure_demo_configuration() applies no
-  -- content pack. Generated from erp_ref.reason_code, the catalogue the base
-  -- pack itself is generated from, so the two cannot drift. Only what is
-  -- missing is added: a demonstration somebody has shaped keeps its list, and
-  -- a code somebody switched off stays off.
-  if exists (select 1 from erp_ref.reason_code rc
-              where rc.category_code in ('RETURN_CUSTOMER', 'RETURN_SUPPLIER')
-                and not exists (select 1 from erp.reason_code x
-                                 where x.tenant_id = p_tenant_id
-                                   and x.category_code = rc.category_code
-                                   and x.code = rc.code)) then
-    for r in
-      select rc.category_code, rc.code, rc.name,
-             rc.requires_note, rc.requires_approval, rc.seq
-        from erp_ref.reason_code rc
-       where rc.category_code in ('RETURN_CUSTOMER', 'RETURN_SUPPLIER')
-         and not exists (select 1 from erp.reason_code x
-                          where x.tenant_id = p_tenant_id
-                            and x.category_code = rc.category_code
-                            and x.code = rc.code)
-       order by rc.category_code, rc.seq
-    loop
-      perform erp.upsert_reason_code(r.category_code, r.code, r.name,
-                                     r.requires_note, r.requires_approval, r.seq);
-    end loop;
+  -- content pack. Taken from erp_ref.reason_code, the catalogue the base pack
+  -- itself is generated from, so the two cannot drift.
+  --
+  -- Inserted here the way this function installs its sites, its parties and
+  -- its items, rather than looped through erp.upsert_reason_code(). Two
+  -- reasons, and the second is the one that matters. A code already in the
+  -- register keeps exactly what it has, so a demonstration somebody has shaped
+  -- keeps its list and a code somebody switched off stays off, where the upsert
+  -- would have restated the name and set the status back to active. And
+  -- erp.assert_write_only_columns() reads a body that names a table and hands
+  -- one of its column names to another routine as a body that DECIDES on that
+  -- column: a loop here would have flipped erp.reason_code.name out of the
+  -- write-only register it belongs in, on a pass-through that decides nothing.
+  -- Naming the column as the target of a write says what is true.
+  insert into erp.reason_code (tenant_id, category_code, code, name,
+                               requires_note, requires_approval, seq, created_by)
+  select p_tenant_id, rc.category_code, rc.code, rc.name,
+         rc.requires_note, rc.requires_approval, rc.seq, p_principal
+    from erp_ref.reason_code rc
+   where rc.category_code in ('RETURN_CUSTOMER', 'RETURN_SUPPLIER')
+  on conflict (tenant_id, category_code, code) do nothing;
+  if found then
     v_did := v_did || '"return reasons"'::jsonb;
   end if;
 
@@ -203,7 +201,7 @@ declare
   v_n    constant text := E'  end loop days;\n';
   v_r    constant text := $r$  -- ── What should not have come, going back ────────────────────────────────
   -- Every Tuesday the goods-in team sends a tenth of one receipt line back to
-  -- the supplier it came from (20260918210000): raised against the receipt
+  -- the supplier it came from (20260918220000): raised against the receipt
   -- through erp.raise_supplier_credit_note() under a reason the organisation
   -- keeps in its register, and issued, so the goods leave the bulk store at
   -- what they cost and what we owe the supplier falls by what is credited.
@@ -274,7 +272,7 @@ declare
 
   -- ── The week's returns, credited ─────────────────────────────────────────
   -- Every Friday a quarter of one line of the week's most recent sales invoice
-  -- comes back (20260918210000): raised through
+  -- comes back (20260918220000): raised through
   -- erp.raise_customer_credit_note() under a reason the organisation keeps,
   -- and issued, so revenue reverses, the customer owes less, and the goods
   -- return to the shelf at what they cost rather than at what they sold for.
@@ -405,7 +403,7 @@ declare
   v_o1 constant text := $o1$  v_old_at timestamptz; v_old_on date; v_new_at timestamptz;
 $o1$;
   v_r1 constant text := $q1$  v_old_at timestamptz; v_old_on date; v_new_at timestamptz;
-  -- What the month gave back (20260918210000)
+  -- What the month gave back (20260918220000)
   v_back   numeric; v_gone numeric; v_dr bigint; v_cr bigint;
 $q1$;
 
