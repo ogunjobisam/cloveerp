@@ -4421,6 +4421,15 @@ export const EXTRA_TILES: TileDef[] = [
     group: "move",
   },
   {
+    path: "/inventory/adjustments",
+    titleKey: "nav.inventory_adjustments",
+    title: "Stock adjustments",
+    blurb:
+      "Corrections to what the system says is on the shelf: a count variance, damage, theft or a sample, each carrying the day it was found, a reason and an approval.",
+    permission: "inventory.adjust",
+    group: "move",
+  },
+  {
     path: "/inventory/audit",
     titleKey: "nav.inventory_audit",
     title: "Stock audit",

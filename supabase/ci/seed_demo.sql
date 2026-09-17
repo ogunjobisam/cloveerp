@@ -44,10 +44,11 @@ select erp.seed_demo_history(:'from_date'::date + 25, null, 1) ->> 'built' as sl
 -- The month moves stock between the company's two sites every Wednesday
 -- (20260918100000), sends goods back to a supplier every Tuesday and credits a
 -- customer every Friday (20260918220000), receives half of an order every
--- Monday, and every Thursday registers a supplier's bill above the agreed
--- price and delivers half of a customer's order (20260918600000);
+-- Monday, every Thursday registers a supplier's bill above the agreed price and
+-- delivers half of a customer's order (20260918600000), and every Saturday
+-- counts the shelf and writes one unit off (20260918800000);
 -- erp_test.demo_site_transfer_suite() and erp_test.demo_history_suite() hold
--- the seeder to all six.
+-- the seeder to all seven.
 select 'ci-demo: ' || count(*) || ' documents, '
        || count(*) filter (where dt.base_type_code = 'transfer_order')
        || ' of them transfers between sites, '
@@ -65,7 +66,9 @@ select 'ci-demo: ' || count(*) || ' documents, '
                              and exists (select 1 from erp.document_relation r
                                           where r.tenant_id = d.tenant_id and r.to_document_id = d.id
                                             and r.relation_kind = 'fulfils' and r.to_line_id is not null))
-       || ' orders delivered in part' as seeded
+       || ' orders delivered in part, '
+       || count(*) filter (where dt.base_type_code = 'adjustment')
+       || ' weekend counts' as seeded
   from erp.document d
   join erp.document_type dt on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
  where d.tenant_id = :'tenant_id';
