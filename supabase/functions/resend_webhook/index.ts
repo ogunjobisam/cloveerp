@@ -38,7 +38,7 @@ import {
   verifyResendWebhook,
   webhookHeaders,
 } from "../../../src/lib/email/resend-webhook.ts";
-import { connect, type Sql } from "../../../worker/src/core/db.ts";
+import { connect, declaring, type Sql } from "../../../worker/src/core/db.ts";
 
 // deno-lint-ignore no-explicit-any
 const Deno = (globalThis as any).Deno;
@@ -104,7 +104,7 @@ Deno.serve(async (req: Request) => {
         500,
       );
     }
-    sql = connect(url);
+    sql = connect(url, "edge_function");
 
     let secret = fromEnv;
     if (secret === null) {
@@ -150,12 +150,16 @@ Deno.serve(async (req: Request) => {
     // One row, one decision, all of it in the database: what the event means,
     // which message it belongs to, whether it has been seen before, and
     // whether the address should now be suppressed.
-    const rows = (await sql`
+    const rows = (await declaring(
+      sql,
+      (tx) =>
+        tx`
       select erp.record_email_delivery_event(
                ${verdict.eventId}, ${event.type}, ${event.state},
                ${event.providerMessageId}, ${event.occurredAt}::timestamptz,
                ${event.recipient}, ${event.bounceKind}, ${event.detail}) as result
-    `) as unknown as Array<{ result: unknown }>;
+    `,
+    )) as unknown as Array<{ result: unknown }>;
 
     // 200 whatever the database made of it: an event we cannot match is not a
     // reason for the provider to send it again, and a replay is not an error.
