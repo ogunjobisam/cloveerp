@@ -46,7 +46,7 @@ function TenantLifecycle() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("module.tenant_lifecycle", "Organisation lifecycle")}>
+      <PageHeader title={t("module.tenant_lifecycle", "Going live and closing down")}>
         Everything here acts on{" "}
         <strong className="font-semibold text-foreground">
           {session.tenant?.name ?? "the organisation you are signed in to"}

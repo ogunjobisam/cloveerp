@@ -71,7 +71,7 @@ try:
     src = open(sys.argv[1]).read()
 except FileNotFoundError:
     sys.exit(0)
-pat = re.compile(r'\b(title|description|empty|header|label|blurb|hint|note)\s*:\s*"((?:[^"\\]|\\.)*)"')
+pat = re.compile(r'\b(title|description|empty|header|label|blurb|hint|note|howItWorks)\s*:\s*"((?:[^"\\]|\\.)*)"')
 for v in sorted({m.group(2) for m in pat.finditer(src)}):
     print(v)
 PY

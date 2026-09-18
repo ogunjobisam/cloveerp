@@ -271,6 +271,12 @@ export type ModuleDef = {
   title: string;
   /** One sentence. Shown on the tile and under the page title. */
   blurb: string;
+  /**
+   * Everything else the screen has to say about itself, behind the header's
+   * help icon under "How this works". A description that opens with one clear
+   * sentence and then adds two that undo it is the fault this is for.
+   */
+  howItWorks?: string;
   permission?: string;
   group: TileGroup;
   kpis: Kpi[];
@@ -472,12 +478,12 @@ export const RELEASE_BATCH: ActionSpec = {
 export const INVENTORY: ModuleDef = {
   flow: {
     title: "Stock, step by step",
-    note: "Goods arrive, are put away, are counted, and are corrected or handed on. Each box is where work waits; the button is what moves it.",
+    note: "Goods arrive, are put away, are counted, and are corrected or passed on.",
     stages: [
       {
         label: "Goods in",
-        hint: "Receipts posted against a purchase order. Stock lands in goods-in before it has a home.",
-        fedBy: "Stock appears here once a receipt against a purchase order is posted.",
+        hint: "Receipts confirmed against a purchase order. Stock lands in goods-in before it has a home.",
+        fedBy: "Stock appears here once a receipt against a purchase order is confirmed.",
 
         list: GOODS_IN_LIST,
         // Still raised from here: a receipt is what puts stock into goods-in.
@@ -489,7 +495,7 @@ export const INVENTORY: ModuleDef = {
         label: "Put away",
         hint: "A task per pallet, from goods-in to the location it belongs in.",
         fedBy:
-          "Work appears here once goods are received into goods-in and put-away tasks are raised.",
+          "Work appears here once goods are received into goods-in and put-away tasks are created.",
 
         list: {
           fn: "erp_warehouse_tasks",
@@ -507,8 +513,8 @@ export const INVENTORY: ModuleDef = {
       },
       {
         label: "Count",
-        hint: "Counting a location, recording what was found, and posting the difference.",
-        fedBy: "Counts appear here once count tasks are raised for a site.",
+        hint: "Counting a location, recording what was found, and confirming the difference.",
+        fedBy: "Counts appear here once count tasks are created for a site.",
 
         list: {
           fn: "erp_count_tasks",
@@ -530,7 +536,7 @@ export const INVENTORY: ModuleDef = {
         createFn: "erp_write_off_stock",
       },
       {
-        label: "Hand on",
+        label: "Pass on",
         hint: "Stock that leaves your custody without being sold — a keeper, a contract manufacturer.",
         createFn: "erp_hand_over_custody",
       },
@@ -540,7 +546,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock policies",
       description:
-        "How a handling unit is identified and counted, by product class, by site or by the step it is built at.",
+        "How a pallet is identified and counted, by product class, by site or by the step it is built at.",
       permission: "inventory.read",
       fn: "erp_container_identity_policies",
       fields: [],
@@ -553,7 +559,7 @@ export const INVENTORY: ModuleDef = {
       fields: [pickItem(), pickSite(), { kind: "date", name: "p_on", label: "On" }],
     },
     {
-      label: "Batch genealogy",
+      label: "Batch history",
       description: "Everything one batch touched — what it was made from and where it went.",
       permission: "inventory.read",
       fn: "erp_batch_audit",
@@ -562,9 +568,9 @@ export const INVENTORY: ModuleDef = {
       ],
     },
     {
-      label: "Temperature excursion impact",
+      label: "Stock affected by a temperature problem",
       description:
-        "What stock was standing in a place between two times, so an excursion can be scoped.",
+        "What stock was standing in a place between two times, so you can see what a temperature problem affected.",
       permission: "inventory.read",
       fn: "erp_excursion_impact",
       fields: [
@@ -597,9 +603,9 @@ export const INVENTORY: ModuleDef = {
   group: "move",
   actions: [
     {
-      label: "Consume consigned stock",
+      label: "Use supplier-owned stock",
       description:
-        "Take a supplier's consigned stock into the company's ownership where it stands. Costed at the consigned price and posted against goods received not invoiced, because the supplier will invoice what was used.",
+        "Take stock a supplier still owns into your ownership where it stands. It is costed at the agreed price and recorded as received, not yet billed, because the supplier will bill what was used.",
       permission: "inventory.adjust",
       fn: "erp_consume_consignment",
       fields: [
@@ -633,7 +639,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Propose an identity policy",
       description:
-        "How handling units are identified and counted, for a product class or a site. Proposed as a change, so it is approved and promoted like any other configuration.",
+        "How pallets are identified and counted, for a product class or a site. Proposed as a change, so it is approved like any other setting.",
       permission: "administration.configure",
       fn: "erp_propose_identity_policy",
       fields: [
@@ -842,7 +848,7 @@ export const INVENTORY: ModuleDef = {
       invalidates: ["erp_batches"],
     },
     {
-      label: "Build a handling unit",
+      label: "Build a pallet",
       description: "A case, carton or pallet at a location, within the site's identity policy.",
       fn: "erp_create_handling_unit",
       fields: [
@@ -863,7 +869,7 @@ export const INVENTORY: ModuleDef = {
         {
           kind: "text",
           name: "p_parent_container_id",
-          label: "Inside handling unit",
+          label: "On pallet",
           hint: "The id of the coarser unit this one goes into, if any.",
         },
         { kind: "text", name: "p_code", label: "Code", hint: "Left empty, one is generated." },
@@ -949,7 +955,7 @@ export const INVENTORY: ModuleDef = {
       invalidates: ["erp_count_tasks", "erp_count_accuracy", "erp_stock_health"],
     },
     {
-      label: "Post a count",
+      label: "Confirm a count",
       description: "Turn a counted task into a stock adjustment.",
       permission: "inventory.adjust",
       fn: "erp_post_count",
@@ -1108,16 +1114,12 @@ export const INVENTORY: ModuleDef = {
       compute: (rows) => zeroIsGood(rows.length, "batches on the horizon"),
     },
   ],
-  chart: {
-    title: "Stock ageing",
-    description: "Quantity by age band.",
-    fn: "erp_stock_ageing",
-    siteArg: "p_site_id",
-    empty:
-      "No aged stock to profile. Stock is banded by age here once anything has been on hand long enough to band.",
-    label: (r) => String(r["bucket"] ?? "—"),
-    value: (r) => num(r["quantity"]),
-  },
+  // No chart. "Stock ageing — Quantity by age band" and "Ageing — How long
+  // stock has been standing still" were two cards on one tab reading the same
+  // door, erp_stock_ageing, and on the day they were compared both said there
+  // was no aged stock. The table stays: it carries the product and the site
+  // beside the band, which the bars could not, and it has the more specific of
+  // the two names.
   // Count tasks and Warehouse tasks used to stand here as two tables, reading
   // erp_count_tasks and erp_warehouse_tasks — the same two doors the Count and
   // Put away steps of the chain above already list, one screenful higher. The
@@ -1164,7 +1166,7 @@ export const INVENTORY: ModuleDef = {
     },
     {
       title: "Valuation",
-      description: "Cost basis by product and site, in minor units.",
+      description: "Cost basis by product and site.",
       fn: "erp_stock_valuation",
       siteArg: "p_site_id",
       empty: "Nothing to value yet. Stock is valued from the moment it is received.",
@@ -1174,17 +1176,25 @@ export const INVENTORY: ModuleDef = {
         { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Quantity", cell: "quantity", numeric: true },
-        { header: "Value (minor)", cell: "value_minor", numeric: true },
+        // Money, in the row's own currency. This printed 125000 under a
+        // heading that said "Value (minor)" — which a person reads as one
+        // hundred and twenty-five thousand pounds, beside a tile on the same
+        // screen that correctly said £1,918. Minor units stay in the door and
+        // in anything exported from it; they are never what a screen shows.
+        { header: "Value", cell: moneyCell("value_minor", "currency"), numeric: true },
         { header: "Currency", cell: "currency" },
       ],
     },
     {
-      title: "Ageing",
-      // This was empty for every organisation not costed first in, first out:
-      // the door read cost layers, and average and standard cost keep none. It
-      // now ages that stock from the movement ledger, which cannot say which
-      // receipt a unit came from, so the description says what is assumed and
-      // every row says how its age is known.
+      // The title is the plain-words one the terminology pass chose; the
+      // description is the ageing fix's, and it has to stay long. This report
+      // was empty for every organisation not costed first in, first out,
+      // because the door read cost layers and average and standard cost keep
+      // none. It now ages that stock from the movement ledger, which cannot
+      // say which receipt a unit came from — so the description says what is
+      // assumed rather than letting the report imply a precision it does not
+      // have, and every row says how its age is known.
+      title: "Stock ageing",
       description:
         "How long stock has been here, by when it arrived. Stock costed first in, first out is aged by the receipt each unit was costed from. Stock at average or standard cost keeps no such record, so it is aged by the latest arrivals that make up what is on hand, oldest assumed out first.",
       fn: "erp_stock_ageing",
@@ -1202,7 +1212,7 @@ export const INVENTORY: ModuleDef = {
     },
     {
       title: "Batches",
-      description: "Traceable units, with their genealogy anchors.",
+      description: "Traceable units, and what they came from.",
       fn: "erp_batches",
       empty:
         "No batches yet. A batch is created when stock of a batch-controlled product is received, so a product has to be marked batch controlled first.",
@@ -1818,7 +1828,7 @@ export const FINANCE: ModuleDef = {
       ],
     },
     {
-      label: "Allocate a landed cost",
+      label: "Add delivery costs to the stock value",
       permission: "procurement.match",
       fn: "erp_allocate_landed_cost",
       fields: [
@@ -1892,7 +1902,7 @@ export const FINANCE: ModuleDef = {
     {
       title: "Supplier balances",
       description:
-        "What is owed to each supplier, what is overdue, what has been paid, and what a match exception is holding back.",
+        "What is owed to each supplier, what is overdue, what has been paid, and what is held because an invoice does not match.",
       fn: "erp_supplier_balances",
       empty:
         "Nothing is owed to a supplier. Registering a supplier bill puts a balance here; paying an approved run clears it.",
@@ -1925,7 +1935,7 @@ export const FINANCE: ModuleDef = {
       ],
     },
     {
-      title: "Goods received not invoiced",
+      title: "Received, not yet billed",
       description: "Received against a purchase order, still awaiting an invoice.",
       fn: "erp_grni",
       empty:
@@ -2028,12 +2038,15 @@ export const FINANCE: ModuleDef = {
       empty:
         "No taxable transactions this quarter. A document that carries tax appears here once it is posted.",
       rowKey: (r, i) =>
-        `${String(r["direction"] ?? i)}-${String(r["jurisdiction"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
+        `${String(r["direction"] ?? i)}-${String(r["jurisdiction"] ?? i)}-${String(r["treatment"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
       columns: [
         // Charged on what was sold, or suffered on what was bought. Separate
         // boxes on every return, so separate rows here.
         { header: "Direction", cell: "direction" },
         { header: "Jurisdiction", cell: "jurisdiction" },
+        // Zero rated, exempt and outside the scope all carry no tax and are
+        // three different things on a return, so the report says which.
+        { header: "Treatment", cell: "treatment" },
         { header: "Code", cell: "tax_code" },
         { header: "Rate %", cell: "rate_pct", numeric: true },
         { header: "Taxable", cell: moneyCell("taxable_minor", "currency"), numeric: true },
@@ -2134,11 +2147,11 @@ export const FINANCE: ModuleDef = {
 export const PLANNING: ModuleDef = {
   flow: {
     title: "Plan, step by step",
-    note: "Forecast the demand, sign it off, run the requirements, then firm what the run suggests.",
+    note: "Forecast the demand, sign it off, work out what to order, then confirm what the plan suggests.",
     stages: [
       {
         label: "Forecast",
-        hint: "Demand per period, from history and from what you know that history does not.",
+        hint: "How much you expect to need each week or month, from past sales and anything you know is coming.",
         fedBy: "Forecasts appear here once one has been run for a period.",
 
         list: {
@@ -2158,7 +2171,7 @@ export const PLANNING: ModuleDef = {
       },
       {
         label: "Sign off",
-        hint: "A forecast nobody has agreed to is a spreadsheet. Signing it off is what plans use it.",
+        hint: "Plans only use a forecast once somebody has signed it off.",
         fedBy: "Forecasts appear here once one has been run at the forecast step.",
 
         list: {
@@ -2178,8 +2191,8 @@ export const PLANNING: ModuleDef = {
         actionFn: "erp_sign_off_forecast",
       },
       {
-        label: "Requirements run",
-        hint: "Demand against supply, netted, exploded through the bills of material.",
+        label: "Work out what to order",
+        hint: "What you need, less what you have and what is already coming, including the parts of anything you make.",
         // The baseline, by code: "Run a scenario" is the same function, and a
         // scenario's orders can never be firmed at the next step.
         createFn: "planning_run",
@@ -2187,7 +2200,7 @@ export const PLANNING: ModuleDef = {
       {
         label: "Planned order",
         hint: "What the run says to buy or make, before anyone has committed to it.",
-        fedBy: "Orders appear here once a requirements run has been made.",
+        fedBy: "Orders appear here once you have worked out what to order.",
 
         list: {
           fn: "erp_planned_orders",
@@ -2206,8 +2219,8 @@ export const PLANNING: ModuleDef = {
       },
 
       {
-        label: "Firm",
-        hint: "A firmed order becomes a purchase order or a works order and leaves planning.",
+        label: "Confirm the plan",
+        hint: "A confirmed order becomes a purchase order or a works order and leaves planning.",
         to: "/procurement",
         toLabel: "Open purchasing",
       },
@@ -2222,12 +2235,12 @@ export const PLANNING: ModuleDef = {
       fields: [
         pickItem(),
         pickSite(),
-        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+        { kind: "number", name: "p_horizon_days", label: "Days ahead", hint: "Default 180." },
       ],
     },
     {
       label: "Calculated stocking policy",
-      description: "What the engine would set for one product and site, before adopting it.",
+      description: "What the system would set for one product and site, before you adopt it.",
       permission: "planning.read",
       fn: "erp_calculate_policy",
       fields: [pickItem(), pickSite()],
@@ -2249,8 +2262,8 @@ export const PLANNING: ModuleDef = {
       ],
     },
     {
-      label: "Dependent demand of a run",
-      description: "What the production orders a run raised ask of their components, by date.",
+      label: "Parts a plan needs",
+      description: "What the works orders a plan created need in parts, by date.",
       permission: "planning.read",
       fn: "erp_dependent_demand",
       fields: [
@@ -2289,7 +2302,7 @@ export const PLANNING: ModuleDef = {
     {
       label: "Forecast lines",
       description:
-        "Every bucket of one forecast version, with the statistical figure beside any adjustment.",
+        "Every week or month of one forecast, with the calculated figure beside any change you made.",
       permission: "planning.read",
       fn: "erp_forecast_lines",
       fields: [
@@ -2313,13 +2326,14 @@ export const PLANNING: ModuleDef = {
   actions: [
     {
       code: "planning_run",
-      label: "Run planning",
-      description: "Regenerate planned orders and exceptions for one site.",
+      label: "Work out what to order",
+      description:
+        "Work out again what to buy and make at one site, and what needs your attention.",
       permission: "planning.run",
       fn: "erp_run_planning",
       fields: [
         pickSite(),
-        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+        { kind: "number", name: "p_horizon_days", label: "Days ahead", hint: "Default 180." },
       ],
       invalidates: ["erp_planned_orders", "erp_planner_workbench", "erp_planning_runs"],
     },
@@ -2327,12 +2341,12 @@ export const PLANNING: ModuleDef = {
       code: "planning_scenario_run",
       label: "Run a scenario",
       description:
-        "Plan one site under assumptions, beside the baseline. A scenario's orders are never supply and cannot be firmed; compare it with the baseline instead.",
+        "Plan one site under different assumptions, beside the real plan. A scenario's orders are never real and cannot be confirmed; compare it with the real plan instead.",
       permission: "planning.run",
       fn: "erp_run_planning",
       fields: [
         pickSite(),
-        { kind: "number", name: "p_horizon_days", label: "Horizon (days)", hint: "Default 180." },
+        { kind: "number", name: "p_horizon_days", label: "Days ahead", hint: "Default 180." },
         codeField("p_scenario_code", "Scenario", "BASE-2026"),
         {
           kind: "text",
@@ -2367,7 +2381,7 @@ export const PLANNING: ModuleDef = {
       invalidates: ["erp_planning_runs"],
     },
     {
-      label: "Firm a planned order",
+      label: "Confirm a planned order",
       description:
         "A bought item becomes a purchase order of the type you name; a made item becomes a works order.",
       permission: "planning.firm",
@@ -2393,8 +2407,9 @@ export const PLANNING: ModuleDef = {
       invalidates: ["erp_planned_orders", "erp_documents", "erp_works_orders"],
     },
     {
-      label: "Adjust a forecast bucket",
-      description: "Change one bucket of a draft forecast. The statistical figure stays beside it.",
+      label: "Change one week or month of a forecast",
+      description:
+        "Change one week or month of a draft forecast. The calculated figure stays beside it.",
       permission: "planning.forecast",
       fn: "erp_adjust_forecast_line",
       fields: [
@@ -2409,7 +2424,7 @@ export const PLANNING: ModuleDef = {
         {
           kind: "select",
           name: "p_line_id",
-          label: "Bucket",
+          label: "Week or month",
           required: true,
           options: {
             fn: "erp_forecast_lines",
@@ -2482,7 +2497,7 @@ export const PLANNING: ModuleDef = {
           label: ["forecast", "forecast_name"],
         }),
         { kind: "number", name: "p_periods", label: "Periods ahead" },
-        { kind: "number", name: "p_buckets", label: "History buckets" },
+        { kind: "number", name: "p_buckets", label: "Past weeks or months to use" },
       ],
       invalidates: ["erp_planner_workbench", "erp_planned_orders"],
     },
@@ -2591,7 +2606,7 @@ export const PLANNING: ModuleDef = {
       description:
         "Every run kept: baselines, the runs they superseded, and scenarios beside them.",
       fn: "erp_planning_runs",
-      empty: "No planning run yet. Run planning for a site and the run is kept here.",
+      empty: "Nothing worked out yet. Work out what to order for a site and it is kept here.",
       rowKey: (r, i) => String(r["run_id"] ?? i),
       columns: [
         { header: "Site", cell: "site_code" },
@@ -2627,13 +2642,13 @@ export const PLANNING: ModuleDef = {
 export const PRODUCTION: ModuleDef = {
   flow: {
     title: "Making, step by step",
-    note: "Raise the order, release it to the floor, issue the components, book the time, receive the output and close it.",
+    note: "Create the order, release it to the floor, take out the materials, record the hours, take in the finished goods and close it.",
     stages: [
       {
         label: "Works order",
         hint: "What is to be made, how much, and by when.",
         fedBy:
-          "Orders appear here once one is raised, or once a planned order is firmed in planning.",
+          "Orders appear here once one is created, or once a planned order is confirmed in planning.",
 
         list: WORKS_ORDER_LIST,
         states: ["draft", "planned"],
@@ -2642,7 +2657,7 @@ export const PRODUCTION: ModuleDef = {
       {
         label: "Release",
         hint: "Releasing an order is what makes it work the floor can start.",
-        fedBy: "Orders appear here once one has been raised at the works order step.",
+        fedBy: "Orders appear here once one has been created at the works order step.",
 
         list: WORKS_ORDER_LIST,
         // erp.release_works_order takes a draft or planned order.
@@ -2651,7 +2666,7 @@ export const PRODUCTION: ModuleDef = {
         actionFn: "erp_release_works_order",
       },
       {
-        label: "Issue components",
+        label: "Take out materials",
         hint: "Stock leaves the store and joins the order's cost.",
         list: WORKS_ORDER_LIST,
         // Issuing and receiving take a released order or one under way.
@@ -2660,15 +2675,15 @@ export const PRODUCTION: ModuleDef = {
         actionFn: "erp_issue_to_works_order",
       },
       {
-        label: "Book time",
-        hint: "Operation time against the route, so the variance means something.",
+        label: "Record hours",
+        hint: "Hours worked on each operation, so the difference from plan means something.",
         list: WORKS_ORDER_LIST,
         states: ["released", "in_progress"],
         recordArg: "p_works_order_id",
         actionFn: "erp_book_operation_time",
       },
       {
-        label: "Receive output",
+        label: "Take in finished goods",
         hint: "Finished quantity, and scrap, back into stock.",
         list: WORKS_ORDER_LIST,
         states: ["released", "in_progress"],
@@ -2677,7 +2692,7 @@ export const PRODUCTION: ModuleDef = {
       },
       {
         label: "Close",
-        hint: "Closing an order settles its variance and stops further booking.",
+        hint: "Closing an order settles the difference from plan and stops further hours being recorded.",
         list: WORKS_ORDER_LIST,
         // erp.close_works_order takes an order under way or completed.
         states: ["in_progress", "completed"],
@@ -2703,7 +2718,7 @@ export const PRODUCTION: ModuleDef = {
       ],
     },
     {
-      label: "Works order variance",
+      label: "Works order: plan against actual",
       description: "Planned against actual materials and time, once it has run.",
       permission: "production.read",
       fn: "erp_works_order_variance",
@@ -2792,7 +2807,7 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_boms"],
     },
     {
-      label: "Raise a works order",
+      label: "Start making something",
       permission: "production.order",
       fn: "erp_raise_works_order",
       fields: [
@@ -2842,7 +2857,7 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_works_orders"],
     },
     {
-      label: "Issue components",
+      label: "Take out materials",
       permission: "production.execute",
       fn: "erp_issue_to_works_order",
       fields: [
@@ -2860,7 +2875,7 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_works_orders", "erp_stock_health"],
     },
     {
-      label: "Book operation time",
+      label: "Record hours",
       permission: "production.execute",
       fn: "erp_book_operation_time",
       fields: [
@@ -2879,7 +2894,7 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_works_orders"],
     },
     {
-      label: "Receive output",
+      label: "Take in finished goods",
       permission: "production.execute",
       fn: "erp_receive_works_order_output",
       fields: [
@@ -2963,7 +2978,7 @@ export const PRODUCTION: ModuleDef = {
     title: "Works orders by status",
     description: "Where the shop floor currently sits.",
     fn: "erp_works_orders",
-    empty: "No works orders to profile. Raise one under Work and it is counted here by status.",
+    empty: "No works orders to profile. Start one from Actions and it is counted here by status.",
     label: (r) => String(r["status"] ?? "—"),
     value: () => 1,
   },
@@ -2973,7 +2988,7 @@ export const PRODUCTION: ModuleDef = {
       description: "What each made product is made of, version by version.",
       fn: "erp_boms",
       empty:
-        "No bills of materials yet. Define one with the action above before raising a works order for a made product.",
+        "No bills of materials yet. Define one from Actions before starting a works order for a made product.",
       rowKey: (r, i) => String(r["bom_id"] ?? i),
       columns: [
         { header: "Bill", cell: "code" },
@@ -2987,9 +3002,9 @@ export const PRODUCTION: ModuleDef = {
     },
     {
       title: "Works orders",
-      description: "Everything raised, with progress against the ordered quantity.",
+      description: "Everything started, with progress against the ordered quantity.",
       fn: "erp_works_orders",
-      empty: "No works orders raised. Raise one under Actions above.",
+      empty: "No works orders yet. Start one from Actions.",
       rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
       columns: [
         { header: "Number", cell: "order_number" },
@@ -3012,7 +3027,7 @@ export const PRODUCTION: ModuleDef = {
       // No "under Actions above" here: the actions bar is on Work, and this
       // panel is on Reports. An instruction pointing at a control the reader
       // cannot see is worse than none.
-      empty: "No works orders raised, so the register is empty. Raising one is done under Work.",
+      empty: "No works orders yet, so the register is empty. Start one from Actions.",
       rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
       columns: [
         { header: "Number", cell: "order_number" },
@@ -3032,12 +3047,12 @@ export const PRODUCTION: ModuleDef = {
 export const QUALITY: ModuleDef = {
   flow: {
     title: "Quality, step by step",
-    note: "Something is found, it is inspected, it is dispositioned, and if it has left the building there is a recall.",
+    note: "Something is found, it is inspected, you decide what happens to it, and if it has left the building there is a recall.",
     stages: [
       {
         label: "Event",
-        hint: "A complaint, a deviation, an excursion — anything that needs answering.",
-        fedBy: "Events appear here once one is raised, here or from the floor.",
+        hint: "A complaint, something that did not go to plan, something that went outside its safe range — anything that needs answering.",
+        fedBy: "Events appear here once one is reported, here or from the floor.",
 
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
@@ -3046,14 +3061,14 @@ export const QUALITY: ModuleDef = {
       {
         label: "Inspect",
         hint: "The result against the specification, recorded against the batch.",
-        fedBy: "Inspections appear here once an event is raised or a receipt requires inspection.",
+        fedBy: "Inspections appear here once an event is reported or a receipt needs inspecting.",
 
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
         createFn: "erp_record_inspection_result",
       },
       {
-        label: "Disposition",
+        label: "Decide",
         hint: "Release, reject, rework or scrap. This is the decision the audit reads.",
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
@@ -3061,7 +3076,7 @@ export const QUALITY: ModuleDef = {
       },
       {
         label: "Close",
-        hint: "An event closes when the disposition is made and the actions are logged.",
+        hint: "An event closes once you have decided what happens to it and logged the actions.",
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
         recordArg: "p_event_id",
@@ -3069,7 +3084,7 @@ export const QUALITY: ModuleDef = {
       },
       {
         label: "Recall",
-        hint: "Affected stock has shipped: raise a recall and log every action against the clock.",
+        hint: "Affected stock has shipped: start a recall and log every action against the clock.",
         createFn: "erp_raise_recall",
       },
     ],
@@ -3094,12 +3109,13 @@ export const QUALITY: ModuleDef = {
   path: "/quality",
   titleKey: "module.quality",
   title: "Quality control",
-  blurb: "Events, dispositions, supplier qualification and recall — each with a clock.",
+  blurb:
+    "Problems found, what was decided about them, supplier approval and recalls — each against a deadline.",
   permission: "quality.read",
   group: "make",
   actions: [
     {
-      label: "Raise a quality event",
+      label: "Report a problem",
       permission: "quality.disposition",
       fn: "erp_raise_quality_event",
       fields: [
@@ -3109,10 +3125,10 @@ export const QUALITY: ModuleDef = {
           label: "Kind",
           required: true,
           choices: [
-            { value: "deviation", label: "Deviation" },
+            { value: "deviation", label: "Did not go to plan" },
             { value: "non_conformance", label: "Non-conformance" },
             { value: "complaint", label: "Complaint" },
-            { value: "excursion", label: "Excursion" },
+            { value: "excursion", label: "Went outside the safe range" },
             { value: "near_miss", label: "Near miss" },
             { value: "audit_finding", label: "Audit finding" },
           ],
@@ -3187,7 +3203,7 @@ export const QUALITY: ModuleDef = {
       invalidates: ["erp_inspections", "erp_quality_events"],
     },
     {
-      label: "Disposition an inspection",
+      label: "Decide what happens to it",
       permission: "quality.disposition",
       fn: "erp_disposition_inspection",
       fields: [
@@ -3201,7 +3217,7 @@ export const QUALITY: ModuleDef = {
         {
           kind: "choice",
           name: "p_disposition",
-          label: "Disposition",
+          label: "Decision",
           required: true,
           choices: [
             { value: "accept", label: "Accept" },
@@ -3224,7 +3240,7 @@ export const QUALITY: ModuleDef = {
     },
     RELEASE_BATCH,
     {
-      label: "Raise a recall",
+      label: "Start a recall",
       permission: "quality.recall",
       fn: "erp_raise_recall",
       fields: [
@@ -3369,7 +3385,7 @@ export const QUALITY: ModuleDef = {
   ],
   chart: {
     title: "Events by kind",
-    description: "What is being raised against quality.",
+    description: "What problems are being reported.",
     fn: "erp_quality_events",
     empty:
       "No quality events to profile. Deviations, complaints and non-conformances are counted here by kind.",
@@ -3379,10 +3395,10 @@ export const QUALITY: ModuleDef = {
   worklists: [
     {
       title: "Quality events",
-      description: "Non-conformance, complaint, deviation and their investigations.",
+      description:
+        "Non-conformances, complaints, things that did not go to plan, and their investigations.",
       fn: "erp_quality_events",
-      empty:
-        "No quality events open. Raise one under Actions above when something needs investigating.",
+      empty: "No quality events open. Report one from Actions when something needs investigating.",
       rowKey: (r, i) => String(r["quality_event_id"] ?? i),
       columns: [
         { header: "Reference", cell: "reference" },
@@ -3518,7 +3534,7 @@ export const DELIVER_AN_ORDER: ActionSpec = {
   label: "Create a delivery from an order",
   title: "Create a delivery from a sales order",
   description:
-    "A draft delivery for the order's customer and site, holding what is left to deliver on each line at the order's price. Post it when the goods leave.",
+    "A draft delivery for the order's customer and site, holding what is left to deliver on each line at the order's price. Confirm it when the goods leave.",
   permission: "sales.despatch",
   fn: "erp_create_delivery_from_order",
   fields: DELIVERY_FROM_ORDER_FIELDS,
@@ -3641,7 +3657,7 @@ export const RECEIVE_AN_ORDER: ActionSpec = {
   label: "Receive an order",
   title: "Receive goods against a purchase order",
   description:
-    "A draft goods receipt for the order's supplier and site, holding what is left to receive on each line at the order's price. Post it once the goods are counted in.",
+    "A draft goods receipt for the order's supplier and site, holding what is left to receive on each line at the order's price. Confirm it once the goods are counted in.",
   permission: "procurement.receive",
   fn: "erp_create_receipt_from_order",
   fields: RECEIPT_FROM_ORDER_FIELDS,
@@ -3668,13 +3684,12 @@ export const RECEIVE_THIS_ORDER: ActionSpec = {
 export const LOGISTICS: ModuleDef = {
   flow: {
     title: "Despatch, step by step",
-    note: "Create the delivery from its sales order and post it when the goods leave. Then plan the shipment, choose the carrier, book it and record the proof of delivery.",
+    note: "Create the delivery from its sales order, confirm it when the goods leave, then plan the shipment, book the carrier and record proof of delivery.",
     stages: [
       {
         label: "Delivery",
         hint: "Picked goods waiting to leave. A delivery is what a shipment carries.",
-        fedBy:
-          "Deliveries appear here once one is created from a confirmed sales order. Create a delivery from an order is on the bar below.",
+        fedBy: "Deliveries appear here once one is created from a confirmed sales order.",
 
         typeCode: "delivery",
         // Waiting to leave. Posted, the goods have gone.
@@ -3694,7 +3709,7 @@ export const LOGISTICS: ModuleDef = {
         actionFn: "erp_select_carrier",
       },
       {
-        label: "Book",
+        label: "Book carrier",
         hint: "Booking a shipment is the commitment the carrier sees.",
         fedBy: "Shipments appear here once a carrier has been chosen.",
 
@@ -3704,7 +3719,7 @@ export const LOGISTICS: ModuleDef = {
         actionFn: "erp_book_shipment",
       },
       {
-        label: "Proof",
+        label: "Proof of delivery",
         hint: "The signature or the photograph, attached to the shipment.",
         list: SHIPMENT_LIST,
         // Booked or on its way, and not yet signed for.
@@ -3718,8 +3733,8 @@ export const LOGISTICS: ModuleDef = {
   path: "/logistics",
   titleKey: "module.logistics",
   title: "Despatch",
-  blurb:
-    "Getting what has been picked out of the door and proving it arrived, with the carrier's cost landing on the stock it carried.",
+  blurb: "Getting picked goods out of the door and proving they arrived.",
+  howItWorks: "The carrier's cost is added to the value of the stock it carried.",
   permission: "logistics.read",
   group: "move",
   actions: [
@@ -3742,7 +3757,7 @@ export const LOGISTICS: ModuleDef = {
           name: "p_delivery_ids",
           label: "Deliveries",
           required: true,
-          hint: "Posted deliveries from the site above, from the last 30 days, that are not on a shipment yet. Tick every one travelling on this shipment.",
+          hint: "Confirmed deliveries from the site above, from the last 30 days, that are not on a shipment yet. Tick every one travelling on this shipment.",
           options: {
             fn: "erp_deliveries_to_ship",
             argsFrom: { p_site_id: "p_site_id" },
@@ -4113,7 +4128,7 @@ export const SALES_KPIS: Kpi[] = [
 
 export const PURCHASING_KPIS: Kpi[] = [
   {
-    label: "Received not invoiced",
+    label: "Received, not yet billed",
     fn: "erp_grni",
     compute: (rows) => {
       if (rows.length === 0) return { value: "0", hint: "nothing awaiting an invoice", tone: "ok" };
@@ -4126,7 +4141,7 @@ export const PURCHASING_KPIS: Kpi[] = [
     },
   },
   {
-    label: "GRNI value",
+    label: "Received, not yet billed",
     fn: "erp_grni",
     compute: (rows, { money }) =>
       rows.length === 0
@@ -4134,7 +4149,7 @@ export const PURCHASING_KPIS: Kpi[] = [
         : { value: money(rows, "open_value_minor"), hint: "open on the balance sheet" },
   },
   {
-    label: "Match exceptions",
+    label: "Invoices that do not match",
     fn: "erp_match_workbench",
     compute: (rows) => zeroIsGood(rows.length, "invoices that will not match"),
   },
@@ -4146,7 +4161,7 @@ export const PURCHASING_KPIS: Kpi[] = [
         ? null
         : {
             value: money(rows, "value_at_risk_minor"),
-            hint: "held by match exceptions",
+            hint: "held because an invoice does not match",
             tone: "warn",
           },
   },
@@ -4294,7 +4309,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/operations/assurance",
     titleKey: "nav.operations_assurance",
-    title: "Assurance",
+    title: "Checks and sign-off",
     blurb: "The structural checks the build runs on every push.",
     permission: "administration.read",
     group: "assure",
@@ -4302,7 +4317,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/operations/continuity",
     titleKey: "nav.operations_continuity",
-    title: "Continuity and incidents",
+    title: "Backups and outages",
     blurb:
       "What was promised about staying up, whether a drill has proved it, and what happened when it did not.",
     permission: "administration.read",
@@ -4330,7 +4345,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/operations/cutover",
     titleKey: "nav.operations_cutover",
-    title: "Migration and cutover",
+    title: "Moving your old data in",
     blurb:
       "Opening balances loaded as at a date, whether each load reconciles, the parallel-run figures, and which domains are cut over on that evidence.",
     permission: "master_data.read",
@@ -4437,7 +4452,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/logistics/release-areas",
     titleKey: "nav.logistics_release_areas",
-    title: "Marshalling areas",
+    title: "Loading bays",
     blurb:
       "Allocated stock scopes, pull and push replenishment, ageing back to bulk, and print gating.",
     permission: "logistics.plan",
@@ -4466,7 +4481,7 @@ export const EXTRA_TILES: TileDef[] = [
     titleKey: "nav.inventory_adjustments",
     title: "Stock adjustments",
     blurb:
-      "Corrections to what the system says is on the shelf: a count variance, damage, theft or a sample, each carrying the day it was found, a reason and an approval.",
+      "Corrections to what the system says is on the shelf: a count difference, damage, theft or a sample, each carrying the day it was found, a reason and an approval.",
     permission: "inventory.adjust",
     group: "move",
   },
@@ -4475,7 +4490,7 @@ export const EXTRA_TILES: TileDef[] = [
     titleKey: "nav.inventory_audit",
     title: "Stock audit",
     blurb:
-      "Every location with its quantity and value, the last count against it, and the variance between the two.",
+      "Every location with its quantity and value, the last count against it, and the difference between the two.",
     permission: "inventory.read",
     group: "move",
   },
@@ -4492,7 +4507,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/finance/account-determination",
     titleKey: "nav.finance_account_determination",
-    title: "Account determination",
+    title: "Which accounts things post to",
     blurb:
       "Accounting codes and the matrix that decides the nominal account and analysis — with a gap report and no suspense fallback.",
     permission: "finance.configure",
@@ -4501,7 +4516,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/finance/dimensions",
     titleKey: "nav.finance_dimensions",
-    title: "Analysis dimensions",
+    title: "Extra reporting tags",
     blurb:
       "Cost centres, projects and the like: their values, how a posting derives them, and which combinations are allowed.",
     permission: "finance.read",
@@ -4580,7 +4595,7 @@ export const EXTRA_TILES: TileDef[] = [
   {
     path: "/administration/tenant",
     titleKey: "nav.tenant",
-    title: "Organisation lifecycle",
+    title: "Going live and closing down",
     blurb: "Go-live, export and portability, and deletion that deletes.",
     permission: "administration.configure",
     group: "people",

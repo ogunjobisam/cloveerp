@@ -132,9 +132,14 @@ function Profile() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("My profile")}>
+      <PageHeader
+        title={ui("My profile")}
+        howItWorks={ui(
+          "Only you can change these; an administrator manages what you may do, not who you are.",
+        )}
+      >
         {ui(
-          "Your names, the name the product shows for you, and the time zone and languages your screens and documents follow. Only you can change these; an administrator manages what you may do, not who you are.",
+          "Your names, the name the product shows for you, and the time zone and languages your screens and documents follow.",
         )}
       </PageHeader>
 

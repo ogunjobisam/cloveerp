@@ -137,10 +137,13 @@ function Classification() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Classification and coding")}>
-        {ui(
-          "Meaning lives in the classification, not in the code. A code is composed from the classification by a versioned template, recorded once, and never silently rewritten — if the classification later changes, the divergence is reported rather than hidden.",
+      <PageHeader
+        title={ui("Classification and coding")}
+        howItWorks={ui(
+          "A code is composed from the classification by a versioned template, recorded once, and never silently rewritten — if the classification later changes, the divergence is reported rather than hidden.",
         )}
+      >
+        {ui("Meaning lives in the classification, not in the code.")}
       </PageHeader>
 
       {/* Demonstration configuration is made by Clove ERP staff, or by anybody
@@ -152,7 +155,7 @@ function Classification() {
           <RpcButton
             label="Seed a demo configuration"
             fn="erp_seed_demo_configuration"
-            confirm="This adds sample axes, values, a code template, supplier defaults and a marshalling area. Running it twice changes nothing the second time."
+            confirm="This adds sample axes, values, a code template, supplier defaults and a loading bay. Running it twice changes nothing the second time."
             invalidates={[
               "erp_classification_axes",
               "erp_classification_values",
