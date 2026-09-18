@@ -542,7 +542,16 @@ begin
   perform erp.configure_procurement(100000000);
 
   select e.id into v_entity from erp.entity e where e.tenant_id = v_tenant order by e.code limit 1;
-  select s.id into v_site from erp.site s where s.tenant_id = v_tenant order by s.code limit 1;
+  -- A site of its own. Finance and procurement install no site, so reading
+  -- "the organisation's first site" found none, the site cases raised
+  -- documents with no site at all, and they fell back to the organisation's
+  -- day — which the first run of this suite in CI caught, because a site case
+  -- is asserted against the site's day and not merely against "some local day".
+  v_site := erp.create_site('ZZ-LOCAL', 'Local date depot', 'warehouse', v_entity, null, v_ahead);
+  if v_site is null then
+    raise exception 'CLOVEERP_SUITE_FIXTURE: local_date_suite has no site to raise documents for'
+      using hint = 'erp.create_site() returned nothing; the site cases would prove nothing.';
+  end if;
 
   -- ── 1. Fourteen hours ahead ──────────────────────────────────────────────
   v_step := 'raising a document fourteen hours ahead of UTC';
