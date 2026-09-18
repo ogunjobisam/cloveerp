@@ -19,7 +19,7 @@ set lock_timeout = '30s';
 set statement_timeout = 0;
 
 -- =============================================================================
--- 20260920200000  The demonstration is a going concern
+-- 20260920210000  The demonstration is a going concern
 -- -----------------------------------------------------------------------------
 -- Walked live on 18 September 2026, the demonstration organisation reads as a
 -- company that stopped trading in the spring and never collected, never paid
