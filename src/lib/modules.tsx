@@ -1074,15 +1074,12 @@ export const INVENTORY: ModuleDef = {
       compute: (rows) => zeroIsGood(rows.length, "batches on the horizon"),
     },
   ],
-  chart: {
-    title: "Stock ageing",
-    description: "Quantity by age band.",
-    fn: "erp_stock_ageing",
-    empty:
-      "No aged stock to profile. Stock is banded by age here once anything has been on hand long enough to band.",
-    label: (r) => String(r["bucket"] ?? "—"),
-    value: (r) => num(r["quantity"]),
-  },
+  // No chart. "Stock ageing — Quantity by age band" and "Ageing — How long
+  // stock has been standing still" were two cards on one tab reading the same
+  // door, erp_stock_ageing, and on the day they were compared both said there
+  // was no aged stock. The table stays: it carries the product and the site
+  // beside the band, which the bars could not, and it has the more specific of
+  // the two names.
   worklists: [
     {
       title: "Count tasks",
@@ -1156,7 +1153,7 @@ export const INVENTORY: ModuleDef = {
     },
     {
       title: "Valuation",
-      description: "Cost basis by product and site, in minor units.",
+      description: "Cost basis by product and site.",
       fn: "erp_stock_valuation",
       empty: "Nothing to value yet. Stock is valued from the moment it is received.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
@@ -1165,12 +1162,17 @@ export const INVENTORY: ModuleDef = {
         { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Quantity", cell: "quantity", numeric: true },
-        { header: "Value (minor)", cell: "value_minor", numeric: true },
+        // Money, in the row's own currency. This printed 125000 under a
+        // heading that said "Value (minor)" — which a person reads as one
+        // hundred and twenty-five thousand pounds, beside a tile on the same
+        // screen that correctly said £1,918. Minor units stay in the door and
+        // in anything exported from it; they are never what a screen shows.
+        { header: "Value", cell: moneyCell("value_minor", "currency"), numeric: true },
         { header: "Currency", cell: "currency" },
       ],
     },
     {
-      title: "Ageing",
+      title: "Stock ageing",
       description: "How long stock has been standing still.",
       fn: "erp_stock_ageing",
       empty: "No aged stock. Nothing has been on hand long enough to fall into an age band.",
