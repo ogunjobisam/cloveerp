@@ -732,14 +732,22 @@ as $$
 declare
   v_count  integer;
   v_detail text;
+  v_names  text;
   v_read   integer;
 begin
-  select count(*), string_agg(format('  %s — %s', r.reference, r.detail), E'\n')
-    into v_count, v_detail
+  select count(*),
+         string_agg(r.reference, ', ' order by r.reference),
+         string_agg(format('  %s — %s', r.reference, r.detail), E'\n' order by r.reference)
+    into v_count, v_names, v_detail
     from erp.unwritten_setting_report() r;
 
   if v_count > 0 then
-    raise exception E'CLOVEERP_SETTING_NEVER_WRITTEN: % setting(s)\n%', v_count, v_detail
+    -- The names go on the FIRST line. Plenty of things that show a refusal
+    -- show one line of it, and a build that says "1 setting(s)" and not which
+    -- costs whoever meets it another whole build to find out — the same lesson
+    -- as a suite count guard that does not print what its fixture caught.
+    raise exception E'CLOVEERP_SETTING_NEVER_WRITTEN: % setting(s) read and never written: %\n%',
+      v_count, v_names, v_detail
       using errcode = 'P0001',
             hint = 'Either set it where the entry point that owns it begins, '
                    'or stop reading it. A read with no writer is a column of '
@@ -1148,9 +1156,25 @@ select erp.assert_resource_coverage('en');
 select erp.assert_vocabulary_aligned();
 select erp.assert_audit_attributed();
 
--- The two new ones, proved here rather than on the next build: an ungoverned
--- column must not survive its own transaction either.
-select erp.assert_settings_are_written();
 select erp.assert_audit_source_vocabulary();
 
-select erp_test.assert_audit_source_suite();
+-- erp.assert_settings_are_written() and the suite are proved by
+-- 20260919940000, one commit later, not here.
+--
+-- They were asserted here first, and this migration was edited after it was
+-- pushed to say otherwise; supabase/ci/migrations_edited.txt records that with
+-- the repair beside it. The reason is worth reading, because it is this
+-- migration's own defect wearing the other hat.
+--
+-- erp_test.audit_source_suite() falsifies the new check by creating a
+-- throwaway routine that reads a setting nothing writes — and it carries that
+-- routine's DDL as a string, so the suite's own body held the literal the
+-- check looks for. The check reads every routine body in the product schemas,
+-- so it read the suite as a finding about itself: a standing finding, whether
+-- or not the throwaway routine existed. Asserting here therefore refused this
+-- migration, from an empty database, every time it was replayed.
+--
+-- 20260919940000 makes the suite assemble the setting's name rather than write
+-- it whole — the way erp.legacy_refusal_prefix_report() assembles
+-- 'ERP' || 'WARE_' so a scanner is never its own first finding — and then runs
+-- both proofs. The two migrations are one commit apart and land together.
