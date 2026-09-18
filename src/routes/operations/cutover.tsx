@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
@@ -6,6 +7,8 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { RpcButton } from "../../components/erp/rpc-button";
+import { formatMinor } from "../../lib/money";
+import { callErp } from "../../lib/erp";
 
 export const Route = createFileRoute("/operations/cutover")({
   head: () => ({
@@ -136,11 +139,6 @@ function when(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
-function minor(value: number | null | undefined) {
-  if (value === null || value === undefined) return "—";
-  return value.toLocaleString();
-}
-
 function statusTone(status: string): "ok" | "warn" | "bad" | "muted" {
   switch (status) {
     case "loaded":
@@ -159,6 +157,18 @@ function statusTone(status: string): "ok" | "warn" | "bad" | "muted" {
 }
 
 function Cutover() {
+  // The organisation's own currency: the balances a cutover compares are stated
+  // in it, and only a batch carries its own. These were printed with
+  // toLocaleString() — 125,000 for £1,250.00 — so a control total, a loaded
+  // total and the difference between them all read a hundred times too large.
+  const entities = useQuery({
+    queryKey: ["erp_entities", {}],
+    queryFn: () => callErp<{ base_currency: string | null }[]>("erp_entities"),
+  });
+  const base = entities.data?.[0]?.base_currency ?? "GBP";
+  const minor = (value: number | null | undefined, currency?: string | null) =>
+    value === null || value === undefined ? "—" : formatMinor(value, currency || base);
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Moving your old data in">
@@ -435,7 +445,7 @@ function Cutover() {
                   ) : null}
                 </td>
                 <td className="py-2 pr-4 font-mono text-xs">
-                  {minor(r.control_total_minor)} {r.currency}
+                  {minor(r.control_total_minor, r.currency)}
                   {r.control_quantity !== null ? (
                     <div className="mt-0.5 text-muted-foreground">{r.control_quantity} units</div>
                   ) : null}

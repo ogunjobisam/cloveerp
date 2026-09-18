@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { AutoPanel } from "../../components/erp/auto";
+import { AutoPanel, moneyCell } from "../../components/erp/auto";
 import {
   ActionBar,
   HeaderActions,
@@ -406,7 +406,10 @@ function Sales() {
         columns={[
           { header: "Reason", cell: "reason_code" },
           { header: "Returns", cell: "returns", numeric: true },
-          { header: "Value", cell: "value_minor", numeric: true },
+          // erp.return_reason_analysis() carries no currency, so this is the
+          // organisation's, as moneyCell() defaults it — still pounds and pence
+          // rather than a count of pence.
+          { header: "Value", cell: moneyCell("value_minor"), numeric: true },
           { header: "Share %", cell: "share_pct", numeric: true },
         ]}
       />

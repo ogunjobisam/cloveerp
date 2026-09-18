@@ -736,7 +736,7 @@ function Commercial() {
                                           {l.unit_minor == null ? (
                                             <Pill tone="bad">unpriced</Pill>
                                           ) : (
-                                            `${l.unit_minor}p · ${l.band ?? ""}`
+                                            `${money(l.unit_minor, i.currency)} · ${l.band ?? ""}`
                                           )}
                                         </td>
                                         <td className="py-1.5 text-sm tabular-nums">
