@@ -79,3 +79,25 @@ describe("what it sends", () => {
     ).toEqual({ p_order_id: "o1", p_lines: [] });
   });
 });
+
+/**
+ * The order-line picker says what an empty list means.
+ *
+ * It reads erp_deliverable_lines(order), so it is empty for the order in front of the
+ * reader and never for the organisation — which is what it used to say.
+ */
+describe("the order-line picker names the order when it has nothing", () => {
+  const rows = fields.find((f) => f.kind === "rows");
+  const line =
+    rows && rows.kind === "rows" ? rows.columns.find((c) => c.name === "line_id") : undefined;
+
+  test("it follows the order and declares its own empty sentence", () => {
+    expect(line?.options?.argsFrom).toEqual({ p_order_id: "p_order_id" });
+    expect(line?.options?.empty).toContain("This order");
+    expect(line?.options?.empty).not.toContain("organisation");
+  });
+
+  test("and the sentence says what is true of a deliver order", () => {
+    expect(line?.options?.empty).toContain("nothing left to deliver");
+  });
+});
