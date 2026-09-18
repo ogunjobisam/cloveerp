@@ -649,7 +649,7 @@ describe("a proposed change, as a sentence", () => {
     );
   });
 
-  test("classification, product codes and marshalling areas", () => {
+  test("classification, product codes and loading bays", () => {
     expect(say("classification_axis", { code: "BRAND", name: "Brand", is_mandatory: false })).toBe(
       "Group products by Brand (BRAND); a value is optional",
     );
@@ -680,11 +680,11 @@ describe("a proposed change, as a sentence", () => {
         ageing_hours: 72,
       }),
     ).toBe(
-      "Add the marshalling area Picking (PICKING), bringing in just what is short; stock left more than 72 hours goes back to storage",
+      "Add the loading bay Picking (PICKING), bringing in just what is short; stock left more than 72 hours goes back to storage",
     );
     expect(
       say("release_area", { code: "DESP", name: "Despatch", replenishment_mode: "push" }),
-    ).toBe("Add the marshalling area Despatch (DESP), topped up when short");
+    ).toBe("Add the loading bay Despatch (DESP), topped up when short");
   });
 
   test("companies, their rules, costing, labels, picking and the chart", () => {

@@ -161,7 +161,7 @@ function statusTone(status: string): "ok" | "warn" | "bad" | "muted" {
 function Cutover() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Migration and cutover">
+      <PageHeader title="Moving your old data in">
         Opening balances arrive as a batch with the control total the legacy extract was taken with,
         dated as at one day, and load through the same movement and journal tables everything else
         posts to. After loading, the product says per check what it expected and what it found. A

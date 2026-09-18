@@ -58,9 +58,14 @@ function ItemSupply() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Product-suppliers")}>
+      <PageHeader
+        title={ui("Product-suppliers")}
+        howItWorks={ui(
+          "A regulated product cannot default to a supplier that is not on the approved list, and the shares recorded against a product's suppliers may not add to more than the whole.",
+        )}
+      >
         {ui(
-          "One supplier is the default for a product at a site; the rest are ranked alternatives. A regulated product cannot default to a supplier that is not on the approved list, and the shares recorded against a product's suppliers may not add to more than the whole.",
+          "One supplier is the default for a product at a site; the rest are ranked alternatives.",
         )}
       </PageHeader>
 
@@ -163,7 +168,7 @@ function ItemSupply() {
               ui("Default"),
               ui("Split"),
               ui("Approved"),
-              ui("Lead time"),
+              ui("Days to arrive"),
               ui("Minimum"),
               ui("Status"),
             ]}

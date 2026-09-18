@@ -70,10 +70,13 @@ function StockAdjustments() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Stock adjustments")}>
-        {ui(
-          "Making the system agree with the shelf. An adjustment carries the date the count was taken, the reason it changed, and an approval before anything is written — and its cost reaches the stock adjustments account in your profit and loss on that date, not on the day it was keyed in.",
+      <PageHeader
+        title={ui("Stock adjustments")}
+        howItWorks={ui(
+          "An adjustment carries the date the count was taken, the reason it changed, and an approval before anything is written. Its cost is counted on the day the count was taken, not the day it was typed in.",
         )}
+      >
+        {ui("Making the system agree with the shelf.")}
       </PageHeader>
 
       <ActionBar
@@ -142,7 +145,7 @@ function StockAdjustments() {
             invalidates,
           },
           {
-            label: "Post a stock adjustment",
+            label: "Confirm a stock adjustment",
             title: "Write the count into the books",
             description:
               "Moves the stock and posts the cost to the stock adjustments account, both dated the day the count was taken. What the stock is worth is taken from the books as they stand now: an adjustment dated in the past does not change what earlier despatches were valued at, and no ERP can, because what a despatch took out of stock was recorded once and the layers are gone.",

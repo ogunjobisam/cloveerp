@@ -333,14 +333,14 @@ export const ORDER_TO_CASH: Flow = {
     },
     {
       path: "/logistics",
-      stage: "Book",
+      stage: "Book carrier",
       does: "Book it. The booking is the commitment the carrier sees.",
       doors: ["erp_book_shipment"],
       leaves: "The shipment, booked, with its cost landing on the stock.",
     },
     {
       path: "/logistics",
-      stage: "Proof",
+      stage: "Proof of delivery",
       does: "Attach the signature or the photograph once it has been delivered.",
       doors: ["erp_record_proof_of_delivery"],
       leaves: "The shipment delivered, with the proof on it.",

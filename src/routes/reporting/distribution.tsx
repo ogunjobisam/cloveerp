@@ -201,9 +201,12 @@ function Distribution() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Subscriptions, packs and extracts")}>
+      <PageHeader
+        title={ui("Subscriptions, packs and extracts")}
+        howItWorks={ui("Bulk export reads the same door incrementally.")}
+      >
         {ui(
-          "Governed views exposed to external tools as versioned contracts, deprecated on notice; credentials scoped to the organisation and to named views, expiring and revocable. Bulk export reads the same door incrementally.",
+          "Governed views exposed to external tools as versioned contracts, deprecated on notice; credentials scoped to the organisation and to named views, expiring and revocable.",
         )}
       </PageHeader>
 

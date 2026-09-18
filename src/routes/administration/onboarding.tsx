@@ -158,7 +158,7 @@ function sectionText(section: string, ui: Translate): { title: string; blurb: st
       };
     case "B.6":
       return {
-        title: ui("Marshalling areas"),
+        title: ui("Loading bays"),
         blurb: ui("Where stock is gathered before picking and despatch."),
       };
     case "finance":
@@ -309,10 +309,13 @@ function Onboarding() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.administration_onboarding", "Onboarding interview")}>
-        {ui(
-          "Your first-day questionnaire. Describe how the business works — your companies, departments, who signs off spending, how products are grouped and coded — and your answers become the set-up to match. Most questions come with a likely answer you can take with one press. Nothing changes until you accept what your answers propose.",
+      <PageHeader
+        title={t("nav.administration_onboarding", "Onboarding interview")}
+        howItWorks={ui(
+          "Describe how the business works — your companies, departments, who signs off spending, how products are grouped and coded — and your answers become the set-up to match. Most questions come with a likely answer you can take with one press. Nothing changes until you accept what your answers propose.",
         )}
+      >
+        {ui("Your first-day questionnaire.")}
       </PageHeader>
       {mayConfigure && sessions.data !== undefined && sessions.error ? (
         <RefreshNote

@@ -114,10 +114,13 @@ function Journals() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_journals", "Journals")}>
-        {ui(
-          "Accruals, prepayments and corrections typed by hand. One person raises and submits a journal; somebody else who may approve journals posts it. A posted journal is never changed, only reversed.",
+      <PageHeader
+        title={t("nav.finance_journals", "Journals")}
+        howItWorks={ui(
+          "One person raises and submits a journal; somebody else who may approve journals posts it. A posted journal is never changed, only reversed.",
         )}
+      >
+        {ui("Accruals, prepayments and corrections typed by hand.")}
       </PageHeader>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
