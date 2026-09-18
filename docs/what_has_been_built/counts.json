@@ -2,7 +2,7 @@
   "ai_tables": 2,
   "api_only_doors": 20,
   "assertions": 112,
-  "catalogue_checks": 299,
+  "catalogue_checks": 300,
   "de_strings": 692,
   "definer_allowances": 201,
   "diagnostic_checks": 120,
@@ -10,7 +10,7 @@
   "doors": 683,
   "doors_pending_screen": 3,
   "doors_writing": 499,
-  "en_strings": 4879,
+  "en_strings": 4882,
   "enums": 83,
   "erp_tables": 251,
   "erp_views": 16,
@@ -37,7 +37,7 @@
   "ref_tables": 78,
   "spec_version": "v1.6",
   "sql_lines": 291983,
-  "suites": 205,
+  "suites": 206,
   "triggers": 823,
   "write_allowances": 499
 }
