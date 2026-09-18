@@ -253,7 +253,17 @@ function Document() {
         currency={doc.currency}
       />
 
-      <ApprovalChain documentId={documentId} />
+      {/* Approval routing is evidence about a decision, and a decision is
+          either still to come or recorded. On a committed document with
+          nothing stamped it is neither: a delivery, a goods receipt and an
+          issued invoice have no approval, and the card invited the reader to
+          stamp a chain onto one anyway. It stays wherever a chain exists, so
+          nothing already recorded is hidden. */}
+      {doc.is_committed ? (
+        <ApprovalChainWhenStamped documentId={documentId} />
+      ) : (
+        <ApprovalChain documentId={documentId} />
+      )}
 
       <ApprovalDecisions documentId={documentId} />
 
@@ -412,7 +422,12 @@ function ApprovalChain({ documentId }: { documentId: string }) {
               : "Nothing has been stamped on this document yet. Stamping records the chain, the rule version behind each step, and any cover in force."}
           </Prose>
         </div>
+        {/* Secondary on purpose. DocumentTransitions' rule — "the way forward
+            is the one dark button" — is a rule about the screen, not about one
+            card, and on a document the way forward is the transition above,
+            never a routing stamp. */}
         <ActionButton
+          variant="secondary"
           busy={stamp.isPending}
           onClick={() => stamp.mutate({ p_document_id: documentId })}
         >
@@ -453,6 +468,24 @@ function ApprovalChain({ documentId }: { documentId: string }) {
       </div>
     </section>
   );
+}
+
+/**
+ * The routing card on a document that has committed: drawn only where a chain
+ * was actually stamped.
+ *
+ * The same read the card makes, made once here so the card can be left out
+ * altogether rather than rendered saying "No steps resolved." beside a button
+ * whose only effect would be to record today's rules against a decision that
+ * was taken, or never needed, some time ago.
+ */
+function ApprovalChainWhenStamped({ documentId }: { documentId: string }) {
+  const { data } = useQuery({
+    queryKey: ["erp_document_approval_chain", { p_document_id: documentId }],
+    queryFn: () => callErp<Stamp[]>("erp_document_approval_chain", { p_document_id: documentId }),
+  });
+  if (!data || data.length === 0) return null;
+  return <ApprovalChain documentId={documentId} />;
 }
 
 /**
