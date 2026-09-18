@@ -39,9 +39,11 @@ import { Route as CommercialQuotesRouteImport } from './routes/commercial/quotes
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
+import { Route as FinanceCloseRouteImport } from './routes/finance/close'
 import { Route as FinanceCostCentresRouteImport } from './routes/finance/cost-centres'
 import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensions'
 import { Route as FinanceJournalsRouteImport } from './routes/finance/journals'
+import { Route as FinanceReconciliationRouteImport } from './routes/finance/reconciliation'
 import { Route as FinanceStatementsRouteImport } from './routes/finance/statements'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
@@ -231,6 +233,11 @@ const FinanceAccountDeterminationRoute =
     path: '/finance/account-determination',
     getParentRoute: () => rootRouteImport,
   } as any)
+const FinanceCloseRoute = FinanceCloseRouteImport.update({
+  id: '/finance/close',
+  path: '/finance/close',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceCostCentresRoute = FinanceCostCentresRouteImport.update({
   id: '/finance/cost-centres',
   path: '/finance/cost-centres',
@@ -244,6 +251,11 @@ const FinanceDimensionsRoute = FinanceDimensionsRouteImport.update({
 const FinanceJournalsRoute = FinanceJournalsRouteImport.update({
   id: '/finance/journals',
   path: '/finance/journals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceReconciliationRoute = FinanceReconciliationRouteImport.update({
+  id: '/finance/reconciliation',
+  path: '/finance/reconciliation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FinanceStatementsRoute = FinanceStatementsRouteImport.update({
@@ -430,9 +442,11 @@ export interface FileRoutesByFullPath {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/close': typeof FinanceCloseRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/finance/journals': typeof FinanceJournalsRoute
+  '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
@@ -495,9 +509,11 @@ export interface FileRoutesByTo {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/close': typeof FinanceCloseRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/finance/journals': typeof FinanceJournalsRoute
+  '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
@@ -561,9 +577,11 @@ export interface FileRoutesById {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/close': typeof FinanceCloseRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
   '/finance/journals': typeof FinanceJournalsRoute
+  '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
@@ -628,9 +646,11 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/close'
     | '/finance/cost-centres'
     | '/finance/dimensions'
     | '/finance/journals'
+    | '/finance/reconciliation'
     | '/finance/statements'
     | '/inventory/adjustments'
     | '/inventory/audit'
@@ -693,9 +713,11 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/close'
     | '/finance/cost-centres'
     | '/finance/dimensions'
     | '/finance/journals'
+    | '/finance/reconciliation'
     | '/finance/statements'
     | '/inventory/adjustments'
     | '/inventory/audit'
@@ -758,9 +780,11 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/close'
     | '/finance/cost-centres'
     | '/finance/dimensions'
     | '/finance/journals'
+    | '/finance/reconciliation'
     | '/finance/statements'
     | '/inventory/adjustments'
     | '/inventory/audit'
@@ -824,9 +848,11 @@ export interface RootRouteChildren {
   CommercialQuotesRoute: typeof CommercialQuotesRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
+  FinanceCloseRoute: typeof FinanceCloseRoute
   FinanceCostCentresRoute: typeof FinanceCostCentresRoute
   FinanceDimensionsRoute: typeof FinanceDimensionsRoute
   FinanceJournalsRoute: typeof FinanceJournalsRoute
+  FinanceReconciliationRoute: typeof FinanceReconciliationRoute
   FinanceStatementsRoute: typeof FinanceStatementsRoute
   InventoryAdjustmentsRoute: typeof InventoryAdjustmentsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
@@ -1072,6 +1098,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceAccountDeterminationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/close': {
+      id: '/finance/close'
+      path: '/finance/close'
+      fullPath: '/finance/close'
+      preLoaderRoute: typeof FinanceCloseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/finance/cost-centres': {
       id: '/finance/cost-centres'
       path: '/finance/cost-centres'
@@ -1091,6 +1124,13 @@ declare module '@tanstack/react-router' {
       path: '/finance/journals'
       fullPath: '/finance/journals'
       preLoaderRoute: typeof FinanceJournalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finance/reconciliation': {
+      id: '/finance/reconciliation'
+      path: '/finance/reconciliation'
+      fullPath: '/finance/reconciliation'
+      preLoaderRoute: typeof FinanceReconciliationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/finance/statements': {
@@ -1336,9 +1376,11 @@ const rootRouteChildren: RootRouteChildren = {
   CommercialQuotesRoute: CommercialQuotesRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
+  FinanceCloseRoute: FinanceCloseRoute,
   FinanceCostCentresRoute: FinanceCostCentresRoute,
   FinanceDimensionsRoute: FinanceDimensionsRoute,
   FinanceJournalsRoute: FinanceJournalsRoute,
+  FinanceReconciliationRoute: FinanceReconciliationRoute,
   FinanceStatementsRoute: FinanceStatementsRoute,
   InventoryAdjustmentsRoute: InventoryAdjustmentsRoute,
   InventoryAuditRoute: InventoryAuditRoute,

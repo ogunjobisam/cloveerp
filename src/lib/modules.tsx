@@ -117,6 +117,16 @@ export type Panel = {
   description?: string;
   fn: string;
   args?: Record<string, unknown>;
+  /**
+   * The argument the site chosen in the header fills, when this read is about
+   * one place.
+   *
+   * The header said MAIN · LND-HO and the stock tables listed LEE-WH, because
+   * nothing on those screens had ever read the choice. A read that names its
+   * site argument here follows it; one that does not is about the whole
+   * organisation, and the header's own popover says so.
+   */
+  siteArg?: string;
   empty: string;
   /**
    * Where the emptiness is fixed, when it is fixed somewhere else.
@@ -149,6 +159,16 @@ export type Kpi = {
   label: string;
   fn: string;
   args?: Record<string, unknown>;
+  /**
+   * The argument the site chosen in the header fills, when this read is about
+   * one place.
+   *
+   * The header said MAIN · LND-HO and the stock tables listed LEE-WH, because
+   * nothing on those screens had ever read the choice. A read that names its
+   * site argument here follows it; one that does not is about the whole
+   * organisation, and the header's own popover says so.
+   */
+  siteArg?: string;
   /** Derived from the rows of `fn`. Returning null means "no basis to state one". */
   compute: (
     rows: Row[],
@@ -161,6 +181,16 @@ export type Chart = {
   description?: string;
   fn: string;
   args?: Record<string, unknown>;
+  /**
+   * The argument the site chosen in the header fills, when this read is about
+   * one place.
+   *
+   * The header said MAIN · LND-HO and the stock tables listed LEE-WH, because
+   * nothing on those screens had ever read the choice. A read that names its
+   * site argument here follows it; one that does not is about the whole
+   * organisation, and the header's own popover says so.
+   */
+  siteArg?: string;
   empty: string;
   label: (row: Row) => string;
   value: (row: Row) => number;
@@ -561,7 +591,8 @@ export const INVENTORY: ModuleDef = {
   path: "/inventory",
   titleKey: "module.inventory",
   title: "Stock",
-  blurb: "Stock health, valuation, ageing, expiry and counting, all derived from the ledger.",
+  blurb:
+    "Knowing what is on the shelf, what it is worth, and putting right where the shelf and the ledger disagree.",
   permission: "inventory.read",
   group: "move",
   actions: [
@@ -1041,6 +1072,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock lines",
       fn: "erp_stock_health",
+      siteArg: "p_site_id",
       compute: (rows) => ({ value: String(rows.length), hint: "product and site positions" }),
     },
     {
@@ -1052,6 +1084,7 @@ export const INVENTORY: ModuleDef = {
       // counted nothing for every organisation.
       label: "Positions with a finding",
       fn: "erp_stock_health",
+      siteArg: "p_site_id",
       compute: (rows) =>
         zeroIsGood(
           // The empty string is counted as healthy on purpose: a tile whose
@@ -1064,6 +1097,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock value",
       fn: "erp_stock_valuation",
+      siteArg: "p_site_id",
       compute: (rows, { money }) =>
         rows.length === 0 ? null : { value: money(rows, "value_minor"), hint: "on hand, at cost" },
     },
@@ -1078,45 +1112,20 @@ export const INVENTORY: ModuleDef = {
     title: "Stock ageing",
     description: "Quantity by age band.",
     fn: "erp_stock_ageing",
+    siteArg: "p_site_id",
     empty:
       "No aged stock to profile. Stock is banded by age here once anything has been on hand long enough to band.",
     label: (r) => String(r["bucket"] ?? "—"),
     value: (r) => num(r["quantity"]),
   },
+  // Count tasks and Warehouse tasks used to stand here as two tables, reading
+  // erp_count_tasks and erp_warehouse_tasks — the same two doors the Count and
+  // Put away steps of the chain above already list, one screenful higher. The
+  // step lists carry search, paging and, on Put away, Show finished, and the
+  // panel beside them shows every other column of the chosen row (quantity
+  // done, within tolerance, when it was counted and posted) rather than only
+  // the ones a table had room for. Expiry horizon is no step's list and stays.
   worklists: [
-    {
-      title: "Count tasks",
-      description: "Raised by the counting programme and waiting on a person.",
-      fn: "erp_count_tasks",
-      empty:
-        "No count tasks raised. Raise a counting programme under Actions and its tasks appear here.",
-      rowKey: (r, i) => String(r["task_id"] ?? i),
-      columns: [
-        { header: "Product", cell: "item" },
-        { header: "Location", cell: "location" },
-        { header: "Expected", cell: "expected", numeric: true },
-        { header: "Counted", cell: "counted", numeric: true },
-        { header: "Variance", cell: "variance", numeric: true },
-        pill("status"),
-      ],
-    },
-    {
-      title: "Warehouse tasks",
-      description: "Putaway and replenishment, raised from the balances and waiting on a truck.",
-      fn: "erp_warehouse_tasks",
-      empty:
-        "No warehouse tasks outstanding. Picks, putaways and replenishments are raised by the work, not from this screen.",
-      rowKey: (r, i) => String(r["task_id"] ?? i),
-      columns: [
-        { header: "Kind", cell: "kind" },
-        { header: "Product", cell: "item" },
-        { header: "From", cell: "from_location" },
-        { header: "To", cell: "to_location" },
-        { header: "Quantity", cell: "quantity", numeric: true },
-        { header: "Done", cell: "quantity_done", numeric: true },
-        pill("status"),
-      ],
-    },
     {
       title: "Expiry horizon",
       description: "Batches reaching their expiry inside thirty days.",
@@ -1139,14 +1148,13 @@ export const INVENTORY: ModuleDef = {
       title: "Stock health",
       description: "Cover against policy, by product and site.",
       fn: "erp_stock_health",
+      siteArg: "p_site_id",
       empty:
         "Nothing is on hand yet. Receipting a purchase order is what first puts stock into an organisation.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_id"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
-        // erp.stock_health_report() carries site_id and no site code; the gap is
-        // in erp_meta.app_column_allowance rather than filled with a uuid.
         { header: "Site", cell: "site_code" },
         { header: "On hand", cell: "on_hand", numeric: true },
         { header: "Available", cell: "available", numeric: true },
@@ -1158,6 +1166,7 @@ export const INVENTORY: ModuleDef = {
       title: "Valuation",
       description: "Cost basis by product and site, in minor units.",
       fn: "erp_stock_valuation",
+      siteArg: "p_site_id",
       empty: "Nothing to value yet. Stock is valued from the moment it is received.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
@@ -1173,11 +1182,11 @@ export const INVENTORY: ModuleDef = {
       title: "Ageing",
       description: "How long stock has been standing still.",
       fn: "erp_stock_ageing",
+      siteArg: "p_site_id",
       empty: "No aged stock. Nothing has been on hand long enough to fall into an age band.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
-        // As on Stock health: erp.stock_ageing_report() has site_id and no code.
         { header: "Site", cell: "site_code" },
         { header: "Band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -1204,6 +1213,7 @@ export const INVENTORY: ModuleDef = {
       title: "Count accuracy",
       description: "How close the counts came, by programme.",
       fn: "erp_count_accuracy",
+      siteArg: "p_site_id",
       empty: "No counts posted yet, so accuracy cannot be stated.",
       rowKey: (r, i) => String(r["programme_code"] ?? i),
       columns: [
@@ -1215,6 +1225,78 @@ export const INVENTORY: ModuleDef = {
     },
   ],
 };
+
+/**
+ * The three verbs the period close actually has.
+ *
+ * Declared once and offered in two places: the finance module page, where they
+ * sit among everything else finance can do, and /finance/close, which is the
+ * screen a person opens at month end and where they are the only verbs that
+ * matter. Reopening a period and closing a fiscal year stay on the module page
+ * — neither is part of working a close, and the close screen is the one screen
+ * in finance that should carry nothing it does not need.
+ */
+export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
+  {
+    label: "Open a period close",
+    permission: "finance.close_period",
+    fn: "erp_open_period_close",
+    fields: [
+      pickFrom(
+        "erp_fiscal_periods",
+        "fiscal_period_id",
+        ["code", "status"],
+        "p_fiscal_period_id",
+        "Period",
+      ),
+    ],
+    invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_close_checklist"],
+  },
+  {
+    label: "Complete a close task",
+    permission: "finance.close_period",
+    fn: "erp_complete_close_task",
+    fields: [
+      pickFrom(
+        "erp_close_tasks",
+        "task_id",
+        ["period", "code", "status"],
+        "p_task_id",
+        "Close task",
+      ),
+      {
+        kind: "text",
+        name: "p_waiver_reason",
+        label: "Waiver reason",
+        placeholder: "Why the task is being passed without being done",
+        hint: "Only needed when skipping the task rather than completing it.",
+      },
+    ],
+    invalidates: ["erp_close_status", "erp_close_checklist", "erp_book_ties"],
+  },
+  {
+    label: "Close a period",
+    description:
+      "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
+    permission: "finance.close_period",
+    fn: "erp_close_period",
+    fields: [
+      pickFrom(
+        "erp_fiscal_periods",
+        "fiscal_period_id",
+        ["code", "status"],
+        "p_fiscal_period_id",
+        "Period",
+      ),
+    ],
+    invalidates: [
+      "erp_fiscal_periods",
+      "erp_close_status",
+      "erp_close_checklist",
+      "erp_trial_balance",
+    ],
+  },
+];
 
 export const FINANCE: ModuleDef = {
   flow: {
@@ -1566,60 +1648,7 @@ export const FINANCE: ModuleDef = {
       ],
       invalidates: ["erp_settlement_statements", "erp_receivables_ageing", "erp_trial_balance"],
     },
-    {
-      label: "Open a period close",
-      permission: "finance.close_period",
-      fn: "erp_open_period_close",
-      fields: [
-        pickFrom(
-          "erp_fiscal_periods",
-          "fiscal_period_id",
-          ["code", "status"],
-          "p_fiscal_period_id",
-          "Period",
-        ),
-      ],
-      invalidates: ["erp_fiscal_periods", "erp_close_status"],
-    },
-    {
-      label: "Complete a close task",
-      permission: "finance.close_period",
-      fn: "erp_complete_close_task",
-      fields: [
-        pickFrom(
-          "erp_close_tasks",
-          "task_id",
-          ["period", "code", "status"],
-          "p_task_id",
-          "Close task",
-        ),
-        {
-          kind: "text",
-          name: "p_waiver_reason",
-          label: "Waiver reason",
-          placeholder: "Why the task is being passed without being done",
-          hint: "Only needed when skipping the task rather than completing it.",
-        },
-      ],
-      invalidates: ["erp_close_status"],
-    },
-    {
-      label: "Close a period",
-      description:
-        "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
-      permission: "finance.close_period",
-      fn: "erp_close_period",
-      fields: [
-        pickFrom(
-          "erp_fiscal_periods",
-          "fiscal_period_id",
-          ["code", "status"],
-          "p_fiscal_period_id",
-          "Period",
-        ),
-      ],
-      invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_trial_balance"],
-    },
+    ...PERIOD_CLOSE_ACTIONS,
     {
       label: "Reopen a period",
       permission: "finance.reopen_period",
@@ -3675,7 +3704,8 @@ export const LOGISTICS: ModuleDef = {
   path: "/logistics",
   titleKey: "module.logistics",
   title: "Despatch",
-  blurb: "Shipments, carrier bookings and delivery performance, with cost landing on stock.",
+  blurb:
+    "Getting what has been picked out of the door and proving it arrived, with the carrier's cost landing on the stock it carried.",
   permission: "logistics.read",
   group: "move",
   actions: [
@@ -3863,26 +3893,13 @@ export const LOGISTICS: ModuleDef = {
     value: (r) => num(r["otif_pct"]),
     unit: "%",
   },
-  worklists: [
-    {
-      title: "Shipments",
-      description: "Planned and despatched loads.",
-      fn: "erp_shipments",
-      empty:
-        "No shipments planned. A shipment is planned against confirmed sales deliveries, so there has to be a sales order first.",
-      emptyAction: { label: "Open Sales", to: "/sales" },
-      rowKey: (r, i) => String(r["shipment_id"] ?? i),
-      columns: [
-        { header: "Reference", cell: "reference" },
-        { header: "Carrier", cell: "carrier" },
-        { header: "Service", cell: "service_code" },
-        date("Planned", "planned_despatch"),
-        date("Actual", "actual_despatch"),
-        { header: "Tracking", cell: "tracking_reference" },
-        pill("status"),
-      ],
-    },
-  ],
+  // A Shipments table stood here reading erp_shipments — the same door three of
+  // the four steps above already list, and the only door this module has. It
+  // showed seven columns of every shipment; the steps show the same rows with
+  // search, paging and Show finished, and the panel beside them shows the
+  // chosen shipment's every field, the two arrival dates and the freight cost
+  // included, which the table left out.
+  worklists: [],
   reports: [
     {
       title: "Delivery performance",
@@ -4483,6 +4500,24 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "What the period made and what the company is worth, read from the journals purchases, stock and invoices already posted.",
     permission: "finance.read",
+    group: "settle",
+  },
+  {
+    path: "/finance/close",
+    titleKey: "nav.finance_close",
+    title: "Closing the month",
+    blurb:
+      "The checklist that has to be true before the books are closed: every task, who did it, and what the close is waiting for.",
+    permission: ["finance.close_period", "finance.read"],
+    group: "settle",
+  },
+  {
+    path: "/finance/reconciliation",
+    titleKey: "nav.finance_reconciliation",
+    title: "Do the books tie",
+    blurb:
+      "The trial balance, the ageings against their control accounts, the subledgers and the stock valuation — checked against the ledger now, for this organisation.",
+    permission: ["finance.read", "finance.close_period"],
     group: "settle",
   },
   {
