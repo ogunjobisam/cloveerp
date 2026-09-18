@@ -19,7 +19,7 @@ set lock_timeout = '30s';
 set statement_timeout = 0;
 
 -- =============================================================================
--- 20260920210000  The demonstration is a going concern
+-- 20260920220000  The demonstration is a going concern
 -- -----------------------------------------------------------------------------
 -- Walked live on 18 September 2026, the demonstration organisation reads as a
 -- company that stopped trading in the spring and never collected, never paid
@@ -113,6 +113,15 @@ set statement_timeout = 0;
 -- ticked past, so every month either passes on the demonstration's own figures
 -- or says which figure it failed on. Both ledgers, because a period is a
 -- period; 64 of them at ~110 ms of assertions each.
+--
+-- ── AND THEN IT READS ITS OWN WORK BACK ──────────────────────────────────────
+--
+-- Section 4 asks public.erp_receivables_ageing(), public.erp_dunning_worklist(),
+-- public.erp_grni() and public.erp_fiscal_periods() — the four doors the tiles
+-- on /finance, /sales and /procurement call — and writes what they answer into
+-- the deploy's log. The demonstration organisation exists only where the
+-- deploy runs, so this is the only place the result of this file can be read;
+-- a build from an empty database has nothing to read it from.
 --
 -- ── WHY A REFUSAL HERE WARNS AND DOES NOT FAIL ───────────────────────────────
 --
@@ -565,7 +574,102 @@ $close$;
 select set_config('request.jwt.claims', '', true);
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 4. The generators, then the assertions
+-- 4. What the screens now read
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Through the doors the tiles themselves call, so the deploy's log carries the
+-- figures a person would see rather than a restatement of them. Nothing here
+-- writes: every door below is STABLE. This is the only place the result of
+-- this file can be read from, because the demonstration organisation exists
+-- only where the deploy runs.
+
+do $report$
+declare
+  v_needs  constant text[] := array[
+    'master_data.write', 'administration.configure', 'administration.promote',
+    'finance.post', 'finance.close_period', 'procurement.match'];
+  t        record;
+  v_admin  uuid;
+  v_ageing jsonb;
+  v_grni   jsonb;
+  v_owed   bigint;
+  v_late   bigint;
+begin
+  for t in select tn.id, tn.code from erp.tenant tn
+            where tn.code like 'demo-%'
+              and tn.status = 'active'::erp.tenant_status
+            order by tn.code
+  loop
+    begin
+      v_admin := null;
+
+      select u.auth_user_id into v_admin
+        from erp.app_user u
+       where u.tenant_id = t.id
+         and u.kind = 'person'::erp.principal_kind
+         and u.status = 'active'::erp.principal_status
+         and u.auth_user_id is not null
+         and (select count(distinct rp.permission_code)
+                from erp.user_role ur
+                join erp.role r
+                  on r.tenant_id = ur.tenant_id and r.id = ur.role_id
+                 and r.status = 'active'::erp.record_status
+                join erp.role_permission rp
+                  on rp.tenant_id = ur.tenant_id and rp.role_id = ur.role_id
+               where ur.tenant_id = u.tenant_id
+                 and ur.app_user_id = u.id
+                 and (ur.valid_from is null or ur.valid_from <= current_date)
+                 and (ur.valid_to is null or ur.valid_to >= current_date)
+                 and rp.permission_code = any (v_needs)) = array_length(v_needs, 1)
+       order by u.created_at, u.id
+       limit 1;
+
+      if v_admin is null then
+        continue;
+      end if;
+
+      perform set_config('request.jwt.claims',
+                         json_build_object('sub', v_admin)::text, true);
+
+      if erp.current_tenant_id() is distinct from t.id then
+        continue;
+      end if;
+
+      v_ageing := public.erp_receivables_ageing(null);
+      v_grni   := public.erp_grni();
+
+      select coalesce(sum((e ->> 'total_minor')::bigint), 0),
+             coalesce(sum((e ->> 'days_61_90')::bigint
+                          + (e ->> 'days_over_90')::bigint), 0)
+        into v_owed, v_late
+        from jsonb_array_elements(v_ageing) e;
+
+      raise notice
+        'demonstration %: receivables % over % customer(s), % of it past sixty days; % customer(s) in dunning; % receipt(s) not invoiced, oldest % day(s); % of % period(s) open',
+        t.code,
+        to_char(v_owed / 100.0, 'FM999G999G990D00'),
+        jsonb_array_length(v_ageing),
+        to_char(v_late / 100.0, 'FM999G999G990D00'),
+        jsonb_array_length(public.erp_dunning_worklist()),
+        jsonb_array_length(v_grni),
+        coalesce((select max((e ->> 'age_days')::integer)
+                    from jsonb_array_elements(v_grni) e), 0),
+        (select count(*) from jsonb_array_elements(public.erp_fiscal_periods()) e
+          where e ->> 'status' = 'open'),
+        jsonb_array_length(public.erp_fiscal_periods());
+
+    exception when others then
+      raise warning 'demonstration %: its figures could not be read back — %',
+        t.code, sqlerrm;
+    end;
+  end loop;
+end
+$report$;
+
+select set_config('request.jwt.claims', '', true);
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 5. The generators, then the assertions
 -- ═════════════════════════════════════════════════════════════════════════════
 
 select erp.apply_row_security();
