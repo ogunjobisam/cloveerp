@@ -29,7 +29,8 @@ import {
   type RowSeed,
 } from "../../lib/dependent-options";
 import { useT } from "../../lib/i18n";
-import { minorUnitsOf, toMinor, type Currency } from "../../lib/money";
+import { priceLookupArgs, resolvedPrice, type ResolvedPrice } from "../../lib/line-price";
+import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { permissionName } from "../../lib/permission-name";
 import { actionOutcome, documentOutcome, planningOutcome } from "../../lib/plain-words";
 import { useCurrencies } from "./currencies";
@@ -340,6 +341,45 @@ export type RowColumn = {
    * the person typed is never overwritten — see `pickIntoRow`.
    */
   fillFrom?: { column: string; key: string };
+  /**
+   * The agreed price, read from the catalogue while the line is being typed.
+   *
+   * The form promises that "a line left without a price takes the agreed price
+   * for that partner and product". The database does exactly that. The form did
+   * not, so the running total counted a blank price as nought and the record
+   * that came back was worth more than the form said it would be — and, when
+   * there was no agreed price, the line was quietly written at nothing.
+   *
+   * So the form asks the same question the database is about to ask: once the
+   * row names a product and the form names a partner, the price the database
+   * would use is shown, counted in the total, and — when the catalogue has
+   * nothing — said so in words on the line.
+   *
+   * It is never written into the field. A price nobody typed stays untyped, and
+   * the database resolves it on the way in, so there is one answer and it comes
+   * from one place.
+   */
+  priceFrom?: {
+    /** The door that answers. */
+    fn: string;
+    /** Each argument, from a column of the row or, prefixed `form.`, a field of the form. */
+    args: Record<string, string>;
+    /**
+     * What an argument falls back to when the form does not ask it.
+     *
+     * The site is the case: the form only shows a site picker when the shell's
+     * scope has not already answered it, and the answer it sends is the scope's.
+     * The question asked here has to carry the same site, or a site price would
+     * show one figure and the record come back with another.
+     */
+    fixed?: Record<string, string>;
+    /** The arguments that must be answered before there is a question worth asking. */
+    needs: string[];
+    /** Where the answer holds the price, in minor units. */
+    amount: string;
+    /** Where the answer says why there is none. */
+    note?: string;
+  };
 };
 
 /**
@@ -670,6 +710,36 @@ function RowCell({
  * as the header, so raising an order is one press rather than one press and
  * then a visit to the document to price each line.
  */
+/**
+ * The price the database is about to use, for every line being typed.
+ *
+ * One hook over all the rows rather than a component per row, so a line editor
+ * with five lines asks five questions and not five renders' worth of them. A row
+ * that does not yet name what it needs asks nothing.
+ */
+function useRowPrices(
+  column: RowColumn | undefined,
+  rows: Record<string, string>[],
+  formValues: Record<string, string>,
+): ResolvedPrice[] {
+  const spec = column?.priceFrom;
+  const asked = rows.map((row) => priceLookupArgs(spec, row, formValues));
+
+  const results = useQueries({
+    queries: asked.map((args) => ({
+      queryKey: [spec?.fn ?? "no-price", args ?? {}],
+      queryFn: () => callErp<Record<string, unknown>>(spec!.fn, args ?? {}),
+      enabled: Boolean(spec) && args !== null,
+    })),
+  });
+
+  return results.map((r, i) =>
+    asked[i] === null || !spec
+      ? { minor: null, note: null }
+      : resolvedPrice(r.data, spec.amount, spec.note, column?.currency),
+  );
+}
+
 function RowsField({
   field,
   value,
@@ -689,13 +759,33 @@ function RowsField({
 }) {
   const { ui } = useT();
   const total = field.total;
+  const priced = field.columns.find((c) => c.priceFrom);
+  const prices = useRowPrices(priced, value, formValues ?? {});
+
+  // A blank price on a line is not nought: the database fills it from the
+  // catalogue. The total counts what the database is about to write, so the
+  // figure the form shows is the figure the record comes back with.
+  const priceOf = (row: Record<string, string>, index: number): number | null => {
+    if (!total) return null;
+    const typed = row[total.price] ?? "";
+    if (typed !== "") return Number(typed) || 0;
+    const found = priced?.name === total.price ? (prices[index]?.minor ?? null) : null;
+    return found === null ? null : found / 10 ** minorUnitsOf(currencies, total.currency);
+  };
+
   const sum = total
     ? value.reduce(
-        (acc, row) =>
-          acc + (Number(row[total.quantity] ?? 0) || 0) * (Number(row[total.price] ?? 0) || 0),
+        (acc, row, i) => acc + (Number(row[total.quantity] ?? 0) || 0) * (priceOf(row, i) ?? 0),
         0,
       )
     : 0;
+  // A line the database cannot price is a line the total cannot state, and a
+  // total that quietly leaves one out is worse than one that says it has.
+  const unpriceable =
+    total && priced?.name === total.price
+      ? value.filter((row, i) => (row[total.price] ?? "") === "" && prices[i]?.minor === null)
+          .length
+      : 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -738,6 +828,24 @@ function RowsField({
                   )
                 }
               />
+              {/* What the database will use, said on the line rather than
+                  discovered in the record afterwards. */}
+              {c.priceFrom && (row[c.name] ?? "") === "" && prices[index] ? (
+                prices[index].minor !== null ? (
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatMinor(
+                      prices[index].minor,
+                      c.currency ?? "GBP",
+                      minorUnitsOf(currencies, c.currency ?? "GBP"),
+                    )}
+                    {prices[index].note ? ` — ${prices[index].note}` : " agreed"}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-destructive">
+                    {prices[index].note ?? "No agreed price. Put one on this line."}
+                  </span>
+                )
+              ) : null}
             </div>
           ))}
           <ActionButton
@@ -758,6 +866,11 @@ function RowsField({
             <span className="font-medium tabular-nums">
               {total.currency} {sum.toFixed(minorUnitsOf(currencies, total.currency) === 0 ? 0 : 2)}
             </span>
+            {unpriceable > 0 ? (
+              <span className="text-muted-foreground">
+                {` — ${unpriceable === 1 ? "one line has" : `${unpriceable} lines have`} no price yet`}
+              </span>
+            ) : null}
           </span>
         ) : null}
       </div>
