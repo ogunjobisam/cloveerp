@@ -1,20 +1,39 @@
 set lock_timeout = '30s';
 
--- This database's configuration file sets statement_timeout to two minutes,
--- and the work below is more than two minutes on a demonstration five months
--- behind. Two things would go wrong under it. A cancellation is
--- query_canceled, which `exception when others` deliberately does not catch,
--- so the timeout would abort the migration and take the deploy down — the one
--- outcome this file is written to avoid. And erp.seed_demo_history() paces
--- itself off statement_timeout, starting no new day once a quarter of it has
--- gone; measured against a whole DO statement rather than one call, that would
--- leave every call after the first thirty seconds building a single day.
--- Lifting it here makes each call build its five days and lets a refusal be
--- caught and reported instead of ending the run. The work is bounded — about
--- thirty calls of five days, then the receipts, then sixty-four periods at
--- roughly a tenth of a second each — and lock_timeout above still stops it
--- waiting on anybody. RESET at the foot puts the configured two minutes back
--- whether or not the replay wrapped this file in a transaction of its own.
+-- EDITED IN PLACE ON 18 SEPTEMBER, AFTER IT TOOK THE DEPLOY DOWN. What this
+-- file originally did, it no longer does: it used to bring every demonstration
+-- organisation up to date in its own transaction and then re-run the
+-- generators, and on the first real deploy the replay stopped here with
+--
+--   ERROR: cannot ALTER TABLE "journal" because it has pending trigger events
+--
+-- erp.apply_row_security() issues ALTER TABLE on erp.journal, and PostgreSQL
+-- refuses that while the table carries deferred trigger events from writes
+-- earlier in the same transaction — which thousands of new journal rows leave.
+-- The catching up now runs from the deploy, outside any migration transaction,
+-- and what is left here is a routine, a refusal and a suite: a schema change
+-- like any other. See 20260920300000, which is the repair this file is
+-- registered against in supabase/ci/migrations_edited.txt.
+--
+-- WHY THE SUITE DID NOT CATCH IT, WHICH IS THE PART WORTH KEEPING. The ten
+-- cases below prove the routine, and they proved it correctly: they stand up an
+-- organisation, run erp.demonstration_catch_up() on it and hold it to what
+-- changed. What no case could see is the shape of the FILE — writes, and then
+-- the generators, in one transaction — because a suite runs its fixture inside
+-- a subtransaction it rolls back, and nothing runs the generators after it. On
+-- an empty build there is no organisation whose name begins 'demo-', so the
+-- catching up wrote nothing, no trigger events were pending, and the ALTER
+-- succeeded. The routine was proved; the migration was not. A suite proves what
+-- a routine does. It does not prove what the file around it does, and the two
+-- are different claims.
+--
+-- The timeout below is still lifted, for the suite rather than for the catching
+-- up: it builds a fixture organisation through erp.seed_demo_history(), which
+-- paces itself off statement_timeout and would otherwise build a single day per
+-- call, and the whole suite took 46 s on the CI runner against a configured
+-- limit of two minutes. A cancellation is query_canceled, which `exception when
+-- others` does not catch, so a suite that grew past the limit would abort the
+-- replay rather than fail a case. RESET at the foot puts the limit back.
 set statement_timeout = 0;
 
 -- =============================================================================
@@ -69,31 +88,38 @@ set statement_timeout = 0;
 -- this is not one of them, which is why supabase/ci/close_month.sh has to
 -- install it before it can close the month the build seeds.
 --
--- ── ONE ROUTINE, BECAUSE A SUITE HAS TO BE ABLE TO RUN IT ────────────────────
+-- ── ONE ROUTINE, AND IT IS NOT RUN FROM HERE ─────────────────────────────────
 --
--- The work is erp.demonstration_catch_up(), not a block of this file, and that
--- is the whole point of the shape. A migration that did this inline would be
--- proved by the build only in the branch where it finds nothing: CI creates its
--- demonstration organisation (supabase/ci/seed_demo.sql) AFTER every migration
--- has applied, and its code is ci-demo, so nothing here would match. The build
--- would have proved that the code does not crash when there is nothing to do,
--- and production would have been the first database ever to run the other
--- branch. That is the shape of the two deploys lost this week: a check correct
--- and cheap on an empty build, wrong on a live one, because CI and production
--- ran different branches of the same code.
+-- The work is erp.demonstration_catch_up(), and it is called by the deploy
+-- (20260920300000), not by this file. Two reasons, and the second only became
+-- visible after the first deploy that tried it.
 --
--- So the behaviour lives in a routine, and erp_test.demonstration_catch_up_suite()
--- stands up an organisation with the shape this acts on — a demonstration that
--- stopped trading three weeks ago, owing money that fell due nearly five months ago,
--- with receipts nobody has billed and no month ever closed — runs the routine
--- on it, and holds it to what changed: that it traded up to today, that the
--- debt it was carrying was collected while what it is owed is not nothing, that
--- the accrual moved to the creditors, that every month before this one is closed
--- with nothing waived and this one is not, that the four ties still hold, and
--- that running it a second time changes nothing. It also holds the two guards:
--- the routine refuses an organisation that is not a demonstration, and refuses
--- a demonstration whose environment is live. Ten cases, pinned at both ends,
--- undone by CLOVEERP_SUITE_UNDO so it leaves nothing behind.
+-- A migration that did this inline would be proved by the build only in the
+-- branch where it finds nothing: the build creates its demonstration
+-- organisation (supabase/ci/seed_demo.sql) AFTER every migration has applied,
+-- and calls it ci-demo, so nothing here would match 'demo-%'. The build would
+-- have proved that the code does not crash when there is nothing to do, and
+-- production would have been the first database ever to run the other branch.
+--
+-- And a migration is one transaction. Bringing a demonstration five months
+-- forward writes thousands of journal rows, and a transaction holding those
+-- open cannot then alter the table they are in — which is what the generators
+-- at the foot of every migration do. Nothing about that is specific to this
+-- file: writing a demonstration's recent history is not a schema change and
+-- does not belong in a schema change's transaction.
+--
+-- So erp_test.demonstration_catch_up_suite() stands up an organisation with the
+-- shape the routine acts on — a demonstration that stopped trading three weeks
+-- ago, owing money that fell due nearly five months ago, with receipts nobody
+-- has billed and no month ever closed — runs the routine on it, and holds it to
+-- what changed: that it traded up to today, that the debt it was carrying was
+-- collected while what it is owed is not nothing, that the accrual moved to the
+-- creditors, that every month before this one is closed with nothing waived and
+-- this one is not, that the four ties still hold, and that running it a second
+-- time changes nothing. It also holds the two guards: the routine refuses an
+-- organisation that is not a demonstration, and refuses a demonstration whose
+-- environment is live. Ten cases, pinned at both ends, undone by
+-- CLOVEERP_SUITE_UNDO so it leaves nothing behind.
 --
 -- ── IT RUNS TWICE WITHOUT DOING IT TWICE ─────────────────────────────────────
 --
@@ -108,26 +134,25 @@ set statement_timeout = 0;
 -- The suite's ninth case is that second run, and it asserts the counts are
 -- zero and nothing moved.
 --
--- ── WHY A REFUSAL HERE WARNS AND DOES NOT FAIL ───────────────────────────────
+-- ── WHY A REFUSAL WARNS AND DOES NOT FAIL ────────────────────────────────────
 --
 -- Inside the routine each of the three steps is wrapped, so a refusal is
 -- recorded in the report it returns and that step's work rolls back to where it
--- started; at the end of this file each organisation is wrapped again, so a
--- refusal is a warning naming the organisation and carrying the database's own
--- message. None of this is an invariant of the product: it is hygiene on one
+-- started, and each step asserts the ties itself before it returns, so a step
+-- that would leave the books disagreeing takes none of its own work with it.
+-- None of this is an invariant of the product: it is hygiene on one
 -- demonstration organisation's data. A red deploy blocks every other branch,
 -- and blocking a release because a demonstration month would not close would be
 -- the wrong trade every time. What must not happen is a refusal nobody sees, so
--- nothing is caught silently, and each step asserts the ties itself before it
--- returns, so a step that would leave the books disagreeing takes none of its
--- own work with it.
+-- nothing is caught silently — every note the routine returns is printed by the
+-- step that calls it.
 --
 -- ── DEMONSTRATION ORGANISATIONS ONLY ─────────────────────────────────────────
 --
 -- Twice over. The routine refuses any organisation whose code does not begin
--- 'demo-' or whose environment is live, and the loop at the foot of this file
--- only ever offers it organisations of that shape. Nothing falls back to "the
--- only organisation" or "the first organisation". Clove Foods and the platform
+-- 'demo-' or whose environment is live, and the caller in 20260920300000 only
+-- ever offers it organisations of that shape. Nothing falls back to "the only
+-- organisation" or "the first organisation". Clove Foods and the platform
 -- organisation are neither named nor matched.
 --
 -- Dates come from erp.local_today() (20260920110000): the bill is dated where
@@ -755,195 +780,7 @@ $$;
 revoke all on function erp_test.assert_demonstration_catch_up_suite() from public, anon;
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 3. And then it is run, on the demonstrations this database has
--- ═════════════════════════════════════════════════════════════════════════════
-
-do $catch_up$
-declare
-  -- What the routine needs of the person it acts as. A demonstration whose
-  -- administrator does not hold all of these is left alone rather than acted on
-  -- by the build role, which holds nothing and would prove nothing.
-  v_needs  constant text[] := array[
-    'master_data.write', 'administration.configure', 'administration.promote',
-    'finance.post', 'finance.close_period', 'procurement.match'];
-  t        record;
-  v_admin  uuid;
-  v_report jsonb;
-  n        jsonb;
-  v_orgs   integer := 0;
-begin
-  for t in select tn.id, tn.code from erp.tenant tn
-            where tn.code like 'demo-%'
-              and tn.status = 'active'::erp.tenant_status
-            order by tn.code
-  loop
-    begin
-      v_admin := null;
-
-      select u.auth_user_id into v_admin
-        from erp.app_user u
-       where u.tenant_id = t.id
-         and u.kind = 'person'::erp.principal_kind
-         and u.status = 'active'::erp.principal_status
-         and u.auth_user_id is not null
-         and (select count(distinct rp.permission_code)
-                from erp.user_role ur
-                join erp.role r
-                  on r.tenant_id = ur.tenant_id and r.id = ur.role_id
-                 and r.status = 'active'::erp.record_status
-                join erp.role_permission rp
-                  on rp.tenant_id = ur.tenant_id and rp.role_id = ur.role_id
-               where ur.tenant_id = u.tenant_id
-                 and ur.app_user_id = u.id
-                 and (ur.valid_from is null or ur.valid_from <= current_date)
-                 and (ur.valid_to is null or ur.valid_to >= current_date)
-                 and rp.permission_code = any (v_needs)) = array_length(v_needs, 1)
-       order by u.created_at, u.id
-       limit 1;
-
-      if v_admin is null then
-        raise warning 'demonstration %: nobody signed in there holds all of %, so it was left as it was',
-          t.code, array_to_string(v_needs, ', ');
-        continue;
-      end if;
-
-      -- As that administrator, in that organisation, transaction-local, the way
-      -- supabase/ci/close_month.sh and supabase/ci/seed_demo.sql do it.
-      perform set_config('request.jwt.claims',
-                         json_build_object('sub', v_admin)::text, true);
-
-      -- The context that administrator actually resolves to is the one this
-      -- writes in. Somebody who belongs to two organisations would otherwise
-      -- carry this work into whichever one the database picked, and a
-      -- demonstration repair has no business anywhere it was not aimed.
-      if erp.current_tenant_id() is distinct from t.id then
-        raise warning 'demonstration %: signing in as its administrator resolves to another organisation, so nothing was done there', t.code;
-        continue;
-      end if;
-
-      v_report := erp.demonstration_catch_up();
-      v_orgs := v_orgs + 1;
-
-      raise notice 'demonstration %: traded % to %, % document(s) in % call(s); % supplier bill(s) raised, % receipt(s) left; % month(s) closed, % left open',
-        t.code, v_report ->> 'traded_from', v_report ->> 'traded_to',
-        v_report ->> 'documents_built', v_report ->> 'calls',
-        v_report ->> 'bills_raised', v_report ->> 'receipts_unbilled',
-        v_report ->> 'periods_closed', v_report ->> 'periods_left_open';
-
-      -- Nothing the routine could not do is left unsaid.
-      for n in select jsonb_array_elements(v_report -> 'notes') loop
-        raise warning 'demonstration %: %', t.code, n #>> '{}';
-      end loop;
-
-    exception when others then
-      raise warning 'demonstration %: it was left as it was, because bringing it up to date refused — %',
-        t.code, sqlerrm;
-    end;
-  end loop;
-
-  if v_orgs = 0 then
-    raise notice 'no demonstration organisation was brought up to date';
-  end if;
-end
-$catch_up$;
-
-select set_config('request.jwt.claims', '', true);
-
--- ═════════════════════════════════════════════════════════════════════════════
--- 4. What the screens now read
--- ═════════════════════════════════════════════════════════════════════════════
---
--- Through the doors the tiles themselves call, so the deploy's log carries the
--- figures a person would see rather than a restatement of them. Nothing here
--- writes: every door below is STABLE.
-
-do $report$
-declare
-  v_needs  constant text[] := array[
-    'master_data.write', 'administration.configure', 'administration.promote',
-    'finance.post', 'finance.close_period', 'procurement.match'];
-  t        record;
-  v_admin  uuid;
-  v_ageing jsonb;
-  v_grni   jsonb;
-  v_owed   bigint;
-  v_late   bigint;
-begin
-  for t in select tn.id, tn.code from erp.tenant tn
-            where tn.code like 'demo-%'
-              and tn.status = 'active'::erp.tenant_status
-            order by tn.code
-  loop
-    begin
-      v_admin := null;
-
-      select u.auth_user_id into v_admin
-        from erp.app_user u
-       where u.tenant_id = t.id
-         and u.kind = 'person'::erp.principal_kind
-         and u.status = 'active'::erp.principal_status
-         and u.auth_user_id is not null
-         and (select count(distinct rp.permission_code)
-                from erp.user_role ur
-                join erp.role r
-                  on r.tenant_id = ur.tenant_id and r.id = ur.role_id
-                 and r.status = 'active'::erp.record_status
-                join erp.role_permission rp
-                  on rp.tenant_id = ur.tenant_id and rp.role_id = ur.role_id
-               where ur.tenant_id = u.tenant_id
-                 and ur.app_user_id = u.id
-                 and (ur.valid_from is null or ur.valid_from <= current_date)
-                 and (ur.valid_to is null or ur.valid_to >= current_date)
-                 and rp.permission_code = any (v_needs)) = array_length(v_needs, 1)
-       order by u.created_at, u.id
-       limit 1;
-
-      if v_admin is null then
-        continue;
-      end if;
-
-      perform set_config('request.jwt.claims',
-                         json_build_object('sub', v_admin)::text, true);
-
-      if erp.current_tenant_id() is distinct from t.id then
-        continue;
-      end if;
-
-      v_ageing := public.erp_receivables_ageing(null);
-      v_grni   := public.erp_grni();
-
-      select coalesce(sum((e ->> 'total_minor')::bigint), 0),
-             coalesce(sum((e ->> 'days_61_90')::bigint
-                          + (e ->> 'days_over_90')::bigint), 0)
-        into v_owed, v_late
-        from jsonb_array_elements(v_ageing) e;
-
-      raise notice
-        'demonstration %: receivables % over % customer(s), % of it past sixty days; % customer(s) in dunning; % receipt(s) not invoiced, oldest % day(s); % of % period(s) open',
-        t.code,
-        to_char(v_owed / 100.0, 'FM999G999G990D00'),
-        jsonb_array_length(v_ageing),
-        to_char(v_late / 100.0, 'FM999G999G990D00'),
-        jsonb_array_length(public.erp_dunning_worklist()),
-        jsonb_array_length(v_grni),
-        coalesce((select max((e ->> 'age_days')::integer)
-                    from jsonb_array_elements(v_grni) e), 0),
-        (select count(*) from jsonb_array_elements(public.erp_fiscal_periods()) e
-          where e ->> 'status' = 'open'),
-        jsonb_array_length(public.erp_fiscal_periods());
-
-    exception when others then
-      raise warning 'demonstration %: its figures could not be read back — %',
-        t.code, sqlerrm;
-    end;
-  end loop;
-end
-$report$;
-
-select set_config('request.jwt.claims', '', true);
-
--- ═════════════════════════════════════════════════════════════════════════════
--- 5. The generators, then the assertions
+-- 3. The generators, then the assertions
 -- ═════════════════════════════════════════════════════════════════════════════
 
 select erp.apply_row_security();
@@ -956,12 +793,10 @@ select erp.apply_execute_grants();
 
 -- ── Proved ───────────────────────────────────────────────────────────────────
 --
--- The suite first, because it is the only thing on an empty build that runs the
--- routine at all: this database has no organisation whose name begins 'demo-'
--- until supabase/ci/seed_demo.sql makes one, and it makes ci-demo after every
--- migration has applied. Then the whole database, over every organisation and
--- not only the one this touched, which is the assertion the deploy's own proof
--- step would fail on if this were wrong.
+-- Nothing here writes a row of anybody's ledger, so the generators run against
+-- the same table they always do. The suite builds and destroys an organisation
+-- of its own, which is why it can prove the routine on a build that has no
+-- demonstration in it at all.
 
 select erp_test.assert_demonstration_catch_up_suite();
 
