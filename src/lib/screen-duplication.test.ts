@@ -97,13 +97,4 @@ describe("the two screens this pass cut", () => {
     expect(despatch.worklists).toEqual([]);
     expect(stageDoors(despatch)).toContain("erp_shipments");
   });
-
-  test("both say what their action bar holds, rather than that something is in it", () => {
-    for (const path of ["/inventory", "/logistics"]) {
-      const bar = moduleAt(path).actionBar;
-      expect(bar?.title).toBeTruthy();
-      expect(bar?.title).not.toBe("What you can do here");
-      expect(bar?.note).toBeTruthy();
-    }
-  });
 });

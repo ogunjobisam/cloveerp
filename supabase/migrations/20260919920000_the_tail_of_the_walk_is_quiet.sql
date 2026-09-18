@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919910000  The tail of the walk is quiet
+-- 20260919920000  The tail of the walk is quiet
 -- -----------------------------------------------------------------------------
 -- The owner, on the product's own selling point: "One area I still find
 -- confusing is the UI — too much on the screens."
@@ -24,10 +24,7 @@ set lock_timeout = '30s';
 --     and Put away steps of its own chain list, one screenful higher, with
 --     search, paging and Show finished, and a panel beside them showing every
 --     column of the chosen row rather than the six a table had room for. Both
---     tables are gone. Expiry horizon is no step's list and stays. Its fifteen
---     remaining verbs — the ones unstagedActions() leaves, none of them a step
---     of the chain — now sit under a heading that says what they are instead
---     of "What you can do here".
+--     tables are gone. Expiry horizon is no step's list and stays.
 --
 --   * /logistics drew one, Shipments, reading erp_shipments: the only door the
 --     module has, and the list three of its four steps already draw. Gone, and
@@ -52,7 +49,7 @@ set lock_timeout = '30s';
 -- 1. The words on the screen
 -- ═════════════════════════════════════════════════════════════════════════════
 --
--- Eighteen. Sixteen of them supabase/ci/screen_strings.sh demands; two it
+-- Fourteen. Twelve of them supabase/ci/screen_strings.sh demands; two it
 -- cannot see, because its ui("…") harvest is line-based and those two are long
 -- enough that the formatter puts the literal on its own line. They are seeded
 -- anyway — the register's reach is the point, not the script's — and the gap
@@ -68,17 +65,9 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     -- /inventory
     ('Knowing what is on the shelf, what it is worth, and putting right where the shelf and the ledger disagree.',
      'The Stock module''s own sentence, under its title and on its tile. It replaces a list of five report names ending in how they are computed.'),
-    ('The rest of stock',
-     'The heading over the stock verbs that are not a step of the chain above them.'),
-    ('Work that sits beside the chain above rather than on it: batches and handling units, product controls and standard costs, consigned stock, counting and replenishment programmes, and the policies that decide which stock is taken first.',
-     'Said under that heading, naming what the card holds so a reader knows in one line whether their thing is in it rather than reading fifteen buttons.'),
     -- /logistics
     ('Getting what has been picked out of the door and proving it arrived, with the carrier''s cost landing on the stock it carried.',
      'The Despatch module''s own sentence. It replaces three nouns and keeps the one fact the nouns carried, that booking a shipment lands freight on stock.'),
-    ('Before the chain starts',
-     'The heading over Despatch''s single bar verb, which raises the delivery every step above it then works on.'),
-    ('A delivery has to exist before any of this can happen. Raise one here by choosing the sales order it comes from; every step after it is above.',
-     'Said under that heading. The chain''s first step already points at this verb by name; this says what it is for.'),
     -- /operations/assurance
     ('Everything reconciles.',
      'The verdict when every check ran and every one held.'),

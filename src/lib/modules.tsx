@@ -249,23 +249,6 @@ export type ModuleDef = {
   reports: Panel[];
   /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
   actions?: ActionSpec[];
-  /**
-   * What the action bar is called, and what it holds, on a module that has a
-   * chain above it.
-   *
-   * `unstagedActions()` already keeps out of the bar every verb a step of the
-   * chain carries, so what is left is the work that sits beside the chain
-   * rather than on it — and "What you can do here" says none of that. A module
-   * that names its own heading says which work that is, so a reader can tell
-   * whether their thing is in the card without reading every button on it.
-   * Left out, the bar keeps the general heading it always had.
-   *
-   * Stated as `title` and `note` inside an object rather than as
-   * `actionsTitle` and `actionsNote`, because supabase/ci/screen_strings.sh
-   * harvests this file by key name: a word declared under a key it does not
-   * know is a word no tenant can rename and the register cannot see.
-   */
-  actionBar?: { title: string; note: string };
   /** The chain of steps this module moves work along, drawn across the top. */
   flow?: FlowSpec;
   /** Reads that take arguments, so they cannot be a standing panel. */
@@ -582,14 +565,6 @@ export const INVENTORY: ModuleDef = {
     "Knowing what is on the shelf, what it is worth, and putting right where the shelf and the ledger disagree.",
   permission: "inventory.read",
   group: "move",
-  // Fifteen verbs, none of them a step of the chain above: unstagedActions()
-  // takes out the six the chain carries. Fifteen buttons under "What you can
-  // do here" is a list to be read; this says what the card holds, so a reader
-  // knows in one line whether their thing is in it.
-  actionBar: {
-    title: "The rest of stock",
-    note: "Work that sits beside the chain above rather than on it: batches and handling units, product controls and standard costs, consigned stock, counting and replenishment programmes, and the policies that decide which stock is taken first.",
-  },
   actions: [
     {
       label: "Consume consigned stock",
@@ -3669,12 +3644,6 @@ export const LOGISTICS: ModuleDef = {
     "Getting what has been picked out of the door and proving it arrived, with the carrier's cost landing on the stock it carried.",
   permission: "logistics.read",
   group: "move",
-  // One verb, and the chain's first step already points at it by name. Saying
-  // what it is for beats a heading that could be over anything.
-  actionBar: {
-    title: "Before the chain starts",
-    note: "A delivery has to exist before any of this can happen. Raise one here by choosing the sales order it comes from; every step after it is above.",
-  },
   actions: [
     DELIVER_AN_ORDER,
     {
