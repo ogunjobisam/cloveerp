@@ -159,6 +159,47 @@ else
   pass "an uncommitted migration — rule E refuses, because the verdict would be about nothing"
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# I — a version is claimed once
+#
+# Directory-level rather than per-migration, so it gets the throwaway tree the
+# rule E cases already build rather than a fixture of its own: a clean tree must
+# stay quiet, and a second file claiming a version that is already taken must be
+# refused with BOTH filenames named. Naming only one would leave whoever meets
+# it hunting for the other.
+# ─────────────────────────────────────────────────────────────────────────────
+
+cp "$TMP/supabase/migrations/20260102000000_second.sql" \
+   "$TMP/supabase/migrations/20260102000000_a_second_claim.sql"
+
+set +e
+OUT="$(cd "$TMP" && PREFLIGHT_BASE=main "$TMP/supabase/ci/preflight.sh" 2>&1)"
+CODE=$?
+set -e
+if [ "$CODE" -eq 0 ] || ! echo "$OUT" | grep -q "preflight rule I"; then
+  fail "two files, one version: rule I must refuse (exit $CODE)"
+  echo "$OUT" | sed 's/^/      /' >&2
+elif ! echo "$OUT" | grep -q "20260102000000_a_second_claim.sql" \
+  || ! echo "$OUT" | grep -q "20260102000000_second.sql"; then
+  fail "rule I refused but did not name both files, so it does not say what to move"
+  echo "$OUT" | sed 's/^/      /' >&2
+else
+  pass "two files, one version — rule I refuses, and names both claims"
+fi
+
+rm -f "$TMP/supabase/migrations/20260102000000_a_second_claim.sql"
+
+set +e
+OUT="$(cd "$TMP" && PREFLIGHT_BASE=main "$TMP/supabase/ci/preflight.sh" 2>&1)"
+CODE=$?
+set -e
+if echo "$OUT" | grep -q "preflight rule I"; then
+  fail "one file per version: rule I must stay quiet"
+  echo "$OUT" | sed 's/^/      /' >&2
+else
+  pass "one file per version — rule I says nothing"
+fi
+
 echo ""
 if [ "$FAILED" -ne 0 ]; then
   echo "$FAILED of $((PASSED + FAILED)) did not hold. A rule that has stopped firing is" >&2
