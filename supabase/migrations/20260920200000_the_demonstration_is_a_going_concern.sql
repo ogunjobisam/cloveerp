@@ -1,5 +1,23 @@
 set lock_timeout = '30s';
 
+-- This database's configuration file sets statement_timeout to two minutes,
+-- and every block below is a single statement that does more than two minutes
+-- of work on a demonstration five months behind. Two things would go wrong
+-- under it. A cancellation is query_canceled, which `exception when others`
+-- deliberately does not catch, so the timeout would abort the migration and
+-- take the deploy down — the one outcome this file is written to avoid. And
+-- erp.seed_demo_history() paces itself off statement_timeout, starting no new
+-- day once a quarter of it has gone; measured against the whole DO statement
+-- rather than one call, that would leave every call after the first thirty
+-- seconds building a single day. Lifting it for this file makes each call
+-- build its five days and lets a refusal be caught and reported instead of
+-- ending the run. The work is bounded — thirty calls of five days, then the
+-- receipts, then sixty-four periods at about a tenth of a second each — and
+-- lock_timeout above still stops it waiting on anybody. RESET at the foot puts
+-- the configured two minutes back whether or not the replay wrapped this file
+-- in a transaction of its own.
+set statement_timeout = 0;
+
 -- =============================================================================
 -- 20260920200000  The demonstration is a going concern
 -- -----------------------------------------------------------------------------
@@ -143,6 +161,7 @@ declare
   v_res    jsonb;
   v_built  integer;
   v_calls  integer;
+  v_stopped text;
   v_orgs   integer := 0;
 begin
   for t in select tn.id, tn.code from erp.tenant tn
@@ -151,6 +170,12 @@ begin
             order by tn.code
   loop
     begin
+      -- Nothing carried over from the organisation before this one: a warning
+      -- naming another demonstration's last trading day would be a lie.
+      v_admin   := null;
+      v_last    := null;
+      v_stopped := null;
+
       select u.auth_user_id into v_admin
         from erp.app_user u
        where u.tenant_id = t.id
@@ -215,17 +240,33 @@ begin
       v_built  := 0;
       v_calls  := 0;
 
+      <<catching_up>>
       while v_cursor <= current_date loop
-        v_res := erp.seed_demo_history(v_cursor, null, 1);
+        -- A slice that refuses stops the catching up where it stopped. The
+        -- days already built are days of trading that happened and each one
+        -- was a call of its own; throwing them away because the day after
+        -- them would not build would be the wrong end to give ground at.
+        begin
+          v_res := erp.seed_demo_history(v_cursor, null, 1);
+        exception when others then
+          v_stopped := format('%s would not build: %s', v_cursor, sqlerrm);
+        end;
+        exit catching_up when v_stopped is not null;
+
         v_built := v_built + coalesce((v_res ->> 'built')::integer, 0);
         v_calls := v_calls + 1;
-        exit when coalesce((v_res ->> 'done')::boolean, true);
+        exit catching_up when coalesce((v_res ->> 'done')::boolean, true);
         v_cursor := (v_res ->> 'next_from')::date;
         -- A call always advances, so this cannot spin; it is here because a
         -- loop that drives a routine on the routine's own answer should not be
         -- able to run a deploy out of its hour if that ever stops being true.
-        exit when v_calls > 500;
-      end loop;
+        exit catching_up when v_calls > 500;
+      end loop catching_up;
+
+      if v_stopped is not null then
+        raise warning 'demonstration %: it traded as far as it could and then stopped — %',
+          t.code, v_stopped;
+      end if;
 
       -- The books after the catching up, or none of it.
       perform erp.assert_stock_reconciles();
@@ -273,6 +314,8 @@ begin
             order by tn.code
   loop
     begin
+      v_admin := null;
+
       select u.auth_user_id into v_admin
         from erp.app_user u
        where u.tenant_id = t.id
@@ -409,6 +452,8 @@ begin
             order by tn.code
   loop
     begin
+      v_admin := null;
+
       select u.auth_user_id into v_admin
         from erp.app_user u
        where u.tenant_id = t.id
@@ -543,3 +588,5 @@ select erp.apply_execute_grants();
 select erp.assert_whole_database_reconciles();
 select erp.assert_isolation();
 select erp.assert_public_api_safe();
+
+reset statement_timeout;
