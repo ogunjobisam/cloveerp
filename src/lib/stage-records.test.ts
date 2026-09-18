@@ -21,6 +21,7 @@ import {
   offerFor,
   partyLabel,
   rowsAtStage,
+  stageEmptyState,
   stepsPerRow,
   settledAtStage,
   stageReadArgs,
@@ -492,6 +493,68 @@ describe("a move another document makes is never a button", () => {
         .map((c) => `${type}.${c}`);
     });
     expect(missing).toEqual([]);
+  });
+});
+
+describe("why a step is showing nothing", () => {
+  const step = {
+    noun: "document",
+    nounPlural: "documents",
+    label: "Goods receipt",
+    fedBy: "Receipts appear here once goods are received against a purchase order.",
+    toggle: "Show finished",
+  };
+
+  test("a step that has never held anything says so, and names the step before it", () => {
+    const said = stageEmptyState({ ...step, showing: 0, held: 0, finished: 0, counting: false });
+    expect(said).toContain("No documents at goods receipt yet.");
+    expect(said).toContain("Receipts appear here once goods are received");
+  });
+
+  test("a step whose records are all finished says that, and points at the toggle", () => {
+    // The reported fault: the badge read 0 and the panel said no receipts
+    // existed, while two posted ones sat on the same screen behind a tickbox.
+    const said = stageEmptyState({ ...step, showing: 0, held: 0, finished: 2, counting: false });
+    expect(said).toContain("All 2 documents");
+    expect(said).toContain("Show finished");
+    expect(said).not.toContain("yet");
+  });
+
+  test("one finished record is one, not ones", () => {
+    expect(
+      stageEmptyState({ ...step, showing: 0, held: 0, finished: 1, counting: false }),
+    ).toContain("All 1 document at goods receipt are finished");
+  });
+
+  test("the toggle is named as this step names it", () => {
+    expect(
+      stageEmptyState({
+        ...step,
+        toggle: "Show closed periods",
+        showing: 0,
+        held: 0,
+        finished: 3,
+        counting: false,
+      }),
+    ).toContain("Show closed periods");
+  });
+
+  test("nothing is claimed while the finished ones are still being counted", () => {
+    const said = stageEmptyState({ ...step, showing: 0, held: 0, finished: 0, counting: true });
+    expect(said).toBe("Nothing waiting here.");
+    expect(said).not.toContain("yet");
+  });
+
+  test("a search that matched nothing is not an empty step", () => {
+    expect(stageEmptyState({ ...step, showing: 0, held: 4, finished: 0, counting: false })).toBe(
+      "No documents match that search.",
+    );
+  });
+
+  test("a step with rows on it says nothing at all", () => {
+    expect(stageEmptyState({ ...step, showing: 2, held: 2, finished: 0, counting: false })).toBe(
+      "",
+    );
   });
 });
 
