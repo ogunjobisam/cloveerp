@@ -86,6 +86,12 @@ const CLOSE_AND_TIE: readonly Step[] = [
     leaves: "The fiscal period closed, so nothing further posts into it.",
   },
   {
+    path: "/finance/close",
+    does: "Work down the checklist the close raised: each task with its state, who completed or waived it, what it is waiting on, and whether its check would pass right now. Three of them carry a tie and cannot be waived.",
+    doors: ["erp_close_checklist", "erp_complete_close_task"],
+    leaves: "Every close task complete or waived, which is what lets the period close.",
+  },
+  {
     path: "/finance/statements",
     does: "Read the profit and loss for the month and the balance sheet as at its last day. The first tie is here: the trial balance balances.",
     doors: ["erp_trial_balance", "erp_profit_and_loss", "erp_balance_sheet"],
@@ -102,6 +108,12 @@ const CLOSE_AND_TIE: readonly Step[] = [
     does: "Reports, then the two ageings. The third and fourth ties are here: receivables against the debtors control account, payables against the creditors control account.",
     doors: ["erp_receivables_ageing", "erp_payables_ageing"],
     leaves: "Nothing. The third and fourth ties are read, not written.",
+  },
+  {
+    path: "/finance/reconciliation",
+    does: "Read the four ties in one place, in the words a finance person uses, for this organisation: each one holds, or is named with the difference it found and what to do about it.",
+    doors: ["erp_book_ties"],
+    leaves: "Nothing. The ties are read, not written.",
   },
   {
     path: "/operations/assurance",
