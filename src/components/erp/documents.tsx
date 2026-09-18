@@ -219,6 +219,16 @@ export function NewDocumentAction({
   const currency = type.currency ?? "";
   const minorUnits = minorUnitsOf(currencies, type.currency);
 
+  // Which catalogue the database will ask for a line nobody priced, read the
+  // way erp.document_type_party_role_kind() reads it: from the module the
+  // permission belongs to. The form asks the same question so that the total it
+  // shows is the total the record comes back with — it used to show GBP 0.00
+  // for a line the database was about to price, and nothing at all for one it
+  // could not price and would write at nought.
+  const buying = type.create_permission.startsWith("procurement.");
+  const selling = type.create_permission.startsWith("sales.");
+  const effectiveSite = scope.siteId || session.sites[0]?.id || "";
+
   return (
     <ActionDialog
       trigger={<ActionButton>{label ?? "New"}</ActionButton>}
@@ -277,6 +287,41 @@ export function NewDocumentAction({
               kind: "money",
               currency,
               placeholder: "1.85",
+              // A line left empty takes the agreed price. It used to be the
+              // database that knew that and the form that did not, so the
+              // running total said GBP 0.00 and the record did not.
+              ...(buying
+                ? {
+                    priceFrom: {
+                      fn: "erp_resolve_purchase_price",
+                      args: {
+                        p_item_id: "item_id",
+                        p_quantity: "quantity",
+                        p_party_id: "form.p_party_id",
+                        p_site_id: "form.p_site_id",
+                      },
+                      fixed: { p_site_id: effectiveSite },
+                      needs: ["p_item_id", "p_party_id"],
+                      amount: "amount_minor",
+                      note: "source",
+                    },
+                  }
+                : {}),
+              ...(selling
+                ? {
+                    priceFrom: {
+                      fn: "erp_resolve_price",
+                      args: {
+                        p_item_id: "item_id",
+                        p_quantity: "quantity",
+                        p_party_id: "form.p_party_id",
+                      },
+                      needs: ["p_item_id", "p_party_id"],
+                      amount: "amount_minor",
+                      note: "source",
+                    },
+                  }
+                : {}),
             },
             // The product's own description arrives the moment the product is
             // picked, so it is seen and can be changed. Left blank, the
