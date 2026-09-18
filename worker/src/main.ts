@@ -11,7 +11,9 @@ import { assertHandlersExist, drainOnce } from "./core/drain.ts";
 
 async function main() {
   const cfg = loadConfig();
-  const sql = connect(cfg.databaseUrl);
+  // A long-lived process draining queues: the audit trail says so on every
+  // change it makes.
+  const sql = connect(cfg.databaseUrl, "dispatch_worker");
 
   // Before serving anything: refuse to start if a scheduled job names a
   // handler nothing here implements. Starting anyway would present a
