@@ -27,7 +27,7 @@ and checked on every push; the words around them are written by a person.
 | Part 5 capabilities    | <!-- count:part5_built -->97<!-- /count --> built, <!-- count:part5_partial -->0<!-- /count --> partial, <!-- count:part5_absent -->1<!-- /count --> absent by a recorded decision, of <!-- count:part5_total -->98<!-- /count -->       |
 | Verification           | <!-- count:catalogue_checks -->282<!-- /count --> catalogue checks run from an empty database on every push: <!-- count:assertions -->107<!-- /count --> structural assertions, <!-- count:suites -->193<!-- /count --> adversarial suites |
 | Rehearsed on every push | A queue drained in anger, a worker killed mid-dispatch and an endpoint that never answers, an incident declared and communicated, every door named by the application, every screen string renameable, the documents' figures         |
-| Languages              | English and a German core pack (<!-- count:de_strings -->689<!-- /count --> strings) with fallback; <!-- count:legislation_packs -->4<!-- /count --> legislation packs with provenance                                                    |
+| Languages              | English and a German core pack (<!-- count:de_strings -->690<!-- /count --> strings) with fallback; <!-- count:legislation_packs -->4<!-- /count --> legislation packs with provenance                                                    |
 
 ## Running it
 

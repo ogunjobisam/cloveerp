@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919920000  A posting is reversed, not edited
+-- 20260919930000  A posting is reversed, not edited
 -- -----------------------------------------------------------------------------
 -- A guard is landing that refuses amending a document once it is no longer only
 -- ours. That is right, and it makes one question urgent: if a posted document is
@@ -272,8 +272,15 @@ on conflict (code, version) do update
       name_key = excluded.name_key, description = excluded.description,
       payload_schema = excluded.payload_schema, is_current = excluded.is_current;
 
+-- Both locales. erp.assert_resource_coverage('en') is what a migration calls, so
+-- an event type with an English name and no German one applies cleanly and then
+-- fails resource_coverage_de on the assurance run, which is where this was
+-- found: "1 key(s) with no de string — erp_ref.event_type:
+-- event.document.posting_reversed". The verb is the one German accounting uses
+-- for exactly this and nothing else.
 insert into erp_ref.resource (key, locale, value) values
-  ('event.document.posting_reversed', 'en', 'Document posting reversed')
+  ('event.document.posting_reversed', 'en', 'Document posting reversed'),
+  ('event.document.posting_reversed', 'de', 'Buchung des Belegs storniert')
 on conflict (key, locale) do nothing;
 
 -- ── 3. Reading a reversal back ───────────────────────────────────────────────
@@ -828,7 +835,7 @@ select erp_ref.ui_key(v.text), 'en', v.text,
        'A screen string declared at its call site and rendered through ui(). ' || v.why
   from (values
     ('Reverse what this invoice posted',
-     'The dialog raised from a posted sales invoice or purchase invoice (20260919920000).'),
+     'The dialog raised from a posted sales invoice or purchase invoice (20260919930000).'),
     ('The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten.',
      'Said under that heading, because all four consequences land on different screens and a person is owed them before pressing it rather than afterwards.'),
     ('Why it is being reversed',

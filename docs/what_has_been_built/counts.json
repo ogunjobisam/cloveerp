@@ -3,7 +3,7 @@
   "api_only_doors": 20,
   "assertions": 107,
   "catalogue_checks": 282,
-  "de_strings": 689,
+  "de_strings": 690,
   "definer_allowances": 199,
   "diagnostic_checks": 113,
   "diagnostic_checks_in_ci": 93,
@@ -36,7 +36,7 @@
   "promotable_surfaces": 43,
   "ref_tables": 76,
   "spec_version": "v1.6",
-  "sql_lines": 278687,
+  "sql_lines": 278694,
   "suites": 193,
   "triggers": 822,
   "write_allowances": 497
