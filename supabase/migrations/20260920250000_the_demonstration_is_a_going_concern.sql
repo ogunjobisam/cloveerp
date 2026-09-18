@@ -18,7 +18,7 @@ set lock_timeout = '30s';
 set statement_timeout = 0;
 
 -- =============================================================================
--- 20260920240000  The demonstration is a going concern
+-- 20260920250000  The demonstration is a going concern
 -- -----------------------------------------------------------------------------
 -- Walked live on 18 September 2026, the demonstration organisation reads as a
 -- company that stopped trading in the spring and never collected, never paid
@@ -86,9 +86,9 @@ set statement_timeout = 0;
 -- stands up an organisation with the shape this acts on — a demonstration that
 -- stopped trading three weeks ago, owing money that fell due nearly five months ago,
 -- with receipts nobody has billed and no month ever closed — runs the routine
--- on it, and holds it to what changed: that it traded up to today, that what it
--- is owed fell but not to nothing and is no longer all of it old, that the
--- accrual moved to the creditors, that every month before this one is closed
+-- on it, and holds it to what changed: that it traded up to today, that the
+-- debt it was carrying was collected while what it is owed is not nothing, that
+-- the accrual moved to the creditors, that every month before this one is closed
 -- with nothing waived and this one is not, that the four ties still hold, and
 -- that running it a second time changes nothing. It also holds the two guards:
 -- the routine refuses an organisation that is not a demonstration, and refuses
@@ -439,6 +439,14 @@ declare
   v_owed_before bigint; v_owed_after bigint;
   v_stale_before bigint; v_stale_after bigint;
   v_fresh_after bigint;
+  -- The debt that was already there, followed by row rather than by band. The
+  -- first run of this suite asserted the over-ninety band instead and the band
+  -- did not move: cash goes to the oldest item OF THE CUSTOMER IT COMES FROM,
+  -- and in three weeks of trading some customers are not invoiced at all, so
+  -- their old debt is not reached however old it is. Two thirds of what was
+  -- owed was collected and the band stood still. The band was the wrong ruler.
+  v_prior_ids uuid[];
+  v_prior_before bigint; v_prior_after bigint;
   v_grni_before integer; v_grni_after integer;
   v_accrual_before bigint; v_accrual_after bigint; v_payables_after bigint;
   v_last_before date; v_last_after date;
@@ -503,6 +511,13 @@ begin
          coalesce(sum(a.days_over_90), 0)
     into v_owed_before, v_stale_before
     from erp.receivables_ageing(null) a;
+  select coalesce(array_agg(si.id), '{}'::uuid[]),
+         coalesce(sum(si.debit_minor - si.credit_minor - coalesce(si.settled_minor, 0)), 0)
+    into v_prior_ids, v_prior_before
+    from erp.subledger_item si
+   where si.tenant_id = v_tenant
+     and si.control_kind = 'receivable'
+     and si.debit_minor - si.credit_minor - coalesce(si.settled_minor, 0) > 0;
   select count(*), coalesce(sum(g.open_value_minor), 0)
     into v_grni_before, v_accrual_before
     from erp.grni_report() g;
@@ -539,6 +554,10 @@ begin
   select count(*), coalesce(sum(g.open_value_minor), 0)
     into v_grni_after, v_accrual_after
     from erp.grni_report() g;
+  select coalesce(sum(si.debit_minor - si.credit_minor - coalesce(si.settled_minor, 0)), 0)
+    into v_prior_after
+    from erp.subledger_item si
+   where si.id = any (v_prior_ids);
   select max(to_date(substring(d.their_reference from 6 for 8), 'YYYYMMDD'))
     into v_last_after
     from erp.document d
@@ -559,14 +578,20 @@ begin
 
   -- ── 5. The tail, not nothing ───────────────────────────────────────────────
   -- The builder applies cash to the oldest open item of the customer it comes
-  -- from, so the old debt is what the new months collect first.
+  -- from, so the debt already on the books is what the new trading collects
+  -- first. Followed by row: which band a row sits in is a fact about how long
+  -- ago it fell due, and collecting it does not move the band, it empties the
+  -- row.
   v_cases := v_cases + 1;
-  case_name := 'what it is owed fell but not to nothing, the debt that had fallen due long ago was collected, and what is owed now includes invoices raised since';
+  case_name := 'what it was owed when it stopped was collected, what it is owed now is not nothing, and what is owed now includes invoices raised since';
   passed := v_owed_after > 0
-        and v_stale_after < v_stale_before
+        and v_prior_before > 0
+        and v_prior_after < v_prior_before
         and v_fresh_after > 0;
-  detail := format('owed %s before, %s after; over ninety days %s before, %s after; %s of it inside thirty days',
-                   v_owed_before, v_owed_after, v_stale_before, v_stale_after, v_fresh_after);
+  detail := format('the %s item(s) open before it started again owed %s, and owe %s now; owed %s before and %s after, of which %s inside thirty days and %s past ninety',
+                   coalesce(array_length(v_prior_ids, 1), 0),
+                   v_prior_before, v_prior_after,
+                   v_owed_before, v_owed_after, v_fresh_after, v_stale_after);
   return next;
 
   -- ── 6. The accrual became a creditor ───────────────────────────────────────
