@@ -4,8 +4,10 @@ import {
   clearDependentCells,
   dependentFields,
   dropSeededRows,
+  emptyReason,
   optionArgs,
   optionList,
+  seedBlocksAdding,
   seededRows,
 } from "./dependent-options";
 
@@ -172,5 +174,70 @@ describe("a line editor that arrives holding rows", () => {
     const rows = { p_lines: [{ line_id: "a", quantity: "4" }] };
     expect(dropSeededRows(fields, rows, "p_other")).toBe(rows);
     expect(dropSeededRows(fields, {}, "p_order_id")).toEqual({});
+  });
+});
+
+/**
+ * An empty picker says what it is empty of.
+ *
+ * The fault this guards is a sentence, which is why it is worth a test: the
+ * order-line picker on "Receive this order" reads one order and told the
+ * reader the list was empty for the whole organisation. A picker that follows
+ * a choice must never say that, because for such a picker it cannot be true.
+ */
+describe("emptyReason", () => {
+  test("a list that follows nothing may blame the organisation", () => {
+    expect(emptyReason({})).toContain("this organisation");
+    expect(emptyReason(undefined)).toContain("this organisation");
+    expect(emptyReason({ args: { p_limit: 200 } })).toContain("this organisation");
+  });
+
+  test("a list that follows a choice never blames the organisation", () => {
+    expect(emptyReason({ argsFrom: { p_order_id: "p_order_id" } })).not.toContain("organisation");
+    expect(
+      emptyReason({ within: { field: "p_line_id", key: "line_id", path: "candidates" } }),
+    ).not.toContain("organisation");
+  });
+
+  test("the door's own words win wherever they are declared", () => {
+    expect(
+      emptyReason({
+        argsFrom: { p_order_id: "p_order_id" },
+        empty: "This order has nothing left to receive.",
+      }),
+    ).toBe("This order has nothing left to receive.");
+  });
+});
+
+/**
+ * A row nobody could fill is not offered.
+ *
+ * Every picker in a seeded row follows the same choice, so a row added before
+ * that choice is made, or after the door has answered with nothing, is a row
+ * with nothing in any of its lists and a refusal at the end of it.
+ */
+describe("seedBlocksAdding", () => {
+  const seed = { isPending: false, error: null, waiting: false, untouched: true };
+
+  test("an editor with no seed always takes another row", () => {
+    expect(seedBlocksAdding(undefined, 0)).toBeNull();
+  });
+
+  test("not before the choice it follows is made, nor while the door is answering", () => {
+    expect(seedBlocksAdding({ ...seed, waiting: true }, 0)).toBe("Make the choice above first.");
+    expect(seedBlocksAdding({ ...seed, isPending: true }, 0)).toBe("Reading what is left.");
+  });
+
+  test("not when the door answered with nothing to hold", () => {
+    expect(seedBlocksAdding(seed, 0)).toBe("There is nothing left here to add a line for.");
+  });
+
+  test("but yes once the door has answered, and once the person has touched the rows", () => {
+    expect(seedBlocksAdding(seed, 3)).toBeNull();
+    expect(seedBlocksAdding({ ...seed, untouched: false }, 0)).toBeNull();
+  });
+
+  test("and yes when the door refused, because a hand-typed line is all that is left", () => {
+    expect(seedBlocksAdding({ ...seed, error: new Error("refused") }, 0)).toBeNull();
   });
 });
