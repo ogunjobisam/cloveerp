@@ -1,10 +1,9 @@
-import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
 import { unstagedActions } from "../../lib/flow-actions";
 import { useT } from "../../lib/i18n";
-import { AREA_HOME, GROUP_LABELS, areaOf, type ModuleDef, type Panel } from "../../lib/modules";
-import { ActionBar } from "./actions-bar";
+import { type ModuleDef, type Panel } from "../../lib/modules";
+import { ActionBar, HeaderActions } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
@@ -62,23 +61,26 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
       <header className="min-w-0 rounded-xl border border-border bg-card">
         <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-5">
           <div className="min-w-0 flex-1">
-            <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
-              <Link
-                to={AREA_HOME[areaOf(def.group)]}
-                className="hover:text-foreground hover:underline"
-              >
-                {areaOf(def.group) === "settings" ? t("nav.settings", "Settings") : ui("Home")}
-              </Link>
-              <span className="px-1.5">/</span>
-              <span>{ui(GROUP_LABELS[def.group])}</span>
-              <span className="px-1.5">/</span>
-              <span className="text-foreground">{title}</span>
-            </nav>
-            <h1 className="mt-1 truncate text-xl font-semibold">{title}</h1>
+            {/* The trail is the shell's, above this card, and it carries the
+                group this used to add (breadcrumbs.tsx). Two trails — Home >
+                Stock over Home / Move / Stock — was one too many. */}
+            <h1 className="truncate text-xl font-semibold">{title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{ui(def.blurb)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {actions}
+            {/* "What you can do here" was fifteen equal buttons in the middle of
+                the page — the least-used controls on it and the loudest. Every
+                one is still here, one press away. */}
+            {unstaged.length > 0 ? (
+              <HeaderActions>
+                <ActionBar
+                  actions={unstaged}
+                  title="What you can do here"
+                  note="The database authorises every one of these; you only see the ones you hold."
+                />
+              </HeaderActions>
+            ) : null}
             <RefreshButton />
           </div>
         </div>
@@ -117,22 +119,21 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
         </div>
       </header>
 
-      {def.flow ? <ProcessFlow flow={def.flow} actions={def.actions ?? []} /> : null}
-
       {tab === "dashboard" ? (
         <div className="flex min-w-0 flex-col gap-4">
+          {/* The figures first, then the work. The strip counts what is
+              waiting, so it is empty most of the time by design: a manager
+              opening Stock saw a row of noughts while the real position — the
+              lines on hand, their value — sat below the fold. */}
           <KpiRow kpis={def.kpis} />
-          {/* On a module with a strip, the strip carries the verbs its steps
-              name and this carries the rest. It used to be switched off
-              whenever there was a strip, which left every verb no step names
-              declared, permitted and unreachable. */}
-          {unstaged.length > 0 ? (
-            <ActionBar
-              actions={unstaged}
-              title="What you can do here"
-              note="The database authorises every one of these; you only see the ones you hold."
-            />
-          ) : null}
+          {/* Inside the tab, not above both. On the Reports tab the whole
+              pipeline — search, list, pagination, buttons — stood between the
+              tab strip and the first report. */}
+          {def.flow ? <ProcessFlow flow={def.flow} actions={def.actions ?? []} /> : null}
+          {/* The verbs no step names are in the header's Actions panel. They
+              used to be switched off whenever there was a strip, which left
+              every one of them declared, permitted and unreachable; they are
+              not switched off now, only moved out of the way. */}
           {def.worklists.map(panelOf)}
         </div>
       ) : null}
