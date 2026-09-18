@@ -415,11 +415,11 @@ describe("a move another document makes is never a button", () => {
       list.map((c) => move(c)),
     ).map((t) => t.code);
 
-  test("the list is the moves a receipt, a pick, a despatch, an invoice or a payment makes", () => {
+  test("the list is the moves a receipt, a pick, a despatch, an invoice, a payment or a credit note makes", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
       purchase_order: ["receive_partial", "receive_rest", "receive_all"],
       sales_order: ["pick", "despatch", "invoice"],
-      sales_invoice: ["settle"],
+      sales_invoice: ["settle", "credit"],
       purchase_invoice: ["pay"],
     });
   });
@@ -447,10 +447,11 @@ describe("a move another document makes is never a button", () => {
     ).toEqual(["submit", "approve", "close", "cancel"]);
   });
 
-  test("an invoice is not paid by a button, and is still issued, registered, disputed and credited", () => {
+  test("an invoice is neither paid nor credited by a bare button, and is still issued, registered and disputed", () => {
+    // Credited is terminal. Pressed with nothing behind it, the button said the
+    // customer had been given their money back when nobody had.
     expect(codes("sales_invoice", ["issue", "settle", "credit", "cancel"])).toEqual([
       "issue",
-      "credit",
       "cancel",
     ]);
     expect(codes("purchase_invoice", ["register", "dispute", "resolve", "pay", "cancel"])).toEqual([
@@ -475,6 +476,35 @@ describe("a move another document makes is never a button", () => {
     expect(offersAnyTransition("purchase_order", [move("close", { permitted: false })])).toBe(
       false,
     );
+  });
+
+  test("this list is exactly the moves the driver register does not leave to a screen", () => {
+    // The database says what fires each transition
+    // (erp.transition_driver_register, 20260919900000). A row marked 'screen'
+    // means the document page draws a button for it; a row marked 'routine' or
+    // 'undriven' means it does not, which is this list. Two lists that disagree
+    // mean either a button drawn over nothing or a move nobody can make, the
+    // pair of defects that file exists to stop.
+    const register = readFileSync(
+      join(ROOT, "supabase", "migrations", "20260919990000_the_lifecycle_completes.sql"),
+      "utf8",
+    );
+    const body = register.slice(
+      register.indexOf("from (values"),
+      register.indexOf("as x(machine_code"),
+    );
+    const registered: Record<string, string[]> = {};
+    for (const match of body.matchAll(
+      /\('([a-z_]+)'(?:::text)?,\s*'([a-z_]+)'(?:::text)?,\s*'(screen|routine|undriven)'/g,
+    )) {
+      const [, machine, code, driver] = match;
+      if (!machine || !code || driver === "screen") continue;
+      (registered[machine] ??= []).push(code);
+    }
+    const sorted = (list: readonly string[]) => [...list].sort();
+    const shape = (byType: Record<string, readonly string[]>) =>
+      Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, sorted(v)]));
+    expect(shape(registered)).toEqual(shape(DOOR_ONLY_TRANSITIONS));
   });
 
   test("every move on the list is one the shipped lifecycle of that type declares", () => {
