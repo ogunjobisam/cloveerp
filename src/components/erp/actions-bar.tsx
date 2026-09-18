@@ -1,7 +1,12 @@
+import { ChevronDown } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+
 import { useT } from "../../lib/i18n";
 import { describeWarehouseTask } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, type Field } from "./action";
-import { Prose } from "./page";
+import { Prose, TOUCH } from "./page";
 
 /**
  * The verbs.
@@ -121,6 +126,56 @@ export function ActionBar({
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Every verb a screen has that its step strip does not, behind one button in
+ * the page header.
+ *
+ * "What you can do here" was fifteen buttons of equal weight in the middle of
+ * the Stock screen, and more than twenty on Purchasing — the least-used
+ * controls on either screen, and the loudest thing on it. They are still all
+ * here, grouped exactly as they were, with the same words; they are one press
+ * away rather than in the way. The verbs a step carries stay on the step, where
+ * the record they act on is already chosen.
+ *
+ * The groups are ActionBars rendered inside the panel rather than a new list
+ * of the same declarations, so there is still one way an action is drawn and
+ * every word on the panel is still harvested by supabase/ci/screen_strings.sh
+ * from the ActionBar it is written on.
+ */
+export function HeaderActions({ children }: { children: ReactNode }) {
+  const { ui } = useT();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {/* Drawn as a secondary ActionButton is drawn, and a native button so it
+          can say that it opens a panel and whether the panel is open. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`${TOUCH} inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-input px-4 text-sm font-medium hover:bg-muted`}
+      >
+        {ui("Actions")}
+        <ChevronDown aria-hidden className="size-3.5 opacity-60" />
+      </button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        {/* No description: this thread moves controls and writes no new
+            words, and each group below carries its own heading and note. */}
+        <SheetContent
+          side="right"
+          aria-describedby={undefined}
+          className="flex w-[92vw] max-w-lg flex-col gap-4 overflow-y-auto"
+        >
+          <SheetTitle className="text-base">{ui("Actions")}</SheetTitle>
+          {children}
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 

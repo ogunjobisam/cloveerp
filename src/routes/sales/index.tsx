@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AutoPanel } from "../../components/erp/auto";
 import {
   ActionBar,
+  HeaderActions,
   pickBatch,
   pickFrom,
   pickItem,
@@ -302,7 +303,92 @@ const BESIDE_THE_CHAIN: ActionSpec[] = unstagedActions(ORDER_TO_CASH, SELLING_VE
 function Sales() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Sales">
+      <PageHeader
+        title="Sales"
+        actions={
+          // Every verb the strip does not carry, one press away rather than in
+          // the middle of the page. Grouped and worded exactly as before.
+          <HeaderActions>
+            <ActionBar
+              title="The rest of selling"
+              note="Work that sits beside the chain above rather than on it: stock reservations, credit limits and holds, and customer returns."
+              actions={BESIDE_THE_CHAIN}
+            />
+
+            <ActionBar
+              title="Orders that are fulfilled elsewhere"
+              note="A drop-ship is bought from a supplier who delivers to the customer; an intercompany order is mirrored into the company that supplies it. Stock identity pins a line to a batch, location or handling unit."
+              actions={[
+                {
+                  label: "Raise a drop-ship order",
+                  description:
+                    "A purchase order to the supplier, addressed to the customer, priced from the catalogue and linked line by line to this sales order.",
+                  permission: "procurement.order",
+                  fn: "erp_raise_drop_ship_order",
+                  fields: [
+                    pickFrom(
+                      "erp_documents",
+                      "document_id",
+                      ["document_number", "state"],
+                      "p_sales_order_id",
+                      "Sales order",
+                      { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
+                    ),
+                    pickParty("supplier", "p_supplier_party_id", "Supplier"),
+                  ],
+                  invalidates: ["erp_documents"],
+                },
+                {
+                  label: "Raise an intercompany order",
+                  description:
+                    "Mirrors this sales order as a purchase order in the buying company, at its site, in its currency.",
+                  permission: "procurement.order",
+                  fn: "erp_raise_intercompany_order",
+                  fields: [
+                    pickFrom(
+                      "erp_documents",
+                      "document_id",
+                      ["document_number", "state"],
+                      "p_sales_order_id",
+                      "Sales order",
+                      { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
+                    ),
+                    pickSite("p_site_id", "Receiving site"),
+                  ],
+                  invalidates: ["erp_documents"],
+                },
+                {
+                  label: "Pin a line's stock identity",
+                  description:
+                    "The batch, location or handling unit a sales line must be fulfilled from.",
+                  permission: "sales.order",
+                  fn: "erp_set_line_stock_identity",
+                  fields: [
+                    // Lines of an order still being prepared. Once an order is
+                    // confirmed its reservations and picks say where the stock comes
+                    // from, and the door refuses a line of a committed, cancelled or
+                    // finished order.
+                    pickLine("sales_order", "p_line_id", "Sales order line", {
+                      openOnly: true,
+                      states: ["draft", "pending_approval"],
+                    }),
+                    pickBatch("p_batch_id", "Batch", false),
+                    pickLocation("p_location_id", "Location", false),
+                    {
+                      kind: "text",
+                      name: "p_container_id",
+                      label: "Handling unit id",
+                      placeholder: "0f9c1a2e-…",
+                      hint: "Optional. The pallet or tote this line must ship on.",
+                    },
+                  ],
+                  invalidates: ["erp_document"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         Selling something and being paid for it: quote a customer, take the order, pick and deliver
         the goods, invoice what actually went, and apply the cash against it.
       </PageHeader>
@@ -310,84 +396,6 @@ function Sales() {
       <KpiRow kpis={SALES_KPIS} />
 
       <ProcessFlow flow={ORDER_TO_CASH} actions={SELLING_VERBS} />
-
-      <ActionBar
-        title="The rest of selling"
-        note="Work that sits beside the chain above rather than on it: stock reservations, credit limits and holds, and customer returns."
-        actions={BESIDE_THE_CHAIN}
-      />
-
-      <ActionBar
-        title="Orders that are fulfilled elsewhere"
-        note="A drop-ship is bought from a supplier who delivers to the customer; an intercompany order is mirrored into the company that supplies it. Stock identity pins a line to a batch, location or handling unit."
-        actions={[
-          {
-            label: "Raise a drop-ship order",
-            description:
-              "A purchase order to the supplier, addressed to the customer, priced from the catalogue and linked line by line to this sales order.",
-            permission: "procurement.order",
-            fn: "erp_raise_drop_ship_order",
-            fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "state"],
-                "p_sales_order_id",
-                "Sales order",
-                { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
-              ),
-              pickParty("supplier", "p_supplier_party_id", "Supplier"),
-            ],
-            invalidates: ["erp_documents"],
-          },
-          {
-            label: "Raise an intercompany order",
-            description:
-              "Mirrors this sales order as a purchase order in the buying company, at its site, in its currency.",
-            permission: "procurement.order",
-            fn: "erp_raise_intercompany_order",
-            fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "state"],
-                "p_sales_order_id",
-                "Sales order",
-                { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
-              ),
-              pickSite("p_site_id", "Receiving site"),
-            ],
-            invalidates: ["erp_documents"],
-          },
-          {
-            label: "Pin a line's stock identity",
-            description:
-              "The batch, location or handling unit a sales line must be fulfilled from.",
-            permission: "sales.order",
-            fn: "erp_set_line_stock_identity",
-            fields: [
-              // Lines of an order still being prepared. Once an order is
-              // confirmed its reservations and picks say where the stock comes
-              // from, and the door refuses a line of a committed, cancelled or
-              // finished order.
-              pickLine("sales_order", "p_line_id", "Sales order line", {
-                openOnly: true,
-                states: ["draft", "pending_approval"],
-              }),
-              pickBatch("p_batch_id", "Batch", false),
-              pickLocation("p_location_id", "Location", false),
-              {
-                kind: "text",
-                name: "p_container_id",
-                label: "Handling unit id",
-                placeholder: "0f9c1a2e-…",
-                hint: "Optional. The pallet or tote this line must ship on.",
-              },
-            ],
-            invalidates: ["erp_document"],
-          },
-        ]}
-      />
 
       <AutoPanel
         title="Return reasons"
