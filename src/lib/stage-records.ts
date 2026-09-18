@@ -331,3 +331,25 @@ export function describeLine(line: DocumentLine): string {
   const what = [line.item, line.description].filter((x) => x && String(x).trim() !== "");
   return what.length > 0 ? what.join(" — ") : `#${line.line_no}`;
 }
+
+/**
+ * How many steps of a strip go on one row.
+ *
+ * Purchasing's eight steps at 1512 pixels rendered step 3 as "Purchas…", step 7
+ * as "Supplier…", and step 8 — Payment — off the right edge with nothing to say
+ * it was there. A step nobody can read is not a step, and one nobody can see is
+ * worse. So a strip is never narrower per step than its names need: when every
+ * step fits, it is one row; when they do not, it wraps, and the rows are made
+ * even — eight steps that fit six to a row go four and four, not six and two,
+ * because a row of two reads as an afterthought and the last step of a process
+ * is usually the one that matters most.
+ *
+ * `fits` is how many steps the width available can hold side by side.
+ */
+export function stepsPerRow(count: number, fits: number): number {
+  if (count <= 0) return 1;
+  const room = Math.max(1, Math.floor(fits));
+  if (room >= count) return count;
+  const rows = Math.ceil(count / room);
+  return Math.ceil(count / rows);
+}
