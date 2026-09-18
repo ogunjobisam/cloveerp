@@ -249,6 +249,23 @@ export type ModuleDef = {
   reports: Panel[];
   /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
   actions?: ActionSpec[];
+  /**
+   * What the action bar is called, and what it holds, on a module that has a
+   * chain above it.
+   *
+   * `unstagedActions()` already keeps out of the bar every verb a step of the
+   * chain carries, so what is left is the work that sits beside the chain
+   * rather than on it — and "What you can do here" says none of that. A module
+   * that names its own heading says which work that is, so a reader can tell
+   * whether their thing is in the card without reading every button on it.
+   * Left out, the bar keeps the general heading it always had.
+   *
+   * Stated as `title` and `note` inside an object rather than as
+   * `actionsTitle` and `actionsNote`, because supabase/ci/screen_strings.sh
+   * harvests this file by key name: a word declared under a key it does not
+   * know is a word no tenant can rename and the register cannot see.
+   */
+  actionBar?: { title: string; note: string };
   /** The chain of steps this module moves work along, drawn across the top. */
   flow?: FlowSpec;
   /** Reads that take arguments, so they cannot be a standing panel. */
@@ -561,9 +578,18 @@ export const INVENTORY: ModuleDef = {
   path: "/inventory",
   titleKey: "module.inventory",
   title: "Stock",
-  blurb: "Stock health, valuation, ageing, expiry and counting, all derived from the ledger.",
+  blurb:
+    "Knowing what is on the shelf, what it is worth, and putting right where the shelf and the ledger disagree.",
   permission: "inventory.read",
   group: "move",
+  // Fifteen verbs, none of them a step of the chain above: unstagedActions()
+  // takes out the six the chain carries. Fifteen buttons under "What you can
+  // do here" is a list to be read; this says what the card holds, so a reader
+  // knows in one line whether their thing is in it.
+  actionBar: {
+    title: "The rest of stock",
+    note: "Work that sits beside the chain above rather than on it: batches and handling units, product controls and standard costs, consigned stock, counting and replenishment programmes, and the policies that decide which stock is taken first.",
+  },
   actions: [
     {
       label: "Consume consigned stock",
@@ -1083,40 +1109,14 @@ export const INVENTORY: ModuleDef = {
     label: (r) => String(r["bucket"] ?? "—"),
     value: (r) => num(r["quantity"]),
   },
+  // Count tasks and Warehouse tasks used to stand here as two tables, reading
+  // erp_count_tasks and erp_warehouse_tasks — the same two doors the Count and
+  // Put away steps of the chain above already list, one screenful higher. The
+  // step lists carry search, paging and, on Put away, Show finished, and the
+  // panel beside them shows every other column of the chosen row (quantity
+  // done, within tolerance, when it was counted and posted) rather than only
+  // the ones a table had room for. Expiry horizon is no step's list and stays.
   worklists: [
-    {
-      title: "Count tasks",
-      description: "Raised by the counting programme and waiting on a person.",
-      fn: "erp_count_tasks",
-      empty:
-        "No count tasks raised. Raise a counting programme under Actions and its tasks appear here.",
-      rowKey: (r, i) => String(r["task_id"] ?? i),
-      columns: [
-        { header: "Product", cell: "item" },
-        { header: "Location", cell: "location" },
-        { header: "Expected", cell: "expected", numeric: true },
-        { header: "Counted", cell: "counted", numeric: true },
-        { header: "Variance", cell: "variance", numeric: true },
-        pill("status"),
-      ],
-    },
-    {
-      title: "Warehouse tasks",
-      description: "Putaway and replenishment, raised from the balances and waiting on a truck.",
-      fn: "erp_warehouse_tasks",
-      empty:
-        "No warehouse tasks outstanding. Picks, putaways and replenishments are raised by the work, not from this screen.",
-      rowKey: (r, i) => String(r["task_id"] ?? i),
-      columns: [
-        { header: "Kind", cell: "kind" },
-        { header: "Product", cell: "item" },
-        { header: "From", cell: "from_location" },
-        { header: "To", cell: "to_location" },
-        { header: "Quantity", cell: "quantity", numeric: true },
-        { header: "Done", cell: "quantity_done", numeric: true },
-        pill("status"),
-      ],
-    },
     {
       title: "Expiry horizon",
       description: "Batches reaching their expiry inside thirty days.",
@@ -3665,9 +3665,16 @@ export const LOGISTICS: ModuleDef = {
   path: "/logistics",
   titleKey: "module.logistics",
   title: "Despatch",
-  blurb: "Shipments, carrier bookings and delivery performance, with cost landing on stock.",
+  blurb:
+    "Getting what has been picked out of the door and proving it arrived, with the carrier's cost landing on the stock it carried.",
   permission: "logistics.read",
   group: "move",
+  // One verb, and the chain's first step already points at it by name. Saying
+  // what it is for beats a heading that could be over anything.
+  actionBar: {
+    title: "Before the chain starts",
+    note: "A delivery has to exist before any of this can happen. Raise one here by choosing the sales order it comes from; every step after it is above.",
+  },
   actions: [
     DELIVER_AN_ORDER,
     {
@@ -3853,26 +3860,13 @@ export const LOGISTICS: ModuleDef = {
     value: (r) => num(r["otif_pct"]),
     unit: "%",
   },
-  worklists: [
-    {
-      title: "Shipments",
-      description: "Planned and despatched loads.",
-      fn: "erp_shipments",
-      empty:
-        "No shipments planned. A shipment is planned against confirmed sales deliveries, so there has to be a sales order first.",
-      emptyAction: { label: "Open Sales", to: "/sales" },
-      rowKey: (r, i) => String(r["shipment_id"] ?? i),
-      columns: [
-        { header: "Reference", cell: "reference" },
-        { header: "Carrier", cell: "carrier" },
-        { header: "Service", cell: "service_code" },
-        date("Planned", "planned_despatch"),
-        date("Actual", "actual_despatch"),
-        { header: "Tracking", cell: "tracking_reference" },
-        pill("status"),
-      ],
-    },
-  ],
+  // A Shipments table stood here reading erp_shipments — the same door three of
+  // the four steps above already list, and the only door this module has. It
+  // showed seven columns of every shipment; the steps show the same rows with
+  // search, paging and Show finished, and the panel beside them shows the
+  // chosen shipment's every field, the two arrival dates and the freight cost
+  // included, which the table left out.
+  worklists: [],
   reports: [
     {
       title: "Delivery performance",

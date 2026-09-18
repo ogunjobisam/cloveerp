@@ -126,13 +126,22 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
               name and this carries the rest. It used to be switched off
               whenever there was a strip, which left every verb no step names
               declared, permitted and unreachable. */}
-          {unstaged.length > 0 ? (
+          {/* A module that says what its own bar holds says it; the rest keep
+              the general heading, which is all a screen with no chain needs.
+              Written as two whole elements rather than one with `??` in its
+              props, because supabase/ci/screen_strings.sh reads the prop as a
+              literal: behind a fallback expression, the general heading and
+              its sentence would stop being words the register demands a row
+              for, which is the renameability this product claims. */}
+          {unstaged.length === 0 ? null : def.actionBar ? (
+            <ActionBar actions={unstaged} title={def.actionBar.title} note={def.actionBar.note} />
+          ) : (
             <ActionBar
               actions={unstaged}
               title="What you can do here"
               note="The database authorises every one of these; you only see the ones you hold."
             />
-          ) : null}
+          )}
           {def.worklists.map(panelOf)}
         </div>
       ) : null}
