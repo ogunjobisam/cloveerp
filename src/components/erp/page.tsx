@@ -87,6 +87,31 @@ export function RefreshButton() {
   );
 }
 
+/**
+ * What a panel shows while its read is on the way: the shape of what is coming.
+ *
+ * One page used three treatments at once — panels that said "Loading…", tiles
+ * with a label over a blank, and a button that did not exist until its data
+ * arrived and then appeared under a moving cursor. A skeleton says something is
+ * coming and roughly how much, keeps the page from jumping when it lands, and
+ * says "Loading" to a screen reader without saying it to everybody else.
+ */
+export function LoadingRows({ rows = 3, className = "" }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-live="polite" className={`flex flex-col gap-2 ${className}`}>
+      <span className="sr-only">Loading</span>
+      {Array.from({ length: rows }, (_, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="h-4 animate-pulse rounded bg-muted"
+          style={{ width: `${92 - i * 14}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function PageHeader({
   title,
   children,

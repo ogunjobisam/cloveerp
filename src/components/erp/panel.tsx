@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { ErpError, callErp } from "../../lib/erp";
-import { EmptyState, Prose } from "./page";
+import { EmptyState, LoadingRows, Prose } from "./page";
 
 /**
  * A panel backed by one `public.erp_*` call.
@@ -76,9 +76,15 @@ export function DataPanel<T>({
 
       <div className="px-4 py-4 sm:px-5">
         {isPending ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {loading ?? "Loading…"}
-          </p>
+          // A slow read says what it is doing in words; anything else shows the
+          // shape of what is coming, the same as every other panel.
+          loading ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {loading}
+            </p>
+          ) : (
+            <LoadingRows />
+          )
         ) : refused ? (
           <p role="status" className="text-sm text-muted-foreground">
             This account does not hold the permission this panel needs, so there is nothing to show

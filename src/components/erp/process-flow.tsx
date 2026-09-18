@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { actionKey, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
@@ -31,7 +31,7 @@ import { DocumentTransitions } from "./document-transitions";
 import { NewDocumentForType } from "./documents";
 import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
-import { TOUCH } from "./page";
+import { LoadingRows, TOUCH } from "./page";
 
 /**
  * The process, drawn — and then worked.
@@ -319,6 +319,7 @@ function StageList({
   onShowFinished: (show: boolean) => void;
 }) {
   const { ui } = useT();
+  const finishedId = useId();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
@@ -355,8 +356,16 @@ function StageList({
         {/* History, on request. The step lists what is waiting there; the
             finished ones are a press away rather than in the way. */}
         {stage.states && stage.states.length > 0 ? (
-          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+          <label
+            htmlFor={finishedId}
+            className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            {/* Named twice over — by the label it sits in and by the id the
+                label points at — because a reader that walked the tree reported
+                this box as "on", its value, and a checkbox named after its
+                value is a checkbox nobody can find. */}
             <input
+              id={finishedId}
               type="checkbox"
               checked={showFinished}
               onChange={(e) => {
@@ -371,9 +380,7 @@ function StageList({
 
       <div className="min-h-[12rem]">
         {isPending ? (
-          <p role="status" className="px-4 py-4 text-sm text-muted-foreground sm:px-5">
-            Loading…
-          </p>
+          <LoadingRows rows={4} className="px-4 py-4 sm:px-5" />
         ) : error ? (
           <div className="px-4 py-4 sm:px-5">
             <ErrorNote error={error} />
@@ -388,15 +395,23 @@ function StageList({
           </p>
         ) : (
           <ul>
-            {shown.map((row) => {
+            {shown.map((row, index) => {
               const id = String(row[source.id] ?? "");
               const open = id === selectedId;
+              // Never an empty name. The row's title comes from the read, and a
+              // row the read gave no title to was a button a screen reader
+              // announced as nothing at all.
+              const title = join(row, source.title);
+              const rowName =
+                [title, join(row, source.subtitle)].filter(Boolean).join(", ") ||
+                `${source.noun} ${index + 1 + current * PER_PAGE}`;
               return (
                 <li key={id}>
                   <button
                     type="button"
                     onClick={() => onSelect(id)}
                     aria-current={open ? "true" : undefined}
+                    aria-label={rowName}
                     className={`w-full border-b border-border/50 px-4 py-2 text-left outline-none last:border-0 hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-accent/40 sm:px-5 ${
                       open ? "bg-muted" : ""
                     }`}
@@ -784,20 +799,38 @@ function StageWorkbench({
 function StageTab({
   stage,
   index,
+  total,
   active,
   onSelect,
   disabled,
 }: {
   stage: Stage;
   index: number;
+  /** How many steps the strip has, so a screen reader hears "step 3 of 8". */
+  total: number;
   active: boolean;
   onSelect: () => void;
   disabled: boolean;
 }) {
   const { ui } = useT();
+  const hintId = useId();
   // The count is what is waiting at the step, never its history.
   const { source, rows, capped, isPending } = useStageRows(stage);
   const count = source && !isPending ? (capped ? `${rows.length}+` : String(rows.length)) : null;
+
+  // The step's name as a screen reader says it. It used to be whatever the
+  // button's text and title added up to, and the tree reported the whole hint,
+  // cut mid-word — "Somebody asking for something, before anyone has committed
+  // to buying it. Submitting it starts the ap" — so a person who could not see
+  // the strip never heard the word Requisition. The hint is still there, as
+  // the description, where it belongs.
+  // Whole sentences, so a translation can put the words in its own order.
+  const values = { step: ui(stage.label), n: index + 1, total, count: count ?? "0" };
+  const name = !source
+    ? fill(ui("{step}, step {n} of {total}, not counted here"), values)
+    : isPending
+      ? fill(ui("{step}, step {n} of {total}, still counting"), values)
+      : fill(ui("{step}, step {n} of {total}, {count} outstanding"), values);
 
   return (
     <li className="min-w-0">
@@ -806,6 +839,8 @@ function StageTab({
         onClick={onSelect}
         disabled={disabled}
         aria-pressed={active}
+        aria-label={name}
+        aria-describedby={hintId}
         title={ui(stage.hint)}
         className={[
           "flex h-full min-h-14 w-full min-w-0 items-center gap-2 pr-5 text-left transition-colors",
@@ -828,15 +863,28 @@ function StageTab({
         <span className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-tight break-words">
           {ui(stage.label)}
         </span>
-        {count !== null ? (
+        {/* A badge on every step, or the strip reads as if the last step —
+            Hand on, Payment, Pick — were missing something. A step that keeps
+            no list of its own says so with a dash; one still counting shows
+            the badge's shape rather than nothing. */}
+        {source && isPending ? (
           <span
+            aria-hidden="true"
+            className="h-5 w-6 shrink-0 animate-pulse rounded-full bg-card"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
             className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
               active ? "bg-accent-foreground/25" : "bg-card text-muted-foreground"
             }`}
           >
-            {count}
+            {count ?? "—"}
           </span>
-        ) : null}
+        )}
+        <span id={hintId} className="sr-only">
+          {ui(stage.hint)}
+        </span>
       </button>
     </li>
   );
@@ -919,6 +967,7 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
                 key={s.label}
                 stage={s}
                 index={i}
+                total={flow.stages.length}
                 active={i === chosen}
                 onSelect={() => setChosen(i)}
                 disabled={!allowed(s)}
