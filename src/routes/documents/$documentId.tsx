@@ -101,10 +101,21 @@ type Lineage = {
   relation: string;
 };
 
+/** A contra journal raised against this document's posting. */
+type Reversal = {
+  journal_id: string;
+  journal_number: string | null;
+  posting_date: string;
+  reason: string | null;
+  reversed_at: string | null;
+  reverses_journal_number: string | null;
+};
+
 type Payload = {
   document: Doc | null;
   lines: Line[];
   lineage: Lineage[];
+  reversal: Reversal[];
   available_transitions: Transition[];
 };
 
@@ -256,6 +267,7 @@ function Document() {
         <ReversePosting
           documentId={documentId}
           context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          reversal={data.reversal}
         />
       ) : null}
 
@@ -909,7 +921,37 @@ function CreditSupplier({ documentId, context }: { documentId: string; context: 
  * this month. A closed month refuses it and says which, so the field is not a
  * way round the close.
  */
-function ReversePosting({ documentId, context }: { documentId: string; context: string }) {
+function ReversePosting({
+  documentId,
+  context,
+  reversal,
+}: {
+  documentId: string;
+  context: string;
+  reversal: Reversal[];
+}) {
+  const done = reversal[0];
+
+  // Already reversed: the database refuses a second one by name, so offering
+  // the control again would be an invitation into a refusal. What it shows
+  // instead is the answer to the question somebody actually has — when, and
+  // why.
+  if (done) {
+    return (
+      <section className="min-w-0 rounded-xl border border-border bg-card">
+        <header className="border-b border-border px-4 py-4 sm:px-5">
+          <h2 className="text-sm font-semibold">This posting has been reversed</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            The invoice is still here and so is what it posted. Journal {done.journal_number ?? "—"}{" "}
+            reversed {done.reverses_journal_number ?? "it"} on {done.posting_date}
+            {done.reason ? `: ${done.reason}` : "."} What it was worth is off the ageing. To charge
+            it again, raise it again as a new document.
+          </Prose>
+        </header>
+      </section>
+    );
+  }
+
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">

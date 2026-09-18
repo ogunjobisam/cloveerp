@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919900000  A posting is reversed, not edited
+-- 20260919910000  A posting is reversed, not edited
 -- -----------------------------------------------------------------------------
 -- A guard is landing that refuses amending a document once it is no longer only
 -- ours. That is right, and it makes one question urgent: if a posted document is
@@ -808,7 +808,7 @@ select erp_ref.ui_key(v.text), 'en', v.text,
        'A screen string declared at its call site and rendered through ui(). ' || v.why
   from (values
     ('Reverse what this invoice posted',
-     'The dialog raised from a posted sales invoice or purchase invoice (20260919900000).'),
+     'The dialog raised from a posted sales invoice or purchase invoice (20260919910000).'),
     ('The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten.',
      'Said under that heading, because all four consequences land on different screens and a person is owed them before pressing it rather than afterwards.'),
     ('Why it is being reversed',
@@ -822,7 +822,44 @@ select erp_ref.ui_key(v.text), 'en', v.text,
 ) as v(text, why)
 on conflict (key, locale) do nothing;
 
--- ── 9. The suite ─────────────────────────────────────────────────────────────
+-- ── 9. The screen sees the reversal ─────────────────────────────────────────
+--
+-- Without this the reversal is right and invisible: the invoice would still
+-- read "registered" for its full value with nothing on it saying the posting
+-- had been unmade, and the button that unmakes it would still be offered to
+-- somebody the database is about to refuse. Needled rather than re-emitted,
+-- because this body is 20260916030000's and 20260916510000's and not this
+-- migration's to restate.
+
+do $document$
+declare
+  v_sig    constant text := 'public.erp_document(uuid)';
+  v_def    text := pg_get_functiondef('public.erp_document(uuid)'::regprocedure);
+  v_needle constant text := $needle$    'available_transitions', public.erp_available_transitions(p_document_id))$needle$;
+  v_new    constant text := $new$    'reversal', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'journal_id', r.journal_id, 'journal_number', r.journal_number,
+        'posting_date', r.posting_date, 'reason', r.reason,
+        'reversed_at', r.reversed_at,
+        'reverses_journal_number', r.reverses_journal_number)
+        order by r.posting_date)
+        from erp.document_posting_reversal(p_document_id) r), '[]'::jsonb),
+    'available_transitions', public.erp_available_transitions(p_document_id))$new$;
+begin
+  if (length(v_def) - length(replace(v_def, v_needle, ''))) / length(v_needle) <> 1 then
+    raise exception 'CLOVEERP_BODY_UNRECOGNISED: % does not close on its available transitions exactly once as 20260916030000 wrote it', v_sig
+      using hint = 'A later migration changed the document reader. Read pg_get_functiondef() of it and patch that body.';
+  end if;
+  execute replace(v_def, v_needle, v_new);
+
+  if position('document_posting_reversal' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
+    raise exception 'CLOVEERP_BODY_UNRECOGNISED: the document reader did not take the reversal'
+      using hint = 'The replacement did not land. Compare the needle with pg_get_functiondef() of the reader.';
+  end if;
+end
+$document$;
+
+-- ── 10. The suite ────────────────────────────────────────────────────────────
 
 create or replace function erp_test.document_reversal_suite()
 returns table(case_name text, passed boolean, detail text)
@@ -1281,7 +1318,7 @@ $wrap$;
 
 revoke all on function erp_test.assert_document_reversal_suite() from public, anon;
 
--- ── 10. The generators, then the checks that read what changed ───────────────
+-- ── 11. The generators, then the checks that read what changed ──────────────
 
 select erp.apply_row_security();
 select erp.apply_platform_internal_security();
