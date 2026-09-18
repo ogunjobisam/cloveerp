@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:policies -->368<!-- /count --> row-security policies and
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->449<!-- /count --> migrations and
-<!-- count:sql_lines -->286177<!-- /count --> lines of SQL.
+<!-- count:migrations -->450<!-- /count --> migrations and
+<!-- count:sql_lines -->286315<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
