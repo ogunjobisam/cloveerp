@@ -150,7 +150,7 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->4633<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->4651<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->690<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 
