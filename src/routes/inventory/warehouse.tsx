@@ -149,9 +149,14 @@ function WarehouseLayout() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Warehouse layout")}>
+      <PageHeader
+        title={ui("Warehouse layout")}
+        howItWorks={ui(
+          "Put-away sends goods to the place the rules name, replenishment tops up the pick face they name, and picking prefers it once the first-expired rule has chosen the stock.",
+        )}
+      >
         {ui(
-          "A warehouse is a shape, not a list: zones hold aisles, aisles hold bins, and a storage rule says which product belongs where. Put-away sends goods to the place the rules name, replenishment tops up the pick face they name, and picking prefers it once the first-expired rule has chosen the stock.",
+          "A warehouse is a shape, not a list: zones hold aisles, aisles hold bins, and a storage rule says which product belongs where.",
         )}
       </PageHeader>
 

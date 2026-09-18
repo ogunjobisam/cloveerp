@@ -206,11 +206,7 @@ function Close() {
         </section>
       ) : null}
 
-      <ActionBar
-        actions={[...PERIOD_CLOSE_ACTIONS]}
-        title="Working the close"
-        note="The database authorises every one of these; you only see the ones you hold."
-      />
+      <ActionBar actions={[...PERIOD_CLOSE_ACTIONS]} title="Working the close" />
     </div>
   );
 }

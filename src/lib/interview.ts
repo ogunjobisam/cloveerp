@@ -1194,23 +1194,20 @@ function describe(
         return hours
           ? fill(
               ui(
-                "Add the marshalling area {name} ({code}), topped up when short; stock left more than {hours} hours goes back to storage",
+                "Add the loading bay {name} ({code}), topped up when short; stock left more than {hours} hours goes back to storage",
               ),
               values,
             )
-          : fill(ui("Add the marshalling area {name} ({code}), topped up when short"), values);
+          : fill(ui("Add the loading bay {name} ({code}), topped up when short"), values);
       }
       return hours
         ? fill(
             ui(
-              "Add the marshalling area {name} ({code}), bringing in just what is short; stock left more than {hours} hours goes back to storage",
+              "Add the loading bay {name} ({code}), bringing in just what is short; stock left more than {hours} hours goes back to storage",
             ),
             values,
           )
-        : fill(
-            ui("Add the marshalling area {name} ({code}), bringing in just what is short"),
-            values,
-          );
+        : fill(ui("Add the loading bay {name} ({code}), bringing in just what is short"), values);
     }
 
     case "entity": {

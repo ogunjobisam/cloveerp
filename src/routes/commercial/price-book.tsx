@@ -187,9 +187,14 @@ function PriceBook() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Price book")}>
+      <PageHeader
+        title={ui("Price book")}
+        howItWorks={ui(
+          "Rates are maintained per currency and term; the cost beside each rate is what makes margin visible while quoting.",
+        )}
+      >
         {ui(
-          "Each price item is a product of this organisation with a commercial shape: a plan tier, a feature add-on, a band of an entitlement, an environment, a support tier, a fixed-price service, or a legislation pack at nil. Rates are maintained per currency and term; the cost beside each rate is what makes margin visible while quoting.",
+          "Each price item is a product of this organisation with a commercial shape: a plan tier, a feature add-on, a band of an entitlement, an environment, a support tier, a fixed-price service, or a legislation pack at nil.",
         )}
       </PageHeader>
 

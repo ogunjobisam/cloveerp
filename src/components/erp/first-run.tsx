@@ -232,9 +232,7 @@ export function FirstRun() {
             </span>
           </h2>
           <Prose className="mt-1 text-xs text-muted-foreground">
-            {ui(
-              "Only the steps your permissions make yours. Most tick themselves as you work — the platform reads its own records rather than asking you to remember.",
-            )}
+            {ui("Only the steps your permissions make yours. Most tick themselves as you work.")}
           </Prose>
         </div>
       </div>

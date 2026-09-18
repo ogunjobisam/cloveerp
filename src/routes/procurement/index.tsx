@@ -386,7 +386,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     // the invoice out of every payment run with nothing that could release it.
     // The database accepts one only once that approval is given, and never at
     // the hand of whoever raised it in a live organisation (20260914070000).
-    label: "Accept a match exception",
+    label: "Accept an invoice that does not match",
     title: "Accept an invoice that did not match",
     description:
       "Once the approval the exception asked for has been given, the difference is accepted and the invoice can go into a payment run. Whoever raised the exception does not accept it once the organisation is live.",
@@ -414,7 +414,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   {
     label: "Set an order's behaviour",
     description:
-      "Standard, blanket, consignment, drop-ship or intercompany. Fixed once the order is sent.",
+      "Standard, standing order, supplier-owned stock, supplier sends it direct, or between your companies. Fixed once the order is sent.",
     permission: "procurement.order",
     fn: "erp_set_order_behaviour",
     fields: [
@@ -430,16 +430,16 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       {
         kind: "date",
         name: "p_valid_to",
-        label: "Blanket agreement runs to",
-        hint: "For a blanket order only.",
+        label: "Standing order runs to",
+        hint: "For a standing order only.",
       },
     ],
     invalidates: ["erp_documents", "erp_document"],
   },
   {
-    label: "Call off a blanket order",
+    label: "Draw down from a standing order",
     description:
-      "Raises a standard purchase order against the agreement. Each line consumes a blanket line.",
+      "Creates a purchase order against the agreement. Each line draws down a standing order line.",
     permission: "procurement.order",
     fn: "erp_call_off_blanket_order",
     fields: [
@@ -457,11 +457,11 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         label: "Lines",
         required: true,
         addLabel: "Add a line",
-        hint: "The lines of the blanket order chosen above being called off, and how much of each.",
+        hint: "The lines of the standing order chosen above being drawn down, and how much of each.",
         columns: [
           {
             name: "line_id",
-            label: "Blanket line",
+            label: "Standing order line",
             kind: "select",
             // The lines of the chosen blanket, not every purchase order line.
             options: {
@@ -490,7 +490,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_documents"],
   },
   {
-    label: "Confirm a drop-ship",
+    label: "Confirm a supplier-direct order",
     description:
       "The supplier delivered straight to the customer: both the purchase and the sales order are fulfilled, and no stock moves here.",
     permission: "procurement.receive",
@@ -557,7 +557,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_document_approval_chain"],
   },
   {
-    label: "Resolve a purchase price",
+    label: "Find a purchase price",
     description: "What should this supplier charge for this product today, and on what basis?",
     permission: "procurement.order",
     fn: "erp_resolve_purchase_price",
@@ -586,7 +586,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_supplier_qualification"],
   },
   {
-    label: "Allocate a landed cost",
+    label: "Add delivery costs to the stock value",
     permission: "procurement.match",
     fn: "erp_allocate_landed_cost",
     fields: [
@@ -682,7 +682,7 @@ const PURCHASE_TO_PAY: FlowSpec = {
     },
     {
       label: "Goods receipt",
-      hint: "What arrived. Posting a receipt is what puts stock into goods-in and raises the accrual.",
+      hint: "What arrived. Confirming a receipt puts the stock into goods-in and records what you owe for it.",
       fedBy:
         "Receipts appear here once goods are received against a purchase order. Receive an order is on this step.",
 
@@ -704,9 +704,9 @@ const PURCHASE_TO_PAY: FlowSpec = {
     },
     {
       label: "Goods in",
-      hint: "What is standing in the receiving area, with the place each product belongs. Nothing here is on a shelf yet.",
+      hint: "What is standing in goods-in, with the place each product belongs. Nothing here is on a shelf yet.",
       fedBy:
-        "Stock appears here once a goods receipt is posted, because a receipt lands in the site's receiving area.",
+        "Stock appears here once a goods receipt is confirmed, because a receipt lands in the site's goods-in area.",
 
       list: GOODS_IN_LIST,
       createFn: "erp_raise_putaway_tasks",
@@ -715,7 +715,7 @@ const PURCHASE_TO_PAY: FlowSpec = {
       label: "Put away",
       hint: "A task per pallet, from goods-in to the location the storage rules chose. Completing it is what moves the stock.",
       fedBy:
-        "Tasks appear here once put-away is raised for a site at the goods-in step before this one.",
+        "Tasks appear here once put-away is created for a site at the goods-in step before this one.",
 
       list: {
         fn: "erp_warehouse_tasks",
@@ -734,7 +734,7 @@ const PURCHASE_TO_PAY: FlowSpec = {
 
     {
       label: "Supplier bill",
-      hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
+      hint: "Their invoice, matched to what arrived, so you know what you now owe.",
       fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
       typeCode: "purchase_invoice",
@@ -781,7 +781,7 @@ function Procurement() {
           <HeaderActions>
             <ActionBar
               title="The rest of buying"
-              note="Work that sits beside the chain above rather than on it: match exceptions, blanket call-offs, drop-ships, approval routing by value, price lookups, supplier qualification and landed cost."
+              note="Work beside the steps: invoices that do not match, drawing down from standing orders, supplier-direct orders, approval limits, price lookups, supplier approval and delivery costs."
               actions={BESIDE_THE_CHAIN}
             />
           </HeaderActions>
@@ -798,9 +798,9 @@ function Procurement() {
       <InquiryBoard
         inquiries={[
           {
-            label: "Blanket position",
+            label: "Standing order position",
             description:
-              "What was agreed on a blanket order, what the call-offs have consumed, and what is left, line by line.",
+              "What was agreed on a standing order, what has been drawn down, and what is left, line by line.",
             permission: "procurement.read",
             fn: "erp_blanket_position",
             fields: [

@@ -50,7 +50,7 @@ export const Route = createFileRoute("/operations/assurance")({
 function Assurance() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Assurance">
+      <PageHeader title="Checks and sign-off">
         Whether this database still agrees with itself. Every structural check the product makes of
         itself runs here, live, against this organisation — the whole-database reconciliation among
         them — and the answer is one line before it is a list.

@@ -149,7 +149,7 @@ function OrderAction({ row, type }: { row: ForecastRow; type: DocType | undefine
   return (
     <ActionDialog
       trigger={<ActionButton variant="secondary">{ui("Order")}</ActionButton>}
-      title={ui("Raise a purchase order")}
+      title={ui("Order this product")}
       description={ui(
         "The supplier, the site and the product come from this line. Only the quantity and the date you need it by are left to confirm.",
       )}
@@ -329,16 +329,19 @@ function StockForecast() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Stock forecast")}>
-        {ui(
-          "How fast each product has actually been going out, how long it takes to replace, and therefore when it has to be ordered. Days of cover is the balance divided by the daily usage; the reorder-by date is the day the balance reaches the reorder point, so ordering after it is late by definition. What is already on purchase order is counted, so a product waiting on a delivery is not ordered twice.",
+      <PageHeader
+        title={ui("Stock forecast")}
+        howItWorks={ui(
+          "Days of stock left is what is on hand divided by what goes out each day. The order-by date is the day stock falls to the level you order at, so ordering after it is late. What is already on order is counted, so nothing waiting on a delivery is ordered twice.",
         )}
+      >
+        {ui("How fast each product is going out, and when you need to order more.")}
       </PageHeader>
 
       <DataPanel<ForecastRow>
         title={ui("What to order, and by when")}
         description={ui(
-          "Ordered by urgency. Where no reorder point has been set, the one the product's own history implies is shown instead, so nothing is left unanswerable.",
+          "Most urgent first. Where no order level has been set, the one the product's own history suggests is shown instead.",
         )}
         fn="erp_stock_forecast"
         args={{ p_days: 90, p_site_id: siteId || null }}
@@ -357,9 +360,9 @@ function StockForecast() {
                 ui("On order"),
                 ui("Demand"),
                 ui("Used / day"),
-                ui("Lead time"),
-                ui("Reorder pt"),
-                ui("Cover"),
+                ui("Days to arrive"),
+                ui("Order at"),
+                ui("Days left"),
                 ui("Order by"),
                 ui("Order qty"),
                 ui("Supplier"),
@@ -440,7 +443,7 @@ function StockForecast() {
       <DataPanel<ForecastRow>
         title={ui("How the figures were worked out")}
         description={ui(
-          "The same products with what sits behind the answer: the quantity measured, over how many days, the demand that falls inside the lead time, and the policy figures the organisation set.",
+          "The same products with what sits behind the answer: how much went out, over how many days, what will be needed while an order is on its way, and the levels your organisation set.",
         )}
         fn="erp_stock_forecast"
         args={{ p_days: 90, p_site_id: siteId || null }}
@@ -454,13 +457,13 @@ function StockForecast() {
               ui("Used"),
               ui("Over"),
               ui("Used / day"),
-              ui("Lead time"),
+              ui("Days to arrive"),
               ui("Measured over"),
               ui("Planned"),
 
-              ui("Lead-time demand"),
-              ui("Safety stock"),
-              ui("Order up to"),
+              ui("Needed while waiting"),
+              ui("Spare buffer"),
+              ui("Top up to"),
               ui("Minimum"),
               ui("Multiple"),
             ]}

@@ -248,7 +248,7 @@ describe("every module with a strip: every verb is reachable", () => {
 
 describe("the verbs the walkthrough found unreachable", () => {
   test("Planning's requirements run opens the baseline, not a scenario", () => {
-    const stage = PLANNING.flow?.stages.find((s) => s.label === "Requirements run");
+    const stage = PLANNING.flow?.stages.find((s) => s.label === "Work out what to order");
     expect(stage?.createFn).toBeDefined();
     // Looked up the way the strip looks it up, where the last of a name wins.
     const byKey = new Map((PLANNING.actions ?? []).map((a) => [actionKey(a), a]));
