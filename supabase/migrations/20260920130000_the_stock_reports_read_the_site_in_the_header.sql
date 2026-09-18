@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919300000  The stock reports read the site in the header
+-- 20260920130000  The stock reports read the site in the header
 -- -----------------------------------------------------------------------------
 -- The header said MAIN · LND-HO. The Stock forecast listed every row against
 -- LEE-WH. The Stock audit's "Balances by location" did the same. On the Reports
@@ -125,7 +125,7 @@ as $$
                       and v.site_id is not distinct from oh.site_id), 0),
          coalesce(exp30.qty, 0),
          -- The day where the stock is standing, not where the database is
-         -- (20260919100000). An overnight movement was a day old by breakfast.
+         -- (20260920110000). An overnight movement was a day old by breakfast.
          (erp.local_today(oh.site_id)
             - coalesce(last_move.at, now())::date)::integer,
          case
@@ -149,7 +149,7 @@ $$;
 comment on function erp.stock_health_report() is
   'Spec 5.2: cover against policy, per product per site, with the site''s own '
   'code beside its id so a screen has something a person can read. The Site '
-  'column showed an em dash on every row until 20260919300000.';
+  'column showed an em dash on every row until 20260920130000.';
 
 drop function if exists erp.stock_ageing_report();
 
@@ -186,7 +186,7 @@ $$;
 comment on function erp.stock_ageing_report() is
   'Spec 5.2: ageing analysis, measured from the valuation layers. A balance has '
   'no age — it is a number updated this morning whether the stock arrived today '
-  'or two years ago. Carries the site''s code beside its id (20260919300000).';
+  'or two years ago. Carries the site''s code beside its id (20260920130000).';
 
 -- The register of known gaps loses the two this closes. erp_test.app_column_suite()
 -- refuses a row naming a column its door has since learned to answer.

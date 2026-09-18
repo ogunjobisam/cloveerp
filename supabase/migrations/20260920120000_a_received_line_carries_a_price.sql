@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919200000  A received line carries a price
+-- 20260920120000  A received line carries a price
 -- -----------------------------------------------------------------------------
 -- A goods receipt was raised for Yorkshire Oats Ltd: one line, OAT-25, quantity
 -- ten, unit price left empty. The form says, under the lines:
@@ -206,7 +206,7 @@ declare
     || E'    end if;\n';
   v_new    constant text :=
        E'    -- Pricing an unpriced line belongs to erp.add_document_line(), which\n'
-    || E'    -- does it for both sides of the trade (20260919200000). This asked the\n'
+    || E'    -- does it for both sides of the trade (20260920120000). This asked the\n'
     || E'    -- customer catalogue for everything that was not a purchase order, so a\n'
     || E'    -- goods receipt from a supplier was priced from the sales list or, more\n'
     || E'    -- often, not at all.\n';

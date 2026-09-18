@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919100000  A document is dated where it is raised
+-- 20260920110000  A document is dated where it is raised
 -- -----------------------------------------------------------------------------
 -- A goods receipt raised at ten to one in the morning of 18 September, British
 -- Summer Time, was written with document date 2026-09-17. The "Required by"
