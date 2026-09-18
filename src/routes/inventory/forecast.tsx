@@ -5,6 +5,7 @@ import { ActionButton, ActionDialog } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { useScope } from "../../components/erp/session-context";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 
@@ -312,6 +313,10 @@ function StateSummary({ rows }: { rows: ForecastRow[] }) {
 }
 
 function StockForecast() {
+  // public.erp_stock_forecast has taken a site since 20260910192848 and this
+  // screen had never passed one, so a buyer who had chosen LND-HO in the header
+  // was shown every row LEE-WH holds.
+  const { siteId } = useScope();
   const { ui } = useT();
 
   // The tenant's own purchase-order type: its code, and the permission the
@@ -336,7 +341,7 @@ function StockForecast() {
           "Ordered by urgency. Where no reorder point has been set, the one the product's own history implies is shown instead, so nothing is left unanswerable.",
         )}
         fn="erp_stock_forecast"
-        args={{ p_days: 90 }}
+        args={{ p_days: 90, p_site_id: siteId || null }}
         empty={ui(
           "Nothing to forecast yet. A product needs stock, a movement out, or a purchase order against it before there is anything to measure.",
         )}
@@ -438,7 +443,7 @@ function StockForecast() {
           "The same products with what sits behind the answer: the quantity measured, over how many days, the demand that falls inside the lead time, and the policy figures the organisation set.",
         )}
         fn="erp_stock_forecast"
-        args={{ p_days: 90 }}
+        args={{ p_days: 90, p_site_id: siteId || null }}
         empty={ui("Nothing measured yet, so there is nothing to explain.")}
       >
         {(rows) => (
