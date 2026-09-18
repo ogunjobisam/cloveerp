@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   ActionBar,
+  HeaderActions,
   pickBatch,
   pickCurrency,
   pickFrom,
@@ -772,7 +773,20 @@ function Procurement() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.procurement", "Purchasing")}>
+      <PageHeader
+        title={t("nav.procurement", "Purchasing")}
+        actions={
+          // Every verb the strip does not carry, one press away rather than in
+          // the middle of the page. Grouped and worded exactly as before.
+          <HeaderActions>
+            <ActionBar
+              title="The rest of buying"
+              note="Work that sits beside the chain above rather than on it: match exceptions, blanket call-offs, drop-ships, approval routing by value, price lookups, supplier qualification and landed cost."
+              actions={BESIDE_THE_CHAIN}
+            />
+          </HeaderActions>
+        }
+      >
         Buying something and paying for it: somebody asks, somebody approves, the order goes to the
         supplier, the goods arrive, and the supplier&apos;s bill is matched against what arrived.
       </PageHeader>
@@ -780,12 +794,6 @@ function Procurement() {
       <KpiRow kpis={PURCHASING_KPIS} />
 
       <ProcessFlow flow={PURCHASE_TO_PAY} actions={PURCHASING_VERBS} />
-
-      <ActionBar
-        title="The rest of buying"
-        note="Work that sits beside the chain above rather than on it: match exceptions, blanket call-offs, drop-ships, approval routing by value, price lookups, supplier qualification and landed cost."
-        actions={BESIDE_THE_CHAIN}
-      />
 
       <InquiryBoard
         inquiries={[
