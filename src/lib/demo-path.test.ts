@@ -52,14 +52,25 @@ const SOURCE = applicationSource();
  *
  * `/finance`, `/logistics` and `/inventory` declare theirs as `ModuleDef.flow`,
  * so those are read from the declaration itself. `/procurement` and `/sales`
- * draw theirs inline in the route file, so those are read out of the
- * `<ProcessFlow>` element — everything between it and the actions it is given,
- * which is the stages and nothing else.
+ * draw theirs in the route file, so those are read out of the route.
+ *
+ * The flow used to sit inline inside the `<ProcessFlow>` element and this read
+ * everything between that and the actions it is given. 20260918 hoisted both
+ * into named constants — `flow={PURCHASE_TO_PAY}` — so the slice between the
+ * two became empty, this found no labels at all, and a test whose whole job is
+ * to notice that a screen stopped drawing a step reported that /procurement
+ * draws none of them. A screen's stages are where the screen says they are, so
+ * a named flow is followed to its declaration.
  */
 const INLINE_FLOWS: Readonly<Record<string, string>> = {
   "/procurement": join("routes", "procurement", "index.tsx"),
   "/sales": join("routes", "sales", "index.tsx"),
 };
+
+/** The labels declared between two offsets of a source file. */
+function labelsIn(src: string, from: number, to: number): string[] {
+  return [...src.slice(from, to).matchAll(/(?<![A-Za-z])label: "([^"]+)"/g)].map((m) => m[1] ?? "");
+}
 
 function inlineStages(file: string): string[] {
   const src = readFileSync(join(ROOT, "src", file), "utf8");
@@ -67,9 +78,23 @@ function inlineStages(file: string): string[] {
   const closes = src.indexOf("actions={", opens);
   expect(opens, `${file} draws no <ProcessFlow>`).toBeGreaterThan(-1);
   expect(closes, `${file}'s <ProcessFlow> is not given its actions`).toBeGreaterThan(opens);
-  return [...src.slice(opens, closes).matchAll(/(?<![A-Za-z])label: "([^"]+)"/g)].map(
-    (m) => m[1] ?? "",
-  );
+
+  const element = src.slice(opens, closes);
+  const named = /flow=\{([A-Z][A-Za-z0-9_]*)\}/.exec(element);
+  if (named) {
+    const declaration = src.indexOf(`const ${named[1]}: FlowSpec = {`);
+    expect(
+      declaration,
+      `${file} draws flow={${named[1]}} and declares no such FlowSpec`,
+    ).toBeGreaterThan(-1);
+    // To the next top-level declaration, which is where the flow's own object
+    // ends. A label after that belongs to something else.
+    const ends = src.indexOf("\n};", declaration);
+    expect(ends, `${file}'s ${named[1]} is never closed`).toBeGreaterThan(declaration);
+    return labelsIn(src, declaration, ends);
+  }
+
+  return labelsIn(src, opens, closes);
 }
 
 function stagesDrawnOn(path: string): string[] | null {
