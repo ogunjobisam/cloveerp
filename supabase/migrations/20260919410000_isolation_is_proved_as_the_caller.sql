@@ -52,6 +52,12 @@
 -- The count moves from 5 cases to 14, deliberately, and the wrapper is restated
 -- to match. erp_test.assert_isolation_suite()'s floor of 30 is untouched: that
 -- is the other suite, and this migration does not change it.
+--
+-- Cases 1 to 12 passed on the first build of this work, under 20260919400000:
+-- nothing leaked when the role was switched. That version stopped on its own
+-- reconciliation case, because a journal takes its number at commit and this
+-- suite never commits; it reached no database and is replaced by this one
+-- rather than edited, because a migration is written once.
 -- =============================================================================
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -399,6 +405,15 @@ begin
   v_inv_b  := (public.erp_create_document('sales_invoice', v_party_b, v_site_b,
                  'B-INV-1', null, (fb ->> 'gb')::uuid, null, null) ->> 'document_id')::uuid;
   perform public.erp_add_document_line(v_inv_b, v_item_b, 2, 5000, 'B''s invoice line');
+
+  -- A journal takes its number from a DEFERRABLE INITIALLY DEFERRED constraint
+  -- trigger when the transaction that posted it commits (20260906030000). This
+  -- suite never commits: it undoes its fixture by raising. So the trigger is
+  -- fired here instead, still as the second organisation, which brings the
+  -- transaction to the state a commit would leave it in — otherwise the
+  -- reconciliation case below reads an unnumbered journal and reports a defect
+  -- that is an artefact of the suite rather than anything about the product.
+  set constraints all immediate;
 
   execute format('set local role %I', v_owner);
   perform set_config('request.jwt.claims', '', true);
