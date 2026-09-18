@@ -656,11 +656,40 @@ jobs:
         env:
           PGOPTIONS: -c statement_timeout=0
         run: |
-          set -euo pipefail
+          # Not -e. A step that cannot say what went wrong is the reason the
+          # 18 September deploy went green with the demonstration untouched:
+          # psql failed, the shell stopped, and nothing reached the summary. The
+          # exit status is caught and reported instead, both ways.
+          set -uo pipefail
           report="$RUNNER_TEMP/demonstrations.json"
+          errors="$RUNNER_TEMP/demonstrations.err"
           started=$(date +%s%N)
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc \
-            "select erp.catch_up_demonstrations();" > "$report"
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc \
+               "select erp.catch_up_demonstrations();" > "$report" 2> "$errors"; then
+            answered=true
+          else
+            answered=false
+          fi
+
+          if [[ "$answered" != true ]]; then
+            seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
+                          'BEGIN { printf "%.1f", ms / 1000 }')
+            why=$(tail -n 20 "$errors" || true)
+            echo "the demonstration was NOT brought up to date, after ${seconds} s:"
+            printf '%s\n' "$why"
+            echo "::warning::the demonstration was not brought up to date; it is as the last deploy left it. $(head -n 1 "$errors" || true)"
+            {
+              echo "## Demonstration"
+              echo "**Not brought up to date.** It is as the last deploy left it,"
+              echo "which is what a prospect would be shown. The deploy is not failed"
+              echo "by this — it is demonstration data, not an invariant — but nothing"
+              echo "about the tick above says this worked."
+              echo '```'
+              printf '%s\n' "$why"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
                         'BEGIN { printf "%.1f", ms / 1000 }')
 
