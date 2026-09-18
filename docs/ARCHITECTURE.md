@@ -35,7 +35,7 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:triggers -->822<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
 <!-- count:migrations -->433<!-- /count --> migrations and
-<!-- count:sql_lines -->278380<!-- /count --> lines of SQL.
+<!-- count:sql_lines -->278396<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -254,8 +254,8 @@ renames it by. `docs/build_counts.sh --check` proves this document and the
 README quote the database.
 
 **The console.** `erp.platform_assurance()` runs the
-<!-- count:diagnostic_checks -->113<!-- /count --> registered diagnostics
-(<!-- count:diagnostic_checks_in_ci -->92<!-- /count --> of them also in CI) and
+<!-- count:diagnostic_checks -->114<!-- /count --> registered diagnostics
+(<!-- count:diagnostic_checks_in_ci -->93<!-- /count --> of them also in CI) and
 answers green or names what is wrong; every migration ends by requiring it green.
 
 ---

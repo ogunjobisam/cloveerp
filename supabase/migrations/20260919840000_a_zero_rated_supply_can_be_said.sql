@@ -154,8 +154,9 @@
 --     those rows and the report shows it as such.
 --
 -- Proof: erp_test.assert_zero_rated_supply_suite() (13 cases, wrapper pinned)
--- and erp.assert_tax_treatments_are_distinct(), which refuses a model in which
--- zero-rated, exempt and outside the scope have collapsed into one another.
+-- and erp.assert_tax_treatments_are_distinct(), registered as the diagnostic
+-- tax_treatments_distinct, which refuses a model in which zero-rated, exempt
+-- and outside the scope have collapsed into one another.
 -- =============================================================================
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -787,6 +788,21 @@ comment on function erp.assert_tax_treatments_are_distinct is
   'tax is recoverable, exempt and outside the scope differ on whether the '
   'value counts towards registration, and the decision point can carry both '
   'the product''s stated class and the rule''s stated treatment.';
+
+-- An assertion that is not registered is one nothing can run from a screen,
+-- and erp.assert_diagnostics_registered() refuses it. Platform scope: it reads
+-- erp_ref and the decision point and needs no organisation.
+insert into erp_meta.diagnostic_check
+  (code, title, kind, scope, function_name, arguments, detail_function,
+   detail_arguments, blurb, runs_in_ci, seq) values
+  ('tax_treatments_distinct', 'Zero-rated, exempt and outside the scope are three things',
+   'assertion', 'platform', 'assert_tax_treatments_are_distinct', '',
+   'tax_treatment_report', '',
+   'All three carry no tax and they are not the same thing: a zero-rated supply is taxable at nil and the input tax on it is recoverable; an exempt supply is not taxable and restricts recovery; something outside the scope is not a supply for this tax at all. They are different boxes on a return and different answers on a claim, so the product holds them as three treatments and this refuses a model in which they have collapsed into one another.',
+   true, (select coalesce(max(seq), 0) + 1 from erp_meta.diagnostic_check))
+on conflict (code) do update
+  set title = excluded.title, function_name = excluded.function_name,
+      detail_function = excluded.detail_function, blurb = excluded.blurb;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 9. The word the report now says
