@@ -22,7 +22,7 @@ and checked on every push; the words around them are written by a person.
 |                        |                                                                                                                                                                                                                                        |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Specification          | <!-- count:spec_version -->v1.6<!-- /count -->, Parts 1–23; every product decision D1–D<!-- count:product_decisions -->41<!-- /count --> registered and bound to the check that enforces it                                            |
-| Schema                 | <!-- count:migrations -->432<!-- /count --> migrations, <!-- count:erp_tables -->251<!-- /count --> tenant tables, <!-- count:ref_tables -->76<!-- /count --> product-content tables, <!-- count:meta_tables -->71<!-- /count --> platform tables |
+| Schema                 | <!-- count:migrations -->433<!-- /count --> migrations, <!-- count:erp_tables -->251<!-- /count --> tenant tables, <!-- count:ref_tables -->76<!-- /count --> product-content tables, <!-- count:meta_tables -->71<!-- /count --> platform tables |
 | Public API             | <!-- count:doors -->680<!-- /count --> doors, every one with a screen or a registered caller; <!-- count:doors_pending_screen -->3<!-- /count --> waiting for a screen                                                                 |
 | Part 5 capabilities    | <!-- count:part5_built -->97<!-- /count --> built, <!-- count:part5_partial -->0<!-- /count --> partial, <!-- count:part5_absent -->1<!-- /count --> absent by a recorded decision, of <!-- count:part5_total -->98<!-- /count -->       |
 | Verification           | <!-- count:catalogue_checks -->281<!-- /count --> catalogue checks run from an empty database on every push: <!-- count:assertions -->106<!-- /count --> structural assertions, <!-- count:suites -->193<!-- /count --> adversarial suites |
@@ -76,6 +76,7 @@ the live route, the restore drill, releases and rollback, incidents.
 ## Verifying it
 
 ```sh
+supabase/ci/preflight.sh                           # before you push a migration
 psql -c "select erp.platform_assurance();"         # the console, as JSON
 supabase/ci/run_checks.sh                          # the catalogue, as CI runs it
 supabase/ci/drain_rehearsal.sh                     # a queue drained in anger
@@ -91,6 +92,22 @@ A check that exists and is not run is a check that is not there:
 `erp.ci_check_catalogue()` enumerates every assertion and suite the build can
 call, the runner runs them all, and `erp.assert_ci_ran()` refuses if one was
 left out.
+
+`supabase/ci/preflight.sh` is the one check here that needs no database, and
+the build runs it first. Everything else needs the schema stood up from nothing,
+which takes the best part of an hour — and on 17 September that build ran
+fifteen times across five branches and failed nine, with not one of the nine
+being the change itself. Every one was a convention. Preflight reads git and the
+migration text and refuses those in seconds: a migration that runs a suite whose
+fixture conflicts with something a live database already has, a refusal
+registered where the register cannot see it raised, a write door that does not
+call the gate it declares, help actions for a screen with no help topic, an
+immutability verdict taken against an uncommitted tree, and a new door with no
+allowance or no home. Two further rules advise rather than refuse, because their
+answer needs a built database and a check that guesses is a check people learn
+to skip. Run it before every push. `supabase/ci/preflight_falsification.sh` puts
+each rule in front of the mistake it exists for and refuses to believe one that
+stays quiet.
 
 ## Layout
 
