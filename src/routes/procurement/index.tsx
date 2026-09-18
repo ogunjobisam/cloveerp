@@ -12,12 +12,12 @@ import {
   pickWarehouseTask,
   type ActionSpec,
 } from "../../components/erp/actions-bar";
-import { DocumentPanel } from "../../components/erp/documents";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
-import { ProcessFlow } from "../../components/erp/process-flow";
+import { ProcessFlow, type FlowSpec } from "../../components/erp/process-flow";
+import { unstagedActions } from "../../lib/flow-actions";
 import {
   GOODS_IN_LIST,
   PURCHASING_KPIS,
@@ -600,170 +600,191 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   },
 ];
 
+/**
+ * The chain this screen is for, named rather than written into the JSX.
+ *
+ * It is named because the action bar has to read it: a verb a step already
+ * carries must not be offered a second time under a heading that does not
+ * describe it. `ModulePage` has worked this way since `unstagedActions` was
+ * written; this screen and `/sales` are the two that predate it and did not.
+ */
+const PURCHASE_TO_PAY: FlowSpec = {
+  title: "Purchase to pay, step by step",
+  note: "Press a step to see the records sitting there, choose one on the left, and the buttons act on that record.",
+  stages: [
+    {
+      label: "Requisition",
+      hint: "Somebody asking for something, before anyone has committed to buying it. Submitting it starts the approval.",
+      fedBy: "Requisitions appear here once somebody raises one.",
+
+      typeCode: "requisition",
+      // A draft is what is waiting to be asked for. Submitted, it has
+      // moved on to approval; ordered or cancelled, it is finished.
+      states: ["draft"],
+      partyRole: "supplier",
+      recordArg: "p_document_id",
+      actionFn: "requisition_submit",
+      actionFns: ["erp_stamp_document_approval"],
+    },
+    {
+      label: "Approval",
+      hint: "Who has to agree, at this value. An approved requisition — and only an approved one — becomes a purchase order.",
+      fedBy:
+        "Requisitions appear here once they are raised; submit one at the step before to send it for approval.",
+
+      list: {
+        fn: "erp_documents",
+        args: { p_type_code: "requisition", p_limit: 200 },
+        id: "document_id",
+        title: ["document_number"],
+        subtitle: ["document_date", "party"],
+        status: "state_name",
+        noun: "requisition",
+        nounPlural: "requisitions",
+      },
+      // Waiting on a decision, or approved and waiting to become an
+      // order: converting is the verb of this step, so it is listed here.
+      states: ["submitted", "approved"],
+      recordArg: "p_document_id",
+      actionFn: "requisition_approve",
+      actionFns: ["requisition_reject", "erp_convert_document"],
+      createFn: "erp_decide_approval",
+    },
+    {
+      label: "Purchase order",
+      hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent. Once it is sent, the goods are received from here.",
+      fedBy:
+        "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
+
+      typeCode: "purchase_order",
+      // Every order not yet received in full: a draft being written, one
+      // with its approvers, one approved and not sent, and one the
+      // supplier is delivering against.
+      states: ["draft", "pending_approval", "approved", "sent", "partially_received"],
+      actionStates: {
+        // The behaviour of an order is fixed once the supplier has it.
+        erp_set_order_behaviour: ["draft", "pending_approval", "approved"],
+        // And from the moment they have it, the goods can turn up. A
+        // sent order offered nothing at all before this, so the step a
+        // buyer stands on when the van arrives was the one step with
+        // nothing to press.
+        receive_this_order: ["sent", "partially_received"],
+      },
+      partyRole: "supplier",
+      recordArg: "p_document_id",
+      // Receiving calls the order p_order_id, and what arrived is
+      // usually — not always — against the order in front of you, so it
+      // arrives chosen and stays changeable.
+      carriedArgs: { receive_this_order: "p_order_id" },
+      actionFn: "erp_set_order_behaviour",
+      actionFns: ["receive_this_order"],
+    },
+    {
+      label: "Goods receipt",
+      hint: "What arrived. Posting a receipt is what puts stock into goods-in and raises the accrual.",
+      fedBy:
+        "Receipts appear here once goods are received against a purchase order. Receive an order is on this step.",
+
+      typeCode: "goods_receipt",
+      // A receipt still being counted in. Posted, its stock is in goods-in
+      // and it waits for the bill from the supplier; "Show finished" lists it
+      // here to be billed.
+      states: ["draft"],
+      actionStates: {
+        erp_receive_against: ["draft"],
+        erp_bill_from_receipt: ["posted"],
+      },
+      partyRole: "supplier",
+      recordArg: "p_receipt_id",
+      actionFn: "erp_receive_against",
+      actionFns: ["erp_bill_from_receipt"],
+      // The receipt comes from its order, chosen on the form.
+      createFn: "erp_create_receipt_from_order",
+    },
+    {
+      label: "Goods in",
+      hint: "What is standing in the receiving area, with the place each product belongs. Nothing here is on a shelf yet.",
+      fedBy:
+        "Stock appears here once a goods receipt is posted, because a receipt lands in the site's receiving area.",
+
+      list: GOODS_IN_LIST,
+      createFn: "erp_raise_putaway_tasks",
+    },
+    {
+      label: "Put away",
+      hint: "A task per pallet, from goods-in to the location the storage rules chose. Completing it is what moves the stock.",
+      fedBy:
+        "Tasks appear here once put-away is raised for a site at the goods-in step before this one.",
+
+      list: {
+        fn: "erp_warehouse_tasks",
+        args: { p_kind: "putaway", p_limit: 200 },
+        id: "task_id",
+        title: ["item", "kind"],
+        subtitle: ["from_location", "to_location", "quantity"],
+        status: "status",
+        noun: "task",
+        nounPlural: "tasks",
+      },
+      states: ["open"],
+      recordArg: "p_task_id",
+      actionFn: "erp_complete_warehouse_task",
+    },
+
+    {
+      label: "Supplier bill",
+      hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
+      fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
+
+      typeCode: "purchase_invoice",
+      // Being entered, owed, or in dispute. Paid is the end of it.
+      states: ["draft", "registered", "disputed"],
+      partyRole: "supplier",
+      recordArg: "p_invoice_id",
+      actionFn: "erp_invoice_against",
+      createFn: "erp_bill_from_receipt",
+    },
+    {
+      label: "Payment",
+      hint: "Bills fall into a payment run, which somebody else approves before it is paid.",
+      to: "/finance",
+      toLabel: "Open finance",
+    },
+  ],
+};
+
+/** Every verb this screen declares, the chain's and the rest. */
+const PURCHASING_VERBS: ActionSpec[] = [...PROCUREMENT_ACTIONS, RECEIVE_THIS_ORDER];
+
+/**
+ * The verbs no step of the chain carries.
+ *
+ * The bar used to hold all twenty, thirteen of which the strip above it
+ * already offers on the step they belong to — and offers there with the record
+ * chosen, which is the version worth having. So the screen asked the reader to
+ * pick "Receive an order" out of a wall of buttons whose heading said it was
+ * about goods-in, matching and qualification.
+ */
+const BESIDE_THE_CHAIN: ActionSpec[] = unstagedActions(PURCHASE_TO_PAY, PURCHASING_VERBS);
+
 function Procurement() {
   const { t } = useT();
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title={t("nav.procurement", "Purchasing")}>
-        Requisition to purchase order to receipt. Receiving posts stock inbound through the same
-        bridge a delivery uses outbound.
+        Buying something and paying for it: somebody asks, somebody approves, the order goes to the
+        supplier, the goods arrive, and the supplier&apos;s bill is matched against what arrived.
       </PageHeader>
 
       <KpiRow kpis={PURCHASING_KPIS} />
 
-      <ProcessFlow
-        flow={{
-          title: "Purchase to pay, step by step",
-          note: "Press a step to see the records sitting there, choose one on the left, and the buttons act on that record.",
-          stages: [
-            {
-              label: "Requisition",
-              hint: "Somebody asking for something, before anyone has committed to buying it. Submitting it starts the approval.",
-              fedBy: "Requisitions appear here once somebody raises one.",
-
-              typeCode: "requisition",
-              // A draft is what is waiting to be asked for. Submitted, it has
-              // moved on to approval; ordered or cancelled, it is finished.
-              states: ["draft"],
-              partyRole: "supplier",
-              recordArg: "p_document_id",
-              actionFn: "requisition_submit",
-              actionFns: ["erp_stamp_document_approval"],
-            },
-            {
-              label: "Approval",
-              hint: "Who has to agree, at this value. An approved requisition — and only an approved one — becomes a purchase order.",
-              fedBy:
-                "Requisitions appear here once they are raised; submit one at the step before to send it for approval.",
-
-              list: {
-                fn: "erp_documents",
-                args: { p_type_code: "requisition", p_limit: 200 },
-                id: "document_id",
-                title: ["document_number"],
-                subtitle: ["document_date", "party"],
-                status: "state_name",
-                noun: "requisition",
-                nounPlural: "requisitions",
-              },
-              // Waiting on a decision, or approved and waiting to become an
-              // order: converting is the verb of this step, so it is listed here.
-              states: ["submitted", "approved"],
-              recordArg: "p_document_id",
-              actionFn: "requisition_approve",
-              actionFns: ["requisition_reject", "erp_convert_document"],
-              createFn: "erp_decide_approval",
-            },
-            {
-              label: "Purchase order",
-              hint: "The commitment to a supplier. Value bands decide what needs approving before it is sent. Once it is sent, the goods are received from here.",
-              fedBy:
-                "Orders appear here once an approved requisition is converted into one, or a planned order is firmed.",
-
-              typeCode: "purchase_order",
-              // Every order not yet received in full: a draft being written, one
-              // with its approvers, one approved and not sent, and one the
-              // supplier is delivering against.
-              states: ["draft", "pending_approval", "approved", "sent", "partially_received"],
-              actionStates: {
-                // The behaviour of an order is fixed once the supplier has it.
-                erp_set_order_behaviour: ["draft", "pending_approval", "approved"],
-                // And from the moment they have it, the goods can turn up. A
-                // sent order offered nothing at all before this, so the step a
-                // buyer stands on when the van arrives was the one step with
-                // nothing to press.
-                receive_this_order: ["sent", "partially_received"],
-              },
-              partyRole: "supplier",
-              recordArg: "p_document_id",
-              // Receiving calls the order p_order_id, and what arrived is
-              // usually — not always — against the order in front of you, so it
-              // arrives chosen and stays changeable.
-              carriedArgs: { receive_this_order: "p_order_id" },
-              actionFn: "erp_set_order_behaviour",
-              actionFns: ["receive_this_order"],
-            },
-            {
-              label: "Goods receipt",
-              hint: "What arrived. Posting a receipt is what puts stock into goods-in and raises the accrual.",
-              fedBy:
-                "Receipts appear here once goods are received against a purchase order. Receive an order is on this step.",
-
-              typeCode: "goods_receipt",
-              // A receipt still being counted in. Posted, its stock is in goods-in
-              // and it waits for the bill from the supplier; "Show finished" lists it
-              // here to be billed.
-              states: ["draft"],
-              actionStates: {
-                erp_receive_against: ["draft"],
-                erp_bill_from_receipt: ["posted"],
-              },
-              partyRole: "supplier",
-              recordArg: "p_receipt_id",
-              actionFn: "erp_receive_against",
-              actionFns: ["erp_bill_from_receipt"],
-              // The receipt comes from its order, chosen on the form.
-              createFn: "erp_create_receipt_from_order",
-            },
-            {
-              label: "Goods in",
-              hint: "What is standing in the receiving area, with the place each product belongs. Nothing here is on a shelf yet.",
-              fedBy:
-                "Stock appears here once a goods receipt is posted, because a receipt lands in the site's receiving area.",
-
-              list: GOODS_IN_LIST,
-              createFn: "erp_raise_putaway_tasks",
-            },
-            {
-              label: "Put away",
-              hint: "A task per pallet, from goods-in to the location the storage rules chose. Completing it is what moves the stock.",
-              fedBy:
-                "Tasks appear here once put-away is raised for a site at the goods-in step before this one.",
-
-              list: {
-                fn: "erp_warehouse_tasks",
-                args: { p_kind: "putaway", p_limit: 200 },
-                id: "task_id",
-                title: ["item", "kind"],
-                subtitle: ["from_location", "to_location", "quantity"],
-                status: "status",
-                noun: "task",
-                nounPlural: "tasks",
-              },
-              states: ["open"],
-              recordArg: "p_task_id",
-              actionFn: "erp_complete_warehouse_task",
-            },
-
-            {
-              label: "Supplier bill",
-              hint: "Their invoice, matched to the receipt so the accrual clears and the balance is owed.",
-              fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
-
-              typeCode: "purchase_invoice",
-              // Being entered, owed, or in dispute. Paid is the end of it.
-              states: ["draft", "registered", "disputed"],
-              partyRole: "supplier",
-              recordArg: "p_invoice_id",
-              actionFn: "erp_invoice_against",
-              createFn: "erp_bill_from_receipt",
-            },
-            {
-              label: "Payment",
-              hint: "Bills fall into a payment run, which somebody else approves before it is paid.",
-              to: "/finance",
-              toLabel: "Open finance",
-            },
-          ],
-        }}
-        actions={[...PROCUREMENT_ACTIONS, RECEIVE_THIS_ORDER]}
-      />
+      <ProcessFlow flow={PURCHASE_TO_PAY} actions={PURCHASING_VERBS} />
 
       <ActionBar
-        title="Goods-in, matching and qualification"
-        note="Goods-in, matching and supplier qualification — the verbs between the documents."
-        actions={PROCUREMENT_ACTIONS}
+        title="The rest of buying"
+        note="Work that sits beside the chain above rather than on it: match exceptions, blanket call-offs, drop-ships, approval routing by value, price lookups, supplier qualification and landed cost."
+        actions={BESIDE_THE_CHAIN}
       />
 
       <InquiryBoard
@@ -786,39 +807,6 @@ function Procurement() {
             ],
           },
         ]}
-      />
-
-      <DocumentPanel
-        title="Requisitions"
-        description="Somebody asking for something, before anyone has committed to buying it."
-        baseType="requisition"
-        partyRole="supplier"
-        empty="No requisitions yet. New raises one."
-      />
-
-      <DocumentPanel
-        title="Purchase orders"
-        description="Commitments to a supplier. Value bands decide what needs approving before it is sent."
-        baseType="purchase_order"
-        partyRole="supplier"
-        empty="No purchase orders yet. New raises one, or convert a requisition from the panel above."
-      />
-
-      <DocumentPanel
-        title="Goods receipts"
-        description="Goods arriving. Posting one is what puts the stock on the shelf and raises the GRNI accrual."
-        baseType="receipt"
-        partyRole="supplier"
-        empty="No receipts yet. A receipt is recorded against a purchase order, and posting it is what puts stock on hand."
-      />
-
-      <DocumentPanel
-        title="Purchase invoices"
-        description="The supplier's bill. Registering one clears the goods-received accrual and puts the balance on the supplier."
-        baseType="invoice_reference"
-        typeCode="purchase_invoice"
-        partyRole="supplier"
-        empty="No supplier bills yet. Bill a posted goods receipt from the actions above."
       />
     </div>
   );

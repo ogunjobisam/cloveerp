@@ -3430,6 +3430,10 @@ export const DELIVERY_FROM_ORDER_FIELDS: Field[] = [
           argsFrom: { p_order_id: "p_order_id" },
           value: "line_id",
           label: ["line_no", "item", "description", "open_quantity"],
+          // Scoped to the order, so an empty one is a fact about the order and
+          // never about the organisation.
+          empty:
+            "This order has nothing left to deliver: every line has been delivered in full, or is already on a delivery that has not been cancelled.",
         },
       },
       { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
@@ -3530,6 +3534,12 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
           argsFrom: { p_order_id: "p_order_id" },
           value: "line_id",
           label: ["line_no", "item", "description", "open_quantity"],
+          // The owner met this picker empty and was told the list was empty
+          // for the organisation, of an organisation with hundreds of order
+          // lines. It is scoped to the order and to nothing else, so this is
+          // what empty means.
+          empty:
+            "This order has nothing left to receive: every line has been received in full, or is already on a goods receipt that has not been cancelled.",
         },
       },
       { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
