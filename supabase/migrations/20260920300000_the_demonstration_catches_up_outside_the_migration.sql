@@ -3,6 +3,45 @@ set lock_timeout = '30s';
 -- =============================================================================
 -- 20260920300000  The demonstration catches up outside the migration
 -- -----------------------------------------------------------------------------
+-- EDITED IN PLACE ON 18 SEPTEMBER, AFTER IT TOOK THE DEPLOY DOWN A SECOND TIME.
+-- The first version of this file ended by running
+-- erp_test.assert_demonstration_catch_up_suite(), and on the deploy that
+-- carried it the replay stopped there:
+--
+--   ERROR: canceling statement due to statement timeout (SQLSTATE 57014)
+--   At statement: 13   select erp_test.assert_demonstration_catch_up_suite()
+--
+-- The suite stands up a demonstration organisation of its own and runs the
+-- whole catch-up against it. On a build from an empty database that fixture is
+-- small and the suite takes 46 s. On a database with three organisations and a
+-- year of trading it is not small, and it ran past the configured two-minute
+-- limit. Nothing about the suite is wrong; it was in the wrong place.
+--
+-- THAT IS THE THIRD TIME IN TWO DAYS THAT ONE SHAPE HAS TAKEN A DEPLOY DOWN,
+-- and it is worth naming rather than only fixing. Cheap in CI, expensive on
+-- live: the settings check that scanned every routine body (20260920010000),
+-- the catch-up writing journals before the generators (20260920250000), and now
+-- a suite whose fixture is small on an empty database and not on a real one.
+-- Every time, what made it invisible was that the build and production run
+-- different amounts of work through the same statement, so the build's green is
+-- evidence about the build and not about production. The question to ask of
+-- every statement in a migration is not "does this pass" but "how much work is
+-- this on a database with a year of trading in it". This file now answers that
+-- question for each of its own, at the foot.
+--
+-- A suite is the clearest case of all, because a suite BUILDS ITS FIXTURE: its
+-- cost is not the schema's size, it is whatever the fixture does, and the
+-- fixture is built to be realistic. erp.ci_check_catalogue() picks up every
+-- erp_test.assert_%() taking no arguments, so a suite is already run by every
+-- build without a migration asking for it. A migration asserts its own
+-- governance; it does not need to re-run a behavioural suite at deploy time.
+-- 20260919010000 on 17 September is the same lesson with a different suite.
+--
+-- Registered in supabase/ci/migrations_edited.txt against 20260920310000.
+-- 20260920250000, which this file's own head discusses below, HAS now applied
+-- on production and is immutable from here.
+-- -----------------------------------------------------------------------------
+-- -----------------------------------------------------------------------------
 -- 20260920250000 brought every demonstration organisation up to date in its own
 -- transaction and then, as every migration does, re-ran the generators. On the
 -- first real deploy the replay stopped on it:
@@ -310,8 +349,36 @@ select erp.apply_execute_grants();
 --
 -- Nothing here writes a row of anybody's ledger either, which is the whole
 -- point: the generators run after a schema change and nothing else.
-
-select erp_test.assert_demonstration_catch_up_suite();
+--
+-- The suite is NOT run from here, and that is the second edit this file has
+-- taken (see the head of the file). It is in erp.ci_check_catalogue() by name,
+-- so every build runs it; 20260920310000 asserts that, which is the claim that
+-- makes leaving it out of this file safe rather than merely cheaper.
+--
+-- What is left, timed on live on 18 September against three organisations and a
+-- year of trading, inside a transaction that was rolled back:
+--
+--   erp.assert_isolation()                    1,156 ms
+--   erp.assert_public_api_safe()              1,511 ms
+--   erp.assert_ci_coverage()                    154 ms
+--   erp.assert_suite_verdicts_strict()            7 ms
+--   erp.assert_whole_database_reconciles()    1,740 ms   3 organisations, 54 checks
+--                                             ─────────
+--                                             4,568 ms
+--
+-- The reconciliation was the one to suspect and it is not the problem: it grows
+-- with the ledger, but 1.7 s against a two-minute limit leaves room for the
+-- ledger to grow a great deal. It stays, because it is the only assertion here
+-- that would notice a data fault, and because a migration that drops it to save
+-- a second and a half is saving the wrong second. The other four are schema
+-- introspection: their cost is the size of the schema, which is the same on
+-- every database.
+--
+-- The generators above are not timed here on purpose. They take access
+-- exclusive locks across hundreds of objects, so measuring them on live even in
+-- a transaction that rolls back would block the application for the duration.
+-- Their evidence is that every migration ends with them and every deploy has
+-- run them.
 
 select erp.assert_whole_database_reconciles();
 select erp.assert_isolation();
