@@ -485,7 +485,7 @@ describe("a move another document makes is never a button", () => {
     // mean either a button drawn over nothing or a move nobody can make, the
     // pair of defects that file exists to stop.
     const register = readFileSync(
-      join(ROOT, "supabase", "migrations", "20260919900000_the_lifecycle_completes.sql"),
+      join(ROOT, "supabase", "migrations", "20260919905000_the_lifecycle_completes.sql"),
       "utf8",
     );
     const body = register.slice(
