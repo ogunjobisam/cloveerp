@@ -30,7 +30,7 @@ import { useT } from "../lib/i18n";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Clove ERP — Your work, one governed ledger" },
+      { title: "Home — Clove ERP" },
       {
         name: "description",
         content:

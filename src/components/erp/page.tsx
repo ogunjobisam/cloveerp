@@ -1,6 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useContext, useState, type ReactNode } from "react";
-import { PageHeaderExtras } from "./page-extras";
+import { useRouterState } from "@tanstack/react-router";
+import { useContext, useEffect, useState, type ReactNode } from "react";
+
+import { useT } from "../../lib/i18n";
+import { HelpContext, PageHeaderExtras } from "./page-extras";
 
 /**
  * The pieces every screen inside the shell shares.
@@ -87,13 +90,77 @@ export function RefreshButton() {
   );
 }
 
+/**
+ * What a panel shows while its read is on the way: the shape of what is coming.
+ *
+ * One page used three treatments at once — panels that said "Loading…", tiles
+ * with a label over a blank, and a button that did not exist until its data
+ * arrived and then appeared under a moving cursor. A skeleton says something is
+ * coming and roughly how much, keeps the page from jumping when it lands, and
+ * says "Loading" to a screen reader without saying it to everybody else.
+ */
+export function LoadingRows({ rows = 3, className = "" }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-live="polite" className={`flex flex-col gap-2 ${className}`}>
+      <span className="sr-only">Loading</span>
+      {Array.from({ length: rows }, (_, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="h-4 animate-pulse rounded bg-muted"
+          style={{ width: `${92 - i * 14}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Hand a screen's "how this works" to the header's help sheet while the screen
+ * is showing, and say how to open it. Returns null when there is nothing to
+ * hand, or no shell to hand it to.
+ */
+export function useHowItWorks(text: string | undefined): (() => void) | null {
+  const help = useContext(HelpContext);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const setDetail = help?.setDetail;
+  useEffect(() => {
+    if (!setDetail || !text) return;
+    setDetail({ path: pathname, paragraphs: [text] });
+    return () => setDetail(null);
+  }, [setDetail, text, pathname]);
+  return help && text ? () => help.setOpen(true) : null;
+}
+
+/** The link under a screen's one sentence that opens the rest. */
+export function HowItWorksLink({ open }: { open: (() => void) | null }) {
+  const { ui } = useT();
+  if (!open) return null;
+  return (
+    <button
+      type="button"
+      onClick={open}
+      className="mt-1 text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+    >
+      {ui("How this works")}
+    </button>
+  );
+}
+
 export function PageHeader({
   title,
   children,
   actions,
+  howItWorks,
 }: {
   title: string;
+  /** One sentence: what the screen is for. The rest belongs in howItWorks. */
   children?: ReactNode;
+  /**
+   * Everything a screen used to say after its first sentence. Shown behind the
+   * header's help icon under "How this works", reached from a link here.
+   */
+  howItWorks?: string;
   /**
    * Controls that belong to the page rather than to any panel on it — the
    * Actions panel, mostly — drawn beside Refresh, where the module pages draw
@@ -103,11 +170,13 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   const Extras = useContext(PageHeaderExtras);
+  const openHelp = useHowItWorks(howItWorks);
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
         {children ? <Prose className="mt-1 text-sm text-muted-foreground">{children}</Prose> : null}
+        <HowItWorksLink open={openHelp} />
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {Extras ? <Extras /> : null}

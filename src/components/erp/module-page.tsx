@@ -7,7 +7,7 @@ import { ActionBar, HeaderActions } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
-import { RefreshButton, TOUCH } from "./page";
+import { HowItWorksLink, RefreshButton, TOUCH, useHowItWorks } from "./page";
 import { useScope } from "./session-context";
 import { ProcessFlow } from "./process-flow";
 
@@ -71,6 +71,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
   const [tab, setTab] = useState<Tab>("dashboard");
   const title = t(def.titleKey, def.title);
   const unstaged = unstagedActions(def.flow, def.actions ?? []);
+  const openHelp = useHowItWorks(def.howItWorks ? ui(def.howItWorks) : undefined);
 
   // Whether anything on this screen is about one place. Asked before the scope
   // is registered, so a module whose reads are organisation-wide does not claim
@@ -97,6 +98,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
                 Stock over Home / Move / Stock — was one too many. */}
             <h1 className="truncate text-xl font-semibold">{title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{ui(def.blurb)}</p>
+            <HowItWorksLink open={openHelp} />
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {actions}
@@ -105,11 +107,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
                 one is still here, one press away. */}
             {unstaged.length > 0 ? (
               <HeaderActions>
-                <ActionBar
-                  actions={unstaged}
-                  title="What you can do here"
-                  note="The database authorises every one of these; you only see the ones you hold."
-                />
+                <ActionBar actions={unstaged} title="What you can do here" />
               </HeaderActions>
             ) : null}
             <RefreshButton />

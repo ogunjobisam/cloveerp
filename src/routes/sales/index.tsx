@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { AutoPanel } from "../../components/erp/auto";
+import { AutoPanel, moneyCell } from "../../components/erp/auto";
 import {
   ActionBar,
   HeaderActions,
@@ -64,7 +64,7 @@ const SALES_ACTIONS: ActionSpec[] = [
     submitLabel: "Create the sales order",
   },
   {
-    label: "Resolve a price",
+    label: "Find a price",
     description: "What would this customer pay for this product today?",
     permission: "sales.price",
     fn: "erp_resolve_price",
@@ -311,16 +311,16 @@ function Sales() {
           <HeaderActions>
             <ActionBar
               title="The rest of selling"
-              note="Work that sits beside the chain above rather than on it: stock reservations, credit limits and holds, and customer returns."
+              note="Work beside the steps: stock reservations, credit limits and holds, and customer returns."
               actions={BESIDE_THE_CHAIN}
             />
 
             <ActionBar
               title="Orders that are fulfilled elsewhere"
-              note="A drop-ship is bought from a supplier who delivers to the customer; an intercompany order is mirrored into the company that supplies it. Stock identity pins a line to a batch, location or handling unit."
+              note="A supplier-direct order is bought from a supplier who delivers to the customer; an order between your companies is copied into the company that supplies it. Pinning a line ties it to a batch, a location or a pallet."
               actions={[
                 {
-                  label: "Raise a drop-ship order",
+                  label: "Have the supplier send it direct",
                   description:
                     "A purchase order to the supplier, addressed to the customer, priced from the catalogue and linked line by line to this sales order.",
                   permission: "procurement.order",
@@ -339,7 +339,7 @@ function Sales() {
                   invalidates: ["erp_documents"],
                 },
                 {
-                  label: "Raise an intercompany order",
+                  label: "Order from another of your companies",
                   description:
                     "Mirrors this sales order as a purchase order in the buying company, at its site, in its currency.",
                   permission: "procurement.order",
@@ -359,8 +359,7 @@ function Sales() {
                 },
                 {
                   label: "Pin a line's stock identity",
-                  description:
-                    "The batch, location or handling unit a sales line must be fulfilled from.",
+                  description: "The batch, location or pallet a sales line must be filled from.",
                   permission: "sales.order",
                   fn: "erp_set_line_stock_identity",
                   fields: [
@@ -377,7 +376,7 @@ function Sales() {
                     {
                       kind: "text",
                       name: "p_container_id",
-                      label: "Handling unit id",
+                      label: "Pallet id",
                       placeholder: "0f9c1a2e-…",
                       hint: "Optional. The pallet or tote this line must ship on.",
                     },
@@ -407,7 +406,10 @@ function Sales() {
         columns={[
           { header: "Reason", cell: "reason_code" },
           { header: "Returns", cell: "returns", numeric: true },
-          { header: "Value", cell: "value_minor", numeric: true },
+          // erp.return_reason_analysis() carries no currency, so this is the
+          // organisation's, as moneyCell() defaults it — still pounds and pence
+          // rather than a count of pence.
+          { header: "Value", cell: moneyCell("value_minor"), numeric: true },
           { header: "Share %", cell: "share_pct", numeric: true },
         ]}
       />

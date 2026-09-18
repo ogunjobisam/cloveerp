@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { SignIn } from "../components/erp/gate";
+import { safeReturnPath } from "../lib/return-path";
 
 /**
  * Signing in, as a place rather than a state.
@@ -35,5 +36,17 @@ export const Route = createFileRoute("/signin")({
 
 function SignInPage() {
   const navigate = useNavigate();
-  return <SignIn onSignedIn={() => void navigate({ to: "/" })} />;
+  // /signin?redirect=/inventory comes back to /inventory, by every route in:
+  // the password, an emailed link and Google. Only ever a path on this site.
+  const redirect = safeReturnPath(
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("redirect"),
+  );
+  return (
+    <SignIn
+      {...(redirect ? { returnPath: redirect } : {})}
+      onSignedIn={() => void navigate({ to: redirect ?? "/" })}
+    />
+  );
 }

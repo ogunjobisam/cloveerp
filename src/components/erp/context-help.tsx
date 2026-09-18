@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { CircleHelp } from "lucide-react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { friendlyError } from "@/lib/errors";
@@ -11,6 +11,7 @@ import { prettifyRoutine } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { MODULES, allTiles } from "../../lib/modules";
 import { TOUCH } from "./page";
+import { HelpContext, type ScreenDetail } from "./page-extras";
 
 /**
  * Contextual help (specification v1.2 §22.1).
@@ -89,18 +90,15 @@ function useScreenName(path: string): string {
   return tile ? t(tile.titleKey, tile.title) : ui("this screen");
 }
 
+/**
+ * The help icon. Rendered in the phone header and the desk header, so it only
+ * opens the sheet; the sheet itself is ContextHelpSheet, once, in the shell.
+ */
 export function ContextHelp() {
-  const { ui } = useT();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const [open, setOpen] = useState(false);
-  const path = helpPathFor(pathname);
-  const screen = useScreenName(path);
-
-  const topic = useQuery({
-    queryKey: ["erp_help_topic", { p_screen_path: path }],
-    queryFn: () => callErp<HelpTopic>("erp_help_topic", { p_screen_path: path }),
-    enabled: open,
-  });
+  const help = useContext(HelpContext);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = help ? help.open : ownOpen;
+  const setOpen = help ? help.setOpen : setOwnOpen;
 
   return (
     <>
@@ -113,7 +111,43 @@ export function ContextHelp() {
       >
         <CircleHelp className="size-5" />
       </button>
+      {help ? null : <HelpSheet open={ownOpen} setOpen={setOwnOpen} detail={null} />}
+    </>
+  );
+}
 
+/** The sheet the help icon opens, rendered once by the shell. */
+export function ContextHelpSheet() {
+  const help = useContext(HelpContext);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (!help) return null;
+  // A screen's own detail, but only while that screen is the one showing.
+  const detail = help.detail && help.detail.path === pathname ? help.detail : null;
+  return <HelpSheet open={help.open} setOpen={help.setOpen} detail={detail} />;
+}
+
+function HelpSheet({
+  open,
+  setOpen,
+  detail,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  detail: ScreenDetail | null;
+}) {
+  const { ui } = useT();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const path = helpPathFor(pathname);
+  const screen = useScreenName(path);
+
+  const topic = useQuery({
+    queryKey: ["erp_help_topic", { p_screen_path: path }],
+    queryFn: () => callErp<HelpTopic>("erp_help_topic", { p_screen_path: path }),
+    enabled: open,
+  });
+
+  return (
+    <>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="right"
@@ -127,6 +161,22 @@ export function ContextHelp() {
               "The product's guidance for {screen}. The same for every organisation; a note of your own sits beneath it.",
             ).replace("{screen}", screen)}
           </SheetDescription>
+
+          {detail && detail.paragraphs.length > 0 ? (
+            <section className="rounded-lg border border-border p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {ui("How this works")}
+              </h3>
+              <div className="mt-1 flex flex-col gap-2 text-sm">
+                {/* Already in the reader's words: each page passes its
+                    paragraphs through ui() where it writes them, which is
+                    where supabase/ci/screen_strings.sh looks for them. */}
+                {detail.paragraphs.map((p, i) => (
+                  <p key={i}>{p}</p>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {topic.isPending ? (
             <p role="status" className="text-sm text-muted-foreground">

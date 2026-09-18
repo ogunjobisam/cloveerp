@@ -65,10 +65,13 @@ function SiteTransfers() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Site transfers")}>
-        {ui(
-          "Moving stock from one of your warehouses to another. The goods leave the first site's shelves when they are loaded and stand in that site's transit place, still its stock and still its value, until they are booked in at the other end. Nothing is bought or sold on the way, so no profit or loss account moves.",
+      <PageHeader
+        title={ui("Site transfers")}
+        howItWorks={ui(
+          "The goods leave the first site's shelves when they are loaded and stay that site's stock, at the same value, until they are booked in at the other end.",
         )}
+      >
+        {ui("Moving stock from one of your warehouses to another.")}
       </PageHeader>
 
       <ActionBar

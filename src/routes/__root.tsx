@@ -130,15 +130,65 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The tab's title follows the route the moment it changes.
+ *
+ * HeadContent writes the title once the new route has rendered, and a route in
+ * its own chunk renders only when the chunk has arrived — so the tab still said
+ * "Stock — Clove ERP" after landing on Purchasing. The destination's own head()
+ * is read as the navigation starts instead. Every route here states its title
+ * as a literal, so reading it needs nothing the route has not loaded yet; one
+ * that ever does is skipped, and HeadContent sets it a moment later as before.
+ */
+function useTitleFollowsTheRoute() {
+  const router = useRouter();
+  useEffect(
+    () =>
+      router.subscribe("onBeforeNavigate", ({ toLocation }) => {
+        const matches = router.matchRoutes(toLocation.pathname, toLocation.search);
+        for (let i = matches.length - 1; i >= 0; i--) {
+          const routeId = matches[i]?.routeId;
+          const head = routeId ? router.looseRoutesById[routeId]?.options.head : undefined;
+          if (!head) continue;
+          try {
+            const declared = (head as (ctx: never) => { meta?: { title?: string }[] })({} as never);
+            const title = declared?.meta?.find((m) => typeof m?.title === "string")?.title;
+            if (title) {
+              document.title = title;
+              return;
+            }
+          } catch {
+            /* a head() that needs its route's data: HeadContent will set it */
+          }
+        }
+      }),
+    [router],
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useTitleFollowsTheRoute();
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
-      {/* What an action did is said out loud, once, wherever it was pressed. */}
-      <Toaster position="bottom-right" closeButton richColors />
+      {/* What an action did is said out loud, once, wherever it was pressed —
+          and then goes. Bottom right put it on top of the record panel's
+          buttons: "GRN-2026-000003 created" sat over "Receive an order" through
+          six clicks, because a toast stops its clock while the pointer is on it
+          and the pointer was on it trying to reach the button underneath. Top
+          centre, just under the header, is over the page's title, where there
+          is nothing to press; five seconds, and never more than three at once. */}
+      <Toaster
+        position="top-center"
+        offset={76}
+        duration={5000}
+        visibleToasts={3}
+        closeButton
+        richColors
+      />
     </QueryClientProvider>
   );
 }

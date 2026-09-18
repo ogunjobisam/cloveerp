@@ -1,6 +1,6 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
@@ -17,6 +17,7 @@ import { tenantStorageKey } from "../../lib/tenant-storage";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
+import { safeReturnPath } from "../../lib/return-path";
 
 /**
  * The auth boundary.
@@ -107,6 +108,21 @@ export type SignInProps = {
  * route there is nothing watching, so the caller says where to go next.
  */
 export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
+  // Where to come back to. Inside the gate that is the page the person asked
+  // for, which is the one showing; an emailed link and Google both used to
+  // return to the bare site and lose it.
+  const here = useRouterState({ select: (st) => st.location.href });
+
+  // Shown in place of a gated page, the tab still named that page — "Stock —
+  // Clove ERP" over a sign-in form. It names the form while the form is there.
+  useEffect(() => {
+    const was = document.title;
+    document.title = "Sign in — Clove ERP";
+    return () => {
+      document.title = was;
+    };
+  }, []);
+  const back = safeReturnPath(returnPath) ?? safeReturnPath(here) ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +159,7 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
     try {
       const { error } = await supabase!.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
+        options: { shouldCreateUser: false, emailRedirectTo: `${window.location.origin}${back}` },
       });
       limited = error !== null && isRateLimited(error);
     } catch {
@@ -157,7 +173,7 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
     setError(null);
     const { error } = await supabase!.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}${returnPath ?? ""}` },
+      options: { redirectTo: `${window.location.origin}${back}` },
     });
     // On success the browser navigates away to Google; only failures return here.
     if (error) setError(friendlyError(error).body ?? friendlyError(error).title);
@@ -191,53 +207,15 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
           />
         </label>
 
-        <label className="mt-3 block text-sm font-medium">
-          Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            autoComplete="current-password"
-          />
-        </label>
-
-        {error ? (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={busy || link === "sending"}
-          className="mt-5 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-        >
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-
-        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" />
-          or
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
-        >
-          <GoogleGlyph />
-          Continue with Google
-        </button>
-
+        {/* Most people arrive by invitation, and an invitation brings no
+            password. The way in they can use was the last line on the page,
+            beneath two they could not; it is the first thing after the
+            address now, and the password is for those who have set one. */}
         <button
           type="button"
           onClick={() => void emailMeASignInLink()}
           disabled={busy || link === "sending"}
-          className="mt-3 w-full rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+          className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
           {link === "sending" ? "Sending…" : "Email me a sign-in link"}
         </button>
@@ -251,9 +229,51 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
           </p>
         ) : (
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            Joined by invitation and have no password? Enter your email and ask for a link.
+            Joined by invitation and have no password? This is the way in.
           </p>
         )}
+        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or with a password
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <label className="mt-3 block text-sm font-medium">
+          Password
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            autoComplete="current-password"
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          disabled={busy || link === "sending"}
+          className="mt-3 w-full rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+        >
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <button
+          type="button"
+          onClick={signInWithGoogle}
+          disabled={busy}
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+        >
+          <GoogleGlyph />
+          Continue with Google
+        </button>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
           <Link to="/product" className="underline underline-offset-2">

@@ -169,9 +169,14 @@ function AccountDetermination() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Account determination")}>
+      <PageHeader
+        title={ui("Which accounts things post to")}
+        howItWorks={ui(
+          "Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
+        )}
+      >
         {ui(
-          "A posting class is what accounting cares about; the product is what operations cares about. Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
+          "A posting class is what accounting cares about; the product is what operations cares about.",
         )}
       </PageHeader>
 
@@ -447,7 +452,7 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<Rule>
-        title={ui("Account determination")}
+        title={ui("Which accounts things post to")}
         description={ui(
           "Transaction type, posting classes and place on the left; the account and its analysis on the right.",
         )}
