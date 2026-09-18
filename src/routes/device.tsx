@@ -969,7 +969,7 @@ const KEY_WORDS: Record<string, string> = {
   operation_seq: "Operation number",
   quantity_scrapped: "How many scrapped?",
   scrap_reason: "Why scrapped?",
-  disposition: "Disposition",
+  disposition: "Decision",
 };
 
 function CaptureStep({
@@ -1347,7 +1347,7 @@ function Enquiry({
       <button type="button" className={`${SMALL} self-start`} onClick={onBack}>
         {ui("Back")}
       </button>
-      <h1 className="text-2xl font-semibold">{ui("Scan a product, location or handling unit")}</h1>
+      <h1 className="text-2xl font-semibold">{ui("Scan a product, location or pallet")}</h1>
       {!online ? (
         <p role="status" className="text-base">
           {ui("Positions are read from the server. Reconnect to see them.")}

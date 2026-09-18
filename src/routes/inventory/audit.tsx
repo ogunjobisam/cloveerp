@@ -129,9 +129,14 @@ function StockAudit() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Stock audit")}>
+      <PageHeader
+        title={ui("Stock audit")}
+        howItWorks={ui(
+          "A place nobody has counted shows as never counted rather than as agreeing. Nothing on this screen changes stock: confirm a count and the correction is made as a movement, with a reason.",
+        )}
+      >
         {ui(
-          "What the book says is standing in each place, what it is worth, and what the last count actually found. A place nobody has counted shows as never counted rather than as agreement — an untested balance is not a verified one. Nothing here changes stock: post a count and the correction is made as a movement, with a reason.",
+          "What the system says is in each place, what it is worth, and what the last count found.",
         )}
       </PageHeader>
 
@@ -159,7 +164,8 @@ function StockAudit() {
           },
           {
             label: "Record a count",
-            description: "What the counter found in the place. The variance is worked out from it.",
+            description:
+              "What the counter found in the place. The difference is worked out from it.",
             permission: "inventory.count",
             fn: "erp_record_count",
             fields: [
@@ -173,7 +179,7 @@ function StockAudit() {
             // approval task, and until 20260914070000 deciding it moved
             // nothing: the count stayed waiting. Deciding it here approves or
             // refuses the count itself.
-            label: "Decide a count variance",
+            label: "Decide a count difference",
             description:
               "A count outside its programme's tolerance waits for the approving role to agree. Agreed, it can be posted; refused, it stays as it was found and is not posted.",
             // No permission: the door gates on the task being assigned to the
@@ -213,7 +219,7 @@ function StockAudit() {
             submitLabel: "Record the decision",
           },
           {
-            label: "Post a count",
+            label: "Confirm a count",
             description:
               "Correct the stock by an agreed difference. Once the organisation is live, somebody other than the person who counted it posts it.",
             permission: "inventory.adjust",
@@ -246,8 +252,8 @@ function StockAudit() {
               ui("Value"),
               ui("Last counted"),
               ui("Counted"),
-              ui("Variance"),
-              ui("Variance value"),
+              ui("Difference"),
+              ui("Difference in value"),
               ui("State"),
             ]}
           >
@@ -305,7 +311,7 @@ function StockAudit() {
               ui("Value"),
               ui("Expected"),
               ui("Counted"),
-              ui("Variance"),
+              ui("Difference"),
               ui("Last counted"),
               ui("Count"),
             ]}

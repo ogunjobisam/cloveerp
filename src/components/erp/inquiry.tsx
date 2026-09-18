@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { formatMinor } from "../../lib/money";
 import { ActionButton, ComboField, ErrorNote, MultiField, type Field } from "./action";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
@@ -45,18 +46,30 @@ function Value({ value }: { value: unknown }) {
     );
   }
   if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    // An amount in minor units is money, in the record's own currency where it
+    // says one. "Resolve a purchase price" answered AMOUNT MINOR 1850 for a
+    // price of £18.50; minor units belong to the door, never to the screen.
+    const currency = typeof record["currency"] === "string" ? record["currency"] : "GBP";
     return (
       <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-        {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
-          <div key={k} className="min-w-0">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {k.replace(/_/g, " ")}
-            </dt>
-            <dd className="break-words text-sm">
-              <Value value={v} />
-            </dd>
-          </div>
-        ))}
+        {Object.entries(record).map(([k, v]) => {
+          const money = k.endsWith("_minor") && typeof v === "number" && Number.isFinite(v);
+          return (
+            <div key={k} className="min-w-0">
+              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {k.replace(/_minor$/, "").replace(/_/g, " ")}
+              </dt>
+              <dd className="break-words text-sm">
+                {money ? (
+                  <span className="tabular-nums">{formatMinor(v, currency)}</span>
+                ) : (
+                  <Value value={v} />
+                )}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
     );
   }

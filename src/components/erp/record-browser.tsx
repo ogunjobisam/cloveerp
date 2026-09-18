@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { article } from "../../lib/plain-words";
 import { tenantStorageKey } from "../../lib/tenant-storage";
 import { ErrorNote } from "./action";
-import { EmptyState, Prose } from "./page";
+import { EmptyState, LoadingRows, Prose } from "./page";
 import { useErpSession } from "./session-context";
 
 /**
@@ -304,9 +304,7 @@ export function RecordBrowser<T>({
 
           <div className="max-h-[32rem] overflow-y-auto">
             {isPending ? (
-              <p role="status" className="px-4 py-4 text-sm text-muted-foreground sm:px-5">
-                Loading…
-              </p>
+              <LoadingRows className="px-4 py-4 sm:px-5" />
             ) : error ? (
               // ErrorNote rather than the title alone.
               //

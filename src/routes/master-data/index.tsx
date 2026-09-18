@@ -542,7 +542,7 @@ function ItemSuppliers({ itemId }: { itemId: string }) {
           No supplier recorded. A purchase order for this product has nobody to go to.
         </p>
       ) : (
-        <Table columns={["Supplier", "Their code", "Rank", "Lead time", "Approved"]}>
+        <Table columns={["Supplier", "Their code", "Rank", "Days to arrive", "Approved"]}>
           {(data ?? []).map((s) => (
             <tr key={s.item_supplier_id} className="border-b border-border/50 last:border-0">
               <td className="py-2 pr-4">

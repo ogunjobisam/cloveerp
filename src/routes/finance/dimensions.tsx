@@ -79,7 +79,7 @@ function Dimensions() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_dimensions", "Analysis dimensions")}>
+      <PageHeader title={t("nav.finance_dimensions", "Extra reporting tags")}>
         A dimension is a way of analysing a posting: cost centre, project, region. A value is
         stamped on every journal line from the posting rule, from the document, or derived from the
         document&rsquo;s facts by a rule you write here; a combination rule says which values an

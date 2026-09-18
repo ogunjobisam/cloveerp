@@ -312,9 +312,12 @@ function Commercial() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Your agreement")}>
+      <PageHeader
+        title={ui("Your agreement")}
+        howItWorks={ui("The contract is the source; the entitlement enforced is derived from it.")}
+      >
         {ui(
-          "What this organisation is entitled to, what it is using, what it will pay next and when its term ends, without asking. The contract is the source; the entitlement enforced is derived from it.",
+          "What this organisation is entitled to, what it is using, what it will pay next and when its term ends, without asking.",
         )}
       </PageHeader>
 
@@ -733,7 +736,7 @@ function Commercial() {
                                           {l.unit_minor == null ? (
                                             <Pill tone="bad">unpriced</Pill>
                                           ) : (
-                                            `${l.unit_minor}p · ${l.band ?? ""}`
+                                            `${money(l.unit_minor, i.currency)} · ${l.band ?? ""}`
                                           )}
                                         </td>
                                         <td className="py-1.5 text-sm tabular-nums">
