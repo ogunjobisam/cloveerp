@@ -371,6 +371,14 @@ begin
   values (v_tenant, 'ZZ-SITE-1', 'A widget in two places', v_uom, 'active'::erp.record_status)
   returning id into v_item;
 
+  -- Costed in layers. Ageing is measured from the valuation layers, and the
+  -- demonstration configuration costs stock at average, which keeps none: the
+  -- first CI run of this suite found the ageing empty at both depots for that
+  -- reason, not because the filter was wrong.
+  insert into erp.costing_policy (tenant_id, code, name, method, item_id, status)
+  values (v_tenant, 'zz_site_fifo', 'Two-depot widget in layers', 'fifo'::erp.costing_method,
+          v_item, 'active'::erp.record_status);
+
   -- Forty north, ten south, at the same cost. No document: this is an opening
   -- position, the way erp_test.stock_adjustment_suite() stands its own.
   perform erp.receive_cost(v_item, v_north, 40, 500, v_ccy);
