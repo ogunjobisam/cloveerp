@@ -710,6 +710,25 @@ jobs:
         # closed on, so a fifth tie is run by this the day it lands.
         run: supabase/ci/ties_thrice.sh
 
+      - name: The demonstration catches up over a bare connection
+        # The deploy calls erp.catch_up_demonstrations() over a connection that
+        # arrives with nothing set on it. Nothing else in this build does: the
+        # suite establishes its own session and keeps it, and a migration has
+        # only the connection it is running in. So on 18 September the routine
+        # went green here and failed there, because it gave the organisation
+        # context back one statement before erp.journal's deferred numbering
+        # trigger fired at commit.
+        #
+        # This step is that connection. It builds a small demonstration, then
+        # calls the routine from a psql invocation of its own, then reads back
+        # from a third that it traded to today, numbered every journal and
+        # closed its months with nothing waived.
+        #
+        # After the close above, for the same reason it gives: this is the last
+        # thing that writes a ledger in the build, and it brings an organisation
+        # of its own rather than touching ci-demo.
+        run: supabase/ci/demonstration_catch_up.sh
+
       - name: Every door has a home
         # The application calls the database by bare string, and nothing
         # compared those strings with the schema: the generated types file is
