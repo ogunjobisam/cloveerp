@@ -52,22 +52,34 @@ export function useAvailableTransitions(
  * means that something else exists: a purchase order is received because a
  * goods receipt was posted against it, a sales order is picked, despatched or
  * invoiced because stock was picked, a delivery left or an invoice was raised,
- * and an invoice is paid because cash was applied or a payment run paid it.
+ * an invoice is paid because cash was applied or a payment run paid it, and an
+ * invoice is credited because a credit note reversed it.
  * Pressed as a bare move, each would say so with nothing behind it — an order
- * marked received with no receipt, an order invoiced with no invoice. So they
+ * marked received with no receipt, an order invoiced with no invoice, an
+ * invoice credited with nothing owed back. So they
  * are left to their doors, which the screens offer by name: "Receive against an
  * order", "Pick the order", "Create a delivery from this order", "Invoice a
- * delivery", "Apply cash", "Record payment". Submitting, approving, sending,
- * posting, issuing, registering, disputing, crediting, closing and cancelling
+ * delivery", "Credit this invoice", "Apply cash", "Record payment".
+ * Submitting, approving, sending,
+ * posting, issuing, registering, disputing, closing and cancelling
  * stay buttons: each is the whole of what it records.
  *
+ * `credit` joined the list on 19 September, with the mechanism that makes it:
+ * the credit note door shipped on the 18th and left the invoice Issued, so the
+ * bare button beside it was the only thing that could mark an invoice Credited
+ * — terminally, with no credit note, no reversing journal and no goods back.
+ * Issuing a credit note that covers the whole invoice now moves it
+ * (erp.credit_invoices_for_credit_note, 20260919900000).
+ *
  * The database still performs these moves for whoever holds the permission;
- * this is only what the screens offer.
+ * this is only what the screens offer. Each entry here is a row in
+ * erp.transition_driver_register() naming the routine that drives it, and the
+ * test below holds the two lists to each other.
  */
 export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
   purchase_order: ["receive_partial", "receive_rest", "receive_all"],
   sales_order: ["pick", "despatch", "invoice"],
-  sales_invoice: ["settle"],
+  sales_invoice: ["settle", "credit"],
   purchase_invoice: ["pay"],
 };
 
