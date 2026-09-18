@@ -1191,6 +1191,78 @@ export const INVENTORY: ModuleDef = {
   ],
 };
 
+/**
+ * The three verbs the period close actually has.
+ *
+ * Declared once and offered in two places: the finance module page, where they
+ * sit among everything else finance can do, and /finance/close, which is the
+ * screen a person opens at month end and where they are the only verbs that
+ * matter. Reopening a period and closing a fiscal year stay on the module page
+ * — neither is part of working a close, and the close screen is the one screen
+ * in finance that should carry nothing it does not need.
+ */
+export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
+  {
+    label: "Open a period close",
+    permission: "finance.close_period",
+    fn: "erp_open_period_close",
+    fields: [
+      pickFrom(
+        "erp_fiscal_periods",
+        "fiscal_period_id",
+        ["code", "status"],
+        "p_fiscal_period_id",
+        "Period",
+      ),
+    ],
+    invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_close_checklist"],
+  },
+  {
+    label: "Complete a close task",
+    permission: "finance.close_period",
+    fn: "erp_complete_close_task",
+    fields: [
+      pickFrom(
+        "erp_close_tasks",
+        "task_id",
+        ["period", "code", "status"],
+        "p_task_id",
+        "Close task",
+      ),
+      {
+        kind: "text",
+        name: "p_waiver_reason",
+        label: "Waiver reason",
+        placeholder: "Why the task is being passed without being done",
+        hint: "Only needed when skipping the task rather than completing it.",
+      },
+    ],
+    invalidates: ["erp_close_status", "erp_close_checklist", "erp_book_ties"],
+  },
+  {
+    label: "Close a period",
+    description:
+      "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
+    permission: "finance.close_period",
+    fn: "erp_close_period",
+    fields: [
+      pickFrom(
+        "erp_fiscal_periods",
+        "fiscal_period_id",
+        ["code", "status"],
+        "p_fiscal_period_id",
+        "Period",
+      ),
+    ],
+    invalidates: [
+      "erp_fiscal_periods",
+      "erp_close_status",
+      "erp_close_checklist",
+      "erp_trial_balance",
+    ],
+  },
+];
+
 export const FINANCE: ModuleDef = {
   flow: {
     title: "Money, step by step",
@@ -1541,60 +1613,7 @@ export const FINANCE: ModuleDef = {
       ],
       invalidates: ["erp_settlement_statements", "erp_receivables_ageing", "erp_trial_balance"],
     },
-    {
-      label: "Open a period close",
-      permission: "finance.close_period",
-      fn: "erp_open_period_close",
-      fields: [
-        pickFrom(
-          "erp_fiscal_periods",
-          "fiscal_period_id",
-          ["code", "status"],
-          "p_fiscal_period_id",
-          "Period",
-        ),
-      ],
-      invalidates: ["erp_fiscal_periods", "erp_close_status"],
-    },
-    {
-      label: "Complete a close task",
-      permission: "finance.close_period",
-      fn: "erp_complete_close_task",
-      fields: [
-        pickFrom(
-          "erp_close_tasks",
-          "task_id",
-          ["period", "code", "status"],
-          "p_task_id",
-          "Close task",
-        ),
-        {
-          kind: "text",
-          name: "p_waiver_reason",
-          label: "Waiver reason",
-          placeholder: "Why the task is being passed without being done",
-          hint: "Only needed when skipping the task rather than completing it.",
-        },
-      ],
-      invalidates: ["erp_close_status"],
-    },
-    {
-      label: "Close a period",
-      description:
-        "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
-      permission: "finance.close_period",
-      fn: "erp_close_period",
-      fields: [
-        pickFrom(
-          "erp_fiscal_periods",
-          "fiscal_period_id",
-          ["code", "status"],
-          "p_fiscal_period_id",
-          "Period",
-        ),
-      ],
-      invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_trial_balance"],
-    },
+    ...PERIOD_CLOSE_ACTIONS,
     {
       label: "Reopen a period",
       permission: "finance.reopen_period",
@@ -4446,6 +4465,24 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "What the period made and what the company is worth, read from the journals purchases, stock and invoices already posted.",
     permission: "finance.read",
+    group: "settle",
+  },
+  {
+    path: "/finance/close",
+    titleKey: "nav.finance_close",
+    title: "Closing the month",
+    blurb:
+      "The checklist that has to be true before the books are closed: every task, who did it, and what the close is waiting for.",
+    permission: ["finance.close_period", "finance.read"],
+    group: "settle",
+  },
+  {
+    path: "/finance/reconciliation",
+    titleKey: "nav.finance_reconciliation",
+    title: "Do the books tie",
+    blurb:
+      "The trial balance, the ageings against their control accounts, the subledgers and the stock valuation — checked against the ledger now, for this organisation.",
+    permission: ["finance.read", "finance.close_period"],
     group: "settle",
   },
   {
