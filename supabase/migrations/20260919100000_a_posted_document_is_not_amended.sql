@@ -328,10 +328,13 @@ begin
 
   -- The rest of the body is still the body: the cut-off it raises on, and the
   -- reservation it releases rather than leaving to hold stock the document no
-  -- longer wants.
+  -- longer wants. Each phrase is one the original wrote on a SINGLE line — a
+  -- comment broken over two lines is never a substring of the body, and the
+  -- first attempt at this migration probed for one that was.
   v_def := pg_get_functiondef(v_sig::regprocedure);
   if position('CLOVEERP_PAST_AMENDMENT_CUT_OFF' in v_def) = 0
-     or position('an amendment that silently re-reserves' in v_def) = 0
+     or position('that silently re-reserves can quietly take stock from another order' in v_def) = 0
+     or position('update erp.allocation' in v_def) = 0
      or position('erp.authorise(v_perm, d.entity_id, d.site_id' in v_def) = 0 then
     raise exception 'CLOVEERP_AMEND_LINE_UNRECOGNISED: % lost part of its body, or did not take this patch', v_sig;
   end if;
