@@ -117,6 +117,16 @@ export type Panel = {
   description?: string;
   fn: string;
   args?: Record<string, unknown>;
+  /**
+   * The argument the site chosen in the header fills, when this read is about
+   * one place.
+   *
+   * The header said MAIN · LND-HO and the stock tables listed LEE-WH, because
+   * nothing on those screens had ever read the choice. A read that names its
+   * site argument here follows it; one that does not is about the whole
+   * organisation, and the header's own popover says so.
+   */
+  siteArg?: string;
   empty: string;
   /**
    * Where the emptiness is fixed, when it is fixed somewhere else.
@@ -149,6 +159,16 @@ export type Kpi = {
   label: string;
   fn: string;
   args?: Record<string, unknown>;
+  /**
+   * The argument the site chosen in the header fills, when this read is about
+   * one place.
+   *
+   * The header said MAIN · LND-HO and the stock tables listed LEE-WH, because
+   * nothing on those screens had ever read the choice. A read that names its
+   * site argument here follows it; one that does not is about the whole
+   * organisation, and the header's own popover says so.
+   */
+  siteArg?: string;
   /** Derived from the rows of `fn`. Returning null means "no basis to state one". */
   compute: (
     rows: Row[],
@@ -161,6 +181,16 @@ export type Chart = {
   description?: string;
   fn: string;
   args?: Record<string, unknown>;
+  /**
+   * The argument the site chosen in the header fills, when this read is about
+   * one place.
+   *
+   * The header said MAIN · LND-HO and the stock tables listed LEE-WH, because
+   * nothing on those screens had ever read the choice. A read that names its
+   * site argument here follows it; one that does not is about the whole
+   * organisation, and the header's own popover says so.
+   */
+  siteArg?: string;
   empty: string;
   label: (row: Row) => string;
   value: (row: Row) => number;
@@ -1048,6 +1078,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock lines",
       fn: "erp_stock_health",
+      siteArg: "p_site_id",
       compute: (rows) => ({ value: String(rows.length), hint: "product and site positions" }),
     },
     {
@@ -1059,6 +1090,7 @@ export const INVENTORY: ModuleDef = {
       // counted nothing for every organisation.
       label: "Positions with a finding",
       fn: "erp_stock_health",
+      siteArg: "p_site_id",
       compute: (rows) =>
         zeroIsGood(
           // The empty string is counted as healthy on purpose: a tile whose
@@ -1071,6 +1103,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Stock value",
       fn: "erp_stock_valuation",
+      siteArg: "p_site_id",
       compute: (rows, { money }) =>
         rows.length === 0 ? null : { value: money(rows, "value_minor"), hint: "on hand, at cost" },
     },
@@ -1085,6 +1118,7 @@ export const INVENTORY: ModuleDef = {
     title: "Stock ageing",
     description: "Quantity by age band.",
     fn: "erp_stock_ageing",
+    siteArg: "p_site_id",
     empty:
       "No aged stock to profile. Stock is banded by age here once anything has been on hand long enough to band.",
     label: (r) => String(r["bucket"] ?? "—"),
@@ -1120,14 +1154,13 @@ export const INVENTORY: ModuleDef = {
       title: "Stock health",
       description: "Cover against policy, by product and site.",
       fn: "erp_stock_health",
+      siteArg: "p_site_id",
       empty:
         "Nothing is on hand yet. Receipting a purchase order is what first puts stock into an organisation.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_id"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
-        // erp.stock_health_report() carries site_id and no site code; the gap is
-        // in erp_meta.app_column_allowance rather than filled with a uuid.
         { header: "Site", cell: "site_code" },
         { header: "On hand", cell: "on_hand", numeric: true },
         { header: "Available", cell: "available", numeric: true },
@@ -1139,6 +1172,7 @@ export const INVENTORY: ModuleDef = {
       title: "Valuation",
       description: "Cost basis by product and site, in minor units.",
       fn: "erp_stock_valuation",
+      siteArg: "p_site_id",
       empty: "Nothing to value yet. Stock is valued from the moment it is received.",
       emptyAction: { label: "Open Purchasing", to: "/procurement" },
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}`,
@@ -1154,11 +1188,11 @@ export const INVENTORY: ModuleDef = {
       title: "Ageing",
       description: "How long stock has been standing still.",
       fn: "erp_stock_ageing",
+      siteArg: "p_site_id",
       empty: "No aged stock. Nothing has been on hand long enough to fall into an age band.",
       rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
-        // As on Stock health: erp.stock_ageing_report() has site_id and no code.
         { header: "Site", cell: "site_code" },
         { header: "Band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
@@ -1185,6 +1219,7 @@ export const INVENTORY: ModuleDef = {
       title: "Count accuracy",
       description: "How close the counts came, by programme.",
       fn: "erp_count_accuracy",
+      siteArg: "p_site_id",
       empty: "No counts posted yet, so accuracy cannot be stated.",
       rowKey: (r, i) => String(r["programme_code"] ?? i),
       columns: [
