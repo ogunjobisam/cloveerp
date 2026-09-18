@@ -140,13 +140,29 @@
 --   'routine'   the screens leave it to a door or a mechanism, named here with
 --               its signature, and the check confirms the routine exists and
 --               performs transitions.
---   'undriven'  the named, justified register. One row today.
+--   'undriven'  the named, justified register. Empty today, and kept.
 --
--- The one allowance is sales_invoice.settle. erp.apply_cash() applies money to
--- open items and does not move the invoice to Paid; only the demonstration
--- does, by hand, the same way it did the other four. That is a real finding and
--- it is being answered separately, so it is written down with its reason rather
--- than quietly counted as driven.
+-- The allowance list is empty, and the way it emptied is worth writing down.
+-- This file was drafted with one row on it: sales_invoice.settle, because
+-- erp.apply_cash() applied money to open items and left the invoice Issued, and
+-- only the demonstration moved it, by hand, the same way it did the other four.
+-- 20260919200000 landed while this was in review and made cash settle what it
+-- pays, through erp.settle_paid_document(). The finding was real, it was
+-- answered, and the register follows it rather than keeping a reason that has
+-- stopped being true.
+--
+-- The same change is why 'routine' names the routine that PERFORMS the move and
+-- not the door a person presses. erp.pay_payment_run() drove purchase_invoice's
+-- `pay` directly when this was written; it now delegates to
+-- erp.settle_paid_document(), and the first build after 20260919200000 landed
+-- refused with
+--
+--     a registered driver that performs no transition — purchase_invoice.pay
+--
+-- which is finding 4 doing its job on its first day, against a change nobody
+-- had told it about. A register that named the door would have stayed quietly
+-- green while the door stopped driving anything. The performer is the only end
+-- of that chain the database can check, so the performer is what is named.
 --
 -- The 'routine'/'screen' split is mirrored in DOOR_ONLY_TRANSITIONS, and
 -- src/lib/stage-records.test.ts reads this file to prove the two agree — the
@@ -668,7 +684,7 @@ as $$
       ('purchase_invoice',   'register',               'screen', ''),
       ('purchase_invoice',   'dispute',                'screen', ''),
       ('purchase_invoice',   'resolve',                'screen', ''),
-      ('purchase_invoice',   'pay',                    'routine', 'erp.pay_payment_run(uuid)'),
+      ('purchase_invoice',   'pay',                    'routine', 'erp.settle_paid_document(uuid,text)'),
       ('purchase_invoice',   'cancel',                 'screen', ''),
 
       ('purchase_credit_note', 'issue',                'screen', ''),
@@ -694,14 +710,7 @@ as $$
       ('delivery',           'cancel',                 'screen', ''),
 
       ('sales_invoice',      'issue',                  'screen', ''),
-      ('sales_invoice',      'settle',                 'undriven',
-       'Cash application does not move the invoice to Paid. erp.apply_cash() '
-       'settles open items and leaves the document Issued; only '
-       'erp.seed_demo_history() performs this move, by hand, which is how the '
-       'demonstration month shows paid invoices the product cannot produce. '
-       'The same finding as sales_order.invoice was, answered separately by the '
-       'change that makes cash settle an invoice. Written down here rather than '
-       'counted as driven.'),
+      ('sales_invoice',      'settle',                 'routine', 'erp.settle_paid_document(uuid,text)'),
       ('sales_invoice',      'credit',                 'routine', 'erp.credit_invoices_for_credit_note(uuid)'),
       ('sales_invoice',      'cancel',                 'screen', ''),
 
@@ -1086,7 +1095,7 @@ volatile
 set search_path = ''
 as $suite$
 declare
-  c_expected constant integer := 14;
+  c_expected constant integer := 15;
   v_cases  integer := 0;
   v_tag    text := substr(md5(gen_random_uuid()::text), 1, 6);
   a1       uuid := gen_random_uuid();
@@ -1102,8 +1111,8 @@ declare
   v_after_a text; v_after_b text; v_closed text;
   v_credit_1 text; v_credit_2 text; v_draft_state text;
   v_msg1 text; v_msg2 text; v_verdict text;
-  v_reg jsonb; v_reg_a jsonb; v_reg_b jsonb; v_reg_c jsonb;
-  v_hit_a boolean; v_hit_b boolean; v_hit_c boolean;
+  v_reg jsonb; v_reg_a jsonb; v_reg_b jsonb; v_reg_c jsonb; v_reg_d jsonb;
+  v_hit_a boolean; v_hit_b boolean; v_hit_c boolean; v_hit_d boolean;
 begin
   begin
     v_step := 'an organisation with finance, procurement, sales and inventory installed';
@@ -1373,6 +1382,27 @@ begin
               'for every day this product has existed';
     return next;
 
+    -- The allowance itself. No transition needs one today — the one this file
+    -- was drafted with was answered by 20260919200000 before it landed — so
+    -- without this case the allowance would be a door nobody has opened, and a
+    -- register row saying nothing would go through it silently.
+    select jsonb_agg(case
+             when e ->> 'machine_code' = 'sales_order' and e ->> 'transition_code' = 'invoice'
+             then e || jsonb_build_object('driver', 'undriven', 'detail', '   ')
+             else e end) into v_reg_d
+      from jsonb_array_elements(v_reg) e;
+    select exists (
+      select 1 from erp.undriven_transition_report(v_reg_d) r
+       where r.reference = 'sales_order.invoice'
+         and r.finding like '%no reason written down%')
+      into v_hit_d;
+
+    v_cases := v_cases + 1;
+    case_name := 'an allowance that gives no reason is refused';
+    passed := v_state is null and coalesce(v_hit_d, false);
+    detail := 'a transition may be left to nothing, and only with the reason written beside it';
+    return next;
+
     perform set_config('request.jwt.claims', '', true);
     raise exception 'CLOVEERP_SUITE_UNDO';
   exception when others then
@@ -1412,7 +1442,7 @@ volatile
 set search_path = ''
 as $wrap$
 declare
-  c_expected constant integer := 14;
+  c_expected constant integer := 15;
   v_all integer; v_fail integer; v_detail text;
 begin
   create temp table if not exists _lifecycle_completes on commit drop as
