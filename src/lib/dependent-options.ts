@@ -28,7 +28,64 @@ export type DependentSource = {
    * value chosen in `field`, and its `path`.
    */
   within?: { field: string; key: string; path: string };
+  /**
+   * Why this picker is offering nothing, when it offers nothing.
+   *
+   * See `emptyReason`. Declared where the true answer is particular to the
+   * door — "this order has nothing left to receive" — and left out where the
+   * general sentence is the whole truth.
+   */
+  empty?: string;
 };
+
+/**
+ * What a picker with nothing in it should say.
+ *
+ * Receiving is the case this exists for. The order-line picker on "Receive
+ * this order" reads `erp_receivable_lines(p_order_id)`, which is scoped to the
+ * order and to nothing else, and when it came back empty the screen said the
+ * list was "empty for this organisation" — of an organisation with hundreds of
+ * order lines. The true answer, that the order already had a goods receipt
+ * holding every line, was five lines further down the page in red, after the
+ * form had been filled in and pressed.
+ *
+ * So: a picker that follows another choice is never empty *for the
+ * organisation*. It is empty for the record chosen above it, and it says so —
+ * in the door's own terms where `empty` is declared, and in the general form
+ * otherwise. Only a picker that follows nothing may blame the organisation,
+ * because for that one it is true.
+ */
+export function emptyReason(source: DependentSource | undefined): string {
+  if (source?.empty) return source.empty;
+  if (source && (source.argsFrom || source.within))
+    return "Nothing to choose from here, because of what was chosen above.";
+  return "Nothing to choose from yet — this list is empty for this organisation.";
+}
+
+/**
+ * Why a line editor fed by a door cannot take another row yet, or null when it
+ * can.
+ *
+ * A row of such an editor is pickers that all follow the same choice, so a row
+ * added before the door has answered — or after it has answered with nothing —
+ * is a row nobody can fill: every picker in it is empty, and the form is
+ * refused on submission for having no line. Offering "Add a line" there is
+ * offering a step the flow has not reached, so the button is disabled and says
+ * which of the three it is.
+ */
+export function seedBlocksAdding(
+  seed: { isPending: boolean; error: unknown; waiting: boolean; untouched: boolean } | undefined,
+  rows: number,
+): string | null {
+  if (!seed) return null;
+  if (seed.waiting) return "Make the choice above first.";
+  if (seed.isPending) return "Reading what is left.";
+  // A door that refused is a door whose answer nobody has: adding a line by
+  // hand is the only way left, so it stays open.
+  if (seed.error) return null;
+  if (seed.untouched && rows === 0) return "There is nothing left here to add a line for.";
+  return null;
+}
 
 /**
  * The arguments the picker asks its door with, or null while a field it
@@ -90,8 +147,8 @@ export type RowSeed = DependentSource & {
   fn: string;
   /** Column name to the key of each record that fills it. */
   fill: Record<string, string>;
-  /** Said when the door answers with nothing to hold. */
-  empty?: string;
+  /* `empty` is the sentence said when the door answers with nothing to hold —
+     declared on DependentSource, because a picker needs the same sentence. */
 };
 
 /** A record's field as a text box would hold it. */
