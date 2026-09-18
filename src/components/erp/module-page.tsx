@@ -9,6 +9,7 @@ import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
 import { RefreshButton, TOUCH } from "./page";
+import { useScope } from "./session-context";
 import { ProcessFlow } from "./process-flow";
 
 /**
@@ -29,6 +30,26 @@ import { ProcessFlow } from "./process-flow";
  */
 
 type Tab = "dashboard" | "reports";
+
+/**
+ * A read, with the site the header names filled in.
+ *
+ * The header said MAIN · LND-HO while the stock tables listed LEE-WH, because
+ * nothing on those screens had ever read the choice — three doors had taken a
+ * site since 20260910182034 and no screen passed one. A read that declares
+ * which argument the site fills now gets it here, and a read that declares none
+ * is about the whole organisation, which the header's popover says.
+ *
+ * An empty choice sends null, which every one of those doors reads as "every
+ * site". So "All" still means all.
+ */
+function withSite<T extends { args?: Record<string, unknown>; siteArg?: string }>(
+  read: T,
+  siteId: string,
+): T {
+  if (!read.siteArg) return read;
+  return { ...read, args: { ...(read.args ?? {}), [read.siteArg]: siteId || null } };
+}
 
 function panelOf(p: Panel) {
   return (
@@ -51,6 +72,16 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
   const [tab, setTab] = useState<Tab>("dashboard");
   const title = t(def.titleKey, def.title);
   const unstaged = unstagedActions(def.flow, def.actions ?? []);
+
+  // Whether anything on this screen is about one place. Asked before the scope
+  // is registered, so a module whose reads are organisation-wide does not claim
+  // to follow a choice it ignores.
+  const readsSite =
+    def.kpis.some((k) => k.siteArg) ||
+    def.worklists.some((p) => p.siteArg) ||
+    def.reports.some((r) => r.siteArg) ||
+    Boolean(def.chart?.siteArg);
+  const { siteId } = useScope(readsSite);
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "dashboard", label: ui("Dashboard") },
@@ -121,7 +152,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
 
       {tab === "dashboard" ? (
         <div className="flex min-w-0 flex-col gap-4">
-          <KpiRow kpis={def.kpis} />
+          <KpiRow kpis={def.kpis.map((k) => withSite(k, siteId))} />
           {/* On a module with a strip, the strip carries the verbs its steps
               name and this carries the rest. It used to be switched off
               whenever there was a strip, which left every verb no step names
@@ -133,13 +164,13 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
               note="The database authorises every one of these; you only see the ones you hold."
             />
           ) : null}
-          {def.worklists.map(panelOf)}
+          {def.worklists.map((p) => panelOf(withSite(p, siteId)))}
         </div>
       ) : null}
 
       {tab === "reports" ? (
         <div className="flex min-w-0 flex-col gap-5">
-          {def.chart ? <MiniBars chart={def.chart} /> : null}
+          {def.chart ? <MiniBars chart={withSite(def.chart, siteId)} /> : null}
           {def.reports.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {ui("This module has no reports of its own yet.")}
@@ -148,7 +179,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
             <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
               {def.reports.map((r) => (
                 <div key={`${r.fn}-${r.title}`} className="min-w-0">
-                  {panelOf(r)}
+                  {panelOf(withSite(r, siteId))}
                 </div>
               ))}
             </div>

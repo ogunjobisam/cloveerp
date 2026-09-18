@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
+import { useScope } from "../../components/erp/session-context";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
@@ -113,6 +114,9 @@ const countTask = () =>
   pickFrom("erp_count_tasks", "task_id", ["item", "location", "status"], "p_task_id", "Count task");
 
 function StockAudit() {
+  // The balances and the count tasks are about a place. The header names one
+  // and this screen had never read it (20260919300000).
+  const { siteId } = useScope();
   const { ui } = useT();
   const invalidates = [
     "erp_stock_audit",
@@ -226,6 +230,7 @@ function StockAudit() {
           "Every active place at every site, whether or not anything stands in it, with the last count against it.",
         )}
         fn="erp_stock_audit"
+        args={{ p_site_id: siteId || null }}
         empty={ui(
           "No locations to audit yet. Add locations under Warehouse layout, and receive stock into them, and each one is listed here with its balance.",
         )}
@@ -284,6 +289,7 @@ function StockAudit() {
           "The same audit one line deeper: which product the quantity is, what it costs, and what the last count expected against what it found. Value in a bin is its share of the product's valuation at that site, not a separate cost.",
         )}
         fn="erp_stock_audit_lines"
+        args={{ p_site_id: siteId || null }}
         empty={ui(
           "No stock standing anywhere and no counts raised. Receive a purchase order and put it away, and the lines appear here.",
         )}
