@@ -76,6 +76,9 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
 
 ## Migrations
 
+- **Run `supabase/ci/preflight.sh` before pushing a migration.** It is offline,
+  takes seconds, and refuses the conventions that otherwise cost a forty-minute
+  build to learn. Commit first: rule E reads commits, not the working tree.
 - Forward-only. Never edit a migration that has been pushed —
   `supabase/ci/migrations_immutable.sh` fails the build for it.
 - Every migration ends by re-running the generators (`erp.apply_row_security()`

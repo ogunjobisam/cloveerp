@@ -22,8 +22,10 @@ import {
   dependentFields,
   dropDefaultedValues,
   dropSeededRows,
+  emptyReason,
   optionArgs,
   optionList,
+  seedBlocksAdding,
   seededRows,
   type FieldDefault,
   type RowSeed,
@@ -261,6 +263,15 @@ export type OptionSource = {
   describe?: (row: Record<string, unknown>) => string;
   /** Only the rows worth offering, when the door lists more: open tasks, not done ones. */
   keep?: (row: Record<string, unknown>) => boolean;
+  /**
+   * Why this list is empty, when it is — in the terms of the thing it follows.
+   *
+   * A picker scoped to a record is never empty "for this organisation", and
+   * saying so sends the reader to look for master data that is already there.
+   * See `emptyReason` in src/lib/dependent-options.ts, where the rule and the
+   * case that prompted it are written down.
+   */
+  empty?: string;
 };
 
 export type Field =
@@ -487,24 +498,30 @@ function PickerNote({
   error,
   empty,
   waiting = false,
+  source,
 }: {
   isPending: boolean;
   error: unknown;
   empty: boolean;
   waiting?: boolean;
+  /**
+   * The list this picker reads, for what it should say about being empty. A
+   * note with no source — the one a row editor draws for its seed — never
+   * reaches the empty sentence, because its emptiness is said elsewhere.
+   */
+  source?: OptionSource | undefined;
 }) {
+  const { ui } = useT();
   if (error) return <span className="text-xs text-destructive">{friendlyError(error).title}</span>;
   // A list that follows another choice has nothing to say until that is made.
   if (waiting)
-    return <span className="text-xs text-muted-foreground">Make the choice above first.</span>;
-  // An empty picker is a fact worth stating: it usually means the master data
-  // does not exist yet, not that the screen is broken.
-  if (!isPending && empty)
     return (
-      <span className="text-xs text-muted-foreground">
-        Nothing to choose from yet — this list is empty for this organisation.
-      </span>
+      <span className="text-xs text-muted-foreground">{ui("Make the choice above first.")}</span>
     );
+  // An empty picker is a fact worth stating, and which fact it is depends on
+  // what the list was scoped to: the organisation, or the record above.
+  if (!isPending && empty)
+    return <span className="text-xs text-muted-foreground">{ui(emptyReason(source))}</span>;
   return null;
 }
 
@@ -562,7 +579,13 @@ export function SelectField({
           </option>
         ))}
       </select>
-      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} waiting={waiting} />
+      <PickerNote
+        isPending={isPending}
+        error={error}
+        empty={rows.length === 0}
+        waiting={waiting}
+        source={field.options}
+      />
     </>
   );
 }
@@ -651,7 +674,13 @@ export function MultiField({
           </label>
         ))}
       </div>
-      <PickerNote isPending={isPending} error={error} empty={rows.length === 0} waiting={waiting} />
+      <PickerNote
+        isPending={isPending}
+        error={error}
+        empty={rows.length === 0}
+        waiting={waiting}
+        source={field.options}
+      />
     </>
   );
 }
@@ -786,6 +815,10 @@ function RowsField({
       ? value.filter((row, i) => (row[total.price] ?? "") === "" && prices[i]?.minor === null)
           .length
       : 0;
+  // A row this editor cannot fill is not a row worth offering: every picker in
+  // it follows the same choice, so before that choice is made and when the
+  // door answers with nothing there is nothing to put in one.
+  const cannotAdd = seedBlocksAdding(seedState, value.length);
 
   return (
     <div className="flex flex-col gap-2">
@@ -857,7 +890,12 @@ function RowsField({
         </div>
       ))}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <ActionButton variant="secondary" onClick={() => onChange([...value, {}])}>
+        <ActionButton
+          variant="secondary"
+          disabled={cannotAdd !== null}
+          title={cannotAdd !== null ? ui(cannotAdd) : undefined}
+          onClick={() => onChange([...value, {}])}
+        >
           {field.addLabel ?? "Add a line"}
         </ActionButton>
         {total && value.length > 0 ? (
