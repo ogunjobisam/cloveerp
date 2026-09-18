@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919930000  A posting is reversed, not edited
+-- 20260920200000  A posting is reversed, not edited
 -- -----------------------------------------------------------------------------
 -- A guard is landing that refuses amending a document once it is no longer only
 -- ours. That is right, and it makes one question urgent: if a posted document is
@@ -117,7 +117,7 @@ set lock_timeout = '30s';
 --
 -- ── ITS OWN DATE, AND THE CLOSE ──────────────────────────────────────────────
 --
--- DEPENDS ON #198 (20260919100000, erp.local_today). A PostgREST session runs
+-- DEPENDS ON 20260920110000 (erp.local_today, #198). A PostgREST session runs
 -- at UTC, so current_date is the database's day and not the day where the work
 -- is happening: a document keyed at ten to one in the morning BST was written
 -- with yesterday's date, and at a month end that is the previous accounting
@@ -126,8 +126,15 @@ set lock_timeout = '30s';
 -- second one. It matters more here than almost anywhere: a reversal is dated
 -- against the period it lands in, so a reversal an hour on the wrong side of
 -- midnight can post into a different month from the journal it reverses, which
--- is the exact failure this migration exists to prevent. This migration sorts
--- after 20260919100000 and will not apply before it.
+-- is the exact failure this migration exists to prevent.
+--
+-- The date and the guard read the same day, which is the half that is easy to
+-- get wrong: v_on comes from erp.local_today(), and erp.journal_period() is
+-- asked about v_on. Take the date from the site's day and leave the period
+-- guard on current_date and the document lands in one month and its journal in
+-- another, for an hour of every night.
+--
+-- This migration sorts after 20260920110000 and will not apply before it.
 --
 -- p_posting_date defaults to today and may be any open date. The period guard is
 -- the product's single definition of one, erp.journal_period(), called before
@@ -835,7 +842,7 @@ select erp_ref.ui_key(v.text), 'en', v.text,
        'A screen string declared at its call site and rendered through ui(). ' || v.why
   from (values
     ('Reverse what this invoice posted',
-     'The dialog raised from a posted sales invoice or purchase invoice (20260919930000).'),
+     'The dialog raised from a posted sales invoice or purchase invoice (20260920200000).'),
     ('The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten.',
      'Said under that heading, because all four consequences land on different screens and a person is owed them before pressing it rather than afterwards.'),
     ('Why it is being reversed',
