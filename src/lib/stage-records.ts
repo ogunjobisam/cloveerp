@@ -331,3 +331,50 @@ export function describeLine(line: DocumentLine): string {
   const what = [line.item, line.description].filter((x) => x && String(x).trim() !== "");
   return what.length > 0 ? what.join(" — ") : `#${line.line_no}`;
 }
+
+/**
+ * Why a step is showing nothing.
+ *
+ * A step counts outstanding work. Empty means the work is done at least as often
+ * as it means the work has not started, and the two read nothing alike — but the
+ * step gave one sentence for both. The Goods receipt step read 0 and said "No
+ * documents at goods receipt yet. Receipts appear here once goods are received
+ * against a purchase order", over two posted receipts sitting on the same screen
+ * a tickbox away. It told the reader that nothing existed and then instructed
+ * them to do the thing they had already done twice.
+ *
+ * So three sentences for three reasons, and the one that claims non-existence is
+ * only ever said when nothing exists.
+ */
+export function stageEmptyState(input: {
+  noun: string;
+  nounPlural: string;
+  /** The step's own name, as the strip shows it. */
+  label: string;
+  /** Which step puts work here, when the step knows. */
+  fedBy?: string | undefined;
+  /** The words on the history toggle, whatever this step calls it. */
+  toggle: string;
+  /** How many rows the step holds once the search has been applied. */
+  showing: number;
+  /** How many rows the step holds before it. */
+  held: number;
+  /** How many finished records the step holds — counted only when none are waiting. */
+  finished: number;
+  /** Whether that count is still being taken, so nothing is claimed too early. */
+  counting: boolean;
+}): string {
+  if (input.showing > 0) return "";
+  if (input.held > 0) return `No ${input.nounPlural} match that search.`;
+  if (input.counting) return "Nothing waiting here.";
+  if (input.finished > 0)
+    return (
+      `Nothing waiting here. All ${input.finished} ` +
+      `${input.finished === 1 ? input.noun : input.nounPlural} at ${input.label.toLowerCase()} ` +
+      `are finished — tick ${input.toggle} to see them.`
+    );
+  return (
+    `No ${input.nounPlural} at ${input.label.toLowerCase()} yet.` +
+    (input.fedBy ? ` ${input.fedBy}` : "")
+  );
+}

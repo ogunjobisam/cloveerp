@@ -14,6 +14,7 @@ import {
   describeLine,
   offerFor,
   rowsAtStage,
+  stageEmptyState,
   settledAtStage,
   stageReadArgs,
   stateOf,
@@ -196,12 +197,51 @@ function useStageRows(stage: Stage, showFinished = false) {
   const read = Array.isArray(query.data) ? query.data : [];
   const held = rowsAtStage(read, { states: stage.states, statusKey: source?.status }, showFinished);
   const rows = source?.arrange ? source.arrange(held, showFinished) : held;
+
+  // Whether a step with nothing waiting on it has nothing at all, or has
+  // everything it ever had, finished and out of the way.
+  //
+  // The Goods receipt step read 0 and said "No documents at goods receipt yet.
+  // Receipts appear here once goods are received against a purchase order" —
+  // while two posted receipts sat on the same screen, a tickbox away. The step
+  // counts outstanding work and the sentence claimed non-existence, and the
+  // sentence then told the reader to go and do the thing they had already done.
+  //
+  // The narrowed read cannot tell the two apart, because the door was asked for
+  // the step's states and left the finished ones out. So when — and only when —
+  // a step is empty, the type is read whole. It is the same read, under the
+  // same key, that ticking the toggle performs, so the answer is already in
+  // hand by the time anybody ticks it.
+  const wholeArgs = source ? stageReadArgs(source.fn, source.args ?? {}, stage.states, true) : {};
+  const wholeQuery = useQuery({
+    queryKey: [source?.fn ?? "no-stage-list", wholeArgs],
+    queryFn: () => (source ? callErp<Row[]>(source.fn, wholeArgs) : Promise.resolve([] as Row[])),
+    enabled:
+      Boolean(source) &&
+      !showFinished &&
+      Boolean(stage.states && stage.states.length > 0) &&
+      !query.isPending &&
+      !query.error &&
+      rows.length === 0,
+  });
+
+  const whole = Array.isArray(wholeQuery.data) ? wholeQuery.data : [];
+  const finished = rowsAtStage(
+    whole,
+    { states: stage.states, statusKey: source?.status },
+    true,
+  ).length;
+
   return {
     source,
     rows,
     capped: read.length >= CAP,
     isPending: Boolean(source) && query.isPending,
     error: query.error,
+    /** How many finished records a step holds, counted only when it is empty. */
+    finished: rows.length === 0 ? finished : 0,
+    /** Whether that count has been taken yet, so "nothing here" is not said too soon. */
+    countingFinished: wholeQuery.isFetching,
   };
 }
 
@@ -301,6 +341,8 @@ function StageList({
   capped,
   isPending,
   error,
+  finished,
+  countingFinished,
   selectedId,
   onSelect,
   showFinished,
@@ -312,6 +354,10 @@ function StageList({
   capped: boolean;
   isPending: boolean;
   error: unknown;
+  /** How many records this step holds that are already finished. */
+  finished: number;
+  /** Whether that count is still being taken. */
+  countingFinished: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
   showFinished: boolean;
@@ -336,6 +382,30 @@ function StageList({
         This step keeps no list of its own — its verb acts on what you choose inside it.
       </div>
     );
+
+  /**
+   * Why this step is showing nothing.
+   *
+   * Three reasons, and the step used to give one sentence for the first two.
+   * "No documents at goods receipt yet. Receipts appear here once goods are
+   * received against a purchase order" was shown over two posted receipts,
+   * hidden by a tickbox — so it told the reader that nothing existed and then
+   * instructed them to do the thing they had already done twice.
+   *
+   * A step counts outstanding work. Empty means the work is done at least as
+   * often as it means the work has not started, and the two read nothing alike.
+   */
+  const emptyState = stageEmptyState({
+    noun: source.noun,
+    nounPlural: source.nounPlural,
+    label: stage.label,
+    fedBy: stage.fedBy,
+    toggle: stage.showFinishedLabel ? ui(stage.showFinishedLabel) : ui("Show finished"),
+    showing: shown.length,
+    held: rows.length,
+    finished,
+    counting: countingFinished,
+  });
 
   return (
     <div className="min-w-0">
@@ -378,13 +448,7 @@ function StageList({
             <ErrorNote error={error} />
           </div>
         ) : shown.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-muted-foreground sm:px-5">
-            {rows.length === 0
-              ? `No ${source.nounPlural} at ${stage.label.toLowerCase()} yet.${
-                  stage.fedBy ? ` ${stage.fedBy}` : ""
-                }`
-              : `No ${source.nounPlural} match that search.`}
-          </p>
+          <p className="px-4 py-4 text-sm text-muted-foreground sm:px-5">{emptyState}</p>
         ) : (
           <ul>
             {shown.map((row) => {
@@ -730,7 +794,10 @@ function StageWorkbench({
   next: NextStep | null;
 }) {
   const [showFinished, setShowFinished] = useState(false);
-  const { source, rows, capped, isPending, error } = useStageRows(stage, showFinished);
+  const { source, rows, capped, isPending, error, finished, countingFinished } = useStageRows(
+    stage,
+    showFinished,
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const byFn = new Map(actions.map((a) => [actionKey(a), a]));
@@ -754,6 +821,8 @@ function StageWorkbench({
           capped={capped}
           isPending={isPending}
           error={error}
+          finished={finished}
+          countingFinished={countingFinished}
           selectedId={selectedId}
           onSelect={setSelectedId}
           showFinished={showFinished}
