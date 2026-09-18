@@ -4,8 +4,40 @@ import type { TenantBinding } from "./config.ts";
 
 export type Sql = ReturnType<typeof postgres>;
 
-export function connect(databaseUrl: string): Sql {
-  return postgres(databaseUrl, {
+/**
+ * Which way into the database this connection is.
+ *
+ * erp.audit_entry.source records the entry point behind every change, and for
+ * the life of the product it recorded 'api' for all of them, because the
+ * session setting it reads was set by nothing (20260919930000). A trigger can
+ * only record what the session tells it, so the telling happens here: at the
+ * point a process opens its connection, which is the one place that knows what
+ * the process is.
+ *
+ * The word must be one erp_ref.audit_source holds; erp.declare_source()
+ * refuses anything else, and erp.audit_entry.source is foreign-keyed to the
+ * same table, so a typo cannot become a source nobody can account for.
+ */
+export type AuditSource = "dispatch_worker" | "edge_function" | "public_door";
+
+// Not a field on the client, because the client is a tagged-template function
+// the driver builds. A required parameter on connect() is what makes this
+// impossible to forget: a new entry point does not compile until it says what
+// it is.
+const sourceOfConnection = new WeakMap<object, AuditSource>();
+
+function declaredSource(sql: Sql): AuditSource {
+  const source = sourceOfConnection.get(sql);
+  if (source === undefined) {
+    // Only reachable by building a client without connect(). Loud, because the
+    // quiet version of this is an audit trail that says nothing and looks fine.
+    throw new Error("this connection never said which entry point it is; open it with connect(url, source)");
+  }
+  return source;
+}
+
+export function connect(databaseUrl: string, source: AuditSource): Sql {
+  const sql = postgres(databaseUrl, {
     // One unit of work is one transaction, and they are short. A big pool buys
     // nothing and makes lease expiry harder to reason about.
     max: 4,
@@ -14,6 +46,8 @@ export function connect(databaseUrl: string): Sql {
     // must arrive intact rather than as a generic driver failure.
     onnotice: () => {},
   });
+  sourceOfConnection.set(sql, source);
+  return sql;
 }
 
 /**
@@ -49,10 +83,32 @@ export async function asPrincipal<T>(
   work: (tx: Sql) => Promise<T>,
 ): Promise<T> {
   return sql.begin(async (tx) => {
+    // First, before anything this transaction does is audited: what this is.
+    // Transaction-local like the tenant and the principal below, and for the
+    // same reason — a pooled connection carries session state to whoever it
+    // serves next, and a source left set mislabels their changes as ours.
+    await tx`select erp.declare_source(${declaredSource(sql)})`;
     await tx`select erp.set_job_tenant(${binding.tenantId}::uuid)`;
     if (binding.principalId !== null) {
       await tx`select erp.set_job_principal(${binding.principalId}::uuid)`;
     }
+    return work(tx as unknown as Sql);
+  }) as Promise<T>;
+}
+
+/**
+ * One unit of work, as one transaction, saying only which entry point it is.
+ *
+ * For the calls that declare no tenant and adopt no principal — an Edge
+ * Function reading an invitation, recording a delivery event, spending the
+ * email budget. Each is a single statement, so a single-statement transaction
+ * is what it already was; the transaction is here to give the declaration
+ * somewhere to live, since erp.declare_source() is transaction-local like
+ * every other context setting this product carries.
+ */
+export async function declaring<T>(sql: Sql, work: (tx: Sql) => Promise<T>): Promise<T> {
+  return sql.begin(async (tx) => {
+    await tx`select erp.declare_source(${declaredSource(sql)})`;
     return work(tx as unknown as Sql);
   }) as Promise<T>;
 }
@@ -88,6 +144,12 @@ export async function asRole<T>(sql: Sql, role: string, work: (tx: Sql) => Promi
     throw new Error(`${role} is not a role name`);
   }
   return sql.begin(async (tx) => {
+    // Before the role changes, not after: erp.declare_source() lets an
+    // untrusted session call itself the screen and nothing else, and once the
+    // role is reduced this session is untrusted by design. Declaring first is
+    // also the honest order — this is the public ingress whatever it then
+    // reduces itself to.
+    await tx`select erp.declare_source(${declaredSource(sql)})`;
     await tx`set local role ${tx(role)}`;
     return work(tx as unknown as Sql);
   }) as Promise<T>;

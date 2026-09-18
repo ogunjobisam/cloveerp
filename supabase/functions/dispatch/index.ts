@@ -159,7 +159,7 @@ Deno.serve(async (req: Request) => {
           500,
         );
       }
-      sql = connect(url);
+      sql = connect(url, "edge_function");
       try {
         fromVault = await vaultSecret(sql);
       } catch (err) {
@@ -186,7 +186,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const cfg = loadConfig(env);
-    sql ??= connect(cfg.databaseUrl);
+    sql ??= connect(cfg.databaseUrl, "edge_function");
     await assertHandlersExist(sql);
     const report = await drainOnce(sql, cfg);
 

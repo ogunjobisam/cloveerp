@@ -98,7 +98,7 @@
  * The imports carry explicit .ts extensions because Deno requires them, and
  * src/lib/invitation-email.ts imports nothing so that Deno can follow it.
  */
-import { connect, type Sql } from "../../../worker/src/core/db.ts";
+import { connect, declaring, type Sql } from "../../../worker/src/core/db.ts";
 import { sendViaResend } from "../../../worker/src/core/resend.ts";
 import {
   INVITE_VALID_DAYS,
@@ -238,10 +238,14 @@ async function claimEmail(
   kind: "invite" | "resend",
   authUserId: string | null,
 ): Promise<Claim> {
-  const rows = (await sql`
+  const rows = (await declaring(
+    sql,
+    (tx) =>
+      tx`
     select allowed, reason
       from erp.claim_invitation_email(${appUserId}::uuid, ${kind}::text, ${authUserId}::uuid)
-  `) as unknown as { allowed: unknown; reason: unknown }[];
+  `,
+  )) as unknown as { allowed: unknown; reason: unknown }[];
   const row = rows[0];
   return { allowed: row?.allowed === true, reason: textOf(row?.reason) };
 }
@@ -252,9 +256,13 @@ async function claimEmail(
  * anything else throws, and the caller sends nothing.
  */
 async function identityIsBound(sql: Sql, authUserId: string): Promise<boolean> {
-  const rows = (await sql`
+  const rows = (await declaring(
+    sql,
+    (tx) =>
+      tx`
     select erp.auth_identity_is_bound(${authUserId}::uuid) as bound
-  `) as unknown as { bound: unknown }[];
+  `,
+  )) as unknown as { bound: unknown }[];
   const bound = rows[0]?.bound;
   if (typeof bound !== "boolean") {
     throw new Error("erp.auth_identity_is_bound gave no answer");
@@ -655,7 +663,7 @@ async function invite(req: Request, body: Record<string, unknown>): Promise<Resp
     // no account. The caller is the Supabase Auth account Auth itself named
     // above, so the budget follows the person and not the organisation they
     // happen to be in.
-    const db = connect(connection);
+    const db = connect(connection, "edge_function");
     sql = db;
     let claim: Claim;
     try {
@@ -777,12 +785,16 @@ async function resend(req: Request, token: unknown): Promise<Response> {
 
     // The connection is the project's own, which is what erp.session_is_trusted()
     // asks for; the function it reaches answers only for a pending invitation.
-    const db = connect(connection);
+    const db = connect(connection, "edge_function");
     sql = db;
-    const rows = (await db`
+    const rows = (await declaring(
+      db,
+      (tx) =>
+        tx`
       select app_user_id, email, display_name, tenant_name, expires_at
         from erp.invitation_for_resend(${token}::text)
-    `) as unknown as ResendRow[];
+    `,
+    )) as unknown as ResendRow[];
     const row = rows[0];
     if (!row || !row.email || !row.app_user_id) return nothing();
 
