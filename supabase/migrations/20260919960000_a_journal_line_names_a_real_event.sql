@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919900000  A journal line names a real event
+-- 20260919960000  A journal line names a real event
 -- -----------------------------------------------------------------------------
 -- 0026_b7_finance.sql gave erp.journal and erp.journal_line a source_event_id
 -- and no foreign key. Every other reference on those two tables has one —
@@ -173,7 +173,7 @@ as $$
        and a.attnum > 0
        and not a.attisdropped
        and a.atttypid = 'pg_catalog.uuid'::regtype
-       and a.attname ~ '(^|_)event_id$|(^|_)journal_line_id$'
+       and a.attname::text ~ '(^|_)event_id$|(^|_)journal_line_id$'
   ),
   declared as (
     select r.*,
@@ -246,6 +246,11 @@ comment on function erp.provenance_pointer_report is
 -- of a database with real money in it rather than of an empty build. It is a
 -- report and not an assertion because an operator has to be able to ask the
 -- question again afterwards, on a live database, without a deploy.
+--
+-- The sample is taken as min(…::text)::uuid and not as min(…): PostgreSQL gives
+-- uuid a btree ordering but no aggregate over it, so min(uuid) does not exist
+-- and a build refuses the whole file on it. Text has one, and the cast is
+-- lossless in both directions. Do not "simplify" it back.
 
 create or replace function erp.provenance_orphan_report()
 returns table(pointer text, enforced boolean, pointing bigint, orphans bigint, sample uuid)
@@ -256,49 +261,49 @@ as $$
   select 'erp.journal.source_event_id', true,
          count(*) filter (where j.source_event_id is not null),
          count(*) filter (where j.source_event_id is not null and e.id is null),
-         min(j.source_event_id) filter (where j.source_event_id is not null and e.id is null)
+         (min(j.source_event_id::text) filter (where j.source_event_id is not null and e.id is null))::uuid
     from erp.journal j
     left join erp.event e on e.tenant_id = j.tenant_id and e.id = j.source_event_id
   union all
   select 'erp.journal_line.source_event_id', true,
          count(*) filter (where l.source_event_id is not null),
          count(*) filter (where l.source_event_id is not null and e.id is null),
-         min(l.source_event_id) filter (where l.source_event_id is not null and e.id is null)
+         (min(l.source_event_id::text) filter (where l.source_event_id is not null and e.id is null))::uuid
     from erp.journal_line l
     left join erp.event e on e.tenant_id = l.tenant_id and e.id = l.source_event_id
   union all
   select 'erp.stock_movement.event_id', true,
          count(*) filter (where m.event_id is not null),
          count(*) filter (where m.event_id is not null and e.id is null),
-         min(m.event_id) filter (where m.event_id is not null and e.id is null)
+         (min(m.event_id::text) filter (where m.event_id is not null and e.id is null))::uuid
     from erp.stock_movement m
     left join erp.event e on e.tenant_id = m.tenant_id and e.id = m.event_id
   union all
   select 'erp.notification.event_id', true,
          count(*) filter (where nt.event_id is not null),
          count(*) filter (where nt.event_id is not null and e.id is null),
-         min(nt.event_id) filter (where nt.event_id is not null and e.id is null)
+         (min(nt.event_id::text) filter (where nt.event_id is not null and e.id is null))::uuid
     from erp.notification nt
     left join erp.event e on e.tenant_id = nt.tenant_id and e.id = nt.event_id
   union all
   select 'erp.command.causation_event_id', true,
          count(*) filter (where cm.causation_event_id is not null),
          count(*) filter (where cm.causation_event_id is not null and e.id is null),
-         min(cm.causation_event_id) filter (where cm.causation_event_id is not null and e.id is null)
+         (min(cm.causation_event_id::text) filter (where cm.causation_event_id is not null and e.id is null))::uuid
     from erp.command cm
     left join erp.event e on e.tenant_id = cm.tenant_id and e.id = cm.causation_event_id
   union all
   select 'erp.event_cursor.last_event_id', true,
          count(*) filter (where cu.last_event_id is not null),
          count(*) filter (where cu.last_event_id is not null and e.id is null),
-         min(cu.last_event_id) filter (where cu.last_event_id is not null and e.id is null)
+         (min(cu.last_event_id::text) filter (where cu.last_event_id is not null and e.id is null))::uuid
     from erp.event_cursor cu
     left join erp.event e on e.tenant_id = cu.tenant_id and e.id = cu.last_event_id
   union all
   select 'erp.tax_determination.journal_line_id', true,
          count(*) filter (where td.journal_line_id is not null),
          count(*) filter (where td.journal_line_id is not null and jl.id is null),
-         min(td.journal_line_id) filter (where td.journal_line_id is not null and jl.id is null)
+         (min(td.journal_line_id::text) filter (where td.journal_line_id is not null and jl.id is null))::uuid
     from erp.tax_determination td
     left join erp.journal_line jl on jl.tenant_id = td.tenant_id and jl.id = td.journal_line_id
   union all
@@ -307,7 +312,7 @@ as $$
   select 'erp_meta.contract_notice.event_id', false,
          count(*) filter (where cn.event_id is not null),
          count(*) filter (where cn.event_id is not null and e.id is null),
-         min(cn.event_id) filter (where cn.event_id is not null and e.id is null)
+         (min(cn.event_id::text) filter (where cn.event_id is not null and e.id is null))::uuid
     from erp_meta.contract_notice cn
     left join erp.event e on e.id = cn.event_id;
 $$;
