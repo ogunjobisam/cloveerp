@@ -6,7 +6,7 @@ import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/mon
 import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import { useErpSession, useScope } from "./session-context";
-import { Prose } from "./page";
+import { LoadingRows, Prose } from "./page";
 import { Pill, Table } from "./panel";
 
 /**
@@ -131,7 +131,7 @@ export function DocumentPanel({
           // that was never broken.
           <ErrorNote error={typesError} />
         ) : typesPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <LoadingRows />
         ) : !type ? (
           <p className="text-sm text-muted-foreground">
             No <code className="font-mono text-xs">{typeCode ?? baseType}</code> type is configured
@@ -142,7 +142,7 @@ export function DocumentPanel({
             is what creates one.
           </p>
         ) : isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <LoadingRows />
         ) : error ? (
           <ErrorNote error={error} />
         ) : (data ?? []).length === 0 ? (
@@ -267,6 +267,9 @@ export function NewDocumentAction({
           kind: "rows",
           name: "p_lines",
           label: "Lines",
+          // A document is its lines. Create on an empty form said nothing about
+          // them; now it says a line is needed, beside the lines.
+          required: true,
           addLabel: "Add a line",
           hint: "Everything this document is for. A line left without a price takes the agreed price for that partner and product, where there is one.",
           total: { quantity: "quantity", price: "unit_price_minor", currency },
@@ -375,10 +378,19 @@ export function NewDocumentForType({
   partyRole?: string;
   label?: string;
 }) {
-  const { data: types } = useQuery({
+  const { data: types, isPending } = useQuery({
     queryKey: ["erp_document_types", { p_base_type_code: "" }],
     queryFn: () => callErp<DocType[]>("erp_document_types", {}),
   });
+  // Drawn, disabled, while the types are read. It used to be absent until then
+  // and appear under a moving cursor — which is how a click meant for the
+  // button beside it lands on this one.
+  if (isPending)
+    return (
+      <ActionButton disabled title="Loading">
+        {label ?? "New"}
+      </ActionButton>
+    );
   const type = types?.find((t) => t.code === typeCode);
   if (!type) return null;
   return (

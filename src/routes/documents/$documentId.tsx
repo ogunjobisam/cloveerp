@@ -101,10 +101,21 @@ type Lineage = {
   relation: string;
 };
 
+/** A contra journal raised against this document's posting. */
+type Reversal = {
+  journal_id: string;
+  journal_number: string | null;
+  posting_date: string;
+  reason: string | null;
+  reversed_at: string | null;
+  reverses_journal_number: string | null;
+};
+
 type Payload = {
   document: Doc | null;
   lines: Line[];
   lineage: Lineage[];
+  reversal: Reversal[];
   available_transitions: Transition[];
 };
 
@@ -241,6 +252,22 @@ function Document() {
         <CreditSupplier
           documentId={documentId}
           context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
+
+      {/* A posted invoice cannot be edited and, where nothing is coming back,
+          cannot be credited either: a credit note in this product is a goods
+          return. Reversing the posting is what is left, and it is what an
+          accounting system does — the opposite journal, on its own date, with
+          both entries standing. Offered once the invoice has committed, which
+          is when there is a posting to unmake; erp.reverse_document_posting
+          refuses anything else by name. */}
+      {(doc.document_type === "sales_invoice" || doc.document_type === "purchase_invoice") &&
+      doc.is_committed ? (
+        <ReversePosting
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          reversal={data.reversal}
         />
       ) : null}
 
@@ -911,6 +938,91 @@ function CreditSupplier({ documentId, context }: { documentId: string; context: 
             p_document_id: documentId,
             p_reason_code: (v["p_reason_code"] as string) || "",
             p_reason: (v["p_reason"] as string) || null,
+          })}
+          invalidates={["erp_document", "erp_documents"]}
+        />
+      </header>
+    </section>
+  );
+}
+
+/**
+ * Unmaking what a posted invoice did to the ledger.
+ *
+ * The date is the reversal's own and defaults to today, which is the point of
+ * offering it: a bill posted last month and found wrong this month belongs in
+ * this month. A closed month refuses it and says which, so the field is not a
+ * way round the close.
+ */
+function ReversePosting({
+  documentId,
+  context,
+  reversal,
+}: {
+  documentId: string;
+  context: string;
+  reversal: Reversal[];
+}) {
+  const done = reversal[0];
+
+  // Already reversed: the database refuses a second one by name, so offering
+  // the control again would be an invitation into a refusal. What it shows
+  // instead is the answer to the question somebody actually has — when, and
+  // why.
+  if (done) {
+    return (
+      <section className="min-w-0 rounded-xl border border-border bg-card">
+        <header className="border-b border-border px-4 py-4 sm:px-5">
+          <h2 className="text-sm font-semibold">This posting has been reversed</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            The invoice is still here and so is what it posted. Journal {done.journal_number ?? "—"}{" "}
+            reversed {done.reverses_journal_number ?? "it"} on {done.posting_date}
+            {done.reason ? `: ${done.reason}` : "."} What it was worth is off the ageing. To charge
+            it again, raise it again as a new document.
+          </Prose>
+        </header>
+      </section>
+    );
+  }
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Reverse this posting</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            A posted invoice is not edited. Reversing it raises the opposite journal on a date of
+            its own, and both the invoice and the correction stay in the record.
+          </Prose>
+        </div>
+
+        <ActionDialog
+          trigger={<ActionButton>Reverse it</ActionButton>}
+          title="Reverse what this invoice posted"
+          description="The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten."
+          permission="finance.post"
+          fn="erp_reverse_document_posting"
+          context={context}
+          fields={[
+            {
+              kind: "text",
+              name: "p_reason",
+              label: "Why it is being reversed",
+              placeholder: "Keyed against the wrong supplier",
+              hint: "Kept on the reversing journal beside who reversed it and when. A bill keyed against the wrong supplier, an invoice raised twice, a price entered wrong.",
+              required: true,
+            },
+            {
+              kind: "date",
+              name: "p_posting_date",
+              label: "The date it is reversed on",
+              hint: "Today unless you say otherwise. A posting made last month and reversed this month belongs in this month; a month that is closed refuses it and says so.",
+            },
+          ]}
+          mapArgs={(v) => ({
+            p_document_id: documentId,
+            p_reason: (v["p_reason"] as string) || "",
+            p_posting_date: (v["p_posting_date"] as string) || null,
           })}
           invalidates={["erp_document", "erp_documents"]}
         />

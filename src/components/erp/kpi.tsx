@@ -8,6 +8,7 @@ import { formatMinorTotals, minorUnitsOf } from "../../lib/money";
 import type { Chart, Kpi, KpiContext, Row } from "../../lib/modules";
 import { chartBars } from "../../lib/report-figures";
 import { useCurrencies } from "./currencies";
+import { LoadingRows } from "./page";
 
 /**
  * The numbers at the top of a module.
@@ -148,7 +149,7 @@ export function MiniBars({ chart }: { chart: Chart }) {
 
       <div className="px-4 py-4 sm:px-5">
         {isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <LoadingRows rows={4} />
         ) : error ? (
           <div role="alert">
             <p className="text-sm font-medium text-destructive">This did not load.</p>

@@ -378,10 +378,13 @@ function Organisation() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Organisation and approval routing")}>
-        {ui(
-          "A department is one object: it routes an approval and it carries the posting. Bands decide who approves by value; a named assignment overrides that for a person, a role or a whole department.",
+      <PageHeader
+        title={ui("Organisation and approval routing")}
+        howItWorks={ui(
+          "Bands decide who approves by value; a named assignment overrides that for a person, a role or a whole department.",
         )}
+      >
+        {ui("A department is one object: it routes an approval and it carries the posting.")}
       </PageHeader>
 
       <ActionBar

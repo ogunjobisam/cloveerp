@@ -214,9 +214,14 @@ function Notifications() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Notifications")}>
+      <PageHeader
+        title={ui("Notifications")}
+        howItWorks={ui(
+          "In-app is the channel that always works; nothing addressed to you is lost because another channel failed.",
+        )}
+      >
         {ui(
-          "What the product told you, what it held for your quiet hours, and what it could not deliver another way. In-app is the channel that always works; nothing addressed to you is lost because another channel failed.",
+          "What the product told you, what it held for your quiet hours, and what it could not deliver another way.",
         )}
       </PageHeader>
 

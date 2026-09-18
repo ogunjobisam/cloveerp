@@ -26,13 +26,13 @@ import { ApprovalsWaitingBadge } from "./approvals-waiting";
 import { CommandPalette } from "./command-palette";
 import { MainMenu } from "./menu";
 import { ServiceBanner } from "./service-banner";
-import { ContextHelp } from "./context-help";
+import { ContextHelp, ContextHelpSheet } from "./context-help";
 import { BrandMark } from "./logo";
 import { Breadcrumbs } from "./breadcrumbs";
 import { UnsavedChangesProvider } from "./unsaved";
 import { WalkthroughButton } from "./walkthrough";
 import { TOUCH } from "./page";
-import { PageHeaderExtras } from "./page-extras";
+import { HelpContext, PageHeaderExtras, type ScreenDetail } from "./page-extras";
 import { UserMenu } from "./user-menu";
 
 /**
@@ -432,6 +432,20 @@ export function Shell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const brand = useBrand();
 
+  // The help sheet: one, shared by the help icon in each header and by any
+  // screen's "How this works" link, with that screen's own detail in it.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [screenDetail, setScreenDetail] = useState<ScreenDetail | null>(null);
+  const help = useMemo(
+    () => ({
+      open: helpOpen,
+      setOpen: setHelpOpen,
+      detail: screenDetail,
+      setDetail: setScreenDetail,
+    }),
+    [helpOpen, screenDetail],
+  );
+
   // How many mounted components read the header's company and site.
   const [scopeReaders, setScopeReaders] = useState(0);
   const scopeUsage = useMemo(
@@ -474,143 +488,154 @@ export function Shell({
     // meant to fit, and this only stops one mistake becoming a page that
     // scrolls sideways.
     <UnsavedChangesProvider>
-      <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
-        {/* The first thing a keyboard reaches. Invisible until focused, so it
+      <HelpContext.Provider value={help}>
+        <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+          {/* The first thing a keyboard reaches. Invisible until focused, so it
           costs sighted mouse users nothing and saves a keyboard user the
           twenty-odd rail links on every page (WCAG 2.4.1). */}
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-[var(--shadow-card)]"
-        >
-          Skip to content
-        </a>
-        {/*
+          <a
+            href="#main"
+            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-[var(--shadow-card)]"
+          >
+            Skip to content
+          </a>
+          {/*
           The rail is a dark slate panel running the full height of the window
           from md up: the product's identity at the top, the sections it can
           open in the middle, the area switch at the foot. Everything to do with
           *this* account and *this* moment — search, scope, help, the person —
           stays in the light bar across the top, so the two never compete.
         */}
-        <aside
-          className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar text-sidebar-foreground md:flex"
-          aria-label="Product navigation"
-        >
-          <Link
-            to={AREA_HOME[area]}
-            className={`${TOUCH} flex shrink-0 items-center gap-2.5 px-5 py-4`}
+          <aside
+            className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-sidebar text-sidebar-foreground md:flex"
+            aria-label="Product navigation"
           >
-            <BrandMark size={28} />
-            <span className="truncate font-display text-lg font-semibold tracking-[-0.02em]">
-              <span className="text-sidebar-foreground">{brand.prefix}</span>
-              <span style={{ color: brand.total }}>{brand.suffix}</span>
-            </span>
-          </Link>
-
-          <nav aria-label="Sections" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <NavList items={visible} area={area} pathname={pathname} hidden={hidden} tone="dark" />
-          </nav>
-
-          <div className="shrink-0 px-3 py-3">
-            <AreaSwitch area={area} counts={counts} tone="dark" />
-          </div>
-        </aside>
-
-        <div className="md:pl-60">
-          <header className="sticky top-0 z-30 border-b border-border bg-card">
-            <div className="flex items-center gap-3 px-4 py-2.5 md:px-6 md:gap-4">
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(true)}
-                aria-label="Open menu"
-                aria-expanded={drawerOpen}
-                className={`${TOUCH} -ml-2 inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden`}
-              >
-                <Menu className="size-5" />
-              </button>
-
-              {/* On a narrow screen the rail is gone, so the mark comes back. */}
-              <Link to={AREA_HOME[area]} className="flex shrink-0 items-center md:hidden">
-                <BrandMark size={26} />
-              </Link>
-
-              {/* Search reads as a field here, which is what people look for. */}
-              <div className="hidden min-w-0 max-w-md flex-1 md:block">
-                <CommandPalette variant="field" />
-              </div>
-
-              <span className="min-w-0 flex-1 truncate text-sm font-medium md:hidden">
-                {session.tenant?.name ?? "No tenant"}
+            <Link
+              to={AREA_HOME[area]}
+              className={`${TOUCH} flex shrink-0 items-center gap-2.5 px-5 py-4`}
+            >
+              <BrandMark size={28} />
+              <span className="truncate font-display text-lg font-semibold tracking-[-0.02em]">
+                <span className="text-sidebar-foreground">{brand.prefix}</span>
+                <span style={{ color: brand.total }}>{brand.suffix}</span>
               </span>
+            </Link>
 
-              {/* What is waiting on this person, wherever they are. Renders
+            <nav aria-label="Sections" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <NavList
+                items={visible}
+                area={area}
+                pathname={pathname}
+                hidden={hidden}
+                tone="dark"
+              />
+            </nav>
+
+            <div className="shrink-0 px-3 py-3">
+              <AreaSwitch area={area} counts={counts} tone="dark" />
+            </div>
+          </aside>
+
+          <div className="md:pl-60">
+            <header className="sticky top-0 z-30 border-b border-border bg-card">
+              <div className="flex items-center gap-3 px-4 py-2.5 md:px-6 md:gap-4">
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(true)}
+                  aria-label="Open menu"
+                  aria-expanded={drawerOpen}
+                  className={`${TOUCH} -ml-2 inline-flex w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden`}
+                >
+                  <Menu className="size-5" />
+                </button>
+
+                {/* On a narrow screen the rail is gone, so the mark comes back. */}
+                <Link to={AREA_HOME[area]} className="flex shrink-0 items-center md:hidden">
+                  <BrandMark size={26} />
+                </Link>
+
+                {/* Search reads as a field here, which is what people look for. */}
+                <div className="hidden min-w-0 max-w-md flex-1 md:block">
+                  <CommandPalette variant="field" />
+                </div>
+
+                <span className="min-w-0 flex-1 truncate text-sm font-medium md:hidden">
+                  {session.tenant?.name ?? "No tenant"}
+                </span>
+
+                {/* What is waiting on this person, wherever they are. Renders
                   nothing at all when nothing is, so an ordinary header is the
                   header it always was. */}
-              <ApprovalsWaitingBadge />
+                <ApprovalsWaitingBadge />
 
-              <div className="ml-auto flex shrink-0 items-center rounded-md border border-input md:hidden">
-                <CommandPalette />
-                <MainMenu />
-                <ContextHelp />
-              </div>
+                <div className="ml-auto flex shrink-0 items-center rounded-md border border-input md:hidden">
+                  <CommandPalette />
+                  <MainMenu />
+                  <ContextHelp />
+                </div>
 
-              <div className="ml-auto hidden shrink-0 items-center rounded-md border border-input md:flex">
-                <MainMenu />
-                <ContextHelp />
-              </div>
+                <div className="ml-auto hidden shrink-0 items-center rounded-md border border-input md:flex">
+                  <MainMenu />
+                  <ContextHelp />
+                </div>
 
-              <ScopeControl
-                session={session}
-                scope={scope}
-                onScopeChange={onScopeChange}
-                sites={sites}
-                pageUsesScope={scopeReaders > 0}
-              />
-
-              <div className="hidden shrink-0 md:block">
-                <UserMenu session={session} onSignOut={onSignOut} />
-              </div>
-            </div>
-          </header>
-          {session.tenant_id ? <ServiceBanner /> : null}
-
-          <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-            <SheetContent
-              side="left"
-              className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto"
-            >
-              <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
-
-              <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
-
-              <nav aria-label="Sections">
-                <NavList
-                  items={visible}
-                  area={area}
-                  pathname={pathname}
-                  hidden={hidden}
-                  onNavigate={() => setDrawerOpen(false)}
-                />
-              </nav>
-
-              <div className="mt-auto border-t border-border pt-4">
-                <UserMenu
+                <ScopeControl
                   session={session}
-                  onSignOut={onSignOut}
-                  onNavigate={() => setDrawerOpen(false)}
-                  className="w-full justify-start"
+                  scope={scope}
+                  onScopeChange={onScopeChange}
+                  sites={sites}
+                  pageUsesScope={scopeReaders > 0}
                 />
-              </div>
-            </SheetContent>
-          </Sheet>
 
-          <main id="main" tabIndex={-1} className={MAIN_AREA}>
-            <Breadcrumbs />
-            <PageHeaderExtras.Provider value={WalkthroughButton}>
-              <ScopeUsageContext.Provider value={scopeUsage}>{children}</ScopeUsageContext.Provider>
-            </PageHeaderExtras.Provider>
-          </main>
+                <div className="hidden shrink-0 md:block">
+                  <UserMenu session={session} onSignOut={onSignOut} />
+                </div>
+              </div>
+            </header>
+            {session.tenant_id ? <ServiceBanner /> : null}
+
+            <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+              <SheetContent
+                side="left"
+                className="flex w-[85vw] max-w-sm flex-col gap-6 overflow-y-auto"
+              >
+                <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
+
+                <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
+
+                <nav aria-label="Sections">
+                  <NavList
+                    items={visible}
+                    area={area}
+                    pathname={pathname}
+                    hidden={hidden}
+                    onNavigate={() => setDrawerOpen(false)}
+                  />
+                </nav>
+
+                <div className="mt-auto border-t border-border pt-4">
+                  <UserMenu
+                    session={session}
+                    onSignOut={onSignOut}
+                    onNavigate={() => setDrawerOpen(false)}
+                    className="w-full justify-start"
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <main id="main" tabIndex={-1} className={MAIN_AREA}>
+              <Breadcrumbs />
+              <PageHeaderExtras.Provider value={WalkthroughButton}>
+                <ScopeUsageContext.Provider value={scopeUsage}>
+                  {children}
+                </ScopeUsageContext.Provider>
+              </PageHeaderExtras.Provider>
+            </main>
+          </div>
         </div>
-      </div>
+        <ContextHelpSheet />
+      </HelpContext.Provider>
     </UnsavedChangesProvider>
   );
 }

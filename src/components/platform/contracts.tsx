@@ -1274,7 +1274,11 @@ export function InvoiceLines({ lines, currency }: { lines: InvoiceLine[]; curren
               </td>
               <td className="py-1.5 pr-4 text-xs tabular-nums">{l.over.toLocaleString()}</td>
               <td className="py-1.5 pr-4 text-xs tabular-nums">
-                {l.unit_minor == null ? <Pill tone="bad">unpriced</Pill> : `${l.unit_minor}p`}
+                {l.unit_minor == null ? (
+                  <Pill tone="bad">unpriced</Pill>
+                ) : (
+                  money(l.unit_minor, currency)
+                )}
               </td>
               <td className="py-1.5 pr-4 font-mono text-xs">{l.band ?? "—"}</td>
               <td className="py-1.5 text-sm tabular-nums">{money(l.net_minor, currency)}</td>

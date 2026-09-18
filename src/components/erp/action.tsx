@@ -1,7 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -40,6 +40,8 @@ import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
 import { useUnsavedGuard } from "./unsaved";
+import { fill } from "../../lib/interview";
+import { missingRequired } from "../../lib/required-fields";
 
 /**
  * The write surface.
@@ -1090,6 +1092,10 @@ export function ActionDialog({
   const [values, setValues] = useState<Record<string, string>>(() => opening);
   const [lists, setLists] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Record<string, Record<string, string>[]>>({});
+  // Whether Create has been pressed. Until it has, nothing is marked missing —
+  // an empty form is not an error, it is a form nobody has filled in yet.
+  const [attempted, setAttempted] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   // What a picker that follows another choice reads: the record the screen
   // already chose, and what has been chosen on the form.
@@ -1276,14 +1282,53 @@ export function ActionDialog({
   const shown = fields.filter((f) => !(prefill && f.name in prefill));
   const asPage = shown.length > 2 || shown.some((f) => f.kind === "rows");
 
+  // What is still missing, worked out afresh on every keystroke once Create has
+  // been pressed, so a mark goes away the moment its field is answered.
+  const missing = attempted ? missingRequired(shown, heldValues, heldRows, lists) : [];
+
+  /**
+   * Submit, or say what is missing and go to it. Create on an empty form used
+   * to leave a faint focus ring on one field and say nothing; the person
+   * pressed it again. Both buttons come through here, "Create and move on" as
+   * well, which used to skip the check altogether.
+   */
+  function submit(extra: Record<string, unknown> = {}) {
+    setAttempted(true);
+    const gaps = missingRequired(shown, heldValues, heldRows, lists);
+    if (gaps.length > 0) {
+      const first = formRef.current?.querySelector<HTMLElement>(`[data-field="${gaps[0]}"]`);
+      first?.scrollIntoView({ block: "center", behavior: "smooth" });
+      first?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+      return;
+    }
+    action.mutate(extra);
+  }
+
   const body = (
     <form
+      ref={formRef}
       className="flex flex-col gap-4"
+      // The form checks itself: the browser's check blocked the submit and
+      // said nothing anybody noticed, and cannot see a line editor at all.
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        action.mutate({});
+        submit();
       }}
     >
+      {missing.length > 0 ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-3.5 py-2.5 text-sm text-destructive"
+        >
+          {fill(ui("Nothing has been created yet. Fill in {fields} first."), {
+            fields: shown
+              .filter((f) => missing.includes(f.name))
+              .map((f) => ui(f.label))
+              .join(", "),
+          })}
+        </div>
+      ) : null}
       {context ? (
         <div className="rounded-lg border border-border border-l-2 border-l-accent bg-accent-soft/40 px-3.5 py-2.5">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1300,7 +1345,12 @@ export function ActionDialog({
           // a label inside a label is neither valid nor navigable.
           const Wrap = f.kind === "multi" || f.kind === "rows" ? "div" : "label";
           return (
-            <Wrap key={f.name} className="flex min-w-0 flex-col gap-1 text-sm">
+            <Wrap
+              key={f.name}
+              data-field={f.name}
+              aria-invalid={missing.includes(f.name) || undefined}
+              className="flex min-w-0 flex-col gap-1 text-sm"
+            >
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {ui(f.label)}
                 {f.kind === "money" ? ` (${f.currency})` : ""}
@@ -1387,6 +1437,13 @@ export function ActionDialog({
               )}
 
               {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
+              {missing.includes(f.name) ? (
+                <span className="text-xs font-medium text-destructive">
+                  {f.kind === "rows"
+                    ? ui("Add at least one line.")
+                    : fill(ui("{field} is needed."), { field: ui(f.label) })}
+                </span>
+              ) : null}
             </Wrap>
           );
         })}
@@ -1420,7 +1477,7 @@ export function ActionDialog({
             variant="secondary"
             busy={action.isPending}
             disabled={takesMoney && Boolean(currencyError)}
-            onClick={() => action.mutate(alsoSubmit.args)}
+            onClick={() => submit(alsoSubmit.args)}
           >
             {ui(alsoSubmit.label)}
           </ActionButton>

@@ -19,13 +19,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/logistics/release-areas")({
   head: () => ({
     meta: [
-      { title: "Marshalling areas and waves — Clove ERP" },
+      { title: "Loading bays and waves — Clove ERP" },
       {
         name: "description",
         content:
-          "Marshalling areas hold allocated stock, waves allocate in detail against them, shortfalls raise directed replenishment, and paperwork prints only once everything is covered.",
+          "Loading bays hold allocated stock, waves allocate in detail against them, shortfalls raise directed replenishment, and paperwork prints only once everything is covered.",
       },
-      { property: "og:title", content: "Marshalling areas and waves — Clove ERP" },
+      { property: "og:title", content: "Loading bays and waves — Clove ERP" },
       {
         property: "og:description",
         content:
@@ -84,7 +84,7 @@ type WaveLine = {
   status: string;
 };
 
-const pickArea = (name = "p_release_area_id", label = "Marshalling area") =>
+const pickArea = (name = "p_release_area_id", label = "Loading bay") =>
   pickFrom("erp_release_areas", "release_area_id", ["site_code", "code", "name"], name, label);
 
 const pickWave = (name = "p_wave_id", label = "Wave") =>
@@ -96,25 +96,30 @@ function ReleaseAreas() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Marshalling areas")}>
+      <PageHeader
+        title={ui("Loading bays")}
+        howItWorks={ui(
+          "A wave allocates in detail against the area, what the area cannot cover raises directed replenishment rather than a shortage, and nothing prints until every line is covered.",
+        )}
+      >
         {ui(
-          "Stock in a marshalling area is allocated stock: out of counting scope and out of reach of other demand. A wave allocates in detail against the area, what the area cannot cover raises directed replenishment rather than a shortage, and nothing prints until every line is covered.",
+          "Stock in a loading bay is allocated stock: out of counting scope and out of reach of other demand.",
         )}
       </PageHeader>
 
       <ConfigTransfer
         objectType="release_area"
-        title="Marshalling areas as a file"
+        title="Loading bays as a file"
         description="Sites and locations are named by code; the download doubles as the upload template."
         invalidates={["erp_release_areas", "erp_release_area_locations"]}
       />
 
       <ActionBar
-        title="Marshalling areas"
+        title="Loading bays"
         note="An area is a scope, not a place on a map: a site, a location, the order type and the product classes it serves. A wave will not take a line the area does not serve."
         actions={[
           {
-            label: "Add or amend a marshalling area",
+            label: "Add or change a loading bay",
             permission: "logistics.plan",
             fn: "erp_upsert_release_area",
             fields: [
@@ -125,7 +130,7 @@ function ReleaseAreas() {
                 label: "Code",
                 required: true,
                 placeholder: "LEE-DESPATCH",
-                hint: "A short code for this marshalling area.",
+                hint: "A short code for this loading bay.",
               },
               {
                 kind: "text",
@@ -230,7 +235,7 @@ function ReleaseAreas() {
                 kind: "select",
                 name: "p_document_id",
                 label: "Order this line is for",
-                hint: "Optional. A marshalling area set up for one order type only takes lines from an order of that type.",
+                hint: "Optional. A loading bay set up for one order type only takes lines from an order of that type.",
                 options: {
                   fn: "erp_documents",
                   args: { p_limit: 200, p_actionable: true },
@@ -259,14 +264,12 @@ function ReleaseAreas() {
       />
 
       <DataPanel<Area>
-        title={ui("Marshalling areas")}
+        title={ui("Loading bays")}
         description={ui(
           "What each area serves, how it replenishes, and what is sitting in it now.",
         )}
         fn="erp_release_areas"
-        empty={ui(
-          "No marshalling areas yet. Allocation runs against the whole site until one exists.",
-        )}
+        empty={ui("No loading bays yet. Allocation runs against the whole site until one exists.")}
       >
         {(rows) => (
           <Table

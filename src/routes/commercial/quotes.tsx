@@ -223,10 +223,13 @@ function Quotes() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={ui("Quotes")}>
-        {ui(
-          "A quote is assembled from price items, not typed. Margin shows live per line and in total against the cost model; a discount beyond the threshold is routed for approval; every version is retained; the order form is the quote rendered, not re-keyed.",
+      <PageHeader
+        title={ui("Quotes")}
+        howItWorks={ui(
+          "Margin shows live per line and in total against the cost model; a discount beyond the threshold is routed for approval; every version is retained; the order form is the quote rendered, not re-keyed.",
         )}
+      >
+        {ui("A quote is assembled from price items, not typed.")}
       </PageHeader>
 
       {q.isPending ? (
