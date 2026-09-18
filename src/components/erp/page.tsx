@@ -87,7 +87,21 @@ export function RefreshButton() {
   );
 }
 
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+export function PageHeader({
+  title,
+  children,
+  actions,
+}: {
+  title: string;
+  children?: ReactNode;
+  /**
+   * Controls that belong to the page rather than to any panel on it — the
+   * Actions panel, mostly — drawn beside Refresh, where the module pages draw
+   * theirs, so a screen built on this header and one built on ModulePage put
+   * the same control in the same place.
+   */
+  actions?: ReactNode;
+}) {
   const Extras = useContext(PageHeaderExtras);
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -97,6 +111,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {Extras ? <Extras /> : null}
+        {actions}
         <RefreshButton />
       </div>
     </div>
