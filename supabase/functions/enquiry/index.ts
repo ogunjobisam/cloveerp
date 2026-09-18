@@ -353,7 +353,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const ipHash = await hashAddress(req, salt);
-    sql = connect(connection);
+    // The one entry point serving somebody who has not signed in.
+    sql = connect(connection, "public_door");
 
     let id: string;
     try {

@@ -16,7 +16,7 @@
 # else: no database, no psql, no connection. If a rule here ever needs one it
 # is the wrong rule and belongs in erp.ci_check_catalogue() with the rest.
 #
-# Six rules refuse and two advise, and the division is deliberate. A check that
+# Seven rules refuse and two advise, and the division is deliberate. A check that
 # fires falsely is ignored within a day and is then worse than nothing, so a
 # rule refuses only where the refusal is arithmetic — the same substring the
 # database itself looks for, the same register, the same name. Where the answer
@@ -32,6 +32,7 @@
 #   F  a new public door needs its allowance and a home
 #   G  advisory: a total somebody wrote down has moved
 #   H  advisory: a suite's count guard should print what its fixture caught
+#   I  a version is claimed once
 #
 # Proved by supabase/ci/preflight_falsification.sh, which puts a fixture
 # migration in front of each rule and refuses to believe a rule that stays
@@ -104,6 +105,59 @@ run_branch_rule_e() {
     echo "$dirty_elsewhere" | sed 's/^/             /'
   fi
 }
+
+# ═════════════════════════════════════════════════════════════════════════════
+# I — a version is claimed once
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# A migration's version is the digits at the front of its filename, and it is
+# the key in supabase_migrations.schema_migrations. Two files with the same
+# digits are two files claiming one version.
+#
+# The schema build cannot see it. It replays supabase/migrations/*.sql in
+# filename order, so both files apply, in some order, and the build is green.
+# The deploy is where it lands: the second insert is a duplicate key, which is
+# the failure CLAUDE.md records from 8 September — twenty-three minutes of a
+# deploy lost to one.
+#
+# It happened on 18 September. Two branches independently chose
+# 20260919850000. Neither branch's build could see the other, and neither was
+# wrong on its own; the collision existed only in the pair. That is why this
+# reads the whole directory rather than only what the branch adds — a duplicate
+# is a property of the tree, not of a change — and why the pair had to be built
+# together before either could land.
+#
+# What it cannot see: two versions colliding across branches that have not been
+# brought together. Nothing offline can. Build the wave together.
+
+run_rule_i() {
+  local dupes
+  dupes="$(ls "$ROOT/supabase/migrations"/*.sql 2>/dev/null \
+             | xargs -n1 basename \
+             | sed -n 's/^\([0-9]\{6,\}\)_.*/\1/p' \
+             | sort | uniq -d)"
+  [ -n "$dupes" ] || return 0
+
+  {
+    echo "✗ two or more migrations claim the same version."
+    while IFS= read -r v; do
+      [ -n "$v" ] || continue
+      echo "    $v"
+      ls "$ROOT/supabase/migrations/${v}_"*.sql 2>/dev/null | xargs -n1 basename | sed 's/^/      /'
+    done <<< "$dupes"
+    echo "  A version is the key in supabase_migrations.schema_migrations. The build"
+    echo "  replays the files in filename order and will be green; the deploy records"
+    echo "  the version and refuses the second with a duplicate key."
+    echo "  Move whichever file is branch-only — absent at $BASE — to a free version,"
+    echo "  in a single commit, so the old path is added and deleted entirely within"
+    echo "  the branch. Never move one that exists on $BASE."
+    echo "  (preflight rule I)"
+    echo ""
+  } >&2
+  FAILED=1
+}
+
+run_rule_i
 
 # ═════════════════════════════════════════════════════════════════════════════
 # A–D, F–H — read the migration text
