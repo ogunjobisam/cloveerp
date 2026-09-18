@@ -19,7 +19,7 @@ set lock_timeout = '30s';
 set statement_timeout = 0;
 
 -- =============================================================================
--- 20260920220000  The demonstration is a going concern
+-- 20260920230000  The demonstration is a going concern
 -- -----------------------------------------------------------------------------
 -- Walked live on 18 September 2026, the demonstration organisation reads as a
 -- company that stopped trading in the spring and never collected, never paid
@@ -113,6 +113,12 @@ set statement_timeout = 0;
 -- ticked past, so every month either passes on the demonstration's own figures
 -- or says which figure it failed on. Both ledgers, because a period is a
 -- period; 64 of them at ~110 ms of assertions each.
+--
+-- The bill is dated where the goods arrived and the month is the
+-- organisation's own month, through erp.local_today() (20260920110000), which
+-- landed on main while this was being written. erp.bill_from_receipt() still
+-- defaults its own invoice date from current_date, so the day is passed to it
+-- rather than left to it; that default is worth fixing where it lives.
 --
 -- ── AND THEN IT READS ITS OWN WORK BACK ──────────────────────────────────────
 --
@@ -245,6 +251,9 @@ begin
         continue;
       end if;
 
+      -- current_date and not erp.local_today(): the builder clamps its own
+      -- end to current_date, so a bound past that one would only buy an
+      -- extra call that builds nothing.
       v_cursor := v_last + 1;
       v_built  := 0;
       v_calls  := 0;
@@ -316,6 +325,7 @@ declare
   v_admin  uuid;
   v_billed integer;
   v_left   integer;
+  v_today  date;
 begin
   for t in select tn.id, tn.code from erp.tenant tn
             where tn.code like 'demo-%'
@@ -373,7 +383,7 @@ begin
       -- the accrual that reads badly, and the builder's Thursday takes the
       -- newest, so the oldest is exactly what it would never reach.
       for g in
-        select d.id, d.document_number, d.document_date
+        select d.id, d.document_number, d.document_date, d.site_id
           from erp.document d
           join erp.document_type dt
             on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
@@ -408,9 +418,14 @@ begin
          order by d.document_date, d.document_number
       loop
         begin
+          -- Dated where the goods arrived rather than where the database is
+          -- standing (20260920110000). erp.bill_from_receipt() still defaults
+          -- its own date from current_date, so the day is passed to it rather
+          -- than left to it.
+          v_today := erp.local_today(g.site_id);
           perform erp.bill_from_receipt(
-                    g.id, 'INV/' || g.document_number, current_date,
-                    current_date + 30, true);
+                    g.id, 'INV/' || g.document_number, v_today,
+                    v_today + 30, true);
           v_billed := v_billed + 1;
         exception when others then
           v_left := v_left + 1;
@@ -454,6 +469,7 @@ declare
   v_admin  uuid;
   v_closed integer;
   v_stuck  integer;
+  v_today  date;
 begin
   for t in select tn.id, tn.code from erp.tenant tn
             where tn.code like 'demo-%'
@@ -516,14 +532,19 @@ begin
 
       -- Every period that ended before the month this runs in. The current
       -- month stays open, because today's cash and today's bills are posted
-      -- into it.
+      -- into it. The month is the organisation's own, not the one the database
+      -- is standing in (20260920110000): at a month boundary those are
+      -- different months, and this would otherwise close the month the
+      -- organisation is still working in.
+      v_today := erp.local_today();
+
       for p in select fp.id, fp.code, l.code as ledger
                  from erp.fiscal_period fp
                  join erp.ledger l
                    on l.tenant_id = fp.tenant_id and l.id = fp.ledger_id
                 where fp.tenant_id = t.id
                   and fp.status = 'open'::erp.period_status
-                  and fp.ends_on < date_trunc('month', current_date)::date
+                  and fp.ends_on < date_trunc('month', v_today)::date
                 order by fp.ends_on, l.code
       loop
         begin
