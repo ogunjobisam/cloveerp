@@ -1180,16 +1180,24 @@ export const INVENTORY: ModuleDef = {
     },
     {
       title: "Ageing",
-      description: "How long stock has been standing still.",
+      // This was empty for every organisation not costed first in, first out:
+      // the door read cost layers, and average and standard cost keep none. It
+      // now ages that stock from the movement ledger, which cannot say which
+      // receipt a unit came from, so the description says what is assumed and
+      // every row says how its age is known.
+      description:
+        "How long stock has been here, by when it arrived. Stock costed first in, first out is aged by the receipt each unit was costed from. Stock at average or standard cost keeps no such record, so it is aged by the latest arrivals that make up what is on hand, oldest assumed out first.",
       fn: "erp_stock_ageing",
       siteArg: "p_site_id",
-      empty: "No aged stock. Nothing has been on hand long enough to fall into an age band.",
-      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
+      empty: "Nothing on hand to age. Stock appears here in its age band from the day it arrives.",
+      rowKey: (r, i) =>
+        `${String(r["item_code"] ?? i)}-${String(r["site_code"] ?? i)}-${String(r["bucket"] ?? i)}-${String(r["aged_by"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
         { header: "Site", cell: "site_code" },
         { header: "Band", cell: "bucket" },
         { header: "Quantity", cell: "quantity", numeric: true },
+        { header: "Aged by", cell: "aged_by" },
       ],
     },
     {
@@ -1955,12 +1963,17 @@ export const FINANCE: ModuleDef = {
 
     {
       title: "Slow-moving stock provision",
+      // Aged from the same source as Stock's ageing, and empty for the same
+      // reason until it was: it read cost layers alone. At average or standard
+      // cost the value in each band is the current cost, not what each receipt
+      // cost, and the description says so.
       description:
-        "One published policy: nothing under ninety days, a quarter to six months, half to a year, all of it beyond.",
+        "One published policy: nothing under ninety days, a quarter to six months, half to a year, all of it beyond. Stock costed first in, first out is aged and valued by the receipts it was costed from; stock at average or standard cost by its latest arrivals, at its current cost.",
       fn: "erp_stock_provision",
       empty:
-        "Nothing is old enough to provide against. Stock appears here once it has passed the slow-moving threshold this organisation set.",
-      rowKey: (r, i) => `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}`,
+        "Nothing on hand to provide against. Every product in stock appears here in its age band, including stock too new to need a provision.",
+      rowKey: (r, i) =>
+        `${String(r["item_code"] ?? i)}-${String(r["bucket"] ?? i)}-${String(r["aged_by"] ?? i)}`,
       columns: [
         { header: "Product", cell: "item_code" },
         { header: "Name", cell: "item_name" },
@@ -1969,6 +1982,7 @@ export const FINANCE: ModuleDef = {
         { header: "Value", cell: moneyCell("value_minor"), numeric: true },
         { header: "Provision %", cell: "provision_pct", numeric: true },
         { header: "Provision", cell: moneyCell("provision_minor"), numeric: true },
+        { header: "Aged by", cell: "aged_by" },
       ],
     },
     {
