@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { actionKey, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
@@ -15,6 +15,7 @@ import {
   offerFor,
   rowsAtStage,
   stageEmptyState,
+  stepsPerRow,
   settledAtStage,
   stageReadArgs,
   stateOf,
@@ -868,7 +869,7 @@ function StageTab({
   const count = source && !isPending ? (capped ? `${rows.length}+` : String(rows.length)) : null;
 
   return (
-    <li className="min-w-0 flex-1 basis-40">
+    <li className="min-w-0">
       <button
         type="button"
         onClick={onSelect}
@@ -876,7 +877,7 @@ function StageTab({
         aria-pressed={active}
         title={ui(stage.hint)}
         className={[
-          "flex h-14 w-full min-w-0 items-center gap-2 pr-5 text-left transition-colors",
+          "flex h-full min-h-14 w-full min-w-0 items-center gap-2 pr-5 text-left transition-colors",
           index === 0 ? "step-chevron-first pl-4" : "step-chevron pl-7",
           active
             ? "bg-accent text-accent-foreground"
@@ -891,7 +892,11 @@ function StageTab({
         >
           {index + 1}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{ui(stage.label)}</span>
+        {/* Never cut. A step whose name reads "Purchas…" is a step nobody can
+            choose with confidence; two lines is the price of saying it. */}
+        <span className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-tight break-words">
+          {ui(stage.label)}
+        </span>
         {count !== null ? (
           <span
             className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
@@ -904,6 +909,38 @@ function StageTab({
       </button>
     </li>
   );
+}
+
+/** The narrowest a step may be and still say its name without cutting it. */
+const STEP_MIN_REM = 10.5;
+
+/**
+ * How many steps fit on a row of the strip at the width it has now.
+ *
+ * Measured rather than left to the grid's auto-fill, because auto-fill packs a
+ * row as full as it will go: eight steps with room for six come out six and
+ * two. `stepsPerRow` evens them out. Until the first measurement every step is
+ * on one row and squeezes rather than overflows, so nothing is ever off the
+ * edge, even for the moment before the width is known.
+ */
+function useStepsPerRow(count: number) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [perRow, setPerRow] = useState(count);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      setPerRow(stepsPerRow(count, el.clientWidth / (STEP_MIN_REM * rem)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [count]);
+
+  return { ref, perRow };
 }
 
 export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: ActionSpec[] }) {
@@ -923,6 +960,8 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
     return specs.some((a) => !a.permission || hasPermission(session, a.permission));
   };
 
+  const { ref: stripRef, perRow } = useStepsPerRow(flow.stages.length);
+
   const at = Math.min(chosen, flow.stages.length - 1);
   const stage = flow.stages[at];
   // Where work goes from here. The last step of a chain has nowhere further to
@@ -935,8 +974,15 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
       <div className="p-4 sm:p-5">
         <h2 className="text-sm font-semibold">{ui(flow.title)}</h2>
         {flow.note ? <p className="mt-0.5 text-xs text-muted-foreground">{ui(flow.note)}</p> : null}
-        <div className="mt-3 overflow-x-auto pb-1">
-          <ol className="flex min-w-fit items-stretch gap-1">
+        {/* Rows rather than an edge. Purchasing's eight steps ran off a
+            1512px screen with the last one — Payment — out of sight and
+            nothing to say it was there. Every step is now always on screen;
+            when they do not fit side by side they wrap, evenly. */}
+        <div ref={stripRef} className="mt-3">
+          <ol
+            className="grid items-stretch gap-1"
+            style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
+          >
             {flow.stages.map((s, i) => (
               <StageTab
                 key={s.label}

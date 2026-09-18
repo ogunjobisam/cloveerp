@@ -22,6 +22,7 @@ import {
   partyLabel,
   rowsAtStage,
   stageEmptyState,
+  stepsPerRow,
   settledAtStage,
   stageReadArgs,
   stateOf,
@@ -554,5 +555,35 @@ describe("why a step is showing nothing", () => {
     expect(stageEmptyState({ ...step, showing: 2, held: 2, finished: 0, counting: false })).toBe(
       "",
     );
+  });
+});
+
+describe("how many steps a strip puts on a row", () => {
+  test("steps that fit side by side are one row", () => {
+    expect(stepsPerRow(5, 7)).toBe(5);
+    expect(stepsPerRow(8, 8)).toBe(8);
+  });
+
+  test("eight steps with room for six go four and four, not six and two", () => {
+    // Purchase-to-pay at 1512px: the case that pushed Payment off the edge.
+    expect(stepsPerRow(8, 6)).toBe(4);
+  });
+
+  test("wrapped rows are as even as they can be", () => {
+    expect(stepsPerRow(8, 3)).toBe(3); // 3, 3, 2
+    expect(stepsPerRow(5, 4)).toBe(3); // 3, 2
+    expect(stepsPerRow(7, 5)).toBe(4); // 4, 3
+  });
+
+  test("no row is ever wider than the room it has", () => {
+    for (let count = 1; count <= 12; count++) {
+      for (let fits = 1; fits <= 12; fits++) {
+        expect(stepsPerRow(count, fits)).toBeLessThanOrEqual(Math.max(1, Math.min(count, fits)));
+      }
+    }
+  });
+
+  test("a width too narrow for one step still draws one per row", () => {
+    expect(stepsPerRow(8, 0)).toBe(1);
   });
 });

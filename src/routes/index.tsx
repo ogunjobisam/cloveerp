@@ -142,13 +142,25 @@ function Overview() {
 
   return (
     <div className="flex min-w-0 flex-col gap-8">
-      <PageHeader
-        title={`${ui("Welcome")}, ${
-          session.principal?.given_name || session.principal?.display_name || ui("there")
-        }`}
-      >
-        {where}
-      </PageHeader>
+      <div className="flex min-w-0 flex-col gap-1">
+        <PageHeader
+          title={`${ui("Welcome")}, ${
+            session.principal?.given_name || session.principal?.display_name || ui("there")
+          }`}
+        >
+          {/* What this screen is for, rather than what it is. The greeting says
+              who you are and the line under the header said only where you
+              are; neither of them said what a person does here, which is read
+              what somebody is waiting on and then open a screen. It stays true
+              on a morning when nothing is waiting: the answer is then nothing. */}
+          {ui("Anything waiting on your decision, then the way into every screen you may open.")}
+        </PageHeader>
+        {/* Which organisation, company and site. Secondary to the sentence
+            above and kept, because the header's scope control shows the two
+            codes and holds the organisation's name inside a popover — this is
+            the only place a person reads it without opening one. */}
+        <p className="min-w-0 truncate text-xs text-muted-foreground">{where}</p>
+      </div>
 
       {/* Somebody else is waiting on this before any step of your own. */}
       <ApprovalsWaiting />
