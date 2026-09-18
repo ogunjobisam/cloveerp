@@ -85,6 +85,25 @@ jobs:
           # which a depth-1 checkout does not have.
           fetch-depth: 0
 
+      - name: The conventions this build enforces, before it spends an hour
+        # First, because it is the cheapest thing here and it answers eight of
+        # the questions the rest of this job takes forty minutes to answer.
+        # On 17 September this workflow ran fifteen times across five branches
+        # and failed nine, and not one of those nine was the change being
+        # wrong: every one was a convention nothing caught sooner. This reads
+        # git and the migration text, needs no database, and takes seconds.
+        #
+        # It scopes itself to what the branch adds, so on a push that touches
+        # no migration it finds nothing to read and says so.
+        run: PREFLIGHT_BASE=origin/${{ github.event.pull_request.base.ref || 'main' }} supabase/ci/preflight.sh
+
+      - name: Every preflight rule still fires
+        # A pattern match can stop matching, and the only symptom would be a
+        # build failing again for a reason preflight was supposed to have
+        # caught an hour earlier — by which time nobody is reading preflight.
+        # So each rule is put in front of the mistake it exists for.
+        run: supabase/ci/preflight_falsification.sh
+
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the
         # whole schema, which catches an ungoverned door eventually. This closes
@@ -652,6 +671,44 @@ jobs:
         # recovery; the review is assembled, the incident resolved, and the
         # organisation's history still shows it. D35 and D36, by the log.
         run: supabase/ci/incident_rehearsal.sh
+
+      - name: The seeded month is closed
+        # The v1 Definition of Done states one master gate: after a seeded
+        # month is posted AND THE PERIOD CLOSED, the four ties hold. The build
+        # did the first half. seed_demo.sql above posts a month of trading into
+        # ci-demo and the catalogue asserts the ties over it — but nothing in
+        # .github or supabase/ci had ever called erp.close_period(), on
+        # anything. Every close in the repository happened inside a suite that
+        # builds a throwaway organisation and posts a handful of documents into
+        # it, so the four close tasks made unwaivable on 17 September
+        # (20260918400000, and the ageing task of 20260918510000) had never
+        # once been asked about real data.
+        #
+        # Ties asserted outside a close are the weaker claim. A close puts the
+        # same assertions THROUGH THE CONTROL: erp.complete_close_task() runs
+        # each task's blocking check where it cannot be ticked past, and refuses
+        # a waiver on the four that carry a tie. This step ticks every task with
+        # no waiver reason, so the month closes on its own figures or the build
+        # goes red with the difference named. There is deliberately no way to
+        # waive from it.
+        #
+        # After the rehearsals rather than before the catalogue: the close is
+        # the last thing that writes to ci-demo, so nothing downstream has to
+        # care that one of its months has shut.
+        run: supabase/ci/close_month.sh
+
+      - name: The four ties hold three times running
+        # The Definition of Done's exit criterion, which is not the same
+        # sentence as its gate: the four ties hold on a freshly seeded month,
+        # THREE CONSECUTIVE RUNS. run_checks.sh walks the catalogue once, and
+        # one run cannot tell a tie that holds from a tie that happens to hold
+        # this time — 20260916610000 is what that looks like when it bites.
+        #
+        # Three separate psql sessions, three transactions, three snapshots,
+        # and the answers compared with each other as well as read. The four
+        # are not listed: they are read back from the close tasks the month was
+        # closed on, so a fifth tie is run by this the day it lands.
+        run: supabase/ci/ties_thrice.sh
 
       - name: Every door has a home
         # The application calls the database by bare string, and nothing
