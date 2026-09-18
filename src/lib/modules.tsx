@@ -1985,12 +1985,15 @@ export const FINANCE: ModuleDef = {
       empty:
         "No taxable transactions this quarter. A document that carries tax appears here once it is posted.",
       rowKey: (r, i) =>
-        `${String(r["direction"] ?? i)}-${String(r["jurisdiction"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
+        `${String(r["direction"] ?? i)}-${String(r["jurisdiction"] ?? i)}-${String(r["treatment"] ?? i)}-${String(r["tax_code"] ?? i)}-${String(r["rate_pct"] ?? i)}-${String(r["currency"] ?? i)}`,
       columns: [
         // Charged on what was sold, or suffered on what was bought. Separate
         // boxes on every return, so separate rows here.
         { header: "Direction", cell: "direction" },
         { header: "Jurisdiction", cell: "jurisdiction" },
+        // Zero rated, exempt and outside the scope all carry no tax and are
+        // three different things on a return, so the report says which.
+        { header: "Treatment", cell: "treatment" },
         { header: "Code", cell: "tax_code" },
         { header: "Rate %", cell: "rate_pct", numeric: true },
         { header: "Taxable", cell: moneyCell("taxable_minor", "currency"), numeric: true },
