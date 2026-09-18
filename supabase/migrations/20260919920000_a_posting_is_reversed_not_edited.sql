@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919910000  A posting is reversed, not edited
+-- 20260919920000  A posting is reversed, not edited
 -- -----------------------------------------------------------------------------
 -- A guard is landing that refuses amending a document once it is no longer only
 -- ours. That is right, and it makes one question urgent: if a posted document is
@@ -116,6 +116,18 @@ set lock_timeout = '30s';
 --     third tie. That refusal names the credit note, which moves both together.
 --
 -- ── ITS OWN DATE, AND THE CLOSE ──────────────────────────────────────────────
+--
+-- DEPENDS ON #198 (20260919100000, erp.local_today). A PostgREST session runs
+-- at UTC, so current_date is the database's day and not the day where the work
+-- is happening: a document keyed at ten to one in the morning BST was written
+-- with yesterday's date, and at a month end that is the previous accounting
+-- period. #198 answers whose day it is once — the site's timezone, then the
+-- organisation's, then UTC — and this reads that answer rather than deriving a
+-- second one. It matters more here than almost anywhere: a reversal is dated
+-- against the period it lands in, so a reversal an hour on the wrong side of
+-- midnight can post into a different month from the journal it reverses, which
+-- is the exact failure this migration exists to prevent. This migration sorts
+-- after 20260919100000 and will not apply before it.
 --
 -- p_posting_date defaults to today and may be any open date. The period guard is
 -- the product's single definition of one, erp.journal_period(), called before
@@ -320,7 +332,8 @@ declare
   v_route  text;
   v_next   text;
   v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
-  v_on     date := coalesce(p_posting_date, current_date);
+  v_today  date;
+  v_on     date;
   v_books  integer := 0;
   v_prior  text;
   v_prior_on date;
@@ -341,6 +354,13 @@ begin
   perform erp.authorise('finance.post', d.entity_id, d.site_id, null,
                         'document', p_document_id);
   v_me := erp.current_principal_id();
+
+  -- Whose day it is: the site's, then the organisation's, then UTC (#198). The
+  -- database's own day is not it — a reversal defaulted from current_date at
+  -- half past midnight BST would be dated yesterday, and at a month end
+  -- yesterday is a different period from the one the person is standing in.
+  v_today := erp.local_today(d.site_id);
+  v_on    := coalesce(p_posting_date, v_today);
 
   select * into dt from erp.document_type
    where tenant_id = v_tenant and id = d.document_type_id;
@@ -369,10 +389,10 @@ begin
                    'reversing journal, where whoever reviews the ledger reads it.';
   end if;
 
-  if v_on > current_date then
+  if v_on > v_today then
     raise exception
-      'CLOVEERP_REVERSAL_IN_THE_FUTURE: % is after today, and a reversal dated ahead of itself is a forecast',
-      v_on
+      'CLOVEERP_REVERSAL_IN_THE_FUTURE: % is after today, which where this document was raised is %',
+      v_on, v_today
       using errcode = '23514',
             hint = 'Date the reversal today, or in an open period that has already happened.';
   end if;
@@ -774,7 +794,7 @@ insert into erp_meta.diagnostic_check
    detail_function, detail_arguments, blurb, runs_in_ci, seq)
 values
   ('every_posting_can_be_undone', 'Every posting has a way back', 'assertion', 'platform', 'erp',
-   'assert_every_posting_can_be_undone', '', 'erp.document_reversal_coverage_report', '',
+   'assert_every_posting_can_be_undone', '', 'document_reversal_coverage_report', '',
    'Every kind of document that reaches the ledger says how a posting of it is undone: '
    'reversed with a contra journal, credited with a credit note that moves the goods too, '
    'posted only into the memorandum ledger, already a reversal itself, or not built yet. '
@@ -808,7 +828,7 @@ select erp_ref.ui_key(v.text), 'en', v.text,
        'A screen string declared at its call site and rendered through ui(). ' || v.why
   from (values
     ('Reverse what this invoice posted',
-     'The dialog raised from a posted sales invoice or purchase invoice (20260919910000).'),
+     'The dialog raised from a posted sales invoice or purchase invoice (20260919920000).'),
     ('The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten.',
      'Said under that heading, because all four consequences land on different screens and a person is owed them before pressing it rather than afterwards.'),
     ('Why it is being reversed',
@@ -868,7 +888,7 @@ volatile
 set search_path = ''
 as $suite$
 declare
-  c_expected constant integer := 17;
+  c_expected constant integer := 18;
   v_cases  integer := 0;
   v_tag    text := substr(md5(gen_random_uuid()::text), 1, 6);
   a1       uuid := gen_random_uuid();
@@ -879,8 +899,8 @@ declare
   v_po uuid; v_pol uuid; v_grn uuid;
   v_so uuid; v_sol uuid; v_dn uuid; v_sinv uuid;
   v_pinv uuid; v_draft uuid;
-  v_gl uuid; v_cal_start date; v_back date; v_prior uuid; v_old_period uuid;
-  v_ap text; v_ar text; v_grni text;
+  v_gl uuid; v_cal_start date; v_back date; v_old_period uuid;
+  v_ap text;
   v_ap_before bigint; v_ap_after bigint; v_ap_reversed bigint;
   v_off integer; v_lines integer; v_sub bigint;
   v_orig_j uuid; v_orig_on date; v_orig_period uuid; v_orig_lines integer; v_orig_status text;
@@ -888,7 +908,7 @@ declare
   v_rev_period uuid;
   v_res jsonb;
   v_msg text; v_ok boolean;
-  v_me uuid;
+  v_me uuid; v_today date;
 begin
   begin
     v_step := 'an organisation that buys, sells and keeps books';
@@ -906,10 +926,8 @@ begin
     perform erp.configure_inventory('average');
     perform erp.configure_procurement_controls();
 
-    v_me   := erp.current_principal_id();
-    v_ap   := erp.tenant_account_code('trade_payable');
-    v_ar   := erp.tenant_account_code('trade_receivable');
-    v_grni := erp.tenant_account_code('goods_received_not_invoiced');
+    v_me    := erp.current_principal_id();
+    v_ap    := erp.tenant_account_code('trade_payable');
 
     -- A period before the installed calendar, so a bill can sit in a month that
     -- is not this one. Taken from the calendar rather than from a number of days
@@ -947,6 +965,12 @@ begin
     insert into erp.site (tenant_id, entity_id, code, name, site_type, status)
     values (rb.tenant_id, rb.entity_id, 'ZRSITE', 'Reversal suite site', 'warehouse', 'active')
     returning id into v_site;
+
+    -- The day the suite means everywhere below, read the way the instrument
+    -- reads it (#198): the site's timezone, then the organisation's, then UTC.
+    -- current_date here would be the database's day, and the two can be
+    -- different days for an hour of every night.
+    v_today := erp.local_today(v_site);
     perform erp.create_location(v_site, 'ZR-RECV', 'Goods in', 'receiving');
     perform erp.create_location(v_site, 'ZR-BULK', 'Bulk', 'bulk');
     insert into erp.party (tenant_id, code, name, status)
@@ -1019,7 +1043,7 @@ begin
     -- ── 2, 3, 4, 5, 6, 7. The reversal ──────────────────────────────────────
     v_step := 'reversing the bill, today';
     v_res := erp.reverse_document_posting(
-               v_pinv, 'Keyed against the wrong supplier', current_date);
+               v_pinv, 'Keyed against the wrong supplier', v_today);
 
     select count(*) into v_off
       from (select jl.account_id
@@ -1074,7 +1098,7 @@ begin
     v_cases := v_cases + 1;
     case_name := 'the reversal posts in the period it is dated in, not the one the bill sits in';
     passed := v_state is null
-          and v_rev.posting_date = current_date
+          and v_rev.posting_date = v_today
           and v_orig_on = v_back
           and v_rev_period is not null
           and v_rev_period is distinct from v_orig_period;
@@ -1116,7 +1140,7 @@ begin
     -- ── 8. Twice is refused ─────────────────────────────────────────────────
     v_step := 'reversing it a second time';
     begin
-      perform erp.reverse_document_posting(v_pinv, 'And again', current_date);
+      perform erp.reverse_document_posting(v_pinv, 'And again', v_today);
       v_ok := false; v_msg := 'it was accepted';
     exception when others then
       v_ok := sqlerrm like 'CLOVEERP_ALREADY_REVERSED%';
@@ -1131,10 +1155,10 @@ begin
 
     -- ── 9, 10, 11, 12. The other refusals ───────────────────────────────────
     v_step := 'reversing without a reason';
-    v_draft := erp.create_document('purchase_invoice', rb.entity_id, v_site, v_sup, current_date);
+    v_draft := erp.create_document('purchase_invoice', rb.entity_id, v_site, v_sup, v_today);
     perform erp.add_document_line(v_draft, v_item, 1, 1000, 'a line nobody has registered');
     begin
-      perform erp.reverse_document_posting(v_draft, '   ', current_date);
+      perform erp.reverse_document_posting(v_draft, '   ', v_today);
       v_ok := false; v_msg := 'it was accepted';
     exception when others then
       v_ok := sqlerrm like 'CLOVEERP_REVERSAL_NEEDS_A_REASON%';
@@ -1149,7 +1173,7 @@ begin
 
     v_step := 'reversing a goods receipt';
     begin
-      perform erp.reverse_document_posting(v_grn, 'The goods were never any good', current_date);
+      perform erp.reverse_document_posting(v_grn, 'The goods were never any good', v_today);
       v_ok := false; v_msg := 'it was accepted';
     exception when others then
       v_ok := sqlerrm like 'CLOVEERP_REVERSAL_MOVED_STOCK%'
@@ -1165,7 +1189,7 @@ begin
 
     v_step := 'dating a reversal after today';
     begin
-      perform erp.reverse_document_posting(v_draft, 'Tomorrow', current_date + 1);
+      perform erp.reverse_document_posting(v_draft, 'Tomorrow', v_today + 1);
       v_ok := false; v_msg := 'it was accepted';
     exception when others then
       v_ok := sqlerrm like 'CLOVEERP_REVERSAL_IN_THE_FUTURE%';
@@ -1180,7 +1204,7 @@ begin
 
     v_step := 'reversing a draft';
     begin
-      perform erp.reverse_document_posting(v_draft, 'Nothing has happened yet', current_date);
+      perform erp.reverse_document_posting(v_draft, 'Nothing has happened yet', v_today);
       v_ok := false; v_msg := 'it was accepted';
     exception when others then
       v_ok := sqlerrm like 'CLOVEERP_NOTHING_WAS_POSTED%';
@@ -1223,7 +1247,7 @@ begin
 
     v_step := 'and posting it in the open month instead';
     v_res := erp.reverse_document_posting(
-               v_sinv, 'Raised against the wrong customer', current_date);
+               v_sinv, 'Raised against the wrong customer', v_today);
 
     select count(*) into v_off
       from (select jl.account_id
@@ -1294,7 +1318,7 @@ volatile
 set search_path = ''
 as $wrap$
 declare
-  c_expected constant integer := 17;
+  c_expected constant integer := 18;
   v_all integer; v_fail integer; v_detail text;
 begin
   create temp table if not exists _document_reversal on commit drop as
