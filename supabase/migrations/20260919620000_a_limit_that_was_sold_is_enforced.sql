@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260919610000  A limit that was sold is enforced
+-- 20260919620000  A limit that was sold is enforced
 -- -----------------------------------------------------------------------------
 -- 20260904190000 wrote erp.require_entitlement(). It reads the plan, compares
 -- what an addition would make against what the plan allows, and refuses by
@@ -143,15 +143,17 @@ set lock_timeout = '30s';
 --   erp.grant_role()              20260914065000
 --   public.erp_set_user_roles()   20260914074000
 --
--- The last of those is why this file is numbered 610000 rather than 600000.
--- The first attempt anchored the roles door on 20260914065000, which is where
--- its duties were settled but not where it was last written: 20260914074000
--- re-emitted it with erp.require_user_managers_remain(), and in doing so moved
--- one space in its declarations. The guard caught it and the build refused,
--- which is what the guard is for; the file it refused never reached a
--- database, and a migration is written once, so it is replaced rather than
--- corrected. The marker asserted below is now that user-manager check, so the
--- same mistake cannot pass next time.
+-- The last of those is why this file was renumbered once already. The first
+-- attempt anchored the roles door on 20260914065000, which is where its duties
+-- were settled but not where it was last written: 20260914074000 re-emitted it
+-- with erp.require_user_managers_remain(), and in doing so moved one space in
+-- its declarations. The guard caught it and the build refused, which is what
+-- the guard is for. The marker asserted below is now that user-manager check,
+-- so the same mistake cannot pass next time.
+--
+-- It was renumbered a second time for section 5. A migration is written once,
+-- and neither refused file ever reached a database, so each is replaced rather
+-- than corrected.
 -- =============================================================================
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -205,7 +207,7 @@ comment on function erp.full_users_committed(uuid) is
   'needs a full seat. The same set erp.person_seats() calls full once everybody '
   'has signed in, and the number the grant doors measure against the plan, so '
   'that the refusal reaches the administrator who gave the roles rather than '
-  'the person who later accepts the invitation (20260919610000).';
+  'the person who later accepts the invitation (20260919620000).';
 
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale)
 values ('erp', 'full_users_committed',
@@ -226,7 +228,7 @@ declare
   v_sig    constant text := 'erp.create_site(text,text,text,uuid,character,text)';
   v_def    text := pg_get_functiondef(v_sig::regprocedure);
   v_needle constant text := $n$  insert into erp.site (tenant_id, entity_id, code, name, site_type,$n$;
-  v_new    constant text := $n$  -- The plan's sites, refused where a site is created (20260919610000).
+  v_new    constant text := $n$  -- The plan's sites, refused where a site is created (20260919620000).
   -- Silent where the organisation has no subscription, which is what lets
   -- provisioning, the demonstration and every fixture go on as they were.
   perform erp.require_entitlement('sites', 1);
@@ -257,7 +259,7 @@ $sites$;
 comment on function erp.create_site(text, text, text, uuid, character, text) is
   'Creates a site of one company with the places a receipt needs, under '
   'administration.configure. Refuses a site beyond what the plan allows '
-  '(20260919610000), and refuses nothing on that account where the organisation '
+  '(20260919620000), and refuses nothing on that account where the organisation '
   'has no subscription.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -269,7 +271,7 @@ declare
   v_sig    constant text := 'erp.create_entity(text,text,text,character,character,text,text,smallint,text)';
   v_def    text := pg_get_functiondef(v_sig::regprocedure);
   v_needle constant text := $n$  return erp.upsert_entity(p_code, p_name, p_legal_name, p_base_currency, p_country_code,$n$;
-  v_new    constant text := $n$  -- The plan's companies, refused where a company is created (20260919610000).
+  v_new    constant text := $n$  -- The plan's companies, refused where a company is created (20260919620000).
   -- The refusal above means reaching this line is always one more company;
   -- erp.upsert_entity() is left alone because it is also the update path and
   -- the one provisioning and the promoter call.
@@ -297,7 +299,7 @@ $companies$;
 comment on function erp.create_entity(text, text, text, character, character, text, text, smallint, text) is
   'Creates a company of the organisation: code, name, currency, country, '
   'locales, fiscal year start, optional parent. Refuses a code in use, and a '
-  'company beyond what the plan allows (20260919610000).';
+  'company beyond what the plan allows (20260919620000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 4. Users: refused where somebody becomes a full user
@@ -316,7 +318,7 @@ declare
   v_before := array(select d.sod_rule_id from erp.duty_conflicts(v_tenant, p_app_user_id) d);$n$;
   v_n3     constant text := $n$  return v_id;$n$;
   v_r3     constant text := $n$  -- A grant that makes somebody a full user is where one of the plan's
-  -- included users is spent (20260919610000). Counted after the write, so what
+  -- included users is spent (20260919620000). Counted after the write, so what
   -- is measured is what the organisation would actually have; the refusal
   -- takes its own grant down with it. What is passed is the difference between
   -- the seats committed and the seats the meter can see, because somebody
@@ -359,7 +361,7 @@ comment on function erp.grant_role(uuid, text, uuid, uuid, text, date, date, tex
   'Grants a role under administration.roles. Refuses the caller''s own roles '
   'once live, settles the person''s segregation of duties, and refuses a grant '
   'that would take the organisation past the full users its plan includes '
-  '(20260919610000).';
+  '(20260919620000).';
 
 do $roles$
 declare
@@ -375,7 +377,7 @@ declare
   v_n3     constant text := $n$  return jsonb_build_object(
     'granted', v_added,$n$;
   v_r3     constant text := $n$  -- Setting the whole set can give seats and take them away in one call
-  -- (20260919610000). Only a rise is refused: an organisation that is already
+  -- (20260919620000). Only a rise is refused: an organisation that is already
   -- over a limit has to be able to use this very door to get back under it.
   v_after := erp.full_users_committed(v_tenant);
   if v_after > v_seats then
@@ -425,20 +427,97 @@ comment on function public.erp_set_user_roles(uuid, text[], text, text) is
   'introduces is refused unless p_sod_override_reason records an exception, '
   'which needs administration.promote. A change that would take the '
   'organisation past the full users its plan includes is refused; one that '
-  'reduces them never is (20260919610000). Returns granted, revoked and the '
+  'reduces them never is (20260919620000). Returns granted, revoked and the '
   'person''s conflicts.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. The refusal is one a customer now meets, so it says what to do
 -- ═════════════════════════════════════════════════════════════════════════════
 --
--- The raise has carried a hint since 20260904190000, which is what kept it out
--- of erp.assert_refusals_name_next_action()'s findings. A hint is for whoever
--- is reading the database's own error text. A registered refusal is what the
--- desk resolves into words on a screen, and an organisation may override those
--- words with its own. Until today nothing could reach this refusal, so the
--- difference did not matter; from today it is the refusal a customer meets on
--- the day they outgrow their plan, which is a conversation about money.
+-- Two halves, and until today neither of them mattered, because nothing could
+-- reach the refusal.
+--
+-- The hint on the raise was written for whoever was reading the database's own
+-- error text. Its second sentence explains a decision we took — that the
+-- refusal is named rather than silent — which is not something anybody can act
+-- on. From today it is read by a customer on the day they outgrow their plan,
+-- so it says what the register says.
+--
+-- And the register. A hint is what the database says; a registered refusal is
+-- what the desk resolves into words on a screen, in an organisation's own
+-- wording where it has set one. erp.assert_refusals_name_next_action() is
+-- satisfied by either, which is how a refusal nobody could reach went this
+-- long with only the first.
+--
+-- Re-emitting the raise is also what lets the registration be checked. The
+-- file that raises this refusal was written before 20260904980000 and still
+-- carries the retired prefix; only the sweep makes it say Clove on a built
+-- database, and a check that reads the files rather than the database cannot
+-- see that. Rule B of supabase/ci/preflight.sh refuses a registration whose
+-- code it cannot find being raised, and it is right to: a registered refusal
+-- raised nowhere is what erp.assert_refusals_name_next_action() fails on. The
+-- literal below is the one the database holds.
+--
+-- Left alone, and named rather than quietly fixed: the message reads "% allows
+-- % %" with the plan's code in the first place, and erp.entitlement_limit()
+-- prefers a band the contract sold over the plan's own figure. An organisation
+-- whose agreement sold it twenty full users on a plan that includes fifteen is
+-- therefore told that the plan allows twenty, which names the wrong document
+-- for a right number. The figure the customer is refused on is correct either
+-- way; the sentence around it is work on wording rather than on enforcement,
+-- and a migration doing both would be two migrations sharing a file.
+
+do $hint$
+declare
+  v_sig    constant text := 'erp.require_entitlement(text,numeric)';
+  v_def    text := pg_get_functiondef(v_sig::regprocedure);
+  v_needle constant text := $n$    raise exception
+      'CLOVEERP_ENTITLEMENT_EXCEEDED: % allows % %, and this would make %',
+      v_plan, v_limit, v_kind.unit, v_used + p_adding
+      using errcode = '23514',
+            detail = format('%s: %s', v_kind.title, v_kind.counts_what),
+            hint = 'Raise the plan, or release what is no longer needed. The '
+                   'refusal is named rather than silent so the next invoice '
+                   'holds no surprise.';$n$;
+  v_new    constant text := $n$    raise exception
+      'CLOVEERP_ENTITLEMENT_EXCEEDED: % allows % %, and this would make %',
+      v_plan, v_limit, v_kind.unit, v_used + p_adding
+      using errcode = '23514',
+            detail = format('%s: %s', v_kind.title, v_kind.counts_what),
+            hint = 'Move up to a plan that covers what is needed, or free one '
+                   'up by removing what is no longer used. What the plan '
+                   'covers and how much of it is in use are both on the '
+                   'Commercial screen.';$n$;
+begin
+  if position('erp.entitlement_usage(p_code)' in v_def) = 0
+     or position('erp.report_entitlement_breaches()' in v_def) = 0 then
+    raise exception 'CLOVEERP_BODY_UNRECOGNISED: % is not the body 20260904190000 wrote', v_sig
+      using hint = 'Read the live body before writing a needle against it.';
+  end if;
+  if (select count(*) from regexp_matches(v_def, 'holds no surprise\.', 'g')) <> 1
+     or (select count(*) from regexp_matches(v_def, 'CLOVEERP_ENTITLEMENT_EXCEEDED', 'g')) <> 1 then
+    raise exception 'CLOVEERP_BODY_UNRECOGNISED: % does not carry the refusal and its hint exactly once each', v_sig
+      using hint = 'Read the live body before writing a needle against it.';
+  end if;
+  execute replace(v_def, v_needle, v_new);
+
+  v_def := pg_get_functiondef(v_sig::regprocedure);
+  if position('holds no surprise' in v_def) <> 0
+     or position('Commercial screen' in v_def) = 0
+     or (select count(*) from regexp_matches(v_def, 'CLOVEERP_ENTITLEMENT_EXCEEDED', 'g')) <> 1 then
+    raise exception 'CLOVEERP_PATCH_DID_NOT_LAND: % still says what it said, or lost its refusal', v_sig;
+  end if;
+end
+$hint$;
+
+comment on function erp.require_entitlement is
+  'Specification v1.2 §18.1. Refuses when an addition would take an '
+  'organisation past what its plan or its agreement covers, names the figure '
+  'and what the addition would make, and says what to do about it. Returns '
+  'silently where no subscription is recorded, so an organisation provisioned '
+  'before Part 18 is unaffected until it is given a plan. Called from '
+  'erp.create_site(), erp.create_entity(), erp.grant_role() and '
+  'public.erp_set_user_roles() since 20260919620000; until then, from nowhere.';
 
 select erp.register_refusal('CLOVEERP_ENTITLEMENT_EXCEEDED',
   'Adding more than the plan covers.',
@@ -450,15 +529,15 @@ select erp.register_refusal('CLOVEERP_ENTITLEMENT_EXCEEDED',
 -- ═════════════════════════════════════════════════════════════════════════════
 
 update erp_meta.entitlement_kind
-   set note = 'What a plan includes, and what an extra full user adds to. Until 20260914095000 this counted every active person; light users are counted apart now. Since 20260918910000 it also counts whoever approves a purchase order, a payment or a discount, because those commit the company. Since 20260919610000 it is refused where somebody is given the roles that make them a full user, counting whoever has been given them and not yet signed in, so the refusal reaches the administrator who decided rather than the person who accepts the invitation.'
+   set note = 'What a plan includes, and what an extra full user adds to. Until 20260914095000 this counted every active person; light users are counted apart now. Since 20260918910000 it also counts whoever approves a purchase order, a payment or a discount, because those commit the company. Since 20260919620000 it is refused where somebody is given the roles that make them a full user, counting whoever has been given them and not yet signed in, so the refusal reaches the administrator who decided rather than the person who accepts the invitation.'
  where code = 'users';
 
 update erp_meta.entitlement_kind
-   set note = 'A company is the unit a chart of accounts and a ledger hang from, so it is the unit a plan is priced in. Refused in erp.create_entity() since 20260919610000, and not in erp.upsert_entity(), which is also the update path and the one provisioning and the promoter call.'
+   set note = 'A company is the unit a chart of accounts and a ledger hang from, so it is the unit a plan is priced in. Refused in erp.create_entity() since 20260919620000, and not in erp.upsert_entity(), which is also the update path and the one provisioning and the promoter call.'
  where code = 'companies';
 
 update erp_meta.entitlement_kind
-   set note = 'Sites drive warehouse and device usage, which is where volume comes from. Refused in erp.create_site() since 20260919610000, before the row is written.'
+   set note = 'Sites drive warehouse and device usage, which is where volume comes from. Refused in erp.create_site() since 20260919620000, before the row is written.'
  where code = 'sites';
 
 do $register$
@@ -467,7 +546,7 @@ begin
   select string_agg(k.code, ', ' order by k.code) into v_left
     from erp_meta.entitlement_kind k
    where k.code in ('users', 'companies', 'sites')
-     and k.note not like '%20260919610000%';
+     and k.note not like '%20260919620000%';
   if v_left is not null then
     raise exception 'CLOVEERP_REGISTER_SHORT: % still says nothing calls the refusal', v_left
       using hint = 'Row security refused the update, or the register no longer holds these three kinds.';
