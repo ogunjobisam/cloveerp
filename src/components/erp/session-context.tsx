@@ -35,9 +35,13 @@ export function useErpSession() {
  */
 export const ScopeUsageContext = createContext<{ register: () => () => void } | null>(null);
 
-export function useScope(): Scope {
+export function useScope(reads = true): Scope {
   const { scope } = useErpSession();
   const usage = useContext(ScopeUsageContext);
-  useEffect(() => (usage ? usage.register() : undefined), [usage]);
+  // A page that reads the choice says so; one that only wants to know what it
+  // is — to decide whether it reads it — does not. Registering unconditionally
+  // would make every module page claim to follow the site, which is the same
+  // lie the header used to tell, pointing the other way.
+  useEffect(() => (usage && reads ? usage.register() : undefined), [usage, reads]);
   return scope;
 }

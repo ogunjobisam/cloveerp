@@ -479,7 +479,7 @@ export type Database = {
         Returns: Json
       }
       erp_cost_centres: { Args: never; Returns: Json }
-      erp_count_accuracy: { Args: never; Returns: Json }
+      erp_count_accuracy: { Args: { p_site_id?: string }; Returns: Json }
       erp_count_tasks: { Args: { p_limit?: number }; Returns: Json }
       erp_countries: { Args: never; Returns: Json }
       erp_create_batch: {
@@ -2415,7 +2415,7 @@ export type Database = {
       }
       erp_start_interview: { Args: { p_code?: string }; Returns: Json }
       erp_start_training_scenario: { Args: { p_code: string }; Returns: Json }
-      erp_stock_ageing: { Args: never; Returns: Json }
+      erp_stock_ageing: { Args: { p_site_id?: string }; Returns: Json }
       erp_stock_audit: { Args: { p_site_id?: string }; Returns: Json }
       erp_stock_audit_lines: {
         Args: { p_location_id?: string; p_site_id?: string }
@@ -2425,9 +2425,9 @@ export type Database = {
         Args: { p_days?: number; p_site_id?: string }
         Returns: Json
       }
-      erp_stock_health: { Args: never; Returns: Json }
+      erp_stock_health: { Args: { p_site_id?: string }; Returns: Json }
       erp_stock_provision: { Args: never; Returns: Json }
-      erp_stock_valuation: { Args: never; Returns: Json }
+      erp_stock_valuation: { Args: { p_site_id?: string }; Returns: Json }
       erp_storage_rules: {
         Args: { p_rule_kind?: string; p_site_id?: string }
         Returns: Json
