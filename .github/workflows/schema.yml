@@ -85,6 +85,25 @@ jobs:
           # which a depth-1 checkout does not have.
           fetch-depth: 0
 
+      - name: The conventions this build enforces, before it spends an hour
+        # First, because it is the cheapest thing here and it answers eight of
+        # the questions the rest of this job takes forty minutes to answer.
+        # On 17 September this workflow ran fifteen times across five branches
+        # and failed nine, and not one of those nine was the change being
+        # wrong: every one was a convention nothing caught sooner. This reads
+        # git and the migration text, needs no database, and takes seconds.
+        #
+        # It scopes itself to what the branch adds, so on a push that touches
+        # no migration it finds nothing to read and says so.
+        run: PREFLIGHT_BASE=origin/${{ github.event.pull_request.base.ref || 'main' }} supabase/ci/preflight.sh
+
+      - name: Every preflight rule still fires
+        # A pattern match can stop matching, and the only symptom would be a
+        # build failing again for a reason preflight was supposed to have
+        # caught an hour earlier — by which time nobody is reading preflight.
+        # So each rule is put in front of the mistake it exists for.
+        run: supabase/ci/preflight_falsification.sh
+
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the
         # whole schema, which catches an ungoverned door eventually. This closes
