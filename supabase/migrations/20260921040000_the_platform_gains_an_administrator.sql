@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921030000  The platform gains an administrator
+-- 20260921040000  The platform gains an administrator
 -- -----------------------------------------------------------------------------
 -- The vendor console's staff list had three ranks: owner, operator, support.
 -- Everything an operator could not do was an owner's, and that put running the
@@ -259,7 +259,7 @@ as $$ select interval '7 days' $$;
 
 comment on function erp.purge_grace_floor is
   'The shortest waiting period the deletion sweep will run with. It was an '
-  'argument with no floor until 20260921030000, so a caller could pass zero and '
+  'argument with no floor until 20260921040000, so a caller could pass zero and '
   'take an organisation marked ended a minute earlier.';
 
 create or replace function erp.require_purge_grace(p_grace interval)
