@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921070000  The platform gains an administrator
+-- 20260921080000  The platform gains an administrator
 -- -----------------------------------------------------------------------------
 -- The vendor console's staff list had three ranks: owner, operator, support.
 -- Everything an operator could not do was an owner's, and that put running the
@@ -259,7 +259,7 @@ as $$ select interval '7 days' $$;
 
 comment on function erp.purge_grace_floor is
   'The shortest waiting period the deletion sweep will run with. It was an '
-  'argument with no floor until 20260921070000, so a caller could pass zero and '
+  'argument with no floor until 20260921080000, so a caller could pass zero and '
   'take an organisation marked ended a minute earlier.';
 
 create or replace function erp.require_purge_grace(p_grace interval)
@@ -385,6 +385,15 @@ comment on function public.erp_platform_reinstate_tenant is
   'back to paused or trading, demands a reason and records the reinstatement in '
   'its own right. Administrator rank, the same as marking it ended. Once the '
   'sweep has purged an organisation there is nothing for this to bring back.';
+
+-- PostgreSQL grants EXECUTE to PUBLIC on a new function by default, and PUBLIC
+-- reaches anon. Every other door in this file already exists and inherited its
+-- grants from whichever migration first revoked them; this one is new, so it is
+-- the one place the revoke has to be written by hand.
+revoke all on function public.erp_platform_reinstate_tenant(uuid, text, text)
+  from public, anon;
+grant execute on function public.erp_platform_reinstate_tenant(uuid, text, text)
+  to authenticated, service_role;
 
 select erp.register_refusal('CLOVEERP_NOTHING_TO_REINSTATE',
   'Bringing back an organisation that was never on its way out.',
