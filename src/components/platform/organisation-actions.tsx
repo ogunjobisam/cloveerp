@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Archive, LogIn, LogOut, Pause, Play, Trash2, UserPlus } from "lucide-react";
+import { Archive, LogIn, LogOut, Pause, Play, Trash2, Undo2, UserPlus } from "lucide-react";
 
 import {
   Dialog,
@@ -31,10 +31,15 @@ import { Fail, INPUT } from "./kit";
  *
  * The same controls, with the same gates, on a row of All organisations and on
  * the organisation's own page, so the two can never offer different things.
- * The gates are the ones the list has always had: anybody on the platform may
- * enter and leave, an operator invites, suspends and reactivates, an owner
- * marks ended, purges and hands an organisation on. Hiding a button is the
- * convenience; each door checks the role on its first line.
+ * The gates: anybody on the platform may enter and leave, an operator invites,
+ * suspends and reactivates, an administrator marks an organisation ended and
+ * brings it back, and an owner purges and hands one on. Marking ended and
+ * reinstating sit at the same rank on purpose — an administrator who could end
+ * an organisation but not undo it would hold the harmful half and not the
+ * remedy. Purging is the owner's because nothing undoes it.
+ *
+ * Hiding a button is the convenience; each door checks the rank on its first
+ * line.
  */
 
 const COMPACT =
@@ -56,7 +61,8 @@ export function OrganisationActions({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const mayOperate = atLeast(role, "operator");
-  const isOwner = atLeast(role, "owner");
+  const mayEnd = atLeast(role, "administrator");
+  const mayPurge = atLeast(role, "owner");
   const button = size === "full" ? FULL : COMPACT;
   const danger = `${button} border-destructive/40 text-destructive`;
   const icon = size === "full" ? "size-4" : "size-3.5";
@@ -158,7 +164,7 @@ export function OrganisationActions({
 
           {/* A status, and only a status. It used to say Delete and remove
               nothing, which is the whole reason organisations piled up. */}
-          {isOwner && t.status !== "deleted" ? (
+          {mayEnd && t.status !== "deleted" ? (
             <ReasonDialog
               trigger={
                 <button type="button" className={button}>
@@ -167,7 +173,7 @@ export function OrganisationActions({
                 </button>
               }
               title={`Mark ${t.name} as ended`}
-              description="This records that the organisation has ended and removes no data. Purging is a separate step, afterwards."
+              description="This records that the organisation has ended and removes no data. It can be undone with Reinstate. Purging is a separate step, afterwards."
               reasonLabel="Why has it ended?"
               placeholder="For example: contract terminated on 31 August"
               submitLabel="Mark ended"
@@ -183,9 +189,38 @@ export function OrganisationActions({
             />
           ) : null}
 
+          {/* And the way back. It is not Reactivate: reactivating is the
+              operator's control for a paused organisation and leaves the
+              deletion marker where it is. This takes the marker off, which is
+              what the sweep actually reads. */}
+          {mayEnd && t.status === "deleted" ? (
+            <ReasonDialog
+              trigger={
+                <button type="button" className={button}>
+                  <Undo2 className={icon} />
+                  Reinstate
+                </button>
+              }
+              title={`Reinstate ${t.name}`}
+              description="Takes off the record that it has ended and brings it back paused, so nothing is swept and nobody starts working in it until it is reactivated."
+              reasonLabel="Why is it being reinstated?"
+              placeholder="For example: they renewed on 14 September after all"
+              submitLabel="Reinstate"
+              busyLabel="Reinstating…"
+              run={(reason) =>
+                callErp("erp_platform_reinstate_tenant", {
+                  p_tenant_id: t.id,
+                  p_reason: reason,
+                  p_status: "suspended",
+                })
+              }
+              onDone={() => void refresh()}
+            />
+          ) : null}
+
           {/* This one empties it. Owner only, refused by the database on an
               active organisation, and the code has to be typed. */}
-          {isOwner && t.status !== "active" ? (
+          {mayPurge && t.status !== "active" ? (
             <ConfirmCodeDialog
               trigger={
                 <button type="button" className={danger}>

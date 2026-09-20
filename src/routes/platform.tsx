@@ -16,7 +16,7 @@ import { Wordmark } from "../components/erp/logo";
 import { Pill } from "../components/erp/panel";
 import { TOUCH } from "../components/erp/page";
 import { callErp, isConfigured, supabase } from "../lib/erp";
-import { ROLE_BLURB, usePlatformMe, type PlatformRole } from "../lib/platform";
+import { ROLE_BLURB, ROLE_TONE, usePlatformMe, type PlatformRole } from "../lib/platform";
 import {
   CONSOLE_SECTIONS,
   consoleSearch,
@@ -293,9 +293,7 @@ function PlatformConsole() {
           {/* What the role may do, on the role itself: it read as a second
               sentence of Today's subtitle, run on from the section's own. */}
           <span title={ROLE_BLURB[role]} className="inline-flex">
-            <Pill tone={role === "owner" ? "ok" : role === "operator" ? "warn" : "muted"}>
-              {role}
-            </Pill>
+            <Pill tone={ROLE_TONE[role]}>{role}</Pill>
             <span className="sr-only">. {ROLE_BLURB[role]}</span>
           </span>
         </span>

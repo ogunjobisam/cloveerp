@@ -78,6 +78,10 @@ export function OfferOwnership({ tenant, role }: { tenant: PlatformTenant; role:
   if (tenant.owner_staff_id && !tenant.owned_by_me) return null;
   if (tenant.status === "deleted") return null;
 
+  // Equality on purpose, and not atLeast: a company can only be handed to an
+  // owner, which is what the database checks too. An administrator runs the
+  // platform and does not hold companies, so ranking at or above some threshold
+  // is the wrong question here — "is this person an owner" is the right one.
   const candidates = (staff.data ?? []).filter(
     (s) => s.role === "owner" && !s.revoked_at && s.id !== tenant.owner_staff_id,
   );

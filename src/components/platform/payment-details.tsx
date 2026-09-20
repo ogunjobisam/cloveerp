@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
-import type { PlatformRole } from "../../lib/platform";
+import { atLeast, type PlatformRole } from "../../lib/platform";
 import type { BillingDetailsRead } from "../../lib/platform-today";
 import { Card, Fail, INPUT } from "./kit";
 
@@ -46,7 +46,9 @@ function formFrom(d: BillingDetailsRead | undefined): Form {
 
 export function PaymentDetails({ role }: { role: PlatformRole }) {
   const queryClient = useQueryClient();
-  const isOwner = role === "owner";
+  // Comparison, not equality: an equality test here would have quietly shut
+  // the administrator out of a door that was moved down to them.
+  const mayEdit = atLeast(role, "administrator");
   const details = useQuery({
     queryKey: ["erp_platform_billing_details"],
     queryFn: () => callErp<BillingDetailsRead>("erp_platform_billing_details"),
@@ -186,7 +188,7 @@ export function PaymentDetails({ role }: { role: PlatformRole }) {
               accounts team.
             </p>
           )}
-          {isOwner ? (
+          {mayEdit ? (
             <button
               type="button"
               className={`${details.data.set ? SECONDARY : BUTTON} self-start`}

@@ -6,7 +6,7 @@ import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import { formatFigure, formatMinorTotals } from "../../lib/money";
-import type { PlatformRole } from "../../lib/platform";
+import { atLeast, type PlatformRole } from "../../lib/platform";
 import { Card, Fail, INPUT } from "./kit";
 
 /**
@@ -302,7 +302,7 @@ function RenewalRow({ r, mayWrite }: { r: Renewal; mayWrite: boolean }) {
 }
 
 export function Revenue({ role }: { role: PlatformRole }) {
-  const mayWrite = role === "owner" || role === "operator";
+  const mayWrite = atLeast(role, "operator");
   const q = useQuery({
     queryKey: ["erp_platform_revenue"],
     queryFn: () => callErp<Revenue>("erp_platform_revenue"),

@@ -27,6 +27,7 @@ import { callErp } from "../../lib/erp";
 import {
   atLeast,
   ROLE_BLURB,
+  ROLE_TONE,
   type PlatformAuditRow,
   type PlatformRole,
   type PlatformStaff,
@@ -119,6 +120,7 @@ export function Staff({ role }: { role: PlatformRole }) {
                 className={INPUT}
               >
                 <option value="owner">Owner</option>
+                <option value="administrator">Administrator</option>
                 <option value="operator">Operator</option>
                 <option value="support">Support</option>
               </select>
@@ -138,7 +140,7 @@ export function Staff({ role }: { role: PlatformRole }) {
       <Card
         title="Platform staff"
         icon={<Users className="size-4 text-primary" />}
-        description="Owner controls the platform, operator runs the companies, support can look and be let in."
+        description="Owner decides who works here and who each company belongs to, administrator runs the platform, operator runs the companies, support can look and be let in."
       >
         {staff.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -151,9 +153,9 @@ export function Staff({ role }: { role: PlatformRole }) {
                   <div className="text-xs text-muted-foreground">{s.email}</div>
                 </td>
                 <td className="py-3 pr-4">
-                  <Pill tone={s.role === "owner" ? "ok" : s.role === "operator" ? "warn" : "muted"}>
-                    {s.role}
-                  </Pill>
+                  {/* A map, not a ternary: a two-way ternary showed the rank
+                      added between owner and operator as if it were support. */}
+                  <Pill tone={ROLE_TONE[s.role]}>{s.role}</Pill>
                 </td>
                 <td className="py-3 pr-4 text-xs text-muted-foreground">
                   {s.bound ? "Yes" : "Not yet"}
@@ -170,6 +172,7 @@ export function Staff({ role }: { role: PlatformRole }) {
                         className="rounded-md border border-input bg-background px-2 py-1 text-xs"
                       >
                         <option value="owner">owner</option>
+                        <option value="administrator">administrator</option>
                         <option value="operator">operator</option>
                         <option value="support">support</option>
                       </select>
@@ -203,9 +206,11 @@ export function Staff({ role }: { role: PlatformRole }) {
         )}
       </Card>
 
-      {/* Owners only. Hiding it is the convenience: the door checks for an
-          owner on its first line, whoever calls it. */}
-      {mayManage ? <SelfServiceSignUp /> : null}
+      {/* Whether companies may sign themselves up is part of running the
+          platform, so it moved to administrator with the door. Hiding it is the
+          convenience: the door checks the rank on its first line, whoever calls
+          it. */}
+      {atLeast(role, "administrator") ? <SelfServiceSignUp /> : null}
     </div>
   );
 }

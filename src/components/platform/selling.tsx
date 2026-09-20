@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { Pill } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
-import type { PlatformRole } from "../../lib/platform";
+import { atLeast, type PlatformRole } from "../../lib/platform";
 import { priceListLoaded } from "../../lib/platform-today";
 import { Card, Fail, INPUT } from "./kit";
 
@@ -83,7 +83,9 @@ function Step({ title, done, children }: { title: string; done: boolean; childre
 
 export function SellingSetup({ role }: { role: PlatformRole }) {
   const queryClient = useQueryClient();
-  const isOwner = role === "owner";
+  // Naming the platform's own organisation is erp.designate_platform_organisation,
+  // which an administrator now holds.
+  const mayDesignate = atLeast(role, "administrator");
 
   const state = useQuery({
     queryKey: ["erp_platform_commercial_state"],
@@ -176,9 +178,11 @@ export function SellingSetup({ role }: { role: PlatformRole }) {
               </p>
             )}
 
-            {!isOwner ? (
+            {!mayDesignate ? (
               platform ? null : (
-                <p className="text-xs text-muted-foreground">A platform owner chooses it.</p>
+                <p className="text-xs text-muted-foreground">
+                  A platform administrator or owner chooses it.
+                </p>
               )
             ) : platform && !moving ? (
               <button
@@ -283,7 +287,7 @@ export function SellingSetup({ role }: { role: PlatformRole }) {
                     You are not a member of {platform.name ?? platform.tenant_code}. Invite yourself
                     as its administrator under Customers, accept the invitation, then come back.
                   </p>
-                ) : role === "support" ? (
+                ) : !atLeast(role, "operator") ? (
                   <p className="text-xs text-muted-foreground">
                     An owner or operator loads the price list.
                   </p>

@@ -8,12 +8,18 @@ import { callErp, supabase } from "./erp";
  * A tenant administrator is the most powerful person inside one company. This
  * is the other axis — the people who run the product itself, who create those
  * companies and can be let into them to help. It is deliberately a separate
- * list with its own three roles rather than a permission inside a tenant,
+ * list with its own ranks rather than a permission inside a tenant,
  * because "can administer Acme" and "can create companies" are not the same
  * claim and should never be reachable from one another.
+ *
+ * Four ranks, not three, since the administrator was added: running the
+ * platform and owning it are separable, and everything an operator could not do
+ * used to fall to the owner. An administrator runs it. Choosing who else runs
+ * it, moving a company to another owner and purging one stay with the owner —
+ * the last because it cannot be undone.
  */
 
-export type PlatformRole = "owner" | "operator" | "support";
+export type PlatformRole = "owner" | "administrator" | "operator" | "support";
 
 export type PlatformMe = {
   is_staff: boolean;
@@ -140,7 +146,17 @@ export type PlatformAuditRow = {
   detail: Record<string, unknown>;
 };
 
-const RANK: Record<PlatformRole, number> = { owner: 3, operator: 2, support: 1 };
+/**
+ * The same order erp_meta.platform_rank() computes in the database, and the
+ * reason every gate here is a comparison rather than an equality: a rank added
+ * between two others must not silently drop out of a test written as `===`.
+ */
+const RANK: Record<PlatformRole, number> = {
+  owner: 4,
+  administrator: 3,
+  operator: 2,
+  support: 1,
+};
 
 export function atLeast(role: PlatformRole | null | undefined, min: PlatformRole): boolean {
   return role ? RANK[role] >= RANK[min] : false;
@@ -160,9 +176,26 @@ export function isPlatformOperator(me: Pick<PlatformMe, "is_staff" | "role"> | u
 }
 
 export const ROLE_BLURB: Record<PlatformRole, string> = {
-  owner: "Full control, including who else works on the platform.",
+  owner:
+    "Full control, including who else works on the platform, who each company belongs to, and purging one.",
+  administrator:
+    "Runs the platform: billing, sign-up, and ending or reinstating a company. Cannot change who runs it, and cannot purge.",
   operator: "Onboards and manages companies, and invites their administrators.",
   support: "Reads the company list and the activity log, and may be let in to help.",
+};
+
+/**
+ * How a rank is shown wherever it is shown as a pill. Four ranks and three
+ * usable tones, so the bands are "changes the platform itself" (owner and
+ * administrator), "runs the companies" (operator) and "looks" (support); the
+ * word inside the pill is what tells the first two apart. The fourth tone is
+ * destructive red and a rank is not a fault.
+ */
+export const ROLE_TONE: Record<PlatformRole, "ok" | "warn" | "muted"> = {
+  owner: "ok",
+  administrator: "ok",
+  operator: "warn",
+  support: "muted",
 };
 
 /**

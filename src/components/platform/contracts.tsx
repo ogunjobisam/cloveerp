@@ -6,7 +6,7 @@ import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import { formatFigure } from "../../lib/money";
-import type { PlatformRole } from "../../lib/platform";
+import { atLeast, type PlatformRole } from "../../lib/platform";
 import { describeChanges, describeTermination, describeUplift } from "../../lib/contract-terms";
 import { DraftAmendment } from "./amendment-form";
 import { BillingContact, SendAgain, SendLines, useCommercialEmails } from "./commercial-email";
@@ -239,7 +239,7 @@ function Signature({
 }
 
 export function Contracts({ role }: { role: PlatformRole }) {
-  const mayWrite = role === "owner" || role === "operator";
+  const mayWrite = atLeast(role, "operator");
   const [selected, setSelected] = useState<string | null>(null);
 
   const list = useQuery({
@@ -283,7 +283,7 @@ export function Contracts({ role }: { role: PlatformRole }) {
         <ContractDetail
           id={selected}
           mayWrite={mayWrite}
-          isOwner={role === "owner"}
+          mayEditBilling={atLeast(role, "administrator")}
           onBack={() => setSelected(null)}
         />
       ) : (
@@ -618,12 +618,12 @@ export function Contracts({ role }: { role: PlatformRole }) {
 function ContractDetail({
   id,
   mayWrite,
-  isOwner,
+  mayEditBilling,
   onBack,
 }: {
   id: string;
   mayWrite: boolean;
-  isOwner: boolean;
+  mayEditBilling: boolean;
   onBack: () => void;
 }) {
   const q = useQuery({
@@ -920,7 +920,7 @@ function ContractDetail({
         </Card>
       ) : null}
 
-      <BillingContact contractId={id} isOwner={isOwner} />
+      <BillingContact contractId={id} mayEdit={mayEditBilling} />
 
       <Invoices contractId={id} mayWrite={mayWrite} status={c.status} />
 
