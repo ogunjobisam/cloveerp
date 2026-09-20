@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921040000  The platform gains an administrator
+-- 20260921050000  The platform gains an administrator
 -- -----------------------------------------------------------------------------
 -- The vendor console's staff list had three ranks: owner, operator, support.
 -- Everything an operator could not do was an owner's, and that put running the
@@ -259,7 +259,7 @@ as $$ select interval '7 days' $$;
 
 comment on function erp.purge_grace_floor is
   'The shortest waiting period the deletion sweep will run with. It was an '
-  'argument with no floor until 20260921040000, so a caller could pass zero and '
+  'argument with no floor until 20260921050000, so a caller could pass zero and '
   'take an organisation marked ended a minute earlier.';
 
 create or replace function erp.require_purge_grace(p_grace interval)
@@ -472,7 +472,15 @@ insert into erp_meta.platform_door_rank (schema_name, function_name, minimum_rol
   ('public', 'erp_platform_reinstate_tenant', 'administrator',
    'Undoes marking an organisation ended. The rank for an act is the rank for undoing it.'),
   ('erp', 'designate_platform_organisation', 'administrator',
-   'Names which organisation is the platform''s own. Part of running the platform, not of owning it.')
+   'Names which organisation is the platform''s own. Part of running the platform, not of owning it.'),
+  -- Landed on main from 20260920500000 while this was being written, at owner,
+  -- and it is recorded where it is rather than where it might belong. It sits
+  -- oddly beside erase_enquiry, which moved down: setting the address enquiries
+  -- are sent to is running the platform, and erasing one is the more final act
+  -- of the two. Moving it is a decision about the platform and not a tidy-up,
+  -- so it is asked rather than taken.
+  ('public', 'erp_platform_set_enquiry_notify_to', 'owner',
+   'Sets the address website enquiries are sent to. Recorded at the rank it was written with.')
 on conflict (schema_name, function_name, minimum_role) do update
   set why = excluded.why;
 
