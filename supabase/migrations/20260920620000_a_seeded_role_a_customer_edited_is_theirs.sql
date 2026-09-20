@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260920600000  A seeded role a customer edited is theirs
+-- 20260920620000  A seeded role a customer edited is theirs
 -- -----------------------------------------------------------------------------
 -- The base pack ships role templates, and a role it made carries the mark of
 -- the template it came from. On 14 September that mark was taught to protect a
@@ -153,7 +153,7 @@ declare
 $n$;
   v_r1  constant text := $r$  select i.object_kind, i.object_key, i.operation,
          -- A template role is offered against the name this organisation gave
-         -- it (20260920600000). Renaming is allowed and is not a modification,
+         -- it (20260920620000). Renaming is allowed and is not a modification,
          -- so landing a newer template must not reset the label.
          case when i.object_kind = 'role' and held.name is not null
               then i.effective_payload || jsonb_build_object('name', held.name)
@@ -233,7 +233,7 @@ $n$;
   v_r   constant text := $r$  for r in select * from erp.plan_content_pack(p_pack_code) loop
     -- A role this organisation has changed since a template wrote it is in the
     -- plan so that somebody can see it was considered, and is not in the change
-    -- set because it is theirs now (20260920600000).
+    -- set because it is theirs now (20260920620000).
     continue when r.effect like 'left alone,%';
     perform erp.add_change_set_item(v_cs, r.object_kind, r.object_key,
                                     r.payload, r.operation, null,
@@ -280,7 +280,7 @@ $n$;
    where tenant_id = v_tenant and change_set_id = p_change_set_id
      and status = 'planned';
 
-  -- What the template gave, recorded as it lands (20260920600000). A later
+  -- What the template gave, recorded as it lands (20260920620000). A later
   -- version of the pack compares this with the grants as they stand: equal
   -- means nobody has touched the role and the new version may land on it;
   -- different means the organisation has made the role its own and the pack
@@ -289,15 +289,19 @@ $n$;
   if exists (select 1 from erp.tenant_pack tp
               where tp.tenant_id = v_tenant
                 and tp.change_set_id = p_change_set_id) then
-    update erp.role r
-       set template_digest = erp.role_grant_digest(r.id), updated_at = now()
+    -- The table alias is deliberately not "r": erp.promote_change_set()
+    -- already declares a plpgsql variable of that name for its own item
+    -- loop, and giving a SQL alias the same name resolves a qualified column
+    -- against the outer plpgsql variable instead of this query's table.
+    update erp.role ro
+       set template_digest = erp.role_grant_digest(ro.id), updated_at = now()
       from erp.change_set_item i
      where i.tenant_id = v_tenant
        and i.change_set_id = p_change_set_id
        and i.object_kind = 'role'
-       and i.object_key = r.code
-       and r.tenant_id = v_tenant
-       and r.from_template is not null;
+       and i.object_key = ro.code
+       and ro.tenant_id = v_tenant
+       and ro.from_template is not null;
   end if;
 $r$;
 begin
@@ -307,7 +311,7 @@ begin
   end if;
   execute replace(v_def, v_n, v_r);
 
-  if position('set template_digest = erp.role_grant_digest(r.id)'
+  if position('set template_digest = erp.role_grant_digest(ro.id)'
               in pg_get_functiondef('erp.promote_change_set(uuid,text[],boolean)'::regprocedure)) = 0 then
     raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the promoter did not take the recording of what a template gave'
       using hint = 'The replacement did not land. Compare the needle with the definition the database carries.';
