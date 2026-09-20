@@ -6,7 +6,7 @@ import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import { Card, Fail } from "./kit";
-import type { DrainResult, JobHandler, PlatformRole } from "../../lib/platform";
+import { atLeast, type DrainResult, type JobHandler, type PlatformRole } from "../../lib/platform";
 import type { EmailDeliveryRead } from "../../lib/platform-today";
 import { whenText } from "../../lib/commercial-sends";
 import { purgeSweepSummary, readPurgeSweep } from "../../lib/purge-sweep";
@@ -21,7 +21,9 @@ import { purgeSweepSummary, readPurgeSweep } from "../../lib/purge-sweep";
  */
 export function Queue({ role }: { role: PlatformRole }) {
   const queryClient = useQueryClient();
-  const mayWrite = role === "owner" || role === "operator";
+  const mayWrite = atLeast(role, "operator");
+  // The sweep purges, and purging is the one act with no undo.
+  const maySweep = atLeast(role, "owner");
   const [last, setLast] = useState<DrainResult | null>(null);
 
   const handlers = useQuery({
@@ -62,14 +64,16 @@ export function Queue({ role }: { role: PlatformRole }) {
           >
             {drain.isPending ? "Running…" : "Run due jobs"}
           </button>
-          <button
-            type="button"
-            onClick={() => sweep.mutate()}
-            disabled={sweep.isPending}
-            className={`${TOUCH} rounded-md border border-input px-4 text-sm font-medium hover:bg-muted disabled:opacity-60`}
-          >
-            {sweep.isPending ? "Sweeping…" : "Purge organisations past their grace period"}
-          </button>
+          {maySweep ? (
+            <button
+              type="button"
+              onClick={() => sweep.mutate()}
+              disabled={sweep.isPending}
+              className={`${TOUCH} rounded-md border border-input px-4 text-sm font-medium hover:bg-muted disabled:opacity-60`}
+            >
+              {sweep.isPending ? "Sweeping…" : "Purge organisations past their grace period"}
+            </button>
+          ) : null}
         </div>
 
         {drain.error ? (

@@ -41,7 +41,7 @@ type Enquiry = {
 export function Enquiries({ role }: { role: PlatformRole }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState<string | null>(null);
-  const mayErase = atLeast(role, "owner");
+  const mayErase = atLeast(role, "administrator");
   const mayHandle = atLeast(role, "operator");
 
   const rows = useQuery({

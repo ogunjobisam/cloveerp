@@ -266,9 +266,10 @@ export function QuoteEmail({
 
 /**
  * Where a contract's invoices are emailed: its billing contact, or the
- * organisation's administrators. Everybody reads it; only an owner changes it.
+ * organisation's administrators. Everybody reads it; a platform administrator
+ * or an owner changes it.
  */
-export function BillingContact({ contractId, isOwner }: { contractId: string; isOwner: boolean }) {
+export function BillingContact({ contractId, mayEdit }: { contractId: string; mayEdit: boolean }) {
   const state = useCommercialEmails({ contractId });
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -305,7 +306,7 @@ export function BillingContact({ contractId, isOwner }: { contractId: string; is
               state.data.demonstration,
             )}
           </p>
-          {isOwner && !editing ? (
+          {mayEdit && !editing ? (
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
