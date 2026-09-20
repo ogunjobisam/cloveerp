@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921060000  The platform gains an administrator
+-- 20260921070000  The platform gains an administrator
 -- -----------------------------------------------------------------------------
 -- The vendor console's staff list had three ranks: owner, operator, support.
 -- Everything an operator could not do was an owner's, and that put running the
@@ -259,7 +259,7 @@ as $$ select interval '7 days' $$;
 
 comment on function erp.purge_grace_floor is
   'The shortest waiting period the deletion sweep will run with. It was an '
-  'argument with no floor until 20260921060000, so a caller could pass zero and '
+  'argument with no floor until 20260921070000, so a caller could pass zero and '
   'take an organisation marked ended a minute earlier.';
 
 create or replace function erp.require_purge_grace(p_grace interval)
@@ -1090,7 +1090,6 @@ volatile
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 21;
   v_all    integer;
   v_fail   integer;
   v_detail text;
@@ -1104,11 +1103,16 @@ begin
     from _platform_administrator;
   drop table _platform_administrator;
 
-  if v_all <> c_expected then
+  -- The literal, not a named constant: the build-time check in section 8 looks
+  -- for the substring "v_all <> 21" in this body, the same way it looks for
+  -- "v_cases <> 21" in the suite's own. A constant reads the same to a person
+  -- and is invisible to that search, which is exactly the gap this migration
+  -- found in its own first run against CI.
+  if v_all <> 21 then
     -- The failing cases come with the count: a fixture that fell over returns
     -- its cases failed rather than missing, and the reason is in them.
-    raise exception E'CLOVEERP_PLATFORM_ADMINISTRATOR_SUITE_SHRANK: % case(s), expected %\n%',
-      v_all, c_expected,
+    raise exception E'CLOVEERP_PLATFORM_ADMINISTRATOR_SUITE_SHRANK: % case(s), expected 21\n%',
+      v_all,
       coalesce(v_detail, '  every case passed; the count itself moved')
       using detail = 'A case was added or lost. Update the count deliberately.';
   end if;
