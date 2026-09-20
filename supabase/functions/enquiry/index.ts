@@ -51,6 +51,7 @@
 import { renderEmail } from "../../../src/lib/email/layout.ts";
 import { asRole, connect } from "../../../worker/src/core/db.ts";
 import { PermanentSendFailure, sendViaResend } from "../../../worker/src/core/resend.ts";
+import { maybeSubscribeToFollowUps } from "../../../src/lib/resend-marketing.ts";
 
 // deno-lint-ignore no-explicit-any
 const Deno = (globalThis as any).Deno;
@@ -134,6 +135,11 @@ type Body = {
   source_page?: unknown;
   /** The honeypot. A person never sees this field, so a person never fills it. */
   company_website?: unknown;
+  /** Optional, asked plainly on the form, and only used for the follow-up list. */
+  business_type?: unknown;
+  current_system?: unknown;
+  /** The follow-up email opt-in. Absent or anything but true is not consent. */
+  follow_up_opt_in?: unknown;
 };
 
 function text(v: unknown, max: number): string | null {
@@ -344,6 +350,9 @@ Deno.serve(async (req: Request) => {
     const message = text(body.message, 4000);
     const organisation = text(body.organisation, 160);
     const sourcePage = text(body.source_page, 200);
+    const businessType = text(body.business_type, 60);
+    const currentSystem = text(body.current_system, 200);
+    const followUpOptIn = body.follow_up_opt_in === true;
 
     if (!fullName || !email || !message) {
       return reply(req, 400, {
@@ -387,6 +396,26 @@ Deno.serve(async (req: Request) => {
         >,
     );
 
+    /**
+     * The follow-up list, for somebody who asked to be on it.
+     *
+     * Runs after the enquiry is stored and after the owners have been told,
+     * because it must not delay or change either. Best effort with a short
+     * timeout: a marketing API being slow or down is a log line, never a
+     * different answer to the person who wrote in. Somebody who did not tick
+     * the box is never sent to Resend at all.
+     */
+    async function followUp(): Promise<void> {
+      const outcome = await maybeSubscribeToFollowUps(apiKey, followUpOptIn, {
+        email: email as string,
+        fullName: fullName as string,
+        organisation,
+        businessType,
+        currentSystem,
+      });
+      if (outcome?.failure) console.error(`enquiry ${id}: ${outcome.failure}`);
+    }
+
     if (recipients.length === 0) {
       await asRole(
         sql,
@@ -395,6 +424,7 @@ Deno.serve(async (req: Request) => {
           tx`select erp_ingress.fail_enquiry_notice(${id}::uuid,
         ${"erp_meta.platform_staff names nobody to tell"})`,
       );
+      await followUp();
       return reply(req, 200, { id, stored: true, notified: false });
     }
 
@@ -435,6 +465,7 @@ Deno.serve(async (req: Request) => {
         INGRESS_ROLE,
         (tx) => tx`select erp_ingress.complete_enquiry_notice(${id}::uuid, ${ids.join(",")})`,
       );
+      await followUp();
       return reply(req, 200, { id, stored: true, notified: true });
     }
 
@@ -443,6 +474,7 @@ Deno.serve(async (req: Request) => {
       INGRESS_ROLE,
       (tx) => tx`select erp_ingress.fail_enquiry_notice(${id}::uuid, ${failure})`,
     );
+    await followUp();
     return reply(req, 200, { id, stored: true, notified: false });
   } catch (err) {
     // 500 and nothing about our internals. The enquirer is told to use the

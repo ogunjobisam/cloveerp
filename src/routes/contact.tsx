@@ -132,6 +132,10 @@ function ContactPage() {
           organisation: data.get("organisation"),
           message: data.get("message"),
           company_website: data.get("company_website"),
+          business_type: data.get("business_type"),
+          current_system: data.get("current_system"),
+          // A tick, as a boolean. The function treats anything else as no.
+          follow_up_opt_in: data.get("follow_up_opt_in") !== null,
           source_page: "/contact",
         }),
       });
@@ -254,6 +258,33 @@ function ContactPage() {
             </div>
 
             <div>
+              <label htmlFor="business_type" className={LABEL}>
+                Business type <span className="font-normal text-ink/50">(optional)</span>
+              </label>
+              <select id="business_type" name="business_type" defaultValue="" className={FIELD}>
+                <option value="">Choose one</option>
+                <option value="Manufacturing">Manufacturing</option>
+                <option value="Wholesale &amp; distribution">Wholesale &amp; distribution</option>
+                <option value="E-commerce">E-commerce</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="current_system" className={LABEL}>
+                What do you use today? <span className="font-normal text-ink/50">(optional)</span>
+              </label>
+              <input
+                id="current_system"
+                name="current_system"
+                type="text"
+                maxLength={200}
+                className={FIELD}
+                placeholder="Xero + spreadsheets, Sage 50"
+              />
+            </div>
+
+            <div>
               <label htmlFor="message" className={LABEL}>
                 What would you like to talk about?
               </label>
@@ -293,6 +324,21 @@ function ContactPage() {
                 autoComplete="off"
                 aria-label="Leave this field empty"
               />
+            </div>
+
+            {/* Unticked by default, and nothing is sent to our mailing list
+                unless it is ticked. */}
+            <div className="flex items-start gap-3">
+              <input
+                id="follow_up_opt_in"
+                name="follow_up_opt_in"
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink/30 accent-accent"
+              />
+              <label htmlFor="follow_up_opt_in" className="text-sm leading-relaxed text-ink/70">
+                Send me follow-up emails about Clove ERP, including founding-customer offers. You
+                can unsubscribe at any time.
+              </label>
             </div>
 
             <div className="flex flex-wrap items-center gap-4 pt-1">
