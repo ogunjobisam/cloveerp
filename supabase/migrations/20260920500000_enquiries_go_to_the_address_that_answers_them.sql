@@ -48,12 +48,27 @@
 -- 1. The address the notifications go to
 -- ═════════════════════════════════════════════════════════════════════════════
 
-insert into erp_meta.platform_setting (key, value, reason)
-values ('enquiry.notify_to', '["sales@cloveerp.com"]'::jsonb,
-        'Set when enquiry notifications were separated from the platform owner role: '
-        'a lead goes to the sales mailbox, which is read by whoever is answering, '
-        'rather than to whichever personal address happens to hold owner.')
-on conflict (key) do nothing;
+-- Nothing is seeded here, and the address is set from the console.
+--
+-- Not squeamishness about touching data in a migration —
+-- 20260914030000 seeds self_service.organisations — but the same rule that
+-- migration followed: seed the conservative default, and leave the decision
+-- that belongs to an owner to the owner. The conservative default here is
+-- "no address set", because that is the behaviour every migration before this
+-- one already had, and it is the state the existing suites describe.
+--
+-- Seeding an address instead is what the first attempt at this migration did,
+-- and the build caught it: erp_test.enquiry_suite and erp_test.ingress_suite
+-- both assert that an owner is told, and a seeded address makes that false
+-- from the moment the migration runs. Both live in migrations that are already
+-- pushed and cannot be edited, and neither is wrong — "the owners are told"
+-- is exactly what this schema does when nobody has said otherwise. A seed
+-- would have made two true assertions false to save one visit to a screen
+-- this migration also adds.
+--
+-- So an owner sets the address on Platform -> Enquiries, with a reason, and
+-- the change is in erp_meta.platform_audit like every other. Until then
+-- enquiries go where they have always gone.
 
 -- Absent, malformed, or holding nothing but blanks all read as "no address is
 -- set", because each of them means the same thing to the caller and only one
@@ -539,16 +554,15 @@ begin
 end
 $covered$;
 
--- The migration must not end with an enquiry that would reach nobody. Said as
--- the count and not as the address, because a replay onto a database whose
--- owner has since changed the setting from the console must not fail for
--- having found what it asked for.
-do $reaches$
-begin
-  if not exists (select 1 from erp.enquiry_recipients()) then
-    raise exception 'CLOVEERP_ENQUIRY_REACHES_NOBODY: the migration that moves enquiry notifications ends with nobody to send them to'
-      using errcode = '23502',
-            hint = 'Set enquiry.notify_to to the mailbox that answers enquiries, or leave a platform owner unrevoked to fall back to.';
-  end if;
-end
-$reaches$;
+-- There is deliberately no "and somebody would be told" check at the end of
+-- this migration. It was here while the migration seeded an address, where it
+-- could be met by the seed; without one it would be asserting that the
+-- database has a platform owner, which is true of production and not of a
+-- build from an empty cluster, and a check that reads the world differently
+-- depending on which database it runs against is the kind this repository
+-- keeps out of migrations.
+--
+-- The property still holds and is still checked, in the two places that can
+-- see it: erp_test.enquiry_notification_suite proves the fallback reaches an
+-- owner when no address is set, and erp.assert_enquiries_answerable refuses an
+-- enquiry that was stored and reached nobody without saying why.
