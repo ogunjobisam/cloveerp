@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260920620000  A seeded role a customer edited is theirs
+-- 20260920630000  A seeded role a customer edited is theirs
 -- -----------------------------------------------------------------------------
 -- The base pack ships role templates, and a role it made carries the mark of
 -- the template it came from. On 14 September that mark was taught to protect a
@@ -153,7 +153,7 @@ declare
 $n$;
   v_r1  constant text := $r$  select i.object_kind, i.object_key, i.operation,
          -- A template role is offered against the name this organisation gave
-         -- it (20260920620000). Renaming is allowed and is not a modification,
+         -- it (20260920630000). Renaming is allowed and is not a modification,
          -- so landing a newer template must not reset the label.
          case when i.object_kind = 'role' and held.name is not null
               then i.effective_payload || jsonb_build_object('name', held.name)
@@ -233,7 +233,7 @@ $n$;
   v_r   constant text := $r$  for r in select * from erp.plan_content_pack(p_pack_code) loop
     -- A role this organisation has changed since a template wrote it is in the
     -- plan so that somebody can see it was considered, and is not in the change
-    -- set because it is theirs now (20260920620000).
+    -- set because it is theirs now (20260920630000).
     continue when r.effect like 'left alone,%';
     perform erp.add_change_set_item(v_cs, r.object_kind, r.object_key,
                                     r.payload, r.operation, null,
@@ -270,22 +270,24 @@ $applier$;
 do $stamp$
 declare
   v_def text := pg_get_functiondef('erp.promote_change_set(uuid,text[],boolean)'::regprocedure);
-  v_n   constant text := $n$  update erp.tenant_pack
-     set status = 'applied', applied_at = now(), updated_at = now()
-   where tenant_id = v_tenant and change_set_id = p_change_set_id
-     and status = 'planned';
+  -- Anchored BEFORE the promotion is marked succeeded, not after the pack is
+  -- recorded as applied. erp.promotion_window_is_open() — which the live-
+  -- configuration guard asks on every write this function makes to erp.role
+  -- — requires erp.promotion.status = 'running' in the current transaction.
+  -- The first cut of this migration stamped after that status flip, so the
+  -- guard correctly refused it: CLOVEERP_PROMOTION_WINDOW_NOT_OPEN, the
+  -- window this function itself had already closed.
+  v_n   constant text := $n$  update erp.promotion
+     set status = 'succeeded', finished_at = now(), applied_count = v_applied
+   where id = v_promo;
 $n$;
-  v_r   constant text := $r$  update erp.tenant_pack
-     set status = 'applied', applied_at = now(), updated_at = now()
-   where tenant_id = v_tenant and change_set_id = p_change_set_id
-     and status = 'planned';
-
-  -- What the template gave, recorded as it lands (20260920620000). A later
-  -- version of the pack compares this with the grants as they stand: equal
-  -- means nobody has touched the role and the new version may land on it;
-  -- different means the organisation has made the role its own and the pack
-  -- leaves it alone. The name is outside the digest on purpose, so renaming a
-  -- role never makes it look edited.
+  v_r   constant text := $r$  -- What the template gave, recorded as it lands (20260920630000), while the
+  -- promotion is still running and its window is still open. A later version
+  -- of the pack compares this with the grants as they stand: equal means
+  -- nobody has touched the role and the new version may land on it; different
+  -- means the organisation has made the role its own and the pack leaves it
+  -- alone. The name is outside the digest on purpose, so renaming a role
+  -- never makes it look edited.
   if exists (select 1 from erp.tenant_pack tp
               where tp.tenant_id = v_tenant
                 and tp.change_set_id = p_change_set_id) then
@@ -303,10 +305,14 @@ $n$;
        and ro.tenant_id = v_tenant
        and ro.from_template is not null;
   end if;
+
+  update erp.promotion
+     set status = 'succeeded', finished_at = now(), applied_count = v_applied
+   where id = v_promo;
 $r$;
 begin
   if (length(v_def) - length(replace(v_def, v_n, ''))) / length(v_n) <> 1 then
-    raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the promoter does not record an applied pack the way this migration patches'
+    raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the promoter does not mark a promotion succeeded the way this migration patches'
       using hint = 'A later migration changed the promoter. Read the definition the database carries and write the needle against that.';
   end if;
   execute replace(v_def, v_n, v_r);
