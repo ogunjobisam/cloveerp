@@ -956,6 +956,27 @@ jobs:
           deno check --import-map supabase/functions/import_map.json \
             supabase/functions/*/index.ts
 
+      - name: The send helper's Deno tests
+        # worker/src/core/resend.ts is the one place a message is handed to
+        # Resend, and it is reached from both runtimes: the worker's two queues
+        # and the two Edge Functions. Its request is therefore worth an
+        # assertion, and the assertion belongs in the runtime the functions run
+        # in — the callers that send with no reply-to of their own are the Deno
+        # ones.
+        #
+        # It typechecks before it runs, so the step also covers this file under
+        # Deno's lib rather than only under the worker's tsc. Named rather than
+        # a directory: worker/test also holds Bun tests, which deno cannot run.
+        # DENO_NO_PACKAGE_JSON because the repository root carries one, and
+        # without this deno installs the whole application's npm tree to run a
+        # test whose only import is a file that imports nothing.
+        env:
+          DENO_NO_PACKAGE_JSON: "1"
+        run: |
+          set -euo pipefail
+          deno test --allow-env=CLOVEERP_RESEND_ENDPOINT,EMAIL_REPLY_TO \
+            worker/test/email_reply_to_test.ts
+
       # -----------------------------------------------------------------------
       # The application, in a browser, against a real stack
       #
