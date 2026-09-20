@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
+import { outcomeFor } from "../routes/contact";
 import {
   DEMO_REQUESTED_EVENT,
   FOUNDING_SEGMENT_ID,
+  maybeSubscribeToFollowUps,
   SIGNUP_SOURCE,
   splitName,
   subscribeToFollowUps,
@@ -109,5 +111,43 @@ describe("who reaches the follow-up list", () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.failure).toContain("timed out");
+  });
+});
+
+describe("the consent gate", () => {
+  test("an unticked box makes no Resend calls at all", async () => {
+    const { calls, doFetch } = recorder([]);
+
+    const outcome = await maybeSubscribeToFollowUps("re_key", false, SIGNUP, { fetch: doFetch });
+
+    expect(outcome).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  test("a ticked box goes through the same three calls", async () => {
+    const { calls, doFetch } = recorder([
+      { status: 201, json: { id: "con_2" } },
+      { status: 200 },
+      { status: 200 },
+    ]);
+
+    const outcome = await maybeSubscribeToFollowUps("re_key", true, SIGNUP, { fetch: doFetch });
+
+    expect(outcome).toEqual({ ok: true, failure: null });
+    expect(calls).toHaveLength(3);
+  });
+
+  test("a Resend failure leaves what the page shows exactly as it was", async () => {
+    // The enquiry's own outcome is decided by outcomeFor and nothing else.
+    // Resend falling over is a log line, not a different answer to the sender.
+    const doFetch = (async () => {
+      throw new Error("resend is down");
+    }) as unknown as typeof fetch;
+
+    const stored = { stored: true, notified: true };
+    const followUp = await maybeSubscribeToFollowUps("re_key", true, SIGNUP, { fetch: doFetch });
+
+    expect(followUp?.ok).toBe(false);
+    expect(outcomeFor(stored.stored, { notified: stored.notified })).toEqual({ kind: "answered" });
   });
 });
