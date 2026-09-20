@@ -16,22 +16,43 @@
  */
 
 /**
- * Where the request goes. Resend's API, unless the environment names another
- * endpoint — which only the build does, pointing it at a stub that records
- * the request and answers with an id, so "sent" can be proved without a key.
- * Read from whichever runtime is hosting this file: Bun and Node carry
- * process.env, Deno carries Deno.env.
+ * A setting, read from whichever runtime is hosting this file: Bun and Node
+ * carry process.env, Deno carries Deno.env. Empty and whitespace read as unset,
+ * so a variable set to nothing takes the default rather than the emptiness.
  */
-function resendEndpoint(): string {
+function setting(name: string): string | null {
   const g = globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
     Deno?: { env?: { get(name: string): string | undefined } };
   };
-  const override = g.process?.env?.["CLOVEERP_RESEND_ENDPOINT"] ?? g.Deno?.env?.get("CLOVEERP_RESEND_ENDPOINT");
-  return override && override.trim().length > 0 ? override.trim() : "https://api.resend.com/emails";
+  const value = g.process?.env?.[name] ?? g.Deno?.env?.get(name);
+  return value && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * Where the request goes. Resend's API, unless the environment names another
+ * endpoint — which only the build does, pointing it at a stub that records
+ * the request and answers with an id, so "sent" can be proved without a key.
+ */
+function resendEndpoint(): string {
+  return setting("CLOVEERP_RESEND_ENDPOINT") ?? "https://api.resend.com/emails";
 }
 
 const RESEND_ENDPOINT = resendEndpoint();
+
+/**
+ * Where a reply goes when the message names nowhere else.
+ *
+ * Every sender address in this system is a no-reply address, and a no-reply
+ * address receives nothing: someone answering an invitation, a notification or
+ * an invoice was writing to a mailbox that bounced them. So every message
+ * carries a reply-to, and the caller's own is kept when it has one — the
+ * enquiry function answers to the person who enquired, and a commercial email
+ * answers to whoever issued the document.
+ *
+ * EMAIL_REPLY_TO names another address; unset, it is support@.
+ */
+const DEFAULT_REPLY_TO = setting("EMAIL_REPLY_TO") ?? "support@cloveerp.com";
 
 export type EmailRow = {
   id: string;
@@ -39,6 +60,7 @@ export type EmailRow = {
   subject: string | null;
   body: string | null;
   from_address: string | null;
+  /** Where a reply goes. Null takes DEFAULT_REPLY_TO rather than no reply-to. */
   reply_to: string | null;
   /**
    * An HTML alternative, when the caller has one.
@@ -175,7 +197,7 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
       subject: row.subject ?? "(no subject)",
       text: row.body ?? "",
       ...(row.html ? { html: row.html } : {}),
-      ...(row.reply_to ? { reply_to: row.reply_to } : {}),
+      reply_to: row.reply_to?.trim() || DEFAULT_REPLY_TO,
       ...(row.attachments && row.attachments.length > 0 ? { attachments: row.attachments } : {}),
     }),
   });
