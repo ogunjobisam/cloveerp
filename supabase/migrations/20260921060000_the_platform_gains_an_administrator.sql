@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921050000  The platform gains an administrator
+-- 20260921060000  The platform gains an administrator
 -- -----------------------------------------------------------------------------
 -- The vendor console's staff list had three ranks: owner, operator, support.
 -- Everything an operator could not do was an owner's, and that put running the
@@ -259,7 +259,7 @@ as $$ select interval '7 days' $$;
 
 comment on function erp.purge_grace_floor is
   'The shortest waiting period the deletion sweep will run with. It was an '
-  'argument with no floor until 20260921050000, so a caller could pass zero and '
+  'argument with no floor until 20260921060000, so a caller could pass zero and '
   'take an organisation marked ended a minute earlier.';
 
 create or replace function erp.require_purge_grace(p_grace interval)
@@ -498,7 +498,10 @@ as $$
       from pg_catalog.pg_proc p
       join pg_catalog.pg_namespace n on n.oid = p.pronamespace
      where n.nspname in ('erp', 'erp_meta', 'erp_ref', 'erp_ai', 'public')
-       and p.prokind = 'f'
+       -- Procedures too: there is one in the repository today and it is a
+       -- test, but a gate is a gate and the register must not depend on which
+       -- kind of routine somebody reaches for next.
+       and p.prokind in ('f', 'p')
        and p.proname <> 'require_platform'
        and p.proname not like 'assert\_%'
        and p.proname not like '%\_suite'
