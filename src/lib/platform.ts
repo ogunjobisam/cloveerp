@@ -8,7 +8,7 @@ import { callErp, supabase } from "./erp";
  * A tenant administrator is the most powerful person inside one company. This
  * is the other axis — the people who run the product itself, who create those
  * companies and can be let into them to help. It is deliberately a separate
- * list with its own three roles rather than a permission inside a tenant,
+ * list with its own ranks rather than a permission inside a tenant,
  * because "can administer Acme" and "can create companies" are not the same
  * claim and should never be reachable from one another.
  *

@@ -221,7 +221,13 @@ begin
          'deleted_at   = case when p_status = ''deleted'' then now() else deleted_at end,',
          'deleted_at   = case when p_status = ''deleted'' then now()
                               when p_status = ''active''  then null
-                              else deleted_at end,')
+                              else deleted_at end,'),
+        -- And the one refusal that counted the ranks out loud. It said an
+        -- unknown role "is not owner, operator or support", which from today is
+        -- a sentence that refuses a role the same message says is not one.
+        ('public.erp_platform_add_staff(text, text, text)',
+         '% is not owner, operator or support',
+         '% is not one of the four ranks: owner, administrator, operator or support')
       ) as v(sig, needle, thread)
   loop
     v_oid := r.sig::regprocedure::oid;
