@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260920640000  A new organisation has a light seat
+-- 20260920660000  A new organisation has a light seat
 -- -----------------------------------------------------------------------------
 -- The price list sells a light user at £9: somebody who only reads, reports,
 -- decides an approval or counts stock. The seat register says the same thing in
@@ -29,7 +29,16 @@ set lock_timeout = '30s';
 -- four roles that are light by the register's own definition:
 --
 --   Viewer            every permission whose action is read, and taking a
---                     report away with you.
+--                     report away with you. Coded observer, not viewer: the
+--                     code 'viewer' is already how a demonstration and four
+--                     of the product's own suites name a role they build by
+--                     hand on their own tenant, each with no on-conflict
+--                     handling of its own — none of them anticipated a role
+--                     of that code already existing before they got to make
+--                     one. Renaming this seat's code rather than four
+--                     unrelated fixtures keeps the collision out of files
+--                     this migration has no reason to touch; the name shown
+--                     on screen is still Viewer.
 --   Stock counter     counting stock and reading what is being counted.
 --   Scanner operator  confirming on a registered scanner what somebody else
 --                     planned. This is the base pack's own template, read from
@@ -62,7 +71,7 @@ set lock_timeout = '30s';
 -- operator template is now a role it already holds. The acceptance suite counts
 -- that on purpose and says so.
 --
--- Proof: erp_test.a_light_seat_exists_suite(), five cases, pinned at both ends.
+-- Proof: erp_test.a_light_seat_exists_suite(), six cases, pinned at both ends.
 -- =============================================================================
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -80,7 +89,7 @@ as $$
     -- later is in the Viewer's reach on the day it ships. If one of those reads
     -- ever needs a full seat, erp.assert_provisioning_offers_a_light_seat()
     -- fails the build rather than quietly selling a full user at a light price.
-    when 'viewer' then (
+    when 'observer' then (
       select coalesce(array_agg(p.code order by p.code), '{}'::text[])
         from erp_ref.permission p
        where p.action = 'read' or p.code = 'reporting.export')
@@ -117,7 +126,7 @@ set search_path = ''
 as $$
   with held as (
     select c.code, erp.light_role_permissions(c.code) as perms
-      from (values ('viewer'), ('stock_counter'),
+      from (values ('observer'), ('stock_counter'),
                    ('scanner_operator'), ('approver')) c(code)
   )
   select h.code,
@@ -184,7 +193,7 @@ comment on function erp.assert_provisioning_offers_a_light_seat is
   'A new organisation always has at least one role that produces the light seat '
   'the price list sells, and every role meant to be light is light. The claim '
   'the published price list makes, which the product could not honour until '
-  '20260920640000 and nothing checked.';
+  '20260920660000 and nothing checked.';
 
 -- erp.assert_diagnostics_registered() refuses an assert_* function in schema
 -- erp that is neither registered here nor exempt: fifteen checks were once
@@ -230,7 +239,7 @@ $n$;
   v_r   constant text := $r$    v_made := v_made + 1;
   end loop;
 
-  -- The light seats (20260920640000). Every role above reaches a permission
+  -- The light seats (20260920660000). Every role above reaches a permission
   -- that needs a full seat, so until this nothing a new organisation was given
   -- could produce the seat the price list sells at the lower price. These four
   -- are light by the seat register's own definition — they read, they report,
@@ -240,7 +249,7 @@ $n$;
   -- Seeded the same way: a role already on file belongs to the organisation,
   -- however it was shaped, and seeding never rewrites one.
   foreach v_trio slice 1 in array array[
-    array['viewer', 'Viewer',
+    array['observer', 'Viewer',
           'Reads what the organisation has, everywhere, and takes a report away. Changes nothing.'],
     array['stock_counter', 'Stock counter',
           'Counts stock and reads what is being counted. Accepting the variance is somebody else''s.'],
@@ -257,8 +266,17 @@ $n$;
       continue;
     end if;
 
-    insert into erp.role (tenant_id, code, name, description, status)
-    values (p_tenant_id, v_code, v_name, v_trio[3], 'active')
+    -- Scanner operator carries the base pack's own template mark, and only
+    -- it: it is the pack's Scanner operator template, read from the pack
+    -- rather than written out a second time, and from_template is how a
+    -- content pack recognises a role it does not need to plan again
+    -- (erp.plan_content_pack() tests containment on the whole role, and a
+    -- null from_template here would never contain the pack item's
+    -- 'base-1.0.0'). The other three are not any pack's and carry none.
+    insert into erp.role (tenant_id, code, name, description, from_template, status)
+    values (p_tenant_id, v_code, v_name, v_trio[3],
+            case when v_code = 'scanner_operator' then 'base-1.0.0' else null end,
+            'active')
     returning id into v_role;
 
     insert into erp.role_permission (tenant_id, role_id, permission_code, data_classes)
@@ -315,7 +333,7 @@ declare
   v_def text := pg_get_functiondef('erp_test.starter_pack_acceptance_suite()'::regprocedure);
   v_n   constant text := $n$    (res ->> 'items')::integer = 346
 $n$;
-  v_r   constant text := $r$    -- 345 since 20260920640000: a new organisation is seeded the Scanner
+  v_r   constant text := $r$    -- 345 since 20260920660000: a new organisation is seeded the Scanner
     -- operator role, with the grants the base pack's own template gives it, so
     -- the pack has nothing to add and no longer plans that item.
     (res ->> 'items')::integer = 345
@@ -345,7 +363,7 @@ volatile
 set search_path = ''
 as $suite$
 declare
-  c_expected constant integer := 5;
+  c_expected constant integer := 6;
   v_cases   integer := 0;
   v_step    text := 'before the fixture started';
   v_state   text;
@@ -360,6 +378,7 @@ declare
   v_admin_perms integer; v_catalogue integer;
   v_eleven  integer;
   v_scanner text[]; v_pack_scanner text[];
+  v_scanner_mark text; v_marks text;
   c         text;
 begin
   begin
@@ -376,17 +395,17 @@ begin
   v_cases := v_cases + 1;
   select array(select ro.code from erp.role ro
                 where ro.tenant_id = r.tenant_id
-                  and ro.code in ('viewer', 'stock_counter', 'scanner_operator', 'approver')
+                  and ro.code in ('observer', 'stock_counter', 'scanner_operator', 'approver')
                 order by ro.code) into v_codes;
   case_name := 'a newly provisioned organisation is given the four light roles';
-  passed := v_codes = array['approver', 'scanner_operator', 'stock_counter', 'viewer'];
+  passed := v_codes = array['approver', 'observer', 'scanner_operator', 'stock_counter'];
   detail := format('it has %s', array_to_string(v_codes, ', '));
   return next;
 
   -- ── 2. Each produces a light seat, as the seat function computes it ──────
   v_step := 'somebody holds each of them';
   v_cases := v_cases + 1;
-  foreach c in array array['viewer', 'stock_counter', 'scanner_operator', 'approver'] loop
+  foreach c in array array['observer', 'stock_counter', 'scanner_operator', 'approver'] loop
     v_sub := gen_random_uuid();
     v_subs := v_subs || v_sub;
     select p.app_user_id, p.token into v_person, v_token
@@ -448,6 +467,38 @@ begin
                    v_eleven, v_admin_perms, v_catalogue, array_to_string(v_scanner, ', '));
   return next;
 
+  -- ── 5. Scanner operator carries the template mark; the other three do not ─
+  --
+  -- This is the check that would have caught the gap the first draft of this
+  -- migration shipped with: a scanner_operator seeded with no from_template
+  -- looks identical to the eleven module roles to every OTHER case above —
+  -- same code, same permissions, same seat — right up until the organisation
+  -- applies the base pack and gets a second, indistinguishable role instead
+  -- of nothing. Named by role, not folded into case 4's boolean, so a
+  -- regression here says exactly which role stopped carrying its mark.
+  v_step := 'the scanner operator''s template mark, and the base pack offered again';
+  v_cases := v_cases + 1;
+  select ro.from_template into v_scanner_mark
+    from erp.role ro where ro.tenant_id = r.tenant_id and ro.code = 'scanner_operator';
+  select string_agg(format('%s: %s', ro.code, coalesce(ro.from_template, 'none')), ', ' order by ro.code)
+    into v_marks
+    from erp.role ro
+   where ro.tenant_id = r.tenant_id
+     and ro.code in ('observer', 'stock_counter', 'scanner_operator', 'approver');
+  case_name := 'the scanner operator role carries the base pack''s template mark, the other three light roles carry none, and the base pack does not offer the scanner operator role a second time';
+  passed := v_scanner_mark = 'base-1.0.0'
+        and (select ro.from_template from erp.role ro
+              where ro.tenant_id = r.tenant_id and ro.code = 'observer') is null
+        and (select ro.from_template from erp.role ro
+              where ro.tenant_id = r.tenant_id and ro.code = 'stock_counter') is null
+        and (select ro.from_template from erp.role ro
+              where ro.tenant_id = r.tenant_id and ro.code = 'approver') is null
+        and not exists (select 1 from erp.plan_content_pack('base') p
+                          where p.object_kind = 'role' and p.object_key = 'scanner_operator');
+  detail := format('%s; the base pack''s plan for this organisation names no scanner_operator item',
+                   v_marks);
+  return next;
+
   perform set_config('request.jwt.claims', '', true);
   raise exception 'CLOVEERP_SUITE_UNDO';
   exception when others then
@@ -459,7 +510,7 @@ begin
   perform set_config('request.jwt.claims', '', true);
   perform set_config('erp.job_tenant_id', '', true);
 
-  -- ── 5. Undone ────────────────────────────────────────────────────────────
+  -- ── 6. Undone ────────────────────────────────────────────────────────────
   v_cases := v_cases + 1;
   case_name := 'the fixture was undone';
   passed := v_state is null
@@ -483,10 +534,12 @@ comment on function erp_test.a_light_seat_exists_suite() is
   'A new organisation can sell the seat the price list sells at the lower '
   'price. It is given the four light roles; somebody holding any one of them is '
   'computed as a light user by the seat function and counted as one by the '
-  'meter; the report the build reads agrees; and nothing that was seeded before '
-  'moved — the eleven job roles are still there, the administrator still holds '
-  'every permission, and the scanner role is the base pack''s own template '
-  'rather than a second copy of it. Rolls back everything it made.';
+  'meter; the report the build reads agrees; nothing that was seeded before '
+  'moved — the eleven job roles are still there and the administrator still '
+  'holds every permission; and, by name, the scanner operator role carries the '
+  'base pack''s template mark while the other three carry none, and the base '
+  'pack does not plan the scanner operator role a second time. Rolls back '
+  'everything it made.';
 
 create or replace function erp_test.assert_a_light_seat_exists_suite()
 returns text
@@ -495,7 +548,7 @@ volatile
 set search_path = ''
 as $wrap$
 declare
-  c_expected constant integer := 5;
+  c_expected constant integer := 6;
   v_all integer; v_fail integer; v_detail text;
 begin
   create temp table if not exists _a_light_seat_exists on commit drop as
