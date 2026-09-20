@@ -272,8 +272,7 @@ function ContactPage() {
 
             <div>
               <label htmlFor="current_system" className={LABEL}>
-                What do you use today?{" "}
-                <span className="font-normal text-ink/50">(optional)</span>
+                What do you use today? <span className="font-normal text-ink/50">(optional)</span>
               </label>
               <input
                 id="current_system"
