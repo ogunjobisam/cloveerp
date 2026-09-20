@@ -407,8 +407,8 @@ Deno.serve(async (req: Request) => {
      */
     async function followUp(): Promise<void> {
       const outcome = await maybeSubscribeToFollowUps(apiKey, followUpOptIn, {
-        email,
-        fullName,
+        email: email as string,
+        fullName: fullName as string,
         organisation,
         businessType,
         currentSystem,
