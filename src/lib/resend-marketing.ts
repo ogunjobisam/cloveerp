@@ -191,3 +191,20 @@ export async function subscribeToFollowUps(
     return { ok: false, failure: `resend follow-up did not complete: ${reason}` };
   }
 }
+
+/**
+ * The gate.
+ *
+ * Somebody who did not tick the box is never sent to Resend at all — not a
+ * suppressed contact, not an unsubscribed one, no request. This is the whole
+ * consent decision and it is one function so that it can be proved.
+ */
+export async function maybeSubscribeToFollowUps(
+  apiKey: string,
+  optedIn: boolean,
+  signup: FollowUpSignup,
+  options: FollowUpOptions = {},
+): Promise<FollowUpOutcome | null> {
+  if (!optedIn) return null;
+  return await subscribeToFollowUps(apiKey, signup, options);
+}
