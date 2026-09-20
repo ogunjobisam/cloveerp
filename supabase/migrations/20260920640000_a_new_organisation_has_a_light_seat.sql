@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260920610000  A new organisation has a light seat
+-- 20260920640000  A new organisation has a light seat
 -- -----------------------------------------------------------------------------
 -- The price list sells a light user at £9: somebody who only reads, reports,
 -- decides an approval or counts stock. The seat register says the same thing in
@@ -184,7 +184,31 @@ comment on function erp.assert_provisioning_offers_a_light_seat is
   'A new organisation always has at least one role that produces the light seat '
   'the price list sells, and every role meant to be light is light. The claim '
   'the published price list makes, which the product could not honour until '
-  '20260920610000 and nothing checked.';
+  '20260920640000 and nothing checked.';
+
+-- erp.assert_diagnostics_registered() refuses an assert_* function in schema
+-- erp that is neither registered here nor exempt: fifteen checks were once
+-- reachable only from a SQL client, and this is how the build now refuses to
+-- let a sixteenth join them.
+insert into erp_meta.diagnostic_check
+  (code, title, kind, scope, schema_name, function_name, arguments,
+   detail_function, detail_arguments, blurb, runs_in_ci, seq)
+values
+  ('provisioning_offers_a_light_seat', 'A new organisation can sell the seat the price list sells',
+   'assertion', 'platform', 'erp', 'assert_provisioning_offers_a_light_seat', '',
+   'light_role_seat_report', '',
+   'The price list sells a light user at the lower price, and until this every '
+   'role a new organisation was given reached a permission that needs a full '
+   'seat. A role meant to be light that stops being light — because a '
+   'permission it reaches was reclassified, or a permission was added to it — '
+   'fails the build rather than quietly billing a full user at the light price.',
+   true, 99)
+on conflict (code) do update set
+  title = excluded.title, kind = excluded.kind, scope = excluded.scope,
+  schema_name = excluded.schema_name, function_name = excluded.function_name,
+  arguments = excluded.arguments, detail_function = excluded.detail_function,
+  detail_arguments = excluded.detail_arguments, blurb = excluded.blurb,
+  runs_in_ci = excluded.runs_in_ci, seq = excluded.seq;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 2. And a new organisation is given them
@@ -206,7 +230,7 @@ $n$;
   v_r   constant text := $r$    v_made := v_made + 1;
   end loop;
 
-  -- The light seats (20260920610000). Every role above reaches a permission
+  -- The light seats (20260920640000). Every role above reaches a permission
   -- that needs a full seat, so until this nothing a new organisation was given
   -- could produce the seat the price list sells at the lower price. These four
   -- are light by the seat register's own definition — they read, they report,
@@ -291,7 +315,7 @@ declare
   v_def text := pg_get_functiondef('erp_test.starter_pack_acceptance_suite()'::regprocedure);
   v_n   constant text := $n$    (res ->> 'items')::integer = 346
 $n$;
-  v_r   constant text := $r$    -- 345 since 20260920610000: a new organisation is seeded the Scanner
+  v_r   constant text := $r$    -- 345 since 20260920640000: a new organisation is seeded the Scanner
     -- operator role, with the grants the base pack's own template gives it, so
     -- the pack has nothing to add and no longer plans that item.
     (res ->> 'items')::integer = 345
