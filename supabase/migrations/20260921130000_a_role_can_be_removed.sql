@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921120000  A role can be removed
+-- 20260921130000  A role can be removed
 -- -----------------------------------------------------------------------------
 -- Nothing in the product could take a role out of use. erp.save_role edits and
 -- creates; there is no door that removes; the permissions screen offered "New
@@ -45,6 +45,16 @@ set lock_timeout = '30s';
 --     holding a role has to be in the hint, or the customer is told "this role
 --     is in use" and sent hunting, which is the failure this exists to avoid.
 --
+--   * The removal arm of the promoter could never have run. erp.apply_change_set_item()
+--     declares a plpgsql variable called r, and the arm updated the role as
+--     `update erp.role r ... where r.tenant_id = ...`, so the qualified column
+--     resolved against the variable and not the table: "record r is not
+--     assigned yet". It has been that way since the arm was written
+--     (20260829280000); no suite ever removed a role, which is the same finding
+--     as the unreachable restrict keys. The first version of this migration,
+--     20260921120000, met it in its own suite and was never applied anywhere.
+--     The arm is repaired here, before the suite that proves it.
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- What this does
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -262,7 +272,7 @@ comment on function erp.require_role_unheld(uuid, text) is
   'the hint both carry the names, because the desk shows the hint. Silent when '
   'nothing depends on the role or there is no such role. Called by the door '
   'that proposes a removal and by the promoter when a removal is promoted '
-  '(20260921120000).';
+  '(20260921130000).';
 
 select erp.register_refusal('CLOVEERP_ROLE_IN_USE',
   'Removing a role that people still hold or that an approval step still names.',
@@ -287,8 +297,17 @@ declare
             perform erp.require_user_managers_remain(v_tenant, v_managers_before,
               format('Taking the %s role out of use', p ->> 'code'));
 $n$;
+  -- The update itself. The alias is not r: this function declares a variable of
+  -- that name for its own item loop, and a qualified column is resolved against
+  -- the variable before the table, so the arm failed on its first row.
+  v_n2  constant text := $n$          update erp.role r set status = 'inactive', updated_at = now()
+           where r.tenant_id = v_tenant and r.code = (p ->> 'code');
+$n$;
+  v_r2  constant text := $r$          update erp.role ro set status = 'inactive', updated_at = now()
+           where ro.tenant_id = v_tenant and ro.code = (p ->> 'code');
+$r$;
   v_r   constant text := $r$          if position('function erp.' || 'rollback_to_snapshot(' in v_managers_stack) = 0 then
-            -- Nobody holds it and no approval step names it (20260921120000).
+            -- Nobody holds it and no approval step names it (20260921130000).
             -- A change set proposed while the role was free may be promoted
             -- after somebody was given it, and one from another environment
             -- never passed the door that asks.
@@ -301,9 +320,14 @@ begin
     raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the role removal arm of % is not the text this migration patches', v_sig
       using hint = 'A later migration changed the role arm. Read pg_get_functiondef() of the promoter and patch that body.';
   end if;
-  execute replace(v_def, v_n, v_r);
+  if (length(v_def) - length(replace(v_def, v_n2, ''))) / length(v_n2) <> 1 then
+    raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the role update of the removal arm of % is not the text this migration repairs', v_sig
+      using hint = 'A later migration changed the role arm. Read pg_get_functiondef() of the promoter and patch that body.';
+  end if;
+  execute replace(replace(v_def, v_n, v_r), v_n2, v_r2);
 
-  if position('erp.require_role_unheld(' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
+  if position('erp.require_role_unheld(' in pg_get_functiondef(v_sig::regprocedure)) = 0
+     or position('update erp.role ro set status' in pg_get_functiondef(v_sig::regprocedure)) = 0 then
     raise exception 'CLOVEERP_PROMOTER_UNRECOGNISED: the promoter did not take the refusal to remove a role that is in use'
       using hint = 'The replacement did not land. Compare the needle with pg_get_functiondef() of the promoter.';
   end if;
@@ -337,7 +361,7 @@ $n$;
      and held.tenant_id = erp.require_tenant_id()
      and held.code = i.object_key
      and held.status = 'active'
-    -- A role this organisation has taken out of use (20260921120000). It is not
+    -- A role this organisation has taken out of use (20260921130000). It is not
     -- in the manifest, which lists the roles that are active, so without this
     -- it reads as missing and a pack would put it back.
     left join erp.role removed
@@ -389,7 +413,7 @@ comment on function erp.plan_content_pack is
   'look missing; a role the organisation has changed since a template wrote it '
   'is listed as left alone rather than dropped from the plan; and so is a role '
   'the organisation has removed, which a pack does not bring back '
-  '(20260921120000).';
+  '(20260921130000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. The directory says a removal is waiting
@@ -435,7 +459,7 @@ comment on function public.erp_permissions_directory() is
   '(pending, expired or none), manages_users (administration.users '
   'organisation-wide today, whatever their status) and is_support. Each role '
   'carries removal_waiting, true while a change that removes it has been '
-  'proposed and not yet promoted (20260921120000).';
+  'proposed and not yet promoted (20260921130000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 6. The door
@@ -557,7 +581,7 @@ comment on function public.erp_propose_role_removal(uuid, text) is
   'anybody holds the role or a step names it. Promoted at once while the '
   'organisation is being set up; left for a second administrator once it is '
   'live. A removal already waiting is returned, not proposed again. Writes no '
-  'role itself: erp.role is a promotable surface (20260921120000).';
+  'role itself: erp.role is a promotable surface (20260921130000).';
 
 revoke all on function public.erp_propose_role_removal(uuid, text) from public, anon;
 grant execute on function public.erp_propose_role_removal(uuid, text) to authenticated, service_role;
@@ -569,7 +593,7 @@ insert into erp_meta.public_write_allowance (function_name, gate, rationale) val
    'writes no promotable surface: erp.role is written by '
    'erp.apply_change_set_item() on promotion, which is the only route a live '
    'organisation accepts, and the promoter refuses a removal while the role is '
-   'held or named (20260921120000).')
+   'held or named (20260921130000).')
 on conflict (function_name) do update set gate = excluded.gate,
                                           rationale = excluded.rationale;
 
