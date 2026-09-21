@@ -1,5 +1,33 @@
 set lock_timeout = '30s';
 
+-- EDITED IN PLACE ON 21 SEPTEMBER, AFTER IT TOOK THE DEPLOY DOWN. This file
+-- ended by running three demonstration suites, and on the deploy that carried
+-- it the replay stopped there:
+--
+--   ERROR: canceling statement due to statement timeout (SQLSTATE 57014)
+--   At statement: 23   select erp_test.assert_demonstration_reopen_suite()
+--
+-- Each of the three builds a demonstration organisation of its own and trades
+-- it: erp_test.demonstration_reopen_suite() seeds a day three months back,
+-- closes every historic period through the doors, then has the catch-up reopen,
+-- trade and re-close them. A suite's cost is not the schema's size, it is
+-- whatever its fixture does, and the fixture is built to be realistic — so on
+-- a build from an empty database these pass, and on a database with three
+-- organisations and a year of trading in it they run past the configured two
+-- minutes. Nothing about the suites is wrong; they were in the wrong place.
+--
+-- THAT IS THE SAME SHAPE 20260920310000 NAMED TWO DAYS AGO, and this file
+-- regressed against it: the third call it made was to the very suite that file
+-- had removed from a migration's tail for this exact reason. The build's green
+-- says nothing about it, because the build starts from an empty database —
+-- which is the whole lesson, written down here for the third time.
+--
+-- The three calls are removed and nothing else changes. Registered in
+-- supabase/ci/migrations_edited.txt against 20260921120000, which carries the
+-- claim that made the removal safe: erp.ci_check_catalogue() picks all three
+-- up by name, so the build runs them anyway.
+-- -----------------------------------------------------------------------------
+--
 -- =============================================================================
 -- 20260921110000  The close follows the trading
 -- -----------------------------------------------------------------------------
@@ -1081,9 +1109,19 @@ select erp.apply_audit_coverage();
 select erp.apply_live_config_guards();
 select erp.apply_execute_grants();
 
-select erp_test.assert_demonstration_close_frontier_suite();
-select erp_test.assert_demonstration_reopen_suite();
-select erp_test.assert_demonstration_catch_up_suite();
+-- ── Proved ───────────────────────────────────────────────────────────────────
+--
+-- No suite is run from here, and that is the edit this file has taken: see the
+-- head of it. All three are in erp.ci_check_catalogue() by name, so every build
+-- runs them whether or not a migration asks; 20260921120000 asserts that, which
+-- is the claim that makes leaving them out of this file safe rather than merely
+-- cheaper.
+--
+-- What is left is the ordinary schema proof. Its cost is the size of the
+-- schema, except erp.assert_whole_database_reconciles(), which grows with the
+-- ledger and was timed on live at 1.7 s over three organisations
+-- (20260920300000) — the one assertion here that would notice a data fault, and
+-- the wrong second to save.
 
 select erp.assert_whole_database_reconciles();
 select erp.assert_refusals_name_next_action();
