@@ -59,6 +59,8 @@ type Role = {
   permissions: string[];
   /** True while a change to this role has been proposed and not yet promoted. Absent from an older database. */
   change_waiting?: boolean;
+  /** True while a removal has been proposed and not yet promoted. Absent from an older database. */
+  removal_waiting?: boolean;
 };
 
 /** What saving a role answers: whether the change is in force yet, or is waiting for approval. */
@@ -70,6 +72,13 @@ type RoleAnswer = {
   status: string;
   in_force: boolean;
   unchanged: boolean;
+};
+
+type RemovalAnswer = {
+  name: string;
+  status: string;
+  removed: boolean;
+  already_waiting: boolean;
 };
 
 type Grant = {
@@ -581,17 +590,24 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
   const [editing, setEditing] = useState<Role | null>(null);
   const [creating, setCreating] = useState(false);
   const [proposed, setProposed] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   // A role is configuration, so saving one proposes a change: the change set
   // behind it needs this permission as well as the one that opens the panel.
   // Hiding the buttons is a convenience; the door asks.
   const canChange = hasPermission(session, "administration.configure");
 
+  // A removed role is out of use and stays on file. The list a person works
+  // from is the roles in use; the removed ones are one press away.
+  const inUse = directory.roles.filter((r) => r.status === "active");
+  const removed = directory.roles.filter((r) => r.status !== "active");
+  const shown = showRemoved ? directory.roles : inUse;
+
   return (
     <section className="rounded-xl border border-border bg-card">
       <header className="flex flex-col gap-3 border-b border-border px-4 py-4 sm:px-5 md:flex-row md:items-start md:justify-between md:gap-4">
         <div>
-          <h2 className="text-sm font-semibold">Roles ({directory.roles.length})</h2>
+          <h2 className="text-sm font-semibold">Roles ({inUse.length})</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
             A role is a named set of permissions. Nothing here takes effect until it is granted.
           </Prose>
@@ -644,7 +660,7 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
           <p className="text-sm text-muted-foreground">No roles exist in this organisation yet.</p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {directory.roles.map((r) => (
+            {shown.map((r) => (
               <li key={r.id} className="rounded-lg border border-border/60 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -657,9 +673,12 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
-                    {r.status !== "active" ? <Pill tone="muted">{r.status}</Pill> : null}
+                    {r.status !== "active" ? <Pill tone="muted">Removed</Pill> : null}
+                    {r.removal_waiting ? (
+                      <Pill tone="warn">Removal waiting for approval</Pill>
+                    ) : null}
                     {r.change_waiting ? <Pill tone="warn">Change waiting for approval</Pill> : null}
-                    {canChange ? (
+                    {r.status === "active" && canChange ? (
                       <button
                         onClick={() => {
                           setCreating(false);
@@ -684,12 +703,113 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
                     </li>
                   ))}
                 </ul>
+                {r.status === "active" && !r.removal_waiting ? (
+                  <RoleRemoval role={r} onDone={onDone} />
+                ) : null}
               </li>
             ))}
           </ul>
         )}
+        {removed.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowRemoved((v) => !v)}
+            className="self-start text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+          >
+            {showRemoved ? "Hide removed roles" : `Show removed roles (${removed.length})`}
+          </button>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+/**
+ * Taking a role out of use.
+ *
+ * The role is configuration, so the door does not delete it: it proposes the
+ * change, and an organisation that is being set up promotes it at once while a
+ * live one waits for a second administrator. A role somebody holds, or that an
+ * approval step names, is refused by the database, and the refusal says which
+ * people and which step, so this screen only has to show it.
+ */
+function RoleRemoval({ role, onDone }: { role: Role; onDone: () => void }) {
+  const { ui } = useT();
+  const { session } = useErpSession();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [proposed, setProposed] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => callErp<RemovalAnswer>("erp_propose_role_removal", { p_role_id: role.id }),
+    onSuccess: (answer) => {
+      setError(null);
+      setConfirming(false);
+      setProposed(!answer.removed);
+      onDone();
+    },
+    onError: (e) => setError(e),
+  });
+
+  // The change set behind a removal needs this permission as well as the one
+  // that opens the panel. Hiding the control is a convenience; the door asks.
+  if (!hasPermission(session, "administration.configure")) return null;
+
+  return (
+    <div className="mt-3">
+      {proposed ? (
+        <p className="text-xs text-muted-foreground">
+          {ui(
+            "Removal proposed. This organisation is live, so a second administrator approves it on the Configuration screen before the role goes.",
+          )}
+        </p>
+      ) : confirming ? (
+        <div className="rounded-md border border-border bg-background p-3">
+          <p className="text-xs text-muted-foreground">
+            {ui(
+              "Removing a role takes it out of use: it stops appearing here, nobody can be given it again, and a starter pack will not bring it back. Whoever holds it, and any approval step that names it, has to be moved first.",
+            )}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                mutation.mutate();
+              }}
+              disabled={mutation.isPending}
+              className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-destructive/40 px-4 text-xs font-medium text-destructive disabled:opacity-50`}
+            >
+              {mutation.isPending ? "Removing…" : `Remove ${role.name}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                setError(null);
+              }}
+              disabled={mutation.isPending}
+              className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium disabled:opacity-50`}
+            >
+              Keep it
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium text-destructive`}
+        >
+          Remove role
+        </button>
+      )}
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
