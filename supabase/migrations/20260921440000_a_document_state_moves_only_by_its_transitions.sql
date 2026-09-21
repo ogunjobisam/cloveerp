@@ -257,26 +257,32 @@ comment on function erp_test.assert_no_state_side_doors() is
 -- 4. The switch, and the number it landed with
 -- ═════════════════════════════════════════════════════════════════════════════
 
-do $record$
-declare
-  v_found integer;
-begin
-  select count(*) into v_found from erp.state_side_door_report();
+-- Unlike the reachability walk beside it, this one reads routine bodies and
+-- nothing else, so the number below is the same on an empty replay as on a
+-- database full of trading. It is still a literal rather than a measurement
+-- taken here, for the reason 20260921430000 gives at length: a line that moves
+-- with whatever it is measuring is not a line. Nine, made of eight routines
+-- moving a works order, a planned order or a count task by setting its status
+-- column, and one entrance to the lifecycle engine past the document's own
+-- door — erp.advance_orders_for_receipt(), which moves the purchase order a
+-- receipt belongs to. That one is deliberate as far as it goes, because
+-- erp.transition_document() is what calls it and calling back would recurse;
+-- what it costs is that the order's move carries none of what hangs off that
+-- door, which is precisely the finding worth keeping in sight.
 
-  insert into erp_meta.enforcement_gate
-    (gate, is_blocking, tolerated_findings, landed_in, rationale)
-  values
-    ('no_state_side_doors', false, v_found, '20260921440000',
-     'Landed reporting rather than blocking, as the simplification plan asks. Every finding it has '
-     'today is an object whose lifecycle is a column because it was never authored as configuration, '
-     'and the manufacturing and counting nodes are what bring them over. Anything beyond this number '
-     'still refuses. Switch it to blocking in the dead-configuration pull request.')
-  on conflict (gate) do nothing;
-
-  raise notice 'CLOVEERP_TOLERANCE_RECORDED: no_state_side_doors tolerates % finding(s)',
-    (select g.tolerated_findings from erp_meta.enforcement_gate g where g.gate = 'no_state_side_doors');
-end
-$record$;
+insert into erp_meta.enforcement_gate
+  (gate, is_blocking, tolerated_findings, landed_in, rationale)
+values
+  ('no_state_side_doors', false, 9, '20260921440000',
+   'Landed reporting rather than blocking, as the simplification plan asks. Every finding it has '
+   'today is an object whose lifecycle is a column because it was never authored as configuration, '
+   'and the manufacturing and counting nodes are what bring them over. Anything beyond this number '
+   'still refuses. Switch it to blocking in the dead-configuration pull request.')
+on conflict (gate) do update set
+  is_blocking = excluded.is_blocking,
+  tolerated_findings = excluded.tolerated_findings,
+  landed_in = excluded.landed_in,
+  rationale = excluded.rationale;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. The generators, then the proof

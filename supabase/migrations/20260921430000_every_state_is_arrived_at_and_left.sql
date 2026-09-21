@@ -247,47 +247,44 @@ comment on function erp_test.assert_reachable_configuration() is
   'the number it landed with; erp_meta.enforcement_gate says which.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- 3. The switch, and the number it landed with
+-- 3. The switch, and the line it holds
 -- ═════════════════════════════════════════════════════════════════════════════
 --
--- The number is read from the check on the build that lands it rather than
--- typed, because there is no local database to type it from and a figure got
--- wrong here is a figure somebody would widen rather than explain. It is
--- written once: a later replay leaves it where it is.
+-- The number is written here rather than measured here, and the first attempt
+-- at this file got that wrong in a way worth writing down.
+--
+-- A lifecycle is tenant data. An installer seeds it when an organisation is
+-- provisioned, and a replay from an empty database provisions none: the
+-- demonstration migrations are no-ops away from the live project, and every
+-- suite builds its organisation inside a transaction it rolls back. So at the
+-- moment this file runs there are no active document lifecycles at all, and a
+-- tolerance measured here would have been measured over nothing — tolerating
+-- everything the first time a lifecycle appeared. The check's own refusal for
+-- exactly that case is what caught it, on the build, rather than a green run
+-- reporting nought findings for ever.
+--
+-- Measuring on the first RUN instead was the other temptation, and it is worse
+-- than it looks: the build replays from empty for most pull requests, so a
+-- number recorded on first run is recorded afresh every time and the ratchet
+-- never bites on anything. A line that moves with whatever it is measuring is
+-- not a line.
+--
+-- So the number is a literal, learned from the build that first ran this check
+-- and written here, and a replay lands the same line it landed with.
 
-do $record$
-declare
-  v_found      integer;
-  v_lifecycles integer;
-begin
-  select count(distinct m.code) into v_lifecycles
-    from erp.state_machine m
-   where m.object_type = 'document' and m.status = 'active';
-
-  if coalesce(v_lifecycles, 0) = 0 then
-    raise exception 'CLOVEERP_NO_LIFECYCLE_TO_WALK: nothing to record a tolerance against'
-      using errcode = 'P0001',
-            hint = 'A tolerance recorded over no lifecycles would tolerate everything '
-                   'the first time one appeared. Land this after the installers.';
-  end if;
-
-  select count(*) into v_found from erp.reachable_configuration_report();
-
-  insert into erp_meta.enforcement_gate
-    (gate, is_blocking, tolerated_findings, landed_in, rationale)
-  values
-    ('reachable_configuration', false, v_found, '20260921430000',
-     'Landed reporting rather than blocking, as the simplification plan asks, because the states it '
-     'finds are the ones the correctness and reseed nodes exist to delete. Anything beyond this '
-     'number still refuses. Switch it to blocking in the dead-configuration pull request, once those '
-     'nodes have landed and the number is nought.')
-  on conflict (gate) do nothing;
-
-  raise notice 'CLOVEERP_TOLERANCE_RECORDED: reachable_configuration tolerates % finding(s) over % document lifecycle(s)',
-    (select g.tolerated_findings from erp_meta.enforcement_gate g where g.gate = 'reachable_configuration'),
-    v_lifecycles;
-end
-$record$;
+insert into erp_meta.enforcement_gate
+  (gate, is_blocking, tolerated_findings, landed_in, rationale)
+values
+  ('reachable_configuration', false, 0, '20260921430000',
+   'Landed reporting rather than blocking, as the simplification plan asks, because the states it '
+   'finds are the ones the correctness and reseed nodes exist to delete. Anything beyond this '
+   'number still refuses. Switch it to blocking in the dead-configuration pull request, once those '
+   'nodes have landed and the number is nought.')
+on conflict (gate) do update set
+  is_blocking = excluded.is_blocking,
+  tolerated_findings = excluded.tolerated_findings,
+  landed_in = excluded.landed_in,
+  rationale = excluded.rationale;
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 4. The generators, then the proof
@@ -312,6 +309,11 @@ select erp.assert_ci_coverage();
 select erp.assert_suite_verdicts_strict();
 select erp.assert_enforcement_gates_are_read();
 
--- Cheap: it reads the lifecycle configuration and the driver register. No
--- organisation is built and no ledger is touched.
-select erp_test.assert_reachable_configuration();
+-- The new check is deliberately NOT run from here, and not because it is
+-- expensive — it reads the lifecycle configuration and the driver register and
+-- costs nothing. It is because there is nothing here to read. A replay from an
+-- empty database has provisioned no organisation by this line, so it would walk
+-- no lifecycle at all; the check refuses that case rather than reporting nought,
+-- which is how this was found. erp.ci_check_catalogue() picks it up by name and
+-- supabase/ci/run_checks.sh runs it after the demonstration is seeded, which is
+-- the first moment in a build at which the question has an answer.

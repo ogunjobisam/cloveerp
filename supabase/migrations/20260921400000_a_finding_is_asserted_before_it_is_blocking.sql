@@ -68,11 +68,7 @@ create table if not exists erp_meta.enforcement_gate (
   rationale          text not null,
   primary key (gate),
   constraint enforcement_gate_explains
-    check (length(btrim(rationale)) >= 40),
-  -- A blocking gate tolerates nothing. Leaving a tolerance on a blocking gate
-  -- reads as if some findings were still allowed, and none are.
-  constraint enforcement_gate_blocking_tolerates_nothing
-    check (not is_blocking or tolerated_findings = 0)
+    check (length(btrim(rationale)) >= 40)
 );
 
 comment on table erp_meta.enforcement_gate is
@@ -83,14 +79,18 @@ comment on table erp_meta.enforcement_gate is
 
 comment on column erp_meta.enforcement_gate.is_blocking is
   'The switch. False: findings up to the tolerance are reported and the build '
-  'goes on. True: any finding stops the build. Flipping it is one update '
-  'statement in a migration, which is the whole point of it being one column.';
+  'goes on. True: any finding stops the build, and the tolerance below is not '
+  'consulted at all. Flipping it is one update statement in a migration, which '
+  'is the whole point of it being one column — nothing else has to be changed '
+  'with it, so the pull request that flips it is the repairs and one line.';
 
 comment on column erp_meta.enforcement_gate.tolerated_findings is
-  'What the check found on the build that landed it. Recorded by that '
-  'migration from the check itself, never typed. Below it the check reports '
-  'progress; above it the check refuses even while advisory, so today''s debt '
-  'is tolerated and tomorrow''s is not.';
+  'What the check found on the build that landed it, written into the '
+  'migration that landed it so that a replay from an empty database lands the '
+  'same line rather than measuring a new one. Below it the check reports how '
+  'far ahead it is; above it the check refuses even while advisory, so '
+  'today''s debt is tolerated and tomorrow''s is not. Ignored once the gate is '
+  'blocking.';
 
 select erp_meta.register_table('erp_meta', 'enforcement_gate', 'platform_internal',
   'Which checks are advisory, what each tolerated on landing, and the one '
