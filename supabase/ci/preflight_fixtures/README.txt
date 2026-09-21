@@ -17,3 +17,4 @@ one" means the whole repository, which is what a migration written today sees.
   29999999070000_rule_f_home           a door no screen names and no caller claims
   29999999080000_rule_g_collateral     adds a posting rule; advises, does not refuse
   29999999090000_rule_h_guard          a suite that throws away what it caught
+  29999999100000_rule_j_bound          regular expressions repeating more than 255 times
