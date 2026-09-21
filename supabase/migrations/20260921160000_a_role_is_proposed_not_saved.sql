@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921130000  A role is proposed, not saved
+-- 20260921160000  A role is proposed, not saved
 -- -----------------------------------------------------------------------------
 -- The Roles panel's "New role" and "Edit permissions" call public.erp_save_role,
 -- and erp_save_role wrote erp.role and erp.role_permission directly: an insert,
@@ -121,7 +121,7 @@ declare
           returning id into v_obj;
 $n$;
   v_r   constant text := $r$          -- A role the item describes carries its description when the item says
-          -- one and keeps the one it has when it does not (20260921130000): a
+          -- one and keeps the one it has when it does not (20260921160000): a
           -- pack's role names none, and must not blank what somebody wrote.
           insert into erp.role as rl (tenant_id, code, name, name_key, description, from_template)
           values (v_tenant, p ->> 'code', p ->> 'name', p ->> 'name_key', p ->> 'description', p ->> 'from_template')
@@ -185,7 +185,7 @@ begin
   execute format('comment on function public.erp_permissions_directory() is %L',
     coalesce(obj_description(v_sig::regprocedure, 'pg_proc'), '')
     || ' Each role carries change_waiting, true while a change that creates or '
-    || 'alters it has been proposed and not yet promoted (20260921130000).');
+    || 'alters it has been proposed and not yet promoted (20260921160000).');
 end
 $directory$;
 
@@ -383,7 +383,7 @@ comment on function public.erp_save_role(uuid, text, text, text, text[]) is
   'classes it is narrowed to. Writes no role itself: erp.role and '
   'erp.role_permission are promotable surfaces, and the promoter''s role arm '
   'keeps somebody able to manage users and settles the duties of everybody '
-  'holding the role (20260921130000).';
+  'holding the role (20260921160000).';
 
 update erp_meta.public_write_allowance a
    set gate = 'erp.authorise',
@@ -391,7 +391,7 @@ update erp_meta.public_write_allowance a
                    'administration.roles and administration.configure, and submits it. '
                    'It writes no promotable surface: erp.role and erp.role_permission are '
                    'written by erp.apply_change_set_item() on promotion, which is the '
-                   'only route a live organisation accepts (20260921130000).'
+                   'only route a live organisation accepts (20260921160000).'
  where a.function_name = 'erp_save_role';
 do $allowance$
 declare

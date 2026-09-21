@@ -651,9 +651,24 @@ jobs:
         # Before the proof below, so that what is proved is the database as this
         # deploy leaves it.
         #
-        # No statement timeout: the builder paces itself off one, and under the
-        # configured two minutes it would build a single day per call. It is
-        # bounded by the days between the last deploy and today.
+        # FIVE MINUTES, SET WHERE IT TAKES (20260921130000). This step used to
+        # carry `PGOPTIONS: -c statement_timeout=0` and a comment saying "no
+        # statement timeout". It never took: PGOPTIONS rides in libpq's startup
+        # packet and this deploy connects through the session pooler, which does
+        # not forward it, and a per-role setting would override it even on a
+        # direct connection. On 21 September the catch-up was killed at 121.9 s
+        # by the two-minute limit it believed it had removed, and everything
+        # those two minutes built was rolled back with it.
+        #
+        # So the limit is set by an explicit SET, which no pooler drops and no
+        # role setting overrides, and it is set to something rather than to
+        # nothing: five minutes is a bound this deploy has chosen, where "no
+        # timeout" would have been an unbounded write transaction on a database
+        # with a year of trading in it. erp.demonstration_catch_up() reads the
+        # session's own limit and stops at a fraction of it — trading at three
+        # minutes, billing and closing at four — so it returns and COMMITS
+        # instead of being cancelled, and the next deploy carries on from where
+        # it stopped.
         #
         # This never fails the deploy. It is hygiene on demonstration data, not
         # an invariant of the product, and a red deploy blocks every branch
@@ -662,8 +677,6 @@ jobs:
         # rest. What it will not do is go quiet: every note comes back out here.
         if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         continue-on-error: true
-        env:
-          PGOPTIONS: -c statement_timeout=0
         run: |
           # Not -e. A step that cannot say what went wrong is the reason the
           # 18 September deploy went green with the demonstration untouched:
@@ -673,8 +686,12 @@ jobs:
           report="$RUNNER_TEMP/demonstrations.json"
           errors="$RUNNER_TEMP/demonstrations.err"
           started=$(date +%s%N)
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc \
-               "select erp.catch_up_demonstrations();" > "$report" 2> "$errors"; then
+          # Two -c options, one session: the SET is an ordinary statement the
+          # server executes, so it cannot be dropped on the way in the way
+          # PGOPTIONS was.
+          if psql "$DB_URL" -v ON_ERROR_STOP=1 -tA \
+               -c "set statement_timeout = '5min'" \
+               -c "select erp.catch_up_demonstrations();" > "$report" 2> "$errors"; then
             answered=true
           else
             answered=false
@@ -683,10 +700,39 @@ jobs:
           if [[ "$answered" != true ]]; then
             seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
                           'BEGIN { printf "%.1f", ms / 1000 }')
-            why=$(tail -n 20 "$errors" || true)
+            # The refusal itself (20260921130000). Two things were wrong here and
+            # both threw away the half that mattered.
+            #
+            # tail -n 20 keeps the END of psql's stderr. A PL/pgSQL error carries
+            # the failing statement and then the function stack, which is more
+            # than twenty lines on its own, so the ERROR line was cut off the
+            # front every time and what reached the log began mid-statement. On
+            # 21 September that left a stack with no error on it, and the
+            # cancellation it was reporting could only be worked out from the
+            # clock.
+            #
+            # head -n 1 was worse: psql writes NOTICEs to stderr too and they are
+            # printed BEFORE the error, so the ::warning:: quoted whichever
+            # notice happened to come first and never the refusal.
+            #
+            # So: the ERROR line by name, and the error onwards for the body —
+            # keeping the head, where the ERROR, DETAIL and HINT are, and the
+            # tail, where the innermost frames are, when it is too long for both.
+            refusal=$(awk 'index($0, "ERROR:") { sub(/^.*ERROR:[[:space:]]*/, ""); print; exit }' "$errors")
+            [[ -n "$refusal" ]] || refusal=$(grep -vi "NOTICE:" "$errors" | head -n 1)
+            [[ -n "$refusal" ]] || refusal=$(head -n 1 "$errors")
+
+            why=$(sed -n '/ERROR:/,$p' "$errors")
+            [[ -n "$why" ]] || why=$(cat "$errors")
+            if (( $(printf '%s\n' "$why" | wc -l) > 60 )); then
+              why=$(printf '%s\n' "$why" | head -n 40
+                    echo "  … the middle of the statement it was running is cut here …"
+                    printf '%s\n' "$why" | tail -n 20)
+            fi
+
             echo "the demonstration was NOT brought up to date, after ${seconds} s:"
             printf '%s\n' "$why"
-            echo "::warning::the demonstration was not brought up to date; it is as the last deploy left it. $(head -n 1 "$errors" || true)"
+            echo "::warning::the demonstration was not brought up to date; it is as the last deploy left it. ${refusal}"
             {
               echo "## Demonstration"
               echo "**Not brought up to date.** It is as the last deploy left it,"
@@ -708,17 +754,26 @@ jobs:
           # a run that worked, and four days of deploys went by with the
           # demonstration stuck and nobody reading it. caught_up is the
           # routine's own answer rather than something inferred here.
+          # Three readings, not two (20260921130000). A run that stopped because
+          # the statement is only allowed so long has committed what it built and
+          # the next deploy carries on; that is progress and must not be shouted
+          # at in the same words as a demonstration that is stuck.
           lines=$(jq -r '.[] |
-            (if .caught_up == true then "- " else "- DID NOT CATCH UP — " end)
+            (if .caught_up == true then "- "
+             elif .ran_out_of_time == true then "- MORE TO DO — "
+             else "- DID NOT CATCH UP — " end)
             + "\(.organisation // "?"): traded \(.traded_from // "-") to \(.traded_through // "-"), "
             + "\(.documents_built // 0) document(s); \(.bills_raised // 0) supplier bill(s); "
             + "\(.periods_reopened // 0) month(s) reopened; "
             + "\(.periods_closed // 0) month(s) closed, \(.periods_left_open // 0) left open"
+            + (if .ran_out_of_time == true then " — it stopped inside the time this statement is allowed; the next deploy carries on from \(.traded_through // "-")" else "" end)
             + (if .stopped_on then " — STOPPED on \(.stopped_on), and every day after it is unbuilt" else "" end)
           ' "$report")
           notes=$(jq -r '.[] | . as $o | (.notes // [])[] | "- \($o.organisation // "?"): \(.)"' "$report")
-          stalled=$(jq -r '[.[] | select(.caught_up != true)] | length' "$report")
-          stalled_names=$(jq -r '[.[] | select(.caught_up != true) | .organisation // "?"] | join(", ")' "$report")
+          stalled=$(jq -r '[.[] | select(.caught_up != true and .ran_out_of_time != true)] | length' "$report")
+          stalled_names=$(jq -r '[.[] | select(.caught_up != true and .ran_out_of_time != true) | .organisation // "?"] | join(", ")' "$report")
+          pending=$(jq -r '[.[] | select(.ran_out_of_time == true)] | length' "$report")
+          pending_names=$(jq -r '[.[] | select(.ran_out_of_time == true) | .organisation // "?"] | join(", ")' "$report")
 
           echo "erp.catch_up_demonstrations() took ${seconds} s"
           [[ -z "$lines" ]] && echo "no demonstration organisation on this database" || echo "$lines"
@@ -729,6 +784,9 @@ jobs:
           if [[ "$stalled" != "0" && -n "$stalled_names" ]]; then
             echo "::warning::${stalled} demonstration(s) did not catch up: ${stalled_names}. Each still reads as whatever the last deploy left it as, which is what a prospect is shown."
           fi
+          if [[ "$pending" != "0" && -n "$pending_names" ]]; then
+            echo "::notice::${pending} demonstration(s) have more to build than one statement is allowed: ${pending_names}. Each committed what it built; run this workflow again, or wait for the next deploy, until they report caught up."
+          fi
           {
             echo "## Demonstration"
             if [[ "$stalled" != "0" && -n "$stalled_names" ]]; then
@@ -737,6 +795,13 @@ jobs:
               echo "a prospect is shown. The deploy is not failed by this — it is"
               echo "demonstration data, not an invariant — but nothing about the tick on"
               echo "this step says it worked."
+              echo
+            fi
+            if [[ "$pending" != "0" && -n "$pending_names" ]]; then
+              echo "**${pending} demonstration(s) have more to build than one statement is allowed:**"
+              echo "${pending_names}. Each stopped inside its time and committed what it built,"
+              echo "so this is progress rather than a fault — but it is not finished. Run this"
+              echo "workflow again, or wait for the next deploy, until they report caught up."
               echo
             fi
             echo "erp.catch_up_demonstrations() took ${seconds} s."
