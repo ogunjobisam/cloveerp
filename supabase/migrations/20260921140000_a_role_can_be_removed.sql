@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921130000  A role can be removed
+-- 20260921140000  A role can be removed
 -- -----------------------------------------------------------------------------
 -- Nothing in the product could take a role out of use. erp.save_role edits and
 -- creates; there is no door that removes; the permissions screen offered "New
@@ -54,6 +54,12 @@ set lock_timeout = '30s';
 --     as the unreachable restrict keys. The first version of this migration,
 --     20260921120000, met it in its own suite and was never applied anywhere.
 --     The arm is repaired here, before the suite that proves it.
+--   * The planner already leaves out an item that an earlier application of the
+--     same pack gave with an identical payload, so an unchanged template never
+--     shows up in a plan at all. What brings a removed role back is a NEWER
+--     version of its template, and that is what the suite offers. The second
+--     version of this migration, 20260921130000, offered the same template again
+--     and found nothing to say about it; it too was never applied.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- What this does
@@ -272,7 +278,7 @@ comment on function erp.require_role_unheld(uuid, text) is
   'the hint both carry the names, because the desk shows the hint. Silent when '
   'nothing depends on the role or there is no such role. Called by the door '
   'that proposes a removal and by the promoter when a removal is promoted '
-  '(20260921130000).';
+  '(20260921140000).';
 
 select erp.register_refusal('CLOVEERP_ROLE_IN_USE',
   'Removing a role that people still hold or that an approval step still names.',
@@ -307,7 +313,7 @@ $n$;
            where ro.tenant_id = v_tenant and ro.code = (p ->> 'code');
 $r$;
   v_r   constant text := $r$          if position('function erp.' || 'rollback_to_snapshot(' in v_managers_stack) = 0 then
-            -- Nobody holds it and no approval step names it (20260921130000).
+            -- Nobody holds it and no approval step names it (20260921140000).
             -- A change set proposed while the role was free may be promoted
             -- after somebody was given it, and one from another environment
             -- never passed the door that asks.
@@ -361,7 +367,7 @@ $n$;
      and held.tenant_id = erp.require_tenant_id()
      and held.code = i.object_key
      and held.status = 'active'
-    -- A role this organisation has taken out of use (20260921130000). It is not
+    -- A role this organisation has taken out of use (20260921140000). It is not
     -- in the manifest, which lists the roles that are active, so without this
     -- it reads as missing and a pack would put it back.
     left join erp.role removed
@@ -413,7 +419,7 @@ comment on function erp.plan_content_pack is
   'look missing; a role the organisation has changed since a template wrote it '
   'is listed as left alone rather than dropped from the plan; and so is a role '
   'the organisation has removed, which a pack does not bring back '
-  '(20260921130000).';
+  '(20260921140000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 5. The directory says a removal is waiting
@@ -459,7 +465,7 @@ comment on function public.erp_permissions_directory() is
   '(pending, expired or none), manages_users (administration.users '
   'organisation-wide today, whatever their status) and is_support. Each role '
   'carries removal_waiting, true while a change that removes it has been '
-  'proposed and not yet promoted (20260921130000).';
+  'proposed and not yet promoted (20260921140000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 6. The door
@@ -581,7 +587,7 @@ comment on function public.erp_propose_role_removal(uuid, text) is
   'anybody holds the role or a step names it. Promoted at once while the '
   'organisation is being set up; left for a second administrator once it is '
   'live. A removal already waiting is returned, not proposed again. Writes no '
-  'role itself: erp.role is a promotable surface (20260921130000).';
+  'role itself: erp.role is a promotable surface (20260921140000).';
 
 revoke all on function public.erp_propose_role_removal(uuid, text) from public, anon;
 grant execute on function public.erp_propose_role_removal(uuid, text) to authenticated, service_role;
@@ -593,7 +599,7 @@ insert into erp_meta.public_write_allowance (function_name, gate, rationale) val
    'writes no promotable surface: erp.role is written by '
    'erp.apply_change_set_item() on promotion, which is the only route a live '
    'organisation accepts, and the promoter refuses a removal while the role is '
-   'held or named (20260921130000).')
+   'held or named (20260921140000).')
 on conflict (function_name) do update set gate = excluded.gate,
                                           rationale = excluded.rationale;
 
@@ -945,11 +951,22 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
 
   -- ── 9. The plan says the pack will leave it alone ───────────────────────
-  v_step := 'planning the pack again';
+  v_step := 'a newer version of the template, planned';
   v_cases := v_cases + 1;
+  -- The template gains a permission. Offered unchanged it would be left out of
+  -- the plan altogether, as anything an earlier application gave is; a newer
+  -- version is what would have brought the role back.
+  update erp_ref.pack_item pi
+     set payload = jsonb_build_object('code', 'zz_tpl', 'name', 'Template role',
+           'from_template', v_pack || '-1.0.0',
+           'permissions', jsonb_build_array(
+             jsonb_build_object('permission', 'inventory.read'),
+             jsonb_build_object('permission', 'reporting.read'),
+             jsonb_build_object('permission', 'master_data.read')))
+   where pi.pack_code = v_pack and pi.object_kind = 'role' and pi.object_key = 'zz_tpl';
   select p.effect into v_effect from erp.plan_content_pack(v_pack) p
    where p.object_key = 'zz_tpl';
-  case_name := 'a role the template made and the organisation removed is named in the plan as left alone';
+  case_name := 'when a newer version of the template offers a role the organisation removed, the plan names it as left alone';
   passed := coalesce((select ro.status::text from erp.role ro where ro.id = v_tpl) = 'inactive'
                  and v_effect = 'left alone, because this organisation has removed it', false);
   detail := format('the role is %s and the plan said "%s"',
@@ -979,7 +996,7 @@ begin
   perform erp.promote_change_set(v_cs);
   perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
   select count(*) into v_perms_after from erp.role_permission rp where rp.role_id = v_tpl;
-  case_name := 'applying the pack again leaves a removed role out of use with its grants as they were, and still installs what is new';
+  case_name := 'applying the newer pack leaves a removed role out of use with the grants it had, and still installs what is new';
   passed := coalesce((select ro.status::text from erp.role ro where ro.id = v_tpl) = 'inactive'
                  and v_perms_after = v_perms_before
                  and not exists (select 1 from erp.change_set_item i
