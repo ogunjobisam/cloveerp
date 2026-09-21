@@ -119,10 +119,13 @@ as $$
     select distinct r.ns, r.proname, g.schema_name, g.table_name, g.column_name
       from routine r
       cross join reg g
+      -- Unbounded on purpose: a repetition count over 255 is not a regular
+      -- expression this database will accept, and a statement runs to its
+      -- semicolon however long it is.
       cross join lateral regexp_matches(
         r.code,
         'update\s+' || replace(g.schema_name || '.' || g.table_name, '.', '\.')
-                    || '\M[^;]{0,800}', 'gi') m
+                    || '\M[^;]*', 'gi') m
      where regexp_replace(lower(m[1]), '\mwhere\M.*', '')
              ~ ('\m' || g.column_name || '\s*=')
   )
