@@ -727,6 +727,15 @@ jobs:
         # After the close above, for the same reason it gives: this is the last
         # thing that writes a ledger in the build, and it brings an organisation
         # of its own rather than touching ci-demo.
+        #
+        # It now also rehearses what the step SAYS, which is the half that has
+        # actually been failing: it runs the deploy's own psql invocation and
+        # refuses a report jq cannot read, then runs
+        # supabase/ci/demonstration_report_rehearsal.sh over captured output of
+        # every shape the step meets. On 21 September the formatting broke three
+        # times in one day — the ERROR cut off the front of a stack, a NOTICE
+        # quoted in its place, and a command tag ahead of the JSON — and each
+        # time the call itself was fine and this step could not say so.
         run: supabase/ci/demonstration_catch_up.sh
 
       - name: Every door has a home
