@@ -61,7 +61,7 @@ type Role = {
   change_waiting?: boolean;
 };
 
-/** What saving a role answers: whether the change is in force yet, or is waiting for a second administrator. */
+/** What saving a role answers: whether the change is in force yet, or is waiting for approval. */
 type RoleAnswer = {
   role_id: string | null;
   code: string;
