@@ -91,6 +91,35 @@ SQL
 echo "── calling erp.catch_up_demonstrations('${ORG}') from a connection with nothing set"
 $PSQL_CMD -c "select jsonb_pretty(erp.catch_up_demonstrations('${ORG}'));"
 
+# ── 2b. And what the deploy's own invocation writes is a report, not a report
+#        with a command tag in front of it ─────────────────────────────────────
+#
+# On 21 September the SET moved out of PGOPTIONS — which the session pooler
+# drops — and into its own -c, and psql then wrote a result for EACH -c: the tag
+# "SET" landed ahead of the JSON and every jq in the step failed on it. -tA does
+# not suppress a command tag; -q does. That is a claim about what psql actually
+# writes, so it is checked here against a real psql and a real server rather
+# than reasoned about: the same flags, in the same order, as the deploy step.
+echo "── the deploy's own invocation, and whether what it writes is a report"
+deploy_report="$(mktemp)"
+trap 'rm -f "$deploy_report"' EXIT
+$PSQL_CMD -q -tA \
+  -c "set statement_timeout = '5min'" \
+  -c "select erp.catch_up_demonstrations('${ORG}');" > "$deploy_report"
+
+if ! jq -e 'type == "array"' "$deploy_report" > /dev/null 2>&1; then
+  echo "CLOVEERP_CI_REPORT_NOT_JSON: the invocation deploy.yml uses wrote something jq cannot read as a report." >&2
+  echo "What it wrote, raw:" >&2
+  cat "$deploy_report" >&2
+  echo "The deploy formats that with jq, so the step would print a parse error and nothing about the demonstration." >&2
+  exit 1
+fi
+echo "the deploy's invocation writes $(jq -r 'length' "$deploy_report") report row(s) and nothing else"
+
+# And the formatting of what it writes, against captured output of every shape
+# the step will meet. No database; a second.
+"$(dirname "$0")/demonstration_report_rehearsal.sh"
+
 # ── 3. And it did the work, rather than merely not refusing ──────────────────
 #
 # A statement that commits is not the same claim as a statement that did

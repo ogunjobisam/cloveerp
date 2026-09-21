@@ -678,136 +678,44 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
         continue-on-error: true
         run: |
-          # Not -e. A step that cannot say what went wrong is the reason the
-          # 18 September deploy went green with the demonstration untouched:
-          # psql failed, the shell stopped, and nothing reached the summary. The
-          # exit status is caught and reported instead, both ways.
+          # GitHub runs a `run:` step as `bash -e {0}` unless the step says
+          # otherwise, so -e has always been in force here whatever this script
+          # set; the comment that used to say "Not -e" was wrong, and on
+          # 21 September that mattered — the first jq failed on a report it
+          # could not parse and the step died there having printed six words.
+          # It is relied on deliberately now: the reporter below is the last
+          # command, and its exit status is this step's.
           set -uo pipefail
           report="$RUNNER_TEMP/demonstrations.json"
           errors="$RUNNER_TEMP/demonstrations.err"
           started=$(date +%s%N)
           # Two -c options, one session: the SET is an ordinary statement the
           # server executes, so it cannot be dropped on the way in the way
-          # PGOPTIONS was.
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -tA \
+          # PGOPTIONS was (20260921130000).
+          #
+          # And -q, because psql prints a command tag for every -c it runs and
+          # those go to stdout with the answer. Without it the report carried
+          # "SET" ahead of the JSON and every jq reading it failed. -tA does not
+          # suppress that; -q does. supabase/ci/demonstration_catch_up.sh runs
+          # this exact invocation against a real server on every build and
+          # refuses a report that is not JSON, so this is checked rather than
+          # believed.
+          if psql "$DB_URL" -q -v ON_ERROR_STOP=1 -tA \
                -c "set statement_timeout = '5min'" \
                -c "select erp.catch_up_demonstrations();" > "$report" 2> "$errors"; then
             answered=true
           else
             answered=false
           fi
-
-          if [[ "$answered" != true ]]; then
-            seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
-                          'BEGIN { printf "%.1f", ms / 1000 }')
-            # The refusal itself (20260921130000). Two things were wrong here and
-            # both threw away the half that mattered.
-            #
-            # tail -n 20 keeps the END of psql's stderr. A PL/pgSQL error carries
-            # the failing statement and then the function stack, which is more
-            # than twenty lines on its own, so the ERROR line was cut off the
-            # front every time and what reached the log began mid-statement. On
-            # 21 September that left a stack with no error on it, and the
-            # cancellation it was reporting could only be worked out from the
-            # clock.
-            #
-            # head -n 1 was worse: psql writes NOTICEs to stderr too and they are
-            # printed BEFORE the error, so the ::warning:: quoted whichever
-            # notice happened to come first and never the refusal.
-            #
-            # So: the ERROR line by name, and the error onwards for the body —
-            # keeping the head, where the ERROR, DETAIL and HINT are, and the
-            # tail, where the innermost frames are, when it is too long for both.
-            refusal=$(awk 'index($0, "ERROR:") { sub(/^.*ERROR:[[:space:]]*/, ""); print; exit }' "$errors")
-            [[ -n "$refusal" ]] || refusal=$(grep -vi "NOTICE:" "$errors" | head -n 1)
-            [[ -n "$refusal" ]] || refusal=$(head -n 1 "$errors")
-
-            why=$(sed -n '/ERROR:/,$p' "$errors")
-            [[ -n "$why" ]] || why=$(cat "$errors")
-            if (( $(printf '%s\n' "$why" | wc -l) > 60 )); then
-              why=$(printf '%s\n' "$why" | head -n 40
-                    echo "  … the middle of the statement it was running is cut here …"
-                    printf '%s\n' "$why" | tail -n 20)
-            fi
-
-            echo "the demonstration was NOT brought up to date, after ${seconds} s:"
-            printf '%s\n' "$why"
-            echo "::warning::the demonstration was not brought up to date; it is as the last deploy left it. ${refusal}"
-            {
-              echo "## Demonstration"
-              echo "**Not brought up to date.** It is as the last deploy left it,"
-              echo "which is what a prospect would be shown. The deploy is not failed"
-              echo "by this — it is demonstration data, not an invariant — but nothing"
-              echo "about the tick above says this worked."
-              echo '```'
-              printf '%s\n' "$why"
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
           seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
                         'BEGIN { printf "%.1f", ms / 1000 }')
 
-          # An organisation that did not catch up says so on its own line, in
-          # capitals, before anything else on it (20260921110000). Under the
-          # old wording that line read "traded … 0 document(s)" in the tone of
-          # a run that worked, and four days of deploys went by with the
-          # demonstration stuck and nobody reading it. caught_up is the
-          # routine's own answer rather than something inferred here.
-          # Three readings, not two (20260921130000). A run that stopped because
-          # the statement is only allowed so long has committed what it built and
-          # the next deploy carries on; that is progress and must not be shouted
-          # at in the same words as a demonstration that is stuck.
-          lines=$(jq -r '.[] |
-            (if .caught_up == true then "- "
-             elif .ran_out_of_time == true then "- MORE TO DO — "
-             else "- DID NOT CATCH UP — " end)
-            + "\(.organisation // "?"): traded \(.traded_from // "-") to \(.traded_through // "-"), "
-            + "\(.documents_built // 0) document(s); \(.bills_raised // 0) supplier bill(s); "
-            + "\(.periods_reopened // 0) month(s) reopened; "
-            + "\(.periods_closed // 0) month(s) closed, \(.periods_left_open // 0) left open"
-            + (if .ran_out_of_time == true then " — it stopped inside the time this statement is allowed; the next deploy carries on from \(.traded_through // "-")" else "" end)
-            + (if .stopped_on then " — STOPPED on \(.stopped_on), and every day after it is unbuilt" else "" end)
-          ' "$report")
-          notes=$(jq -r '.[] | . as $o | (.notes // [])[] | "- \($o.organisation // "?"): \(.)"' "$report")
-          stalled=$(jq -r '[.[] | select(.caught_up != true and .ran_out_of_time != true)] | length' "$report")
-          stalled_names=$(jq -r '[.[] | select(.caught_up != true and .ran_out_of_time != true) | .organisation // "?"] | join(", ")' "$report")
-          pending=$(jq -r '[.[] | select(.ran_out_of_time == true)] | length' "$report")
-          pending_names=$(jq -r '[.[] | select(.ran_out_of_time == true) | .organisation // "?"] | join(", ")' "$report")
-
-          echo "erp.catch_up_demonstrations() took ${seconds} s"
-          [[ -z "$lines" ]] && echo "no demonstration organisation on this database" || echo "$lines"
-          if [[ -n "$notes" ]]; then
-            echo "$notes"
-            while IFS= read -r n; do echo "::warning::${n}"; done <<< "$notes"
-          fi
-          if [[ "$stalled" != "0" && -n "$stalled_names" ]]; then
-            echo "::warning::${stalled} demonstration(s) did not catch up: ${stalled_names}. Each still reads as whatever the last deploy left it as, which is what a prospect is shown."
-          fi
-          if [[ "$pending" != "0" && -n "$pending_names" ]]; then
-            echo "::notice::${pending} demonstration(s) have more to build than one statement is allowed: ${pending_names}. Each committed what it built; run this workflow again, or wait for the next deploy, until they report caught up."
-          fi
-          {
-            echo "## Demonstration"
-            if [[ "$stalled" != "0" && -n "$stalled_names" ]]; then
-              echo "**${stalled} demonstration(s) did not catch up: ${stalled_names}.**"
-              echo "Each still reads as whatever the last deploy left it as, which is what"
-              echo "a prospect is shown. The deploy is not failed by this — it is"
-              echo "demonstration data, not an invariant — but nothing about the tick on"
-              echo "this step says it worked."
-              echo
-            fi
-            if [[ "$pending" != "0" && -n "$pending_names" ]]; then
-              echo "**${pending} demonstration(s) have more to build than one statement is allowed:**"
-              echo "${pending_names}. Each stopped inside its time and committed what it built,"
-              echo "so this is progress rather than a fault — but it is not finished. Run this"
-              echo "workflow again, or wait for the next deploy, until they report caught up."
-              echo
-            fi
-            echo "erp.catch_up_demonstrations() took ${seconds} s."
-            [[ -z "$lines" ]] && echo "No demonstration organisation on this database." || echo "$lines"
-            [[ -z "$notes" ]] || { echo; echo "What it could not do:"; echo "$notes"; }
-          } >> "$GITHUB_STEP_SUMMARY"
+          # Everything this step says about the demonstration is said there, so
+          # that it can be rehearsed against captured output by the build
+          # (supabase/ci/demonstration_report_rehearsal.sh). It exits non-zero
+          # only when it cannot read the report at all, which fails this step
+          # and not the deploy.
+          supabase/ci/demonstration_report.sh "$report" "$errors" "$seconds" "$answered"
 
       - name: Prove the live database
         # The same checks the build runs, minus the suites: suites create and
