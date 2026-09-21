@@ -627,8 +627,17 @@ jobs:
         # aged past ninety days, nothing in its current bucket, no month ever
         # closed. erp.catch_up_demonstrations() trades it forward to the day of
         # this deploy through erp.seed_demo_history(), bills the goods it
-        # received and never billed, and closes every month before this one with
-        # nothing waived.
+        # received and never billed, and closes the months whose trading is
+        # finished, with nothing waived.
+        #
+        # It also reopens months an earlier catch-up closed before its trading
+        # had ever reached them, trades them and closes them again on their own
+        # figures (20260921110000). That is a real accounting act and it is
+        # permitted here only because erp.demonstration_catch_up() refuses any
+        # organisation whose code does not begin 'demo-' or whose environment
+        # is live: what this step may reopen is invented books in a non-live
+        # demonstration, and nothing else. The narrowness of that guard is the
+        # reason this is allowed, so it is not a guard to relax.
         #
         # Here rather than in a migration, for two reasons. A migration is one
         # transaction, and five months of trading leaves thousands of journal
@@ -693,12 +702,23 @@ jobs:
           seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
                         'BEGIN { printf "%.1f", ms / 1000 }')
 
+          # An organisation that did not catch up says so on its own line, in
+          # capitals, before anything else on it (20260921110000). Under the
+          # old wording that line read "traded … 0 document(s)" in the tone of
+          # a run that worked, and four days of deploys went by with the
+          # demonstration stuck and nobody reading it. caught_up is the
+          # routine's own answer rather than something inferred here.
           lines=$(jq -r '.[] |
-            "- \(.organisation // "?"): traded \(.traded_from // "-") to \(.traded_to // "-"), "
+            (if .caught_up == true then "- " else "- DID NOT CATCH UP — " end)
+            + "\(.organisation // "?"): traded \(.traded_from // "-") to \(.traded_through // "-"), "
             + "\(.documents_built // 0) document(s); \(.bills_raised // 0) supplier bill(s); "
+            + "\(.periods_reopened // 0) month(s) reopened; "
             + "\(.periods_closed // 0) month(s) closed, \(.periods_left_open // 0) left open"
+            + (if .stopped_on then " — STOPPED on \(.stopped_on), and every day after it is unbuilt" else "" end)
           ' "$report")
           notes=$(jq -r '.[] | . as $o | (.notes // [])[] | "- \($o.organisation // "?"): \(.)"' "$report")
+          stalled=$(jq -r '[.[] | select(.caught_up != true)] | length' "$report")
+          stalled_names=$(jq -r '[.[] | select(.caught_up != true) | .organisation // "?"] | join(", ")' "$report")
 
           echo "erp.catch_up_demonstrations() took ${seconds} s"
           [[ -z "$lines" ]] && echo "no demonstration organisation on this database" || echo "$lines"
@@ -706,8 +726,19 @@ jobs:
             echo "$notes"
             while IFS= read -r n; do echo "::warning::${n}"; done <<< "$notes"
           fi
+          if [[ "$stalled" != "0" && -n "$stalled_names" ]]; then
+            echo "::warning::${stalled} demonstration(s) did not catch up: ${stalled_names}. Each still reads as whatever the last deploy left it as, which is what a prospect is shown."
+          fi
           {
             echo "## Demonstration"
+            if [[ "$stalled" != "0" && -n "$stalled_names" ]]; then
+              echo "**${stalled} demonstration(s) did not catch up: ${stalled_names}.**"
+              echo "Each still reads as whatever the last deploy left it as, which is what"
+              echo "a prospect is shown. The deploy is not failed by this — it is"
+              echo "demonstration data, not an invariant — but nothing about the tick on"
+              echo "this step says it worked."
+              echo
+            fi
             echo "erp.catch_up_demonstrations() took ${seconds} s."
             [[ -z "$lines" ]] && echo "No demonstration organisation on this database." || echo "$lines"
             [[ -z "$notes" ]] || { echo; echo "What it could not do:"; echo "$notes"; }
