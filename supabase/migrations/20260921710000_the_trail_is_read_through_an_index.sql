@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260921700000  The trail is read through an index
+-- 20260921710000  The trail is read through an index
 -- -----------------------------------------------------------------------------
 -- erp.platform_assurance() took 48.7 s on live on 21 September (deploy run
 -- 35642695510, 19:08 UTC). Its function-level statement_timeout is 55 s, the
@@ -148,17 +148,23 @@ set lock_timeout = '30s';
 -- bites: a predicate that stops matching clause for clause takes the check
 -- quietly back to reading the whole trail.
 --
--- ── WHY THE BUILD CANNOT SHOW THE IMPROVEMENT ────────────────────────────────
+-- ── WHAT THE BUILD CAN AND CANNOT SHOW ───────────────────────────────────────
 --
--- It cannot, and that is worth saying rather than leaving to be discovered. On
--- the build the two checks are 19–24 ms and 30–44 ms (jobs 106460527471,
--- 106428297612 and 106434146134, three separate restores), because a build
--- stands the database up from empty and its trail is 4,492 entries a few hours
--- old. Live's is the same trail after a demonstration organisation has traded
--- for months. CI green is evidence about the build. What CI can prove is what
--- this file asks of it: that the new readings find exactly what the old ones
--- find, on fixtures built to be found and fixtures built not to be, and that
--- the indexes are usable for the shapes that now depend on them.
+-- Before: 23.7, 19.3 and 24.0 ms for audit_attributed and 44.2, 29.6 and
+-- 30.6 ms for audit_source_vocabulary, across three separate restores (jobs
+-- 106460527471, 106428297612, 106434146134). After, on the build that carried
+-- this file: 1.2 ms and 2.3 ms. Neither is in the build's ten slowest any more.
+--
+-- That is twenty-fold on a trail of 4,492 entries a few hours old, and it is
+-- not the number that matters. Live's trail is the same trail after months of a
+-- demonstration organisation trading, and the reason to expect 1.2 ms there too
+-- is not the ratio but the shape: what is left is a scan of an index holding
+-- the findings, a primary-key probe, and a few index descents per table, none
+-- of which is a function of how much the trail holds. CI green remains evidence
+-- about the build. What CI proves here is that the new readings find exactly
+-- what the old ones find, on fixtures built to be found and fixtures built to
+-- be left alone, and that the indexes are usable for the shapes that now
+-- depend on them.
 --
 -- ── WHAT HAPPENS ON A RESTORE, AND WHEN THE MARK IS WRONG ────────────────────
 --
@@ -846,20 +852,6 @@ begin
       v_vocab := left(sqlerrm, 500);
     end;
 
-    -- ── The assertion callers reach holds the new shape, not the old ────────
-    --
-    -- Everything above compares queries written here. This reads the function
-    -- the deploy actually runs, so that a revert of the assertion cannot leave
-    -- a green suite behind it.
-    v_step := 'the assertion body, read back';
-    v_def := pg_catalog.pg_get_functiondef('erp.assert_audit_source_vocabulary()'::regprocedure);
-    v_new_shape := (length(v_def) - length(replace(v_def, 'a.source > w.src', '')))
-                   / length('a.source > w.src');
-    v_old_shape := (length(v_def) - length(replace(v_def,
-      'a.source not in (select s.code from erp_ref.audit_source s where s.is_current)', '')))
-      / length('a.source not in (select s.code from erp_ref.audit_source s where s.is_current)');
-    v_summary := erp.assert_audit_attributed();
-
     perform set_config('request.jwt.claims', '', true);
     perform set_config('erp.source', '', true);
     raise exception 'CLOVEERP_SUITE_UNDO';
@@ -871,6 +863,32 @@ begin
 
   perform set_config('request.jwt.claims', '', true);
   perform set_config('erp.source', '', true);
+
+  -- ── The assertion callers reach holds the new shape, not the old ──────────
+  --
+  -- Everything above compares queries written here. This reads the function
+  -- the deploy actually runs, so that a revert of the assertion cannot leave a
+  -- green suite behind it.
+  --
+  -- It is read after the rollback, deliberately, and this is where the first
+  -- run of this suite failed. A check standing in front of a fixture built to
+  -- make it refuse does refuse, and an unguarded call to it inside the fixture
+  -- block leaves by the exception handler: ten cases that had already done
+  -- their work reported the refusal instead of their own findings. The sentence
+  -- is only a sentence on a database with nothing planted in front of it, so it
+  -- is asked for here — and asked for inside a handler of its own, because a
+  -- database with a real finding in it should fail this case and not the suite.
+  v_def := pg_catalog.pg_get_functiondef('erp.assert_audit_source_vocabulary()'::regprocedure);
+  v_new_shape := (length(v_def) - length(replace(v_def, 'a.source > w.src', '')))
+                 / length('a.source > w.src');
+  v_old_shape := (length(v_def) - length(replace(v_def,
+    'a.source not in (select s.code from erp_ref.audit_source s where s.is_current)', '')))
+    / length('a.source not in (select s.code from erp_ref.audit_source s where s.is_current)');
+  begin
+    v_summary := erp.assert_audit_attributed();
+  exception when others then
+    v_summary := left(sqlerrm, 200);
+  end;
 
   -- 1
   v_cases := v_cases + 1;
@@ -959,11 +977,13 @@ begin
   -- 10
   v_cases := v_cases + 1;
   case_name := 'the check the deploy runs walks the words and no longer groups the trail, and the attribution sentence says what it judged';
-  passed := v_state is null and v_new_shape = 1 and v_old_shape = 0
+  -- Not conditioned on v_state: nothing here touched the fixture, so a fixture
+  -- that broke must not take this case's answer with it.
+  passed := v_new_shape = 1 and v_old_shape = 0
         and v_summary like 'audit attribution: every entry since %'
         and v_summary like '%the trail has reached entry %';
-  detail := coalesce(v_state, format('walk anchors: %s, grouping anchors: %s; %s',
-    v_new_shape, v_old_shape, left(coalesce(v_summary, 'no summary'), 130)));
+  detail := format('walk anchors: %s, grouping anchors: %s; %s',
+    v_new_shape, v_old_shape, left(coalesce(v_summary, 'no summary'), 130));
   return next;
 
   -- 11
@@ -995,7 +1015,7 @@ $suite$;
 revoke all on function erp_test.audit_scan_suite() from public, anon, authenticated;
 
 comment on function erp_test.audit_scan_suite() is
-  'The readings 20260921700000 replaced, kept verbatim and run beside the ones '
+  'The readings 20260921710000 replaced, kept verbatim and run beside the ones '
   'that replaced them: the same findings, on fixtures built to be found and '
   'fixtures built to be left alone, and the indexes named in the plans that '
   'the new shapes depend on.';
