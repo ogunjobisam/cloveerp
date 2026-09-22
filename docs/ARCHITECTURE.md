@@ -26,10 +26,10 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 | **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
 <<<<<<< HEAD
 | **Interface**          | An application over a curated API of <!-- count:doors -->688<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
-| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->331<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
+| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->334<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 =======
 | **Interface**          | An application over a curated API of <!-- count:doors -->688<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
-| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->331<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
+| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->334<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 >>>>>>> origin/main
 
 Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
@@ -40,11 +40,11 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
 <<<<<<< HEAD
-<!-- count:migrations -->503<!-- /count --> migrations and
-<!-- count:sql_lines -->312749<!-- /count --> lines of SQL.
+<!-- count:migrations -->513<!-- /count --> migrations and
+<!-- count:sql_lines -->315481<!-- /count --> lines of SQL.
 =======
-<!-- count:migrations -->503<!-- /count --> migrations and
-<!-- count:sql_lines -->312749<!-- /count --> lines of SQL.
+<!-- count:migrations -->513<!-- /count --> migrations and
+<!-- count:sql_lines -->315481<!-- /count --> lines of SQL.
 >>>>>>> origin/main
 
 ### Coverage against the specification
@@ -120,10 +120,10 @@ nobody wrote down:
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
 <<<<<<< HEAD
-| `erp_test`    | <!-- count:suites -->230<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
+| `erp_test`    | <!-- count:suites -->233<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
 | `public`      | <!-- count:doors -->688<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 =======
-| `erp_test`    | <!-- count:suites -->230<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
+| `erp_test`    | <!-- count:suites -->233<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
 | `public`      | <!-- count:doors -->688<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 >>>>>>> origin/main
 
@@ -166,10 +166,10 @@ promotion.
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
 <<<<<<< HEAD
-<!-- count:en_strings -->4929<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->4932<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
 =======
-<!-- count:en_strings -->4929<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->4932<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
 >>>>>>> origin/main
 `custom.`, and a report of what a locale still serves from English.
@@ -244,9 +244,9 @@ push: an empty PostgreSQL, the host bootstrap, then every migration with
 **The catalogue.** `erp.ci_check_catalogue()` reads `pg_proc` and returns every
 check the build can call — <!-- count:assertions -->118<!-- /count --> structural
 <<<<<<< HEAD
-assertions, <!-- count:suites -->230<!-- /count --> adversarial suites, the
+assertions, <!-- count:suites -->233<!-- /count --> adversarial suites, the
 =======
-assertions, <!-- count:suites -->230<!-- /count --> adversarial suites, the
+assertions, <!-- count:suites -->233<!-- /count --> adversarial suites, the
 >>>>>>> origin/main
 whole-database reconciliation last, over every organisation, every posting rule
 in force and every bound company. The runner hands the names it ran back to
