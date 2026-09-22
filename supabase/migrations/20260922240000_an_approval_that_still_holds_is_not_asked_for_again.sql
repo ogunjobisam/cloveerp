@@ -318,11 +318,14 @@ begin
   perform erp.add_document_line(v_po, v_item, 10, 1000, 'ten widgets');
   perform erp.transition_document(v_po, 'submit', 'inherited approval suite');
 
-  select count(*), max(ar.id) into v_n, v_first
+  select count(*) into v_n
     from erp.approval_request ar
    where ar.tenant_id = r.tenant_id and ar.object_type = 'document' and ar.object_id = v_po;
-  select ar.status::text into v_status
-    from erp.approval_request ar where ar.tenant_id = r.tenant_id and ar.id = v_first;
+  select ar.id, ar.status::text into v_first, v_status
+    from erp.approval_request ar
+   where ar.tenant_id = r.tenant_id and ar.object_type = 'document' and ar.object_id = v_po
+   order by ar.requested_at desc, ar.id desc
+   limit 1;
 
   v_cases := v_cases + 1;
   case_name := 'a purchase order submitted asks for approval';
