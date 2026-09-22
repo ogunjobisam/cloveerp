@@ -221,6 +221,16 @@ function Document() {
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
         ) : null}
+
+        {/* An approved requisition is ordered by raising the order from it, and
+            the bare move is left to that door (20260922360000), so the door is
+            offered here, where the requisition is. */}
+        {doc.document_type === "requisition" && doc.state === "approved" ? (
+          <ConvertThisRequisition
+            documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
       </section>
 
       {/* A sales invoice is issued here: its permanent number and the PDF the
@@ -383,6 +393,79 @@ function ReceiveThisOrder({ documentId, context }: { documentId: string; context
           "erp_goods_in",
         ]}
         submitLabel="Create the goods receipt"
+        onDone={(result) => {
+          const made =
+            typeof result === "object" && result !== null
+              ? (result as Record<string, unknown>)["document_id"]
+              : undefined;
+          if (typeof made === "string")
+            void navigate({ to: "/documents/$documentId", params: { documentId: made } });
+        }}
+      />
+    </div>
+  );
+}
+
+/** What converting a requisition takes when nothing is chosen, read for the form. */
+const CONVERSION_DEFAULTS = (key: string) => ({
+  fn: "erp_conversion_defaults",
+  argsFrom: { p_document_id: "p_document_id" },
+  key,
+});
+
+/**
+ * The requisition's own way to its order: the strip's "Convert to a purchase
+ * order", in the same words, on the requisition's page. erp.convert_document
+ * raises the order and moves the requisition to Ordered once every line is on
+ * one.
+ */
+function ConvertThisRequisition({ documentId, context }: { documentId: string; context: string }) {
+  const { ui } = useT();
+  const navigate = useNavigate();
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <ActionDialog
+        trigger={
+          <ActionButton variant="secondary">{ui("Convert to a purchase order")}</ActionButton>
+        }
+        title="Turn this requisition into a purchase order"
+        description="An approved requisition becomes an order to a supplier. Every line still outstanding is carried across, and the order remembers the requisition it came from — so a part order can be finished later."
+        permission="procurement.order"
+        fn="erp_convert_document"
+        fields={[
+          {
+            kind: "select",
+            name: "p_party_id",
+            label: "Supplier",
+            required: true,
+            hint: "The requisition's supplier, or the default supplier every product on it is bought from. Change it to order from someone else.",
+            options: {
+              fn: "erp_parties",
+              args: { p_role_kind: "supplier" },
+              value: "party_id",
+              label: ["code", "name"],
+            },
+            defaultFrom: CONVERSION_DEFAULTS("party_id"),
+          },
+          {
+            kind: "site",
+            name: "p_site_id",
+            label: "Site the goods are for",
+            required: false,
+            hint: "The requisition's site. Change it to deliver somewhere else.",
+            defaultFrom: CONVERSION_DEFAULTS("site_id"),
+          },
+        ]}
+        prefill={{ p_document_id: documentId }}
+        context={context}
+        invalidates={[
+          "erp_document",
+          "erp_documents",
+          "erp_available_transitions",
+          "erp_receivable_lines",
+        ]}
+        submitLabel="Create the purchase order"
         onDone={(result) => {
           const made =
             typeof result === "object" && result !== null

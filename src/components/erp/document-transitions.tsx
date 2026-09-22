@@ -128,8 +128,10 @@ export function DocumentTransitions({
           const move = explained?.[t.code];
           if (move && t.guard_passes) {
             return (
+              // Keyed by the document as well as the move, so a reason typed
+              // for one order is never sent for the next one chosen.
               <ActionDialog
-                key={t.code}
+                key={`${t.code}:${documentId}`}
                 trigger={
                   <button
                     type="button"
