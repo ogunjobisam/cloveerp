@@ -219,6 +219,20 @@ function StockAudit() {
             submitLabel: "Record the decision",
           },
           {
+            // The other half of a refusal. Until 20260922130000 refusing a
+            // count destroyed it: nothing returned a task to open, and
+            // erp_record_count refuses anything that is not open, so the place
+            // was never counted and the difference was never posted.
+            label: "Count it again",
+            description:
+              "Send a count the approver refused back to be counted. The expected figure is re-read from the records as they stand now, so anything that moved through the place since the refusal is accounted for.",
+            permission: "inventory.adjust",
+            fn: "erp_recount_task",
+            fields: [countTask()],
+            invalidates,
+            submitLabel: "Send it back to be counted",
+          },
+          {
             label: "Confirm a count",
             description:
               "Correct the stock by an agreed difference. Once the organisation is live, somebody other than the person who counted it posts it.",

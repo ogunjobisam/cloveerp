@@ -956,6 +956,23 @@ export const INVENTORY: ModuleDef = {
       invalidates: ["erp_count_tasks", "erp_count_accuracy", "erp_stock_health"],
     },
     {
+      label: "Count it again",
+      description:
+        "Send a count the approver refused back to be counted, re-read against the records as they stand now.",
+      permission: "inventory.adjust",
+      fn: "erp_recount_task",
+      fields: [
+        pickFrom(
+          "erp_count_tasks",
+          "task_id",
+          ["item", "location", "status"],
+          "p_task_id",
+          "Count task",
+        ),
+      ],
+      invalidates: ["erp_count_tasks", "erp_count_accuracy", "erp_stock_health"],
+    },
+    {
       label: "Confirm a count",
       description: "Turn a counted task into a stock adjustment.",
       permission: "inventory.adjust",

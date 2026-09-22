@@ -310,6 +310,27 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       },
       { kind: "date", name: "p_invoice_date", label: "Invoice date" },
       { kind: "date", name: "p_due_date", label: "Due date" },
+      // The tax goes on here rather than afterwards (20260922170000). The
+      // ledger reads the tax figure once, as the bill posts, and this route
+      // registers the bill in the same call — so a figure typed later reaches
+      // the VAT return and never reaches the accounts. erp.state_supplier_tax
+      // now refuses that outright, which would leave this button unable to
+      // carry VAT at all if it did not take it here.
+      {
+        kind: "money",
+        name: "p_tax_minor",
+        label: "Tax the supplier charged",
+        currency: "GBP",
+        placeholder: "200.00",
+        hint: "The figure on their invoice. Leave empty if they charged none.",
+      },
+      {
+        kind: "text",
+        name: "p_tax_code",
+        label: "Tax code",
+        placeholder: "S",
+        hint: "The code on their invoice. S is the standard rate.",
+      },
     ],
     invalidates: [
       "erp_documents",
