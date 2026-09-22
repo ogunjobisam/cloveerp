@@ -57,8 +57,21 @@ type Role = {
   description: string | null;
   status: string;
   permissions: string[];
+  /** True while a change to this role has been proposed and not yet promoted. Absent from an older database. */
+  change_waiting?: boolean;
   /** True while a removal has been proposed and not yet promoted. Absent from an older database. */
   removal_waiting?: boolean;
+};
+
+/** What saving a role answers: whether the change is in force yet, or is waiting for approval. */
+type RoleAnswer = {
+  role_id: string | null;
+  code: string;
+  name: string;
+  change_set_id: string | null;
+  status: string;
+  in_force: boolean;
+  unchanged: boolean;
 };
 
 type RemovalAnswer = {
@@ -572,9 +585,17 @@ function GrantsPanel({ directory, onDone }: { directory: Directory; onDone: () =
 }
 
 function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () => void }) {
+  const { ui } = useT();
+  const { session } = useErpSession();
   const [editing, setEditing] = useState<Role | null>(null);
   const [creating, setCreating] = useState(false);
+  const [proposed, setProposed] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
+
+  // A role is configuration, so saving one proposes a change: the change set
+  // behind it needs this permission as well as the one that opens the panel.
+  // Hiding the buttons is a convenience; the door asks.
+  const canChange = hasPermission(session, "administration.configure");
 
   // A removed role is out of use and stays on file. The list a person works
   // from is the roles in use; the removed ones are one press away.
@@ -591,26 +612,41 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
             A role is a named set of permissions. Nothing here takes effect until it is granted.
           </Prose>
         </div>
-        <button
-          onClick={() => {
-            setEditing(null);
-            setCreating(true);
-          }}
-          className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
-        >
-          New role
-        </button>
+        {canChange ? (
+          <button
+            onClick={() => {
+              setEditing(null);
+              setCreating(true);
+              setProposed(false);
+            }}
+            className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
+          >
+            New role
+          </button>
+        ) : null}
       </header>
 
       <div className="flex flex-col gap-4 px-4 py-4 sm:px-5">
+        {proposed ? (
+          <p
+            role="status"
+            className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground"
+          >
+            {ui(
+              "Role change proposed. This organisation is live, so the change takes effect once it has been approved on the Configuration screen.",
+            )}
+          </p>
+        ) : null}
+
         {creating || editing ? (
           <RoleForm
             key={editing?.id ?? "new"}
             directory={directory}
             role={editing}
-            onDone={() => {
+            onDone={(answer) => {
               setCreating(false);
               setEditing(null);
+              setProposed(!answer.in_force);
               onDone();
             }}
             onCancel={() => {
@@ -641,11 +677,13 @@ function RolesPanel({ directory, onDone }: { directory: Directory; onDone: () =>
                     {r.removal_waiting ? (
                       <Pill tone="warn">Removal waiting for approval</Pill>
                     ) : null}
-                    {r.status === "active" ? (
+                    {r.change_waiting ? <Pill tone="warn">Change waiting for approval</Pill> : null}
+                    {r.status === "active" && canChange ? (
                       <button
                         onClick={() => {
                           setCreating(false);
                           setEditing(r);
+                          setProposed(false);
                         }}
                         className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-4 text-xs font-medium`}
                       >
@@ -783,14 +821,14 @@ function RoleForm({
 }: {
   directory: Directory;
   role: Role | null;
-  onDone: () => void;
+  onDone: (answer: RoleAnswer) => void;
   onCancel: () => void;
 }) {
   const [code, setCode] = useState(role?.code ?? "");
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []));
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const { t } = useT();
 
   const byModule = useMemo(() => {
@@ -805,7 +843,7 @@ function RoleForm({
 
   const mutation = useMutation({
     mutationFn: () =>
-      callErp("erp_save_role", {
+      callErp<RoleAnswer>("erp_save_role", {
         p_role_id: role?.id ?? null,
         p_code: code,
         p_name: name,
@@ -813,7 +851,7 @@ function RoleForm({
         p_permissions: [...selected].sort(),
       }),
     onSuccess: onDone,
-    onError: (e) => setError((e as Error).message),
+    onError: (e) => setError(e),
   });
 
   const toggle = (perm: string) => {
@@ -904,9 +942,9 @@ function RoleForm({
       </div>
 
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {error}
-        </p>
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
       ) : null}
 
       <div className="mt-4 flex gap-2">
