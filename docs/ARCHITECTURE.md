@@ -40,11 +40,11 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
 <<<<<<< HEAD
-<!-- count:migrations -->501<!-- /count --> migrations and
-<!-- count:sql_lines -->312364<!-- /count --> lines of SQL.
+<!-- count:migrations -->503<!-- /count --> migrations and
+<!-- count:sql_lines -->312749<!-- /count --> lines of SQL.
 =======
-<!-- count:migrations -->501<!-- /count --> migrations and
-<!-- count:sql_lines -->312364<!-- /count --> lines of SQL.
+<!-- count:migrations -->503<!-- /count --> migrations and
+<!-- count:sql_lines -->312749<!-- /count --> lines of SQL.
 >>>>>>> origin/main
 
 ### Coverage against the specification
@@ -166,10 +166,10 @@ promotion.
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
 <<<<<<< HEAD
-<!-- count:en_strings -->4923<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->4929<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
 =======
-<!-- count:en_strings -->4923<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->4929<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
 >>>>>>> origin/main
 `custom.`, and a report of what a locale still serves from English.
