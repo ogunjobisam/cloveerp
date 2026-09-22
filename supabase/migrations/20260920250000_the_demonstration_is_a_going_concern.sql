@@ -798,7 +798,14 @@ select erp.apply_execute_grants();
 -- of its own, which is why it can prove the routine on a build that has no
 -- demonstration in it at all.
 
-select erp_test.assert_demonstration_catch_up_suite();
+-- The call that stood here is removed and registered in
+-- supabase/ci/migrations_edited.txt; 20260921715000 is the repair and carries
+-- the claim that the removal loses no coverage. It ran the suite against the
+-- definitions as they stood in this file, and the suite's fifth case asserts
+-- an outcome the builder only produces by chance, so a fresh replay failed or
+-- passed according to the date it ran on. erp.ci_check_catalogue() runs the
+-- suite at the end of every build, against the definition that is actually
+-- deployed, which is the one worth asserting.
 
 select erp.assert_whole_database_reconciles();
 select erp.assert_refusals_name_next_action();

@@ -33,7 +33,11 @@ const act = (fn: string, extra: Partial<ActionSpec> = {}): ActionSpec => ({
   ...extra,
 });
 
-const flowOf = (...stages: FlowSpec["stages"]): FlowSpec => ({ title: "Flow", stages });
+const flowOf = (...stages: FlowSpec["stages"]): FlowSpec => ({
+  code: "test",
+  title: "Flow",
+  stages,
+});
 
 describe("actionKey", () => {
   test("is the code when an action has one", () => {

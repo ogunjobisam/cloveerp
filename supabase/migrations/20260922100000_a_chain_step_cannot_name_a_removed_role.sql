@@ -134,7 +134,7 @@ comment on function erp.require_chain_roles_active(uuid, text, jsonb, boolean) i
   'and names the steps and the roles in the message and in the hint. A code that '
   'names no role is not this function''s business. Silent when the promotion is a '
   'rollback to a snapshot, which puts back what the organisation had. Called by '
-  'the approval_chain arm of erp.apply_change_set_item() (20260921150000).';
+  'the approval_chain arm of erp.apply_change_set_item() (20260922100000).';
 
 select erp.register_refusal('CLOVEERP_APPROVAL_STEP_ROLE_RETIRED',
   'Promoting an approval chain with a step that names a role that has been removed.',
@@ -160,7 +160,7 @@ declare
           tenant_id, approval_chain_version_id, seq, code, name, approver_kind,
           approver_source,
 $n$;
-  v_r   constant text := $r$        -- A step may not name a role that has been removed (20260921150000).
+  v_r   constant text := $r$        -- A step may not name a role that has been removed (20260922100000).
         -- The door that proposed the chain asked, but it may have asked before
         -- the role was removed, and a chain from a starter pack or another
         -- environment never went through it. A rollback to a snapshot is let
@@ -236,7 +236,7 @@ comment on function erp.retired_role_steps_report() is
   'approver role or escalation role has been removed. A report and not an '
   'assertion: a rollback to a snapshot can put such a step back on purpose, and '
   'an assertion over tenant data fails the deploy''s proof for the '
-  'organisation''s configuration (20260921150000).';
+  'organisation''s configuration (20260922100000).';
 
 insert into erp_meta.diagnostic_check
   (code, title, kind, scope, function_name, arguments, detail_function, detail_arguments, blurb, runs_in_ci, seq) values

@@ -88,7 +88,7 @@ import json, re, sys
 mode, payload = sys.argv[1], json.loads(sys.argv[2])
 counts_path, files = sys.argv[3], sys.argv[4:]
 pat = re.compile(r'<!-- count:([a-z0-9_]+) -->(.*?)<!-- /count -->', re.S)
-drift, unknown = [], []
+drift, unknown, bare = [], [], []
 # The Word document's builder reads counts.json rather than the database, so
 # the file is written here (--write) and compared here (--check): a stale
 # counts.json is a document quoting a build that no longer exists.
@@ -105,6 +105,11 @@ if mode == "--write":
         f.write("\n")
 for path in files:
     src = open(path).read()
+    # A document that quotes no figure has nothing to disagree, so it would
+    # pass: an emptied file printed "0 figures agree" and the build went green.
+    if not pat.search(src):
+        bare.append(path)
+        continue
     def sub(m):
         key, held = m.group(1), m.group(2)
         if key not in payload:
@@ -117,6 +122,11 @@ for path in files:
     out = pat.sub(sub, src)
     if mode == "--write" and out != src:
         open(path, "w").write(out)
+for path in bare:
+    print(f"{path}: carries no figure markers", file=sys.stderr)
+if bare:
+    print(f"CLOVEERP_DOCUMENT_HAS_NO_FIGURES: {len(bare)} document(s) quote nothing the build can check; restore them rather than run --write", file=sys.stderr)
+    sys.exit(1)
 for path, key in unknown:
     print(f"{path}: marker {key} names a figure the script does not compute", file=sys.stderr)
 if unknown:
