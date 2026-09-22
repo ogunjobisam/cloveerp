@@ -260,6 +260,8 @@ export type Database = {
           p_due_date?: string
           p_invoice_date?: string
           p_receipt_id: string
+          p_tax_code?: string
+          p_tax_minor?: number
           p_their_reference?: string
         }
         Returns: Json
