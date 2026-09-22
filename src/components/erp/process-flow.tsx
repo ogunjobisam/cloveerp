@@ -136,6 +136,16 @@ export type Stage = {
 };
 
 export type FlowSpec = {
+  /**
+   * The cycle's own name, which does not change when its title is reworded.
+   *
+   * A step budget is declared against this code in erp_meta.flow_budget, and
+   * the build counts the verbs below and holds the two to each other. Keying
+   * on the title instead would mean a rewording silently detached a cycle from
+   * its budget, which is the way a budget stops being enforced without anybody
+   * deciding that it should.
+   */
+  code: string;
   title: string;
   note?: string;
   stages: Stage[];
