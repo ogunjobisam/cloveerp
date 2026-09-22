@@ -415,16 +415,19 @@ describe("a move another document makes is never a button", () => {
       list.map((c) => move(c)),
     ).map((t) => t.code);
 
-  test("the list is the moves a receipt, a pick, a despatch, an invoice, a payment or a credit note makes", () => {
+  test("the list is the moves a receipt, a conversion, a pick, a despatch, an invoice, a payment or a credit note makes", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
-      purchase_order: ["receive_partial", "receive_rest", "receive_all"],
+      requisition: ["order"],
+      purchase_order: ["receive_partial", "receive_all"],
       sales_order: ["pick", "despatch", "invoice"],
       sales_invoice: ["settle", "credit"],
       purchase_invoice: ["pay"],
     });
   });
 
-  test("a sent purchase order offers no receiving, and keeps what a person records", () => {
+  test("a sent purchase order offers no receiving, and keeps the short close a person records", () => {
+    // receive_rest is the receipt's move and also a person's, with the reason
+    // said, when nothing more is coming (20260922360000).
     expect(
       codes("purchase_order", [
         "submit",
@@ -438,7 +441,27 @@ describe("a move another document makes is never a button", () => {
         "cancel",
         "cancel_approved",
       ]),
-    ).toEqual(["submit", "approve", "reject", "send", "close", "cancel", "cancel_approved"]);
+    ).toEqual([
+      "submit",
+      "approve",
+      "reject",
+      "send",
+      "receive_rest",
+      "close",
+      "cancel",
+      "cancel_approved",
+    ]);
+  });
+
+  test("a requisition is not marked ordered by a bare button", () => {
+    // It reads Ordered because an order was raised from all of it, which the
+    // conversion does and then says so (20260922360000).
+    expect(codes("requisition", ["submit", "approve", "reject", "order", "cancel"])).toEqual([
+      "submit",
+      "approve",
+      "reject",
+      "cancel",
+    ]);
   });
 
   test("a sales order offers no pick, despatch or invoice", () => {
@@ -464,7 +487,7 @@ describe("a move another document makes is never a button", () => {
 
   test("the list is by type: the same code elsewhere, or an unknown type, is left alone", () => {
     expect(codes("goods_receipt", ["post", "pay", "invoice"])).toEqual(["post", "pay", "invoice"]);
-    expect(codes("requisition", ["submit", "order"])).toEqual(["submit", "order"]);
+    expect(codes("quotation", ["send", "order"])).toEqual(["send", "order"]);
     expect(isDoorOnlyTransition(null, "pay")).toBe(false);
     expect(isDoorOnlyTransition("purchase_invoice", "pay")).toBe(true);
   });
@@ -485,14 +508,21 @@ describe("a move another document makes is never a button", () => {
     // 'undriven' means it does not, which is this list. Two lists that disagree
     // mean either a button drawn over nothing or a move nobody can make, the
     // pair of defects that file exists to stop.
-    const register = readFileSync(
-      join(ROOT, "supabase", "migrations", "20260919990000_the_lifecycle_completes.sql"),
-      "utf8",
-    );
-    const body = register.slice(
-      register.indexOf("from (values"),
-      register.indexOf("as x(machine_code"),
-    );
+    //
+    // The newest migration that defines the register, not the one that first
+    // did: 20260922360000 restated it, and a test pinned to the first file
+    // would go on agreeing with a register the database no longer holds.
+    const definer = "create or replace function erp.transition_driver_register()";
+    const migrations = join(ROOT, "supabase", "migrations");
+    const newest = readdirSync(migrations)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .filter((f) => readFileSync(join(migrations, f), "utf8").includes(definer))
+      .at(-1);
+    expect(newest).toBeDefined();
+    const register = readFileSync(join(migrations, newest ?? ""), "utf8");
+    const start = register.indexOf("from (values", register.indexOf(definer));
+    const body = register.slice(start, register.indexOf("as x(machine_code", start));
     const registered: Record<string, string[]> = {};
     for (const match of body.matchAll(
       /\('([a-z_]+)'(?:::text)?,\s*'([a-z_]+)'(?:::text)?,\s*'(screen|routine|undriven)'/g,

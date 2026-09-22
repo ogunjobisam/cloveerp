@@ -71,13 +71,24 @@ export function useAvailableTransitions(
  * Issuing a credit note that covers the whole invoice now moves it
  * (erp.credit_invoices_for_credit_note, 20260919900000).
  *
- * The database still performs these moves for whoever holds the permission;
- * this is only what the screens offer. Each entry here is a row in
+ * A requisition's `order` joined the list on 22 September (20260922360000):
+ * it reads Ordered because an order was raised from every line of it, which
+ * "Convert to a purchase order" does, and the bare "Convert to order" beside it
+ * marked a requisition ordered with no order anywhere. The same migration took
+ * `receive_rest` off it. The receipt still makes that move, but a person may
+ * now make it too, with the reason said, when the supplier will send nothing
+ * more. That is a short close, and `EXPLAINED_MOVES` in document-transitions.tsx
+ * asks for the reason.
+ *
+ * The database refuses each of these moves pressed over nothing (the receipt,
+ * the conversion and the cash are what it checks), so this is only what the
+ * screens offer, not what holds them. Each entry here is a row in
  * erp.transition_driver_register() naming the routine that drives it, and the
  * test below holds the two lists to each other.
  */
 export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
-  purchase_order: ["receive_partial", "receive_rest", "receive_all"],
+  requisition: ["order"],
+  purchase_order: ["receive_partial", "receive_all"],
   sales_order: ["pick", "despatch", "invoice"],
   sales_invoice: ["settle", "credit"],
   purchase_invoice: ["pay"],

@@ -1,7 +1,51 @@
 import { prettifyField } from "../../lib/friendly";
+import { useT } from "../../lib/i18n";
 import { byTone, transitionTone } from "../../lib/plain-words";
-import { ActionButton, ErrorNote, useErpAction } from "./action";
+import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "./action";
 import { manualTransitions, type Transition } from "./available-transitions";
+import { TOUCH } from "./page";
+
+type ExplainedMove = {
+  fn: "erp_transition_document";
+  label: string;
+  title: string;
+  description: string;
+  hint: string;
+  submitLabel: string;
+};
+
+/**
+ * The moves a person makes only with the reason said (20260922360000).
+ *
+ * A purchase order is received by its goods and closed by its bill, and the
+ * database refuses either one asserted over nothing. Two stay a person's to
+ * make when the fact will never come: the supplier who will send nothing more,
+ * and the bill that is kept somewhere else. The database takes them only with
+ * a reason, which the transition log keeps beside the move, so each opens a
+ * form that asks for the reason instead of moving on a press.
+ */
+const EXPLAINED_MOVES: Readonly<Record<string, Readonly<Record<string, ExplainedMove>>>> = {
+  purchase_order: {
+    receive_rest: {
+      fn: "erp_transition_document",
+      label: "Close short",
+      title: "Close this order short",
+      description:
+        "Nothing more is coming from the supplier. The order reads Received for what arrived, and the bill for that closes it.",
+      hint: "Kept on the order's history with the move.",
+      submitLabel: "Close it short",
+    },
+    close: {
+      fn: "erp_transition_document",
+      label: "Close without the bill",
+      title: "Close this order without its bill",
+      description:
+        "An order closes itself when the bill for what arrived is registered. Close it here only when that bill is kept somewhere else.",
+      hint: "Kept on the order's history with the move.",
+      submitLabel: "Close it",
+    },
+  },
+};
 
 /**
  * What may happen to this document next, and the buttons that make it happen.
@@ -50,10 +94,12 @@ export function DocumentTransitions({
   exclude?: readonly string[];
   quiet?: boolean;
 }) {
+  const { ui } = useT();
   const act = useErpAction({
     fn: "erp_transition_document",
     invalidates: ["erp_document", "erp_documents", "erp_available_transitions"],
   });
+  const explained = documentType ? EXPLAINED_MOVES[documentType] : undefined;
 
   const manual = manualTransitions(documentType, transitions);
   const offered = byTone(
@@ -78,28 +124,67 @@ export function DocumentTransitions({
   return (
     <div className="mt-4 flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
-        {offered.map((t) => (
-          <ActionButton
-            key={t.code}
-            variant={
-              transitionTone(t) === "out"
-                ? "danger"
-                : transitionTone(t) === "back" || !t.guard_passes
-                  ? "secondary"
-                  : "primary"
-            }
-            disabled={!t.guard_passes}
-            busy={act.isPending}
-            title={
-              t.guard_passes
-                ? `Moves this document to ${prettifyField(t.to_state).toLowerCase()}.`
-                : "This document does not yet satisfy the condition on this transition."
-            }
-            onClick={() => act.mutate({ p_document_id: documentId, p_transition_code: t.code })}
-          >
-            {t.name}
-          </ActionButton>
-        ))}
+        {offered.map((t) => {
+          const move = explained?.[t.code];
+          if (move && t.guard_passes) {
+            return (
+              // Keyed by the document as well as the move, so a reason typed
+              // for one order is never sent for the next one chosen.
+              <ActionDialog
+                key={`${t.code}:${documentId}`}
+                trigger={
+                  <button
+                    type="button"
+                    className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-sm font-medium`}
+                  >
+                    {ui(move.label)}
+                  </button>
+                }
+                title={move.title}
+                description={move.description}
+                fn={move.fn}
+                fields={[
+                  {
+                    kind: "text",
+                    name: "p_reason",
+                    label: "Reason",
+                    required: true,
+                    hint: move.hint,
+                  },
+                ]}
+                mapArgs={(v) => ({
+                  p_document_id: documentId,
+                  p_transition_code: t.code,
+                  p_reason: v["p_reason"],
+                })}
+                invalidates={["erp_document", "erp_documents", "erp_available_transitions"]}
+                submitLabel={move.submitLabel}
+              />
+            );
+          }
+          return (
+            <ActionButton
+              key={t.code}
+              variant={
+                transitionTone(t) === "out"
+                  ? "danger"
+                  : transitionTone(t) === "back" || !t.guard_passes
+                    ? "secondary"
+                    : "primary"
+              }
+              disabled={!t.guard_passes}
+              busy={act.isPending}
+              title={
+                t.guard_passes
+                  ? `Moves this document to ${prettifyField(t.to_state).toLowerCase()}.`
+                  : "This document does not yet satisfy the condition on this transition."
+              }
+              onClick={() => act.mutate({ p_document_id: documentId, p_transition_code: t.code })}
+            >
+              {t.name}
+            </ActionButton>
+          );
+        })}
       </div>
       <ErrorNote error={act.error} />
     </div>
