@@ -610,6 +610,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
  * written; this screen and `/sales` are the two that predate it and did not.
  */
 const PURCHASE_TO_PAY: FlowSpec = {
+  code: "p2p",
   title: "Purchase to pay, step by step",
   note: "Press a step to see the records sitting there, choose one on the left, and the buttons act on that record.",
   stages: [

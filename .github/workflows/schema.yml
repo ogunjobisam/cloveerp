@@ -727,6 +727,15 @@ jobs:
         # After the close above, for the same reason it gives: this is the last
         # thing that writes a ledger in the build, and it brings an organisation
         # of its own rather than touching ci-demo.
+        #
+        # It now also rehearses what the step SAYS, which is the half that has
+        # actually been failing: it runs the deploy's own psql invocation and
+        # refuses a report jq cannot read, then runs
+        # supabase/ci/demonstration_report_rehearsal.sh over captured output of
+        # every shape the step meets. On 21 September the formatting broke three
+        # times in one day — the ERROR cut off the front of a stack, a NOTICE
+        # quoted in its place, and a command tag ahead of the JSON — and each
+        # time the call itself was fine and this step could not say so.
         run: supabase/ci/demonstration_catch_up.sh
 
       - name: Every door has a home
@@ -815,6 +824,23 @@ jobs:
         # first set and not the second unless erp_meta.write_only_column says in
         # writing why it is written anyway.
         run: supabase/ci/write_only_columns.sh
+
+      - name: Every cycle costs the number of actions it declares
+        # Rule 8 of the flow doctrine: a cycle declares the most user actions
+        # its happy path may cost, and adding a step means raising the number
+        # in the same change, in the open, with a reason. Nothing declared
+        # anything of the sort, and nothing counted — the number on a step of a
+        # process strip is the backlog waiting AT that step, read live, and has
+        # never had anything to do with how many times a person presses a
+        # button to get through a cycle.
+        #
+        # This counts the distinct verbs each strip offers and hands the list
+        # to erp.assert_flow_step_budgets(), which refuses a cycle over its
+        # declared budget and a declaration that has drifted from the screens
+        # in either direction. It reads a cycle's code, its verbs by function
+        # name, and how many of its steps keep no list of their own — never a
+        # label, a title or a note, so rewording a screen couples nothing here.
+        run: supabase/ci/flow_steps.sh
 
       - name: Every screen string has a row it can be renamed by
         # The terminology layer's premise is that renaming is a glossary change
