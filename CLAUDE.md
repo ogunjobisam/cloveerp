@@ -45,8 +45,9 @@ If a path here is wrong, say so and ask. Do not go looking.
 ## How to verify work — read this before checking anything by hand
 
 The build already proves most of what you would be tempted to check manually.
-`.github/workflows/schema.yml` stands the schema up from an empty cluster on
-every pull request and runs every `erp.assert_*` and `erp_test.assert_*` in
+`.github/workflows/schema.yml` builds the schema on every pull request (from
+a proved base plus what the branch adds; from an empty cluster nightly and on
+demand) and runs every `erp.assert_*` and `erp_test.assert_*` in
 `erp.ci_check_catalogue()` — a check that exists and is not run fails the build.
 
 **Do not walk the UI role by role to verify permissions.** That behaviour is

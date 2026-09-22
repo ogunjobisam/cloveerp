@@ -12,12 +12,34 @@ name: schema
 #     repository that is supposed to reproduce it is not.
 #   - Whether a test has quietly stopped existing. The suites assert their own
 #     case counts, because a suite that loses a case reports success.
+#
+# When each claim is made. A push proves what it adds on a database a previous
+# build proved and cached — a pull request on the base it left, main on the
+# main before it — and the catalogue is walked again only when something it
+# reads has changed since it last passed that day. The from-nothing claim is
+# made once a night, and on demand (`full`), and that run is also where the
+# application boots against a real Supabase stack. Until 22 September every
+# push to main replayed every migration from empty twice — once here and once
+# inside the stack — for 85 to 93 minutes, and the stack's replay had gone red
+# on two merges in three to a deadlock it never retried. The proof was the
+# same; only its cadence was wrong.
+#
+# 02:30 UTC rather than midnight: a replay that crosses 00:00 UTC fails
+# migration_cutover_suite, which compares current_date fixed at the start of
+# its transaction with movements stamped clock_timestamp().
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '30 2 * * *'
   workflow_dispatch:
+    inputs:
+      full:
+        description: 'Build from an empty cluster, walk the whole catalogue, and boot the application against a real stack: what the nightly run does.'
+        type: boolean
+        default: false
 
 # A superseded run's answer is worthless, so it should not still be running.
 #
@@ -207,20 +229,56 @@ jobs:
               | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40
           }
 
-          base_ref=origin/${{ github.event.pull_request.base.ref || 'main' }}
           exact="$(tree_key HEAD)"
-
           echo "exact=$exact" >> "$GITHUB_OUTPUT"
           echo "exact key: $exact"
 
-          # main is never built incrementally. The claim this workflow exists to
-          # make is that the repository reproduces the product from nothing, and
-          # a delta applied to a restored base does not make it. Pull requests
-          # get the speed; main keeps the proof.
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]] || ! git rev-parse --verify -q "$base_ref" >/dev/null; then
+          # A third key, for the catalogue: everything its verdict is a
+          # function of. The migrations and the bootstrap build the database;
+          # seed_demo.sql puts the organisation in it that the final
+          # reconciliation reads; run_checks.sh is how it is walked. And the
+          # day, because two suites are pure functions of current_date (the
+          # catch-up seeds its cash from the date), so a pass is reused for a
+          # day and never longer. Nothing under src/ is in it: the steps that
+          # read src/ run every time regardless.
+          catalogue="$(git ls-tree -r HEAD -- supabase/migrations supabase/ci/00_host_bootstrap.sql \
+                         supabase/ci/seed_demo.sql supabase/ci/run_checks.sh \
+                       | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40)-$(date -u +%F)"
+          echo "catalogue=$catalogue" >> "$GITHUB_OUTPUT"
+          echo "catalogue key: $catalogue"
+
+          # The nightly run, and a dispatch that asks for it, build from an
+          # empty cluster whatever the cache holds: that is the from-nothing
+          # claim, and a restored base does not make it. Every other run
+          # applies what it adds to a base a previous build proved.
+          full=no
+          if [[ "${{ github.event_name }}" == "schedule" ]] \
+             || [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.full }}" == "true" ]]; then
+            full=yes
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          if [[ "$full" == yes ]]; then
             echo "incremental=no" >> "$GITHUB_OUTPUT"
             echo "base=" >> "$GITHUB_OUTPUT"
-            echo "this ref builds in full"
+            echo "this run builds from an empty cluster"
+            exit 0
+          fi
+
+          # The base a push to main leaves is the main before it: the first
+          # parent of a merge commit, or the previous commit of a squash. Until
+          # 22 September main compared itself with origin/main — itself — and
+          # so built in full on every merge, 35 minutes each, and the pull
+          # requests opened in the hour after found no base cached and built
+          # in full too.
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            base_ref=HEAD^1
+          else
+            base_ref=origin/${{ github.event.pull_request.base.ref || 'main' }}
+          fi
+          if ! git rev-parse --verify -q "$base_ref" >/dev/null; then
+            echo "incremental=no" >> "$GITHUB_OUTPUT"
+            echo "base=" >> "$GITHUB_OUTPUT"
+            echo "this ref has no base to build on; building in full"
             exit 0
           fi
 
@@ -325,6 +383,8 @@ jobs:
           exact_hit='${{ steps.schema_cache.outputs.cache-hit || 'false' }}'
           base_hit='${{ steps.base_cache.outputs.cache-hit || 'false' }}'
           echo "cache-hit: $exact_hit (exact), $base_hit (base)"
+          full='${{ steps.keys.outputs.full }}'
+          echo "full build: $full"
           echo "dump present: $([[ -s "$dump" ]] && echo "yes, $(wc -c < "$dump") bytes" || echo no)"
           echo "roles present: $([[ -s "$roles" ]] && echo "yes, $(wc -c < "$roles") bytes" || echo no)"
           echo "role shape present: $([[ -s "$roles_expected" ]] && echo yes || echo no)"
@@ -437,7 +497,12 @@ jobs:
             sed -E '/^ALTER ROLE /s/ (NO)?(SUPERUSER|REPLICATION|BYPASSRLS)\b//g' "$roles"
           }
 
-          if [[ -s "$dump" && -s "$roles" && -s "$roles_expected" ]]; then
+          if [[ "$full" == yes ]]; then
+            # The nightly's claim is made from nothing. The exact-key lookup
+            # still ran above so that the save below stays skipped when the
+            # entry exists; whatever it brought back is not used.
+            echo "building from an empty cluster; the cached database, if any, is not used"
+          elif [[ -s "$dump" && -s "$roles" && -s "$roles_expected" ]]; then
             restore_log="$RUNNER_TEMP/pg_restore.log"
 
             # The roles first, without ON_ERROR_STOP: most of what pg_dumpall
@@ -591,7 +656,41 @@ jobs:
             exit 1
           fi
 
+      - name: Whether this catalogue has already passed today
+        id: proved
+        # The catalogue's verdict is a function of the migrations, the
+        # bootstrap, the seed, the runner script and the day — the key the
+        # keys step computed — and none of those is src/. A pull request that
+        # changes only the application restores main's database in seven
+        # seconds and then, until 22 September, spent fifteen minutes proving
+        # it again: 325 checks whose every input was identical to the run that
+        # had just proved them on main. So a pass leaves a marker under the
+        # catalogue key, and a run that finds the marker says who proved the
+        # set and moves on. The nightly run never looks: its job is to prove,
+        # not to remember.
+        #
+        # A day and no longer, because two suites read current_date; and the
+        # marker is written by the catalogue step itself after every check
+        # passed, never after a failure, so a hit is a pass.
+        if: steps.keys.outputs.full != 'yes'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/catalogue.proved
+          key: clove-erp-proved-v1-${{ steps.keys.outputs.catalogue }}
+
+      - name: Who proved it
+        if: steps.proved.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          proved="$(cat "$RUNNER_TEMP/catalogue.proved")"
+          echo "the catalogue for these migrations, bootstrap, seed and runner passed today already: $proved. Not walked again."
+          {
+            echo "## Catalogue"
+            echo "Already proved today by $proved, for the same migrations, bootstrap, seed and runner; not walked again. The nightly run walks it from an empty cluster regardless."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Every check in the catalogue
+        if: steps.proved.outputs.cache-hit != 'true'
         # No list. erp.ci_check_catalogue() reads pg_proc and returns every
         # erp.assert_* and erp_test.assert_* the build can call, in order:
         # structural assertions, adversarial suites, the one procedure, and
@@ -604,7 +703,18 @@ jobs:
         # This replaces two hand-typed lists that between them left twelve
         # assertions unrun, including all four reconciliations. A check that
         # exists and is not run is a check that is not there.
-        run: supabase/ci/run_checks.sh
+        run: |
+          set -euo pipefail
+          supabase/ci/run_checks.sh
+          # Reached only on a pass: the marker the next run of this set reads.
+          echo "run ${{ github.run_id }} of ${{ github.sha }} on $(date -u +%F)" > "$RUNNER_TEMP/catalogue.proved"
+
+      - name: Remember that it passed
+        if: success() && steps.keys.outputs.full != 'yes' && steps.proved.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/catalogue.proved
+          key: clove-erp-proved-v1-${{ steps.keys.outputs.catalogue }}
 
       - name: A check that is not run fails the build
         # The negative proof, in a transaction that is rolled back: create an
@@ -1039,29 +1149,32 @@ jobs:
       # playwright.config.ts refuses to run without an explicit target and
       # refuses the live ref by name; this is the belt to that pair of braces.
       #
-      # NOT ON PULL REQUESTS, and that is a cost decision rather than a
-      # confidence one. `supabase start` replays every migration in
-      # supabase/migrations against a real Supabase host, and on the day this
-      # was written that step alone ran past twenty minutes — on top of a build
-      # already near twenty. Three pull request pushes in twenty minutes put
-      # three of those in flight at once and took the repository's Actions
-      # budget to its ceiling, at which point GitHub refuses to start any job
-      # at all: the schema build, the deploy, everything. A check that stops
-      # the whole build from running is worse than a check that runs later.
+      # NIGHTLY AND ON DEMAND, not on every push, and that is a cost decision
+      # rather than a confidence one. `supabase start` and the replay behind it
+      # apply every migration in supabase/migrations to a real Supabase host,
+      # and by 22 September that replay alone took 77 minutes on every push to
+      # main — a second copy of the 35-minute replay the build job had just
+      # done beside it — for six tests that take one. Three pull request pushes
+      # in twenty minutes once put three of those in flight at once and took
+      # the repository's Actions budget to its ceiling, at which point GitHub
+      # refuses to start any job at all: the schema build, the deploy,
+      # everything. And on two merges in three it was red, to a deadlock the
+      # loop below now answers, so it was holding a runner for an hour to prove
+      # nothing.
       #
-      # So it runs on push to main — the branch that deploys, where it is worth
-      # twenty minutes — and on demand. A pull request keeps the fast
-      # typescript job it had. Everything above still runs on every pull
+      # So it runs where the from-nothing replay runs: on the schedule, and on
+      # a dispatch that asks for `full`. A push keeps the fast typescript job
+      # it had. Everything above still runs on every push and every pull
       # request: typecheck, lint, unit tests, build, the bundle's project, and
       # the Edge Functions.
       # -----------------------------------------------------------------------
       - uses: supabase/setup-cli@v1
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
         with:
           version: 2.116.0
 
       - name: Start a Supabase stack and give it two accounts
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
         # `supabase start` applies every migration in supabase/migrations to a
         # real Supabase host — GoTrue, PostgREST and Postgres, not the bare
         # cluster the schema job builds. That difference is the point: the
@@ -1107,7 +1220,43 @@ jobs:
           mkdir supabase/migrations
           supabase start
           restore
-          supabase migration up --local --include-all
+
+          # A deadlock is a coincidence, not a verdict — deploy.yml says why,
+          # and this stack has the same minutely job: the migrations schedule
+          # clove-jobs on pg_cron, the stack runs pg_cron, and the generators
+          # at the end of every migration take heavy locks across hundreds of
+          # objects. The last two pushes to main before 22 September died here,
+          # eighteen migrations from the end, with
+          #
+          #   ERROR: deadlock detected (SQLSTATE 40P01)
+          #
+          # and nothing went again. The CLI records each migration it applies,
+          # so a re-run resumes at the one that lost, and the one that lost
+          # rolled back whole. Only on 40P01, as in the deploy: anything else
+          # is this branch's to answer for.
+          attempts=3
+          log="$RUNNER_TEMP/migration-up.log"
+          applied=false
+          for attempt in $(seq 1 "$attempts"); do
+            if supabase migration up --local --include-all 2>&1 | tee "$log"; then
+              applied=true
+              break
+            fi
+            if ! grep -q '40P01' "$log"; then
+              echo "::error::the stack's replay failed for a reason that is not a deadlock; not retrying."
+              exit 1
+            fi
+            if [[ "$attempt" -lt "$attempts" ]]; then
+              # Back off enough to clear a minutely job's window.
+              wait=$((attempt * 30))
+              echo "::warning::deadlock (40P01) on attempt ${attempt} of ${attempts}; retrying in ${wait}s from the migration that lost."
+              sleep "$wait"
+            fi
+          done
+          if [[ "$applied" != true ]]; then
+            echo "::error::deadlocked on all ${attempts} attempts; something in the stack contends for the same objects throughout."
+            exit 1
+          fi
           # Into the runner's temp rather than the checkout: it carries the
           # stack's service-role key, and the working tree is not the place.
           supabase status -o env > "$RUNNER_TEMP/stack.env"
@@ -1137,7 +1286,7 @@ jobs:
           create "e2e-demo@clove.invalid" "e2e-demo-password-1"
 
       - name: The application boots, signs in and draws a module page
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
         env:
           VITE_SUPABASE_URL: ${{ env.E2E_API_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.E2E_ANON_KEY }}
@@ -1150,7 +1299,7 @@ jobs:
         # A failed browser test with no trace is a re-run request. The trace is
         # only written on a retry, so this uploads whatever exists and does not
         # fail the job for finding nothing.
-        if: failure() && github.event_name != 'pull_request'
+        if: failure() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true))
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -1191,7 +1340,7 @@ jobs:
   # This one DOES run on pull requests, and that is the difference between it
   # and the six-test suite above. That one starts a Supabase stack, which
   # replays every migration and took the Actions budget to its ceiling — the
-  # note above it explains why it waits for main. This one starts nothing. The
+  # note above it explains why it runs nightly. This one starts nothing. The
   # application's own two HTTP paths, /auth/v1 and /rest/v1/rpc, are answered
   # from inside the page, so there is no Docker, no database and no sign-in,
   # and the cost is a browser and a dev server.
