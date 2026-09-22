@@ -217,6 +217,7 @@ const SALES_ACTIONS: ActionSpec[] = [
  * not be offered a second time on a bar whose heading does not describe it.
  */
 const ORDER_TO_CASH: FlowSpec = {
+  code: "o2c",
   title: "Order to cash, step by step",
   note: "Press a step to see the records sitting there, choose one on the left, and the buttons act on that record.",
   stages: [

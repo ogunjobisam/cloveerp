@@ -477,6 +477,7 @@ export const RELEASE_BATCH: ActionSpec = {
 
 export const INVENTORY: ModuleDef = {
   flow: {
+    code: "stock",
     title: "Stock, step by step",
     note: "Goods arrive, are put away, are counted, and are corrected or passed on.",
     stages: [
@@ -1318,6 +1319,7 @@ export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
 
 export const FINANCE: ModuleDef = {
   flow: {
+    code: "money",
     title: "Money, step by step",
     note: "Bill what was delivered, take the cash in, pay what is owed out, then close the period.",
     stages: [
@@ -2146,6 +2148,7 @@ export const FINANCE: ModuleDef = {
 
 export const PLANNING: ModuleDef = {
   flow: {
+    code: "plan",
     title: "Plan, step by step",
     note: "Forecast the demand, sign it off, work out what to order, then confirm what the plan suggests.",
     stages: [
@@ -2641,6 +2644,7 @@ export const PLANNING: ModuleDef = {
 
 export const PRODUCTION: ModuleDef = {
   flow: {
+    code: "make",
     title: "Making, step by step",
     note: "Create the order, release it to the floor, take out the materials, record the hours, take in the finished goods and close it.",
     stages: [
@@ -3046,6 +3050,7 @@ export const PRODUCTION: ModuleDef = {
 
 export const QUALITY: ModuleDef = {
   flow: {
+    code: "quality",
     title: "Quality, step by step",
     note: "Something is found, it is inspected, you decide what happens to it, and if it has left the building there is a recall.",
     stages: [
@@ -3683,6 +3688,7 @@ export const RECEIVE_THIS_ORDER: ActionSpec = {
 
 export const LOGISTICS: ModuleDef = {
   flow: {
+    code: "despatch",
     title: "Despatch, step by step",
     note: "Create the delivery from its sales order, confirm it when the goods leave, then plan the shipment, book the carrier and record proof of delivery.",
     stages: [
