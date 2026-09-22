@@ -40,11 +40,11 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
 <<<<<<< HEAD
-<!-- count:migrations -->514<!-- /count --> migrations and
-<!-- count:sql_lines -->315601<!-- /count --> lines of SQL.
+<!-- count:migrations -->518<!-- /count --> migrations and
+<!-- count:sql_lines -->316653<!-- /count --> lines of SQL.
 =======
-<!-- count:migrations -->514<!-- /count --> migrations and
-<!-- count:sql_lines -->315601<!-- /count --> lines of SQL.
+<!-- count:migrations -->518<!-- /count --> migrations and
+<!-- count:sql_lines -->316653<!-- /count --> lines of SQL.
 >>>>>>> origin/main
 
 ### Coverage against the specification
