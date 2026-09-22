@@ -1005,6 +1005,63 @@ def rule_h(repo, mig):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# J — a regular expression's repetition bound cannot exceed 255
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# PostgreSQL's regex engine caps a repetition at 255 (RE_DUP_MAX) and refuses
+# anything above it with `invalid regular expression: invalid repetition
+# count(s)` — when the pattern is first evaluated, not when it is written. On
+# 21 September a `language sql` function carried `'\M[^;]{0,800}'`; it was
+# created without complaint and raised the first time it ran, which was the last
+# statement of the file that created it, after a full build.
+#
+# Neither offline reading could see it. The pglast parse treats a routine body
+# as a string literal and never looks inside, and the Python-side prediction
+# scripts use Python's `re`, where {0,800} is ordinary. The pattern was wrong
+# only in the dialect that had to run it — so this reads the text for the one
+# thing that dialect refuses, and asks nothing else of it.
+#
+# Read inside quoted and dollar-quoted literals only: the lexer records the
+# quoted strings inside a routine body, so a pattern in a body is read, and a
+# bound written outside any string is not a regular expression. A bound counts
+# only when it follows something a quantifier can attach to — `]`, `)`, `.` or a
+# word character (which takes in \d{300}) — because a Postgres array literal
+# such as '{300,400}'::int[] opens with the brace and must not be refused.
+# What that leaves it unable to see is a bound after a bare space; a rule that
+# refuses arrays is worse than a gap that the build still catches.
+
+RE_DUP_MAX = 255
+_BOUND = re.compile(r"(?<=[\w\]).])\{(\d+)(?:,(\d*))?\}")
+
+
+def rule_j(repo, mig):
+    seen = set()
+    for lo, hi in sorted(mig.strings + mig.literals):
+        for m in _BOUND.finditer(mig.text, lo, hi):
+            counts = [int(n) for n in m.groups() if n]
+            if m.start() in seen or max(counts) <= RE_DUP_MAX:
+                continue
+            seen.add(m.start())
+            bound = m.group(0)
+            where = enclosing(mig, m.start())
+            REPORT.refuse(
+                "J", at(mig, m.start()),
+                f"the repetition bound {bound} is over {RE_DUP_MAX}"
+                + (f", in {where}()" if where else ""),
+                [f"…{mig.text[max(lo, m.start() - 24):min(hi, m.end() + 8)].strip()}…",
+                 f"PostgreSQL refuses a repetition count above {RE_DUP_MAX} with \"invalid",
+                 "regular expression: invalid repetition count(s)\", and raises it when",
+                 "the pattern first runs, not when it is written. A function whose body",
+                 "holds one is created without complaint and fails the first time it is",
+                 "called — at the end of the file that made it, after the whole build.",
+                 "The fix is usually to drop the bound, not to lower it: [^;]{0,800}",
+                 f"wants to be [^;]*. Lowering it to {{0,{RE_DUP_MAX}}} is accepted and",
+                 "wrong — the pattern stops matching anything longer, and nothing says so.",
+                 "If the length really is a limit, test it beside the match with",
+                 "length(), where a reader can see it."])
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 
 def main():
     root, mode, targets = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -1024,6 +1081,7 @@ def main():
         rule_f(repo, mig)
         rule_g(repo, mig)
         rule_h(repo, mig)
+        rule_j(repo, mig)
 
     if REPORT.failed:
         print("", file=sys.stderr)

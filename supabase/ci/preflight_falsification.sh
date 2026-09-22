@@ -37,7 +37,9 @@ fail() { FAILED=$((FAILED + 1)); echo "  ✗ $1" >&2; }
 # ─────────────────────────────────────────────────────────────────────────────
 # One fixture, one rule.
 #
-#   expect_refusal <fixture> <rule>   preflight must exit non-zero naming <rule>
+#   expect_refusal <fixture> <rule> [n]
+#                                     preflight must exit non-zero naming <rule>,
+#                                     and, given n, refuse exactly n times
 #   expect_advice  <fixture> <rule>   preflight must exit zero naming <rule>
 #   expect_silence <fixture>          preflight must exit zero saying nothing
 #
@@ -54,18 +56,22 @@ run_fixture() {
 }
 
 rules_named() {
-  echo "$OUT" | sed -n 's/.*(preflight rule \([A-H]\).*/\1/p' | sort -u | tr -d '\n'
+  echo "$OUT" | sed -n 's/.*(preflight rule \([A-J]\).*/\1/p' | sort -u | tr -d '\n'
 }
 
 expect_refusal() {
-  local fixture="$1" rule="$2" seen
+  local fixture="$1" rule="$2" want="${3:-}" seen refusals
   run_fixture "$fixture"
   seen="$(rules_named)"
+  refusals="$(echo "$OUT" | grep -c '^✗' || true)"
   if [ "$CODE" -eq 0 ]; then
     fail "$fixture: preflight exited 0; rule $rule did not refuse it"
     echo "$OUT" | sed 's/^/      /' >&2
   elif [ "$seen" != "$rule" ]; then
     fail "$fixture: expected rule $rule alone, heard from [$seen]"
+    echo "$OUT" | sed 's/^/      /' >&2
+  elif [ -n "$want" ] && [ "$refusals" -ne "$want" ]; then
+    fail "$fixture: expected $want refusals from rule $rule, counted $refusals"
     echo "$OUT" | sed 's/^/      /' >&2
   else
     pass "$fixture — rule $rule refuses it, and nothing else does"
@@ -110,6 +116,9 @@ expect_refusal  29999999060000_rule_f_allowance.sql      F
 expect_refusal  29999999070000_rule_f_home.sql           F
 expect_advice   29999999080000_rule_g_collateral.sql     G
 expect_advice   29999999090000_rule_h_guard.sql          H
+# Three bounds in the fixture, one of each shape — {n,m}, {n}, {n,} — and a
+# refusal for each: a shape that stopped matching would leave two, not none.
+expect_refusal  29999999100000_rule_j_bound.sql          J 3
 
 # ─────────────────────────────────────────────────────────────────────────────
 # E — a branch, not a file.

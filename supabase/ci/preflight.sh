@@ -16,7 +16,7 @@
 # else: no database, no psql, no connection. If a rule here ever needs one it
 # is the wrong rule and belongs in erp.ci_check_catalogue() with the rest.
 #
-# Seven rules refuse and two advise, and the division is deliberate. A check that
+# Eight rules refuse and two advise, and the division is deliberate. A check that
 # fires falsely is ignored within a day and is then worse than nothing, so a
 # rule refuses only where the refusal is arithmetic — the same substring the
 # database itself looks for, the same register, the same name. Where the answer
@@ -33,6 +33,7 @@
 #   G  advisory: a total somebody wrote down has moved
 #   H  advisory: a suite's count guard should print what its fixture caught
 #   I  a version is claimed once
+#   J  a regular expression's repetition bound cannot exceed 255
 #
 # Proved by supabase/ci/preflight_falsification.sh, which puts a fixture
 # migration in front of each rule and refuses to believe a rule that stays
@@ -40,7 +41,7 @@
 #
 # Usage:
 #   supabase/ci/preflight.sh                         every migration this branch adds
-#   supabase/ci/preflight.sh path/to/migration.sql   a named migration: A–D and F–H
+#   supabase/ci/preflight.sh path/to/migration.sql   a named migration: A–D, F–H and J
 #
 # Environment:
 #   PREFLIGHT_BASE   the branch to compare against (default: origin/main)
@@ -160,7 +161,7 @@ run_rule_i() {
 run_rule_i
 
 # ═════════════════════════════════════════════════════════════════════════════
-# A–D, F–H — read the migration text
+# A–D, F–H, J — read the migration text
 # ═════════════════════════════════════════════════════════════════════════════
 #
 # Harvesting a function body out of dollar-quoted SQL, and telling a call the
@@ -173,7 +174,7 @@ if [ "$#" -gt 0 ]; then
   if [ "$FAILED" -ne 0 ]; then
     exit 1
   fi
-  echo "preflight: A–D and F–H pass. E is a branch-level rule and was not run;"
+  echo "preflight: A–D, F–H and J pass. E is a branch-level rule and was not run;"
   echo "           run supabase/ci/preflight.sh with no arguments before pushing."
   exit 0
 fi
@@ -198,7 +199,7 @@ for f in $(git -C "$ROOT" diff --name-only "$MERGE_BASE..HEAD" -- 'supabase/migr
 done
 
 if [ -z "$TARGETS" ]; then
-  echo "preflight: this branch adds no migration, so A–D and F–H have nothing to read"
+  echo "preflight: this branch adds no migration, so A–D, F–H and J have nothing to read"
   exit "$FAILED"
 fi
 
