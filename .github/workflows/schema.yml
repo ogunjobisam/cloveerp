@@ -672,6 +672,17 @@ jobs:
         # A day and no longer, because two suites read current_date; and the
         # marker is written by the catalogue step itself after every check
         # passed, never after a failure, so a hit is a pass.
+        #
+        # Where a marker can be read from. GitHub scopes a cache to the ref
+        # that saved it, plus main and a pull request's base branch: a pull
+        # request reads the markers it saved itself and the ones main saved,
+        # never another pull request's. The same is true of the database
+        # dumps above. So the marker most pull requests read is main's, and
+        # that is one more reason main has to build in minutes: this
+        # workflow's own pull request (#249, 22 September) opened eighty
+        # seconds after a merge, and found neither a database nor a marker,
+        # though the pull request that had just merged had cached the same
+        # database under the same key half an hour earlier.
         if: steps.keys.outputs.full != 'yes'
         uses: actions/cache/restore@v4
         with:

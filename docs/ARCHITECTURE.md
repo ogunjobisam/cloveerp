@@ -24,13 +24,8 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 | **Foundation, B1–B10** | Complete, and every later Part built on it.                                                                                                                                                                                                                                  |
 | **Modules**            | <!-- count:modules -->13<!-- /count --> installable modules, each a change set of rules, lifecycles and approval chains promoted through B6 exactly as a customer's own change would be.                                                                                     |
 | **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
-<<<<<<< HEAD
 | **Interface**          | An application over a curated API of <!-- count:doors -->688<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
-| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->331<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
-=======
-| **Interface**          | An application over a curated API of <!-- count:doors -->688<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
-| **Build**              | Every migration applied to an empty database on every push, then <!-- count:catalogue_checks -->331<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
->>>>>>> origin/main
+| **Build**              | Every migration applied on every push — to a base a previous build proved, and nightly to an empty database — then <!-- count:catalogue_checks -->331<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 
 Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:ref_tables -->78<!-- /count --> product-content tables,
@@ -39,13 +34,8 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:policies -->369<!-- /count --> row-security policies and
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<<<<<<< HEAD
 <!-- count:migrations -->503<!-- /count --> migrations and
 <!-- count:sql_lines -->312749<!-- /count --> lines of SQL.
-=======
-<!-- count:migrations -->503<!-- /count --> migrations and
-<!-- count:sql_lines -->312749<!-- /count --> lines of SQL.
->>>>>>> origin/main
 
 ### Coverage against the specification
 
@@ -119,13 +109,8 @@ nobody wrote down:
 | `erp_meta`    | <!-- count:meta_tables -->76<!-- /count --> tables                                                | Platform metadata: the registers, the allow-lists, the exemptions, incidents, releases   |
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
-<<<<<<< HEAD
 | `erp_test`    | <!-- count:suites -->230<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
 | `public`      | <!-- count:doors -->688<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
-=======
-| `erp_test`    | <!-- count:suites -->230<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
-| `public`      | <!-- count:doors -->688<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
->>>>>>> origin/main
 
 Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`; `pg_cron` and `pg_net`
 where the host has them.
@@ -165,13 +150,8 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<<<<<<< HEAD
 <!-- count:en_strings -->4929<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
-=======
-<!-- count:en_strings -->4929<!-- /count --> English strings, a German core pack
-of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
->>>>>>> origin/main
 `custom.`, and a report of what a locale still serves from English.
 
 **B6 — Change promotion.** Configuration in a live environment cannot be edited
@@ -237,17 +217,15 @@ poll; releases recorded and proved; a restore drill that records itself.
 
 ## 6. Testing
 
-`.github/workflows/schema.yml` stands the product up from nothing on every
-push: an empty PostgreSQL, the host bootstrap, then every migration with
-`--single-transaction`, then one organisation seeded with a year of trading.
+`.github/workflows/schema.yml` stands the product up from nothing every night
+and on demand — an empty PostgreSQL, the host bootstrap, then every migration
+with `--single-transaction` — and on every push applies what the push adds to a
+base a previous build proved and cached. Either way, one organisation is then
+seeded with a year of trading.
 
 **The catalogue.** `erp.ci_check_catalogue()` reads `pg_proc` and returns every
 check the build can call — <!-- count:assertions -->118<!-- /count --> structural
-<<<<<<< HEAD
 assertions, <!-- count:suites -->230<!-- /count --> adversarial suites, the
-=======
-assertions, <!-- count:suites -->230<!-- /count --> adversarial suites, the
->>>>>>> origin/main
 whole-database reconciliation last, over every organisation, every posting rule
 in force and every bound company. The runner hands the names it ran back to
 `erp.assert_ci_ran()`, which refuses if the catalogue holds one it did not run.
