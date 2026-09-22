@@ -4138,12 +4138,19 @@ export const SALES_KPIS: Kpi[] = [
     compute: (rows) => {
       if (rows.length === 0) return { value: "0", hint: "nothing overdue", tone: "ok" };
       const oldest = Math.max(...rows.map((r) => num(r["oldest_days"])));
-      // Blocking trading is a different order of problem from being late.
-      const blocking = count(rows, (r) => r["blocks_trading"] === true);
+      // Being held is a different order of problem from being late.
+      //
+      // This counted blocks_trading until 20260922230000, which is the dunning
+      // LEVEL's flag — what the letter threatens. The doors do not read it:
+      // erp.create_document() asks erp.credit_position(), which is a different
+      // computation and can disagree in both directions. A tile saying "N
+      // blocking trading" off the level was claiming an enforcement nothing
+      // performed. on_hold is what the door actually did.
+      const held = count(rows, (r) => r["on_hold"] === true);
       return {
         value: String(rows.length),
-        hint: blocking > 0 ? `${blocking} blocking trading` : `oldest ${oldest} days`,
-        tone: blocking > 0 ? "bad" : "warn",
+        hint: held > 0 ? `${held} held by credit control` : `oldest ${oldest} days`,
+        tone: held > 0 ? "bad" : "warn",
       };
     },
   },
