@@ -439,7 +439,7 @@ function ConvertThisRequisition({ documentId, context }: { documentId: string; c
             name: "p_party_id",
             label: "Supplier",
             required: true,
-            hint: "The requisition's supplier, or the default supplier every product on it is bought from. Change it to order from someone else.",
+            hint: "The requisition's supplier, or the default supplier every product on it is bought from. Change it and the order loses the requisition's approval and asks for its own.",
             options: {
               fn: "erp_parties",
               args: { p_role_kind: "supplier" },
@@ -453,11 +453,13 @@ function ConvertThisRequisition({ documentId, context }: { documentId: string; c
             name: "p_site_id",
             label: "Site the goods are for",
             required: false,
-            hint: "The requisition's site. Change it to deliver somewhere else.",
+            hint: "The requisition's site. Change it and the order loses the requisition's approval and asks for its own.",
             defaultFrom: CONVERSION_DEFAULTS("site_id"),
           },
         ]}
-        prefill={{ p_document_id: documentId }}
+        // Moved on as it is made, as on the strip: approved with the
+        // requisition when it goes to the supplier and site it named.
+        prefill={{ p_document_id: documentId, p_transition: "auto" }}
         context={context}
         invalidates={[
           "erp_document",
@@ -465,7 +467,9 @@ function ConvertThisRequisition({ documentId, context }: { documentId: string; c
           "erp_available_transitions",
           "erp_receivable_lines",
         ]}
-        submitLabel="Create the purchase order"
+        // Not "Create": a requisition whose lines are all on orders already
+        // is only marked Ordered, and no order is made.
+        submitLabel="Convert"
         onDone={(result) => {
           const made =
             typeof result === "object" && result !== null

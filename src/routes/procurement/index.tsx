@@ -260,7 +260,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         name: "p_party_id",
         label: "Supplier",
         required: true,
-        hint: "The requisition's supplier, or the default supplier every product on it is bought from. Change it to order from someone else.",
+        hint: "The requisition's supplier, or the default supplier every product on it is bought from. Change it and the order loses the requisition's approval and asks for its own.",
         // erp.party_role_kind has no 'provider'; erp_parties matches the kind exactly.
         options: {
           fn: "erp_parties",
@@ -275,10 +275,19 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         name: "p_site_id",
         label: "Site the goods are for",
         required: false,
-        hint: "The requisition's site. Change it to deliver somewhere else.",
+        hint: "The requisition's site. Change it and the order loses the requisition's approval and asks for its own.",
         defaultFrom: CONVERSION_DEFAULTS("site_id"),
       },
     ],
+    // Moved on as it is made: an order to the supplier and site the
+    // requisition named is approved with it (20260922380000), and any other
+    // asks for its own approval. It is never issued in the same step.
+    mapArgs: (v) => ({
+      p_document_id: v["p_document_id"],
+      ...(v["p_party_id"] ? { p_party_id: v["p_party_id"] } : {}),
+      ...(v["p_site_id"] ? { p_site_id: v["p_site_id"] } : {}),
+      p_transition: "auto",
+    }),
     emptyNote:
       "Only an approved requisition converts. Submit it and have it approved at this step first.",
     invalidates: ["erp_documents"],
@@ -380,8 +389,9 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_invoice_id",
         "Invoice",
-        // A supplier invoice still being matched: not another kind of document.
-        { p_type_code: "purchase_invoice", p_limit: 100, p_actionable: true },
+        // A supplier bill still being written: erp.invoice_against adds a line
+        // only while the bill can change, and a registered bill has posted.
+        { p_type_code: "purchase_invoice", p_limit: 100, p_states: ["draft"] },
       ),
       // Open lines only, as for receiving: a line received in full but not yet
       // invoiced stays, because that is the line this matches. And only on an
@@ -762,6 +772,9 @@ const PURCHASE_TO_PAY: FlowSpec = {
       typeCode: "purchase_invoice",
       // Being entered, owed, or in dispute. Paid is the end of it.
       states: ["draft", "registered", "disputed"],
+      // A line is invoiced only onto a bill still being written: registered,
+      // it has posted, and erp.invoice_against refuses it.
+      actionStates: { erp_invoice_against: ["draft"] },
       partyRole: "supplier",
       recordArg: "p_invoice_id",
       actionFn: "erp_invoice_against",
