@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import { ErpError } from "./erp";
-import { canReprint, currentIssue, issueFailure, readIssues, readReadiness } from "./invoice-issue";
+import {
+  canReprint,
+  currentIssue,
+  issuableInOnePress,
+  issueFailure,
+  needsTaxPoint,
+  readIssues,
+  readReadiness,
+} from "./invoice-issue";
 
 const issue = (status: string, id = status) => ({
   document_issue_id: id,
@@ -51,6 +59,33 @@ describe("whether an invoice can be issued", () => {
   test("nothing readable is not ready", () => {
     expect(readReadiness(undefined)).toEqual({ can_issue: false, missing: [] });
     expect(readReadiness({ can_issue: "yes" }).can_issue).toBe(false);
+  });
+});
+
+describe("issuing in one press", () => {
+  const taxPoint = { field: "Tax point", refusal: "CLOVEERP_INVOICE_TAX_POINT_MISSING" };
+  const address = {
+    field: "Customer invoice address",
+    refusal: "CLOVEERP_CUSTOMER_ADDRESS_MISSING",
+  };
+
+  test("a missing tax point is stated by the press, so it does not hold the invoice", () => {
+    const ready = { can_issue: false, missing: [taxPoint] };
+    expect(needsTaxPoint(ready)).toBe(true);
+    expect(issuableInOnePress(ready)).toBe(true);
+  });
+
+  test("anything else missing still holds it", () => {
+    const ready = { can_issue: false, missing: [taxPoint, address] };
+    expect(needsTaxPoint(ready)).toBe(true);
+    expect(issuableInOnePress(ready)).toBe(false);
+  });
+
+  test("a complete invoice issues and is asked for nothing", () => {
+    const ready = { can_issue: true, missing: [] };
+    expect(needsTaxPoint(ready)).toBe(false);
+    expect(issuableInOnePress(ready)).toBe(true);
+    expect(issuableInOnePress({ can_issue: false, missing: [] })).toBe(false);
   });
 });
 

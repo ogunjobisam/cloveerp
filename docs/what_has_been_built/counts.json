@@ -7,10 +7,10 @@
   "definer_allowances": 204,
   "diagnostic_checks": 126,
   "diagnostic_checks_in_ci": 103,
-  "doors": 688,
+  "doors": 689,
   "doors_pending_screen": 3,
-  "doors_writing": 504,
-  "en_strings": 4972,
+  "doors_writing": 505,
+  "en_strings": 4985,
   "enums": 83,
   "erp_tables": 251,
   "erp_views": 16,
@@ -20,7 +20,7 @@
   "legislation_packs": 4,
   "locales_with_strings": 3,
   "meta_tables": 76,
-  "migrations": 526,
+  "migrations": 527,
   "modules": 13,
   "part5_absent": 1,
   "part5_built": 97,
@@ -36,8 +36,8 @@
   "promotable_surfaces": 43,
   "ref_tables": 78,
   "spec_version": "v1.6",
-  "sql_lines": 327243,
+  "sql_lines": 327866,
   "suites": 240,
   "triggers": 823,
-  "write_allowances": 504
+  "write_allowances": 505
 }

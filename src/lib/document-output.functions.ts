@@ -156,56 +156,76 @@ export const documentOutput = createServerFn({ method: "POST" })
       const issueId = String(reserved.data?.document_issue_id ?? "");
       const issuedNumber = String(reserved.data?.issued_number ?? "");
 
-      const session = await rpc<{ tenant_id?: string } | null>("erp_session");
-      const tenant = String(session.data?.tenant_id ?? "");
+      // Whatever fails between taking the number and filing the PDF voids the
+      // number (20260923500000). The press has already moved the invoice to
+      // Issued and posted it, and a number held with no PDF behind it left the
+      // invoice with no way on: pressed again it is numbered afresh.
+      let voided = false;
+      let path = "";
+      let storedHash = "";
+      try {
+        const session = await rpc<{ tenant_id?: string } | null>("erp_session");
+        const tenant = String(session.data?.tenant_id ?? "");
 
-      // Render from the frozen contract that was just written, not from the
-      // live records: what is printed is what was issued.
-      const issues = await rpc<Array<Record<string, unknown>>>("erp_document_issues", {
-        p_document_id: null,
-        p_limit: 200,
-      });
-      if (issues.error) refuse(issues.error.message);
-      const row = issues.data.find((i) => i["document_issue_id"] === issueId);
-      if (!row?.["contract_snapshot"]) refuse("The frozen contract could not be read back.");
-
-      const bytes = await renderSalesInvoicePdf(row["contract_snapshot"] as never, {
-        issuedNumber,
-      });
-      const path = `${tenant}/${issuedNumber}.pdf`;
-      const checksum = await sha256Hex(bytes);
-
-      const uploaded = await archive.upload(path, bytes, {
-        contentType: "application/pdf",
-        upsert: false,
-        metadata: { sha256: checksum },
-      });
-      if (uploaded.error) refuse(uploaded.error.message);
-
-      // The checksum filed is the hash of what the archive actually holds,
-      // read back rather than assumed. The database checks it again against
-      // the stored object before it will accept the number as issued.
-      const stored = await archive.download(path);
-      if (stored.error || !stored.data) refuse("The stored file could not be read back.");
-      const storedHash = await sha256Blob(stored.data);
-
-      const completed = await rpc("erp_complete_document_issue", {
-        p_document_issue_id: issueId,
-        p_storage_path: path,
-        p_content_checksum: storedHash,
-      });
-      if (completed.error) {
-        await archive.remove([path]);
-        const failed = await rpc("erp_fail_document_issue", {
-          p_document_issue_id: issueId,
-          p_reason: `Rendering completed but archive verification failed: ${completed.error.message}`,
+        // Render from the frozen contract that was just written, not from the
+        // live records: what is printed is what was issued.
+        const issues = await rpc<Array<Record<string, unknown>>>("erp_document_issues", {
+          p_document_id: null,
+          p_limit: 200,
         });
-        if (failed.error) {
-          refuse(
-            `${completed.error.message}; the spent number could not be marked void: ${failed.error.message}`,
-          );
+        if (issues.error) refuse(issues.error.message);
+        const row = issues.data.find((i) => i["document_issue_id"] === issueId);
+        if (!row?.["contract_snapshot"]) refuse("The frozen contract could not be read back.");
+
+        const bytes = await renderSalesInvoicePdf(row["contract_snapshot"] as never, {
+          issuedNumber,
+        });
+        path = `${tenant}/${issuedNumber}.pdf`;
+        const checksum = await sha256Hex(bytes);
+
+        const uploaded = await archive.upload(path, bytes, {
+          contentType: "application/pdf",
+          upsert: false,
+          metadata: { sha256: checksum },
+        });
+        if (uploaded.error) refuse(uploaded.error.message);
+
+        // The checksum filed is the hash of what the archive actually holds,
+        // read back rather than assumed. The database checks it again against
+        // the stored object before it will accept the number as issued.
+        const stored = await archive.download(path);
+        if (stored.error || !stored.data) refuse("The stored file could not be read back.");
+        storedHash = await sha256Blob(stored.data);
+
+        const completed = await rpc("erp_complete_document_issue", {
+          p_document_issue_id: issueId,
+          p_storage_path: path,
+          p_content_checksum: storedHash,
+        });
+        if (completed.error) {
+          await archive.remove([path]);
+          const failed = await rpc("erp_fail_document_issue", {
+            p_document_issue_id: issueId,
+            p_reason: `Rendering completed but archive verification failed: ${completed.error.message}`,
+          });
+          voided = true;
+          if (failed.error) {
+            refuse(
+              `${completed.error.message}; the spent number could not be marked void: ${failed.error.message}`,
+            );
+          }
+          refuse(completed.error.message);
         }
-        refuse(completed.error.message);
+      } catch (error) {
+        if (!voided && issueId !== "") {
+          const message = error instanceof Error ? error.message : String(error);
+          if (path !== "") await archive.remove([path]);
+          await rpc("erp_fail_document_issue", {
+            p_document_issue_id: issueId,
+            p_reason: `The PDF was not filed: ${message}`,
+          });
+        }
+        throw error;
       }
 
       const signed = await archive.createSignedUrl(path, SIGNED_URL_SECONDS);
