@@ -2,7 +2,12 @@ import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { byTone, transitionTone } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "./action";
-import { manualTransitions, type Transition } from "./available-transitions";
+import {
+  heldReasons,
+  isCompletable,
+  manualTransitions,
+  type Transition,
+} from "./available-transitions";
 import { TOUCH } from "./page";
 
 type ExplainedMove = {
@@ -121,11 +126,37 @@ export function DocumentTransitions({
   const explained = documentType ? EXPLAINED_MOVES[documentType] : undefined;
 
   const manual = manualTransitions(documentType, transitions);
-  const offered = byTone(
-    manual.filter((t) => t.permitted && !t.is_automatic && !exclude.includes(t.code)),
+  // Drawn only where the person can complete it (20260923600000): permitted,
+  // its guard passing against the document, and not refused by the door. The
+  // rest are not drawn, and why is said once.
+  const offered = byTone(manual.filter((t) => isCompletable(t) && !exclude.includes(t.code)));
+  // Reasons come from every move, the excluded ones too: a move a step verb
+  // makes is excluded here so it is not drawn twice, and its reason is still
+  // the reason (found on review).
+  const held = heldReasons(manual);
+  const notes = (
+    <>
+      {stillWaiting ? (
+        <p className="text-xs text-muted-foreground">
+          {ui("Your decision is recorded; it is still waiting on somebody else's.")}
+        </p>
+      ) : null}
+      {held.map((reason) => (
+        <p key={reason} className="text-xs text-muted-foreground">
+          {ui(reason)}
+        </p>
+      ))}
+    </>
   );
 
   if (offered.length === 0) {
+    if (stillWaiting || held.length > 0)
+      return (
+        <div className="mt-4 flex flex-col gap-2">
+          {notes}
+          <ErrorNote error={act.error} />
+        </div>
+      );
     // Every move left is one a door makes, and the screen offers that door by
     // name: there is nothing to explain here.
     if (quiet || (transitions.length > 0 && manual.length === 0)) return null;
@@ -145,7 +176,7 @@ export function DocumentTransitions({
       <div className="flex flex-wrap gap-2">
         {offered.map((t) => {
           const move = explained?.[t.code];
-          if (move && t.guard_passes) {
+          if (move) {
             return (
               // Keyed by the document as well as the move, so a reason typed
               // for one order is never sent for the next one chosen.
@@ -187,17 +218,12 @@ export function DocumentTransitions({
               variant={
                 transitionTone(t) === "out"
                   ? "danger"
-                  : transitionTone(t) === "back" || !t.guard_passes
+                  : transitionTone(t) === "back"
                     ? "secondary"
                     : "primary"
               }
-              disabled={!t.guard_passes}
               busy={act.isPending}
-              title={
-                t.guard_passes
-                  ? `Moves this document to ${prettifyField(t.to_state).toLowerCase()}.`
-                  : "This document does not yet satisfy the condition on this transition."
-              }
+              title={`Moves this document to ${prettifyField(t.to_state).toLowerCase()}.`}
               onClick={() => act.mutate({ p_document_id: documentId, p_transition_code: t.code })}
             >
               {t.name}
@@ -205,11 +231,7 @@ export function DocumentTransitions({
           );
         })}
       </div>
-      {stillWaiting ? (
-        <p className="text-xs text-muted-foreground">
-          {ui("Your decision is recorded; it is still waiting on somebody else's.")}
-        </p>
-      ) : null}
+      {notes}
       <ErrorNote error={act.error} />
     </div>
   );

@@ -298,3 +298,91 @@ test.describe("what every screen owes a keyboard and a screen reader", () => {
     });
   }
 });
+
+test.describe("a document offers only what can be completed", () => {
+  // The database says which moves the person may make, whether each guard
+  // passes against the document, and which the door would refuse
+  // (public.erp_available_transitions, 20260923600000); the page draws the
+  // ones that would go through and says once why the rest are not there.
+  const DOC_ID = "00000000-0000-4000-8000-00000000d0c5";
+  const move = (code: string, name: string, extra: Record<string, unknown> = {}) => ({
+    code,
+    name,
+    to_state: code,
+    permitted: true,
+    guard_passes: true,
+    is_automatic: false,
+    refused: null,
+    ...extra,
+  });
+  const MOVES = [
+    move("approve", "Approve", { refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }),
+    move("receive_rest", "Receive the rest"),
+    move("close", "Close", { guard_passes: false }),
+    move("cancel_approved", "Cancel", { permitted: false }),
+    move("receive_all", "Receive all"),
+  ];
+
+  test("a refused, guarded, unpermitted or door-only move is not a button, and a line past its cut-off has no Amend", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_document", {
+      document: {
+        document_id: DOC_ID,
+        document_number: "PO-000042",
+        document_type: "purchase_order",
+        document_date: "2026-09-01",
+        currency: "GBP",
+        party: "A Supplier",
+        their_reference: null,
+        total_minor: 10000,
+        state: "sent",
+        state_name: "Issued to supplier",
+        is_committed: true,
+      },
+      lines: [
+        {
+          line_id: "00000000-0000-4000-8000-0000000011e1",
+          line_no: 1,
+          description: "Widgets",
+          quantity: 10,
+          unit_price_minor: 1000,
+          net_minor: 10000,
+          item: "WID",
+          supplier_item_code: null,
+        },
+      ],
+      lineage: [],
+      reversal: [],
+      amendment: {
+        allowed: false,
+        cut_off: "stock_has_moved",
+        detail:
+          "stock has left against this document; amend by returning it, not by editing the document",
+      },
+      available_transitions: MOVES,
+    });
+    backend.rpc("erp_available_transitions", MOVES);
+
+    await page.goto(`/documents/${DOC_ID}`);
+    await expect(page.getByText("PO-000042").first()).toBeVisible({ timeout: 20_000 });
+
+    // The one move that would go through is drawn, under its explained name.
+    await expect(page.getByRole("button", { name: "Close short" })).toBeVisible();
+    // The rest are not drawn at all, disabled or otherwise.
+    for (const name of ["Approve", "Close without the bill", "Cancel", "Receive all"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
+    // Why, once each.
+    await expect(page.getByText("Waiting on somebody else's approval.")).toBeVisible();
+    await expect(
+      page.getByText("Some moves wait on a condition this document does not meet yet."),
+    ).toBeVisible();
+
+    // A line past its cut-off offers no Amend, and says why.
+    await expect(page.getByRole("button", { name: "Amend", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/No line can be amended now: stock has left/)).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+});
