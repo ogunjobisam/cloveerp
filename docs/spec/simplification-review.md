@@ -705,7 +705,15 @@ approved requisition, unchanged and to the supplier and site it named, is born
 **P2** Derive requisition `ordered` from lineage; PO `partially_received`,
 `received` and `closed` from posted receipts and matched invoices.
 **P3** The thirteen parameters, authored through `configure_procurement`, all
-defaulted to the clean path. Do not add a second settings mechanism.
+defaulted to the clean path. Do not add a second settings mechanism. Corrected
+in PR4 (20260923100000): nine are delivered and four deferred. The three new
+keys live in one configuration type, `procurement.policy`, which version 3 of
+the procurement lifecycle writes; the other six were already the approval
+chains, `approval.reapproval_tolerance`, `erp.receipt_tolerance` and
+`erp.match_tolerance`. `requisition_required` and
+`direct_order_threshold_minor` would refuse MRP, drop-ship, intercompany and
+blanket orders; a goods receipt has no approval state; and the auto-approve
+threshold would approve an offsetting requisition by nobody.
 **P4** Add `purchase_invoice` to the configured lifecycle.
 **P5** Budget six.
 
