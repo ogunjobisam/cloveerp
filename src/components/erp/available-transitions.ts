@@ -93,6 +93,8 @@ export function useAvailableTransitions(
 export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
   requisition: ["order"],
   purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
+  // Accepted because an order was raised from it (20260923400000).
+  quotation: ["accept"],
   sales_order: ["pick", "despatch", "invoice"],
   sales_invoice: ["settle", "credit"],
   purchase_invoice: ["pay"],

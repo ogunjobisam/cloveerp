@@ -59,6 +59,14 @@ const SALES_ACTIONS: ActionSpec[] = [
       pickParty("customer", "p_party_id", "Customer", false),
       pickSite("p_site_id", "Site the goods ship from", false),
     ],
+    // Moved on as it is made, as a requisition's order is: submitted for the
+    // approval a sales order asks for, and confirmed where none is needed.
+    mapArgs: (v) => ({
+      p_document_id: v["p_document_id"],
+      ...(v["p_party_id"] ? { p_party_id: v["p_party_id"] } : {}),
+      ...(v["p_site_id"] ? { p_site_id: v["p_site_id"] } : {}),
+      p_transition: "auto",
+    }),
     emptyNote: "Only a quotation that has been sent and accepted converts into an order.",
     invalidates: ["erp_documents"],
     submitLabel: "Create the sales order",

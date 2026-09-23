@@ -231,6 +231,21 @@ function Document() {
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
         ) : null}
+
+        {/* A quotation with the customer becomes their order here, and one
+            accepted with no order raised from it still can. The conversion
+            is what reads it Accepted (20260923400000). */}
+        {doc.document_type === "quotation" &&
+        (doc.state === "sent" ||
+          (doc.state === "accepted" &&
+            !data.lineage.some(
+              (r) => r.depth === 1 && r.relation === "converts" && r.base_type === "sales_order",
+            ))) ? (
+          <ConvertThisQuotation
+            documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
       </section>
 
       {/* A sales invoice is issued here: its permanent number and the PDF the
@@ -412,6 +427,48 @@ const CONVERSION_DEFAULTS = (key: string) => ({
   argsFrom: { p_document_id: "p_document_id" },
   key,
 });
+
+/**
+ * The quotation's own way to its order: the strip's "Convert to a sales order",
+ * on the quotation's page. erp.convert_document raises the order for the
+ * quotation's customer and site, every outstanding line at the quoted price
+ * and discount, moves it on, and reads the quotation Accepted once every line
+ * is on one.
+ */
+function ConvertThisQuotation({ documentId, context }: { documentId: string; context: string }) {
+  const { ui } = useT();
+  const navigate = useNavigate();
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <ActionDialog
+        trigger={<ActionButton variant="primary">{ui("Convert to a sales order")}</ActionButton>}
+        title="Turn this quotation into a sales order"
+        description="A quotation the customer has accepted becomes an order. Every line still outstanding is carried across at the quoted price, and the order remembers the quotation it came from."
+        permission="sales.order"
+        fn="erp_convert_document"
+        fields={[]}
+        prefill={{ p_document_id: documentId, p_transition: "auto" }}
+        context={context}
+        invalidates={[
+          "erp_document",
+          "erp_documents",
+          "erp_available_transitions",
+          "erp_receivable_lines",
+        ]}
+        submitLabel="Create the sales order"
+        onDone={(result) => {
+          const made =
+            typeof result === "object" && result !== null
+              ? (result as Record<string, unknown>)["document_id"]
+              : undefined;
+          if (typeof made === "string")
+            void navigate({ to: "/documents/$documentId", params: { documentId: made } });
+        }}
+      />
+    </div>
+  );
+}
 
 /**
  * The requisition's own way to its order: the strip's "Convert to a purchase
