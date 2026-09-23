@@ -715,7 +715,12 @@ chains, `approval.reapproval_tolerance`, `erp.receipt_tolerance` and
 blanket orders; a goods receipt has no approval state; and the auto-approve
 threshold would approve an offsetting requisition by nobody.
 **P4** Add `purchase_invoice` to the configured lifecycle.
-**P5** Budget six.
+**P5** Budget six. Corrected in PR4 (20260923200000): six is a walk, not a
+relabelled strip. In a live organisation a buyer, an approver who is not an
+administrator and a receiver press six public doors, and the requisition reads
+ordered and the order closed (`erp_test.step_budget_suite`). An approver
+approves in one press; the screen strip's register count is not lowered,
+because moving buttons deletes no step.
 
 ### Sales
 
