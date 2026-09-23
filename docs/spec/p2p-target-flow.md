@@ -156,7 +156,14 @@ The PO closes itself when fully received and fully invoiced.
 
 Thirteen. Every default produces the flow in section 3. Extend
 `erp.configure_procurement()` to author these; do not invent a second settings
-mechanism.
+mechanism. Corrected in PR4 (20260923100000): nine are delivered, and four
+(`requisition_required`, `direct_order_threshold_minor`,
+`auto_approve_threshold_minor` and `receipt_approval_required`) are deferred.
+`reapproval_qty_pct`, `short_close_pct` and `invoice_match_mode` are the keys
+of one configuration type, `procurement.policy`. For a line of an order
+approved with its requisition, `reapproval_qty_pct` is read at issue.
+`short_close_pct` is 0 for an organisation installed before and 2 for a new
+install.
 
 - `procurement.requisition_required` — must a PO originate from an approved
   requisition. Default: true above the direct-order threshold, false below.
