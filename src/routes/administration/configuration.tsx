@@ -185,7 +185,7 @@ const MODULES: Module[] = [
     fn: "erp_configure_procurement",
     name: "Procurement",
     blurb:
-      "Requisition, purchase order and goods receipt lifecycles, with a value-banded approval chain.",
+      "Requisition, purchase order, goods receipt and supplier bill lifecycles. The requisition is approved by value, and an order converted from it unchanged is approved with it.",
     param: {
       name: "p_approval_threshold_minor",
       label: "Approval threshold",
@@ -198,7 +198,8 @@ const MODULES: Module[] = [
   {
     fn: "erp_configure_procurement_controls",
     name: "Procurement controls",
-    blurb: "Three-way matching tolerances, GRNI and landed cost.",
+    blurb:
+      "Three-way matching tolerances, GRNI and landed cost. Procurement installs these with it; this is for an organisation that installed the lifecycle alone.",
   },
   {
     fn: "erp_configure_sales",
@@ -260,16 +261,21 @@ const MODULES: Module[] = [
 
 /**
  * Installers disagree about their return type — some hand back a bare uuid,
- * some a jsonb object carrying `change_set_id`. Both mean the same thing, and
+ * some a jsonb object carrying `change_set_id`, and Procurement a list of them
+ * in `change_set_ids`, because one press installs the lifecycle and its
+ * controls as two change sets (20260922390000). All mean the same thing, and
  * the screen should not care which one it got.
  */
-function changeSetIdOf(result: unknown): string | null {
-  if (typeof result === "string") return result;
+function changeSetIdsOf(result: unknown): string[] {
+  if (typeof result === "string") return [result];
   if (result && typeof result === "object") {
-    const v = (result as Record<string, unknown>)["change_set_id"];
-    if (typeof v === "string") return v;
+    const record = result as Record<string, unknown>;
+    const many = record["change_set_ids"];
+    if (Array.isArray(many)) return many.filter((v): v is string => typeof v === "string");
+    const one = record["change_set_id"];
+    if (typeof one === "string") return [one];
   }
-  return null;
+  return [];
 }
 
 function statusTone(status: string): "ok" | "warn" | "muted" {
@@ -638,21 +644,26 @@ function ModuleCard({ module: m, onDone }: { module: Module; onDone: () => void 
         args[m.param.name] = m.param.money ? toMinor(value) : Number(value);
       if (m.role && role !== "") args[m.role.name] = role;
       const result = await callErp<unknown>(m.fn, args);
-      const id = changeSetIdOf(result);
-      // Read the set back rather than assuming: whether it promoted or stopped
-      // at `ready` is the bootstrap window answering, and it is the one thing
-      // worth reporting.
+      const ids = changeSetIdsOf(result);
+      // Read the sets back rather than assuming: whether each promoted or
+      // stopped at `ready` is the bootstrap window answering, and it is the one
+      // thing worth reporting.
       const sets = await callErp<ChangeSet[]>("erp_change_sets");
-      return sets.find((s) => s.change_set_id === id) ?? null;
+      return sets.filter((s) => ids.includes(s.change_set_id));
     },
-    onSuccess: (set) => {
+    onSuccess: (made) => {
       setError(null);
+      const waiting = made.filter((s) => s.status !== "promoted");
       setOutcome(
-        set === null
+        made.length === 0
           ? "Installed."
-          : set.status === "promoted"
-            ? "Installed and promoted — the configuration is in force."
-            : `Change set authored and left at "${set.status}" — it needs a second administrator to approve.`,
+          : waiting.length === 0
+            ? made.length === 1
+              ? "Installed and promoted — the configuration is in force."
+              : `${made.length} change sets installed and promoted — the configuration is in force.`
+            : waiting.length === 1 && made.length === 1
+              ? `Change set authored and left at "${waiting[0]?.status ?? "ready"}" — it needs a second administrator to approve.`
+              : `${waiting.length} of ${made.length} change sets authored and left waiting — each needs a second administrator to approve.`,
       );
       onDone();
     },
