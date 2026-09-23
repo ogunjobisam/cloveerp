@@ -152,6 +152,14 @@ describe("a toast names what was made", () => {
         moved_on: "post",
       }),
     ).toBe("DN-000255 created from SO-000262 and posted.");
+    expect(
+      documentOutcome({
+        document_id: "d",
+        document_number: "PO-000058",
+        source_document_number: "REQ-000049",
+        moved_on: "inherit_approval",
+      }),
+    ).toBe("PO-000058 created from REQ-000049 and approved.");
   });
 
   test("a move with no word of its own still says it moved", () => {

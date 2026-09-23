@@ -418,7 +418,7 @@ describe("a move another document makes is never a button", () => {
   test("the list is the moves a receipt, a conversion, a pick, a despatch, an invoice, a payment or a credit note makes", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
       requisition: ["order"],
-      purchase_order: ["receive_partial", "receive_all"],
+      purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
       sales_order: ["pick", "despatch", "invoice"],
       sales_invoice: ["settle", "credit"],
       purchase_invoice: ["pay"],
@@ -450,6 +450,15 @@ describe("a move another document makes is never a button", () => {
       "close",
       "cancel",
       "cancel_approved",
+    ]);
+  });
+
+  test("an order is not approved with its requisition by a bare button", () => {
+    // The conversion that raises it makes that move, and only while the order
+    // is the requisition's, unchanged (20260922380000).
+    expect(codes("purchase_order", ["submit", "inherit_approval", "cancel"])).toEqual([
+      "submit",
+      "cancel",
     ]);
   });
 
@@ -539,15 +548,25 @@ describe("a move another document makes is never a button", () => {
 
   test("every move on the list is one the shipped lifecycle of that type declares", () => {
     // A renamed move would leave its button back on the screen with nothing
-    // here to say so.
-    const spine = readFileSync(
-      join(ROOT, "supabase", "migrations", "20260904150000_document_spine_through_promotion.sql"),
-      "utf8",
-    );
+    // here to say so. Read from the newest migration that ships the type's
+    // lifecycle, not the first: 20260922380000 shipped a second version of the
+    // procurement ones, with a move the first never had. The machine ends at
+    // the next configuration item, not at the next 'kind' of any sort, because
+    // an effect is written with one too.
+    const migrations = join(ROOT, "supabase", "migrations");
+    const files = readdirSync(migrations)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .map((f) => readFileSync(join(migrations, f), "utf8"));
     const missing = Object.entries(DOOR_ONLY_TRANSITIONS).flatMap(([type, list]) => {
-      const start = spine.indexOf(`'kind','state_machine','key','${type}'`);
-      const end = spine.indexOf("'kind','", start + 1);
-      const machine = start < 0 ? "" : spine.slice(start, end < 0 ? undefined : end);
+      const opening = new RegExp(`'kind',\\s*'state_machine',\\s*'key',\\s*'${type}'`);
+      const source = files.filter((f) => opening.test(f)).at(-1) ?? "";
+      const found = opening.exec(source);
+      const start = found ? found.index : -1;
+      const rest = start < 0 ? "" : source.slice(start + 1);
+      const next = /'kind',\s*'[a-z_]+',\s*'key',/.exec(rest);
+      const machine =
+        start < 0 ? "" : source.slice(start, next ? start + 1 + next.index : undefined);
       return list
         .filter((c) => !machine.includes(`'code','${c}','name'`))
         .map((c) => `${type}.${c}`);

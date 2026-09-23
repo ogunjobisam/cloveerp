@@ -80,6 +80,10 @@ export function useAvailableTransitions(
  * more. That is a short close, and `EXPLAINED_MOVES` in document-transitions.tsx
  * asks for the reason.
  *
+ * 20260922380000 added `inherit_approval`. An order is approved with its
+ * requisition only by the conversion that raises it, unchanged and to the
+ * supplier the requisition named, so it is never a button.
+ *
  * The database refuses each of these moves pressed over nothing (the receipt,
  * the conversion and the cash are what it checks), so this is only what the
  * screens offer, not what holds them. Each entry here is a row in
@@ -88,7 +92,7 @@ export function useAvailableTransitions(
  */
 export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
   requisition: ["order"],
-  purchase_order: ["receive_partial", "receive_all"],
+  purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
   sales_order: ["pick", "despatch", "invoice"],
   sales_invoice: ["settle", "credit"],
   purchase_invoice: ["pay"],

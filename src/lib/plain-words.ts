@@ -175,6 +175,8 @@ const MOVED_TO: Readonly<Record<string, string>> = {
   book: "booked",
   close: "closed",
   accept: "accepted",
+  // An order converted from its requisition unchanged (20260922380000).
+  inherit_approval: "approved",
 };
 
 export function movedOnWord(code: string | null | undefined): string | null {
