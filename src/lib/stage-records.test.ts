@@ -419,6 +419,7 @@ describe("a move another document makes is never a button", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
       requisition: ["order"],
       purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
+      quotation: ["accept"],
       sales_order: ["pick", "despatch", "invoice"],
       sales_invoice: ["settle", "credit"],
       purchase_invoice: ["pay"],
@@ -470,6 +471,16 @@ describe("a move another document makes is never a button", () => {
       "approve",
       "reject",
       "cancel",
+    ]);
+  });
+
+  test("a quotation is not accepted by a bare button", () => {
+    // It reads Accepted because an order was raised from it, which the
+    // conversion does (20260923400000).
+    expect(codes("quotation", ["send", "accept", "decline", "expire"])).toEqual([
+      "send",
+      "decline",
+      "expire",
     ]);
   });
 
