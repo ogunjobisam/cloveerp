@@ -3489,7 +3489,11 @@ export const DELIVERY_FROM_ORDER_FIELDS: Field[] = [
     ["document_number", "party", "state_name"],
     "p_order_id",
     "Sales order",
-    { p_type_code: "sales_order", p_limit: 200, p_states: ["confirmed", "picking"] },
+    {
+      p_type_code: "sales_order",
+      p_limit: 200,
+      p_states: ["confirmed", "picking", "partially_despatched"],
+    },
   ),
   {
     kind: "rows",

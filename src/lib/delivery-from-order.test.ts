@@ -29,7 +29,7 @@ describe("the form", () => {
     expect(order.options.args).toEqual({
       p_type_code: "sales_order",
       p_limit: 200,
-      p_states: ["confirmed", "picking"],
+      p_states: ["confirmed", "picking", "partially_despatched"],
     });
   });
 
