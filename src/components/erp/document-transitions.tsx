@@ -97,8 +97,27 @@ export function DocumentTransitions({
   const { ui } = useT();
   const act = useErpAction({
     fn: "erp_transition_document",
-    invalidates: ["erp_document", "erp_documents", "erp_available_transitions"],
+    invalidates: [
+      "erp_document",
+      "erp_documents",
+      "erp_available_transitions",
+      "erp_document_approval_chain",
+      "erp_my_approvals",
+    ],
   });
+  // An approver who holds a task on the document approves in one press
+  // (20260923200000). When somebody else's decision is still needed, theirs is
+  // kept and the door answers with the state the document is still in.
+  const pressed = act.variables;
+  const answered =
+    act.isSuccess && typeof act.data === "object" && act.data !== null
+      ? (act.data as Record<string, unknown>)["state"]
+      : undefined;
+  const stillWaiting =
+    pressed?.["p_document_id"] === documentId &&
+    pressed["p_transition_code"] === "approve" &&
+    typeof answered === "string" &&
+    answered !== transitions.find((t) => t.code === "approve")?.to_state;
   const explained = documentType ? EXPLAINED_MOVES[documentType] : undefined;
 
   const manual = manualTransitions(documentType, transitions);
@@ -186,6 +205,11 @@ export function DocumentTransitions({
           );
         })}
       </div>
+      {stillWaiting ? (
+        <p className="text-xs text-muted-foreground">
+          {ui("Your decision is recorded; it is still waiting on somebody else's.")}
+        </p>
+      ) : null}
       <ErrorNote error={act.error} />
     </div>
   );
