@@ -422,7 +422,14 @@ describe("a move another document makes is never a button", () => {
       requisition: ["order"],
       purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
       quotation: ["accept"],
-      sales_order: ["pick", "despatch", "invoice"],
+      sales_order: [
+        "pick",
+        "despatch",
+        "despatch_part",
+        "despatch_part_picked",
+        "despatch_rest",
+        "invoice",
+      ],
       sales_invoice: ["issue", "settle", "credit"],
       purchase_invoice: ["pay"],
     });

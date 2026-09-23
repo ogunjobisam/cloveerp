@@ -111,7 +111,15 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
   // Accepted because an order was raised from it (20260923400000).
   quotation: ["accept"],
-  sales_order: ["pick", "despatch", "invoice"],
+  // Part despatched and the rest are the delivery's (20260923800000).
+  sales_order: [
+    "pick",
+    "despatch",
+    "despatch_part",
+    "despatch_part_picked",
+    "despatch_rest",
+    "invoice",
+  ],
   // Issued by "Issue the invoice", which numbers it in the same press
   // (20260923500000).
   sales_invoice: ["issue", "settle", "credit"],

@@ -179,7 +179,11 @@ const SALES_ACTIONS: ActionSpec[] = [
         ["document_number", "state"],
         "p_document_id",
         "Confirmed sales order",
-        { p_type_code: "sales_order", p_limit: 100, p_states: ["confirmed", "picking"] },
+        {
+          p_type_code: "sales_order",
+          p_limit: 100,
+          p_states: ["confirmed", "picking", "partially_despatched"],
+        },
       ),
       reason("p_reason", "Reason", true),
     ],
@@ -251,9 +255,10 @@ const ORDER_TO_CASH: FlowSpec = {
       typeCode: "sales_order",
       // Every order not yet despatched: a draft, one with its approvers,
       // one confirmed and one being picked.
-      states: ["draft", "pending_approval", "confirmed", "picking"],
+      states: ["draft", "pending_approval", "confirmed", "picking", "partially_despatched"],
       // A delivery comes from an order that can still be despatched.
-      actionStates: { deliver_this_order: ["confirmed", "picking"] },
+      // Part despatched is still owed the rest (20260923800000).
+      actionStates: { deliver_this_order: ["confirmed", "picking", "partially_despatched"] },
       partyRole: "customer",
       // The chosen order is the one the delivery is created from.
       recordArg: "p_order_id",

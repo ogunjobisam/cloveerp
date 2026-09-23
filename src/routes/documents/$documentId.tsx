@@ -208,7 +208,9 @@ function Document() {
             from. Offered on the states erp.create_delivery_from_order accepts;
             the database refuses anything else by name. */}
         {doc.document_type === "sales_order" &&
-        (doc.state === "confirmed" || doc.state === "picking") ? (
+        (doc.state === "confirmed" ||
+          doc.state === "picking" ||
+          doc.state === "partially_despatched") ? (
           <DeliverThisOrder
             documentId={documentId}
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
