@@ -63,6 +63,25 @@ export function readReadiness(data: unknown): IssueReadiness {
   return { can_issue: raw["can_issue"] === true, missing };
 }
 
+/** The refusal an invoice with no tax point of its own is held on. */
+export const TAX_POINT_MISSING = "CLOVEERP_INVOICE_TAX_POINT_MISSING";
+
+/** Whether the press has to state the tax point before it issues. */
+export function needsTaxPoint(ready: IssueReadiness): boolean {
+  return ready.missing.some((m) => m.refusal === TAX_POINT_MISSING);
+}
+
+/**
+ * Whether one press can issue the invoice: nothing is missing, or only the tax
+ * point, which the press states before it issues (20260923500000).
+ */
+export function issuableInOnePress(ready: IssueReadiness): boolean {
+  return (
+    ready.can_issue ||
+    (ready.missing.length > 0 && ready.missing.every((m) => m.refusal === TAX_POINT_MISSING))
+  );
+}
+
 /**
  * A failure from the issue path, as a refusal the desk can word.
  *

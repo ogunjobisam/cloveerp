@@ -421,7 +421,7 @@ describe("a move another document makes is never a button", () => {
       purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
       quotation: ["accept"],
       sales_order: ["pick", "despatch", "invoice"],
-      sales_invoice: ["settle", "credit"],
+      sales_invoice: ["issue", "settle", "credit"],
       purchase_invoice: ["pay"],
     });
   });
@@ -490,13 +490,11 @@ describe("a move another document makes is never a button", () => {
     ).toEqual(["submit", "approve", "close", "cancel"]);
   });
 
-  test("an invoice is neither paid nor credited by a bare button, and is still issued, registered and disputed", () => {
+  test("an invoice is neither issued, paid nor credited by a bare button, and a bill is still registered and disputed", () => {
     // Credited is terminal. Pressed with nothing behind it, the button said the
-    // customer had been given their money back when nobody had.
-    expect(codes("sales_invoice", ["issue", "settle", "credit", "cancel"])).toEqual([
-      "issue",
-      "cancel",
-    ]);
+    // customer had been given their money back when nobody had. Issued is
+    // "Issue the invoice", which numbers it in the same press (20260923500000).
+    expect(codes("sales_invoice", ["issue", "settle", "credit", "cancel"])).toEqual(["cancel"]);
     expect(codes("purchase_invoice", ["register", "dispute", "resolve", "pay", "cancel"])).toEqual([
       "register",
       "dispute",

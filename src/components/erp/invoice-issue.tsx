@@ -7,12 +7,14 @@ import { useT } from "../../lib/i18n";
 import {
   canReprint,
   currentIssue,
+  issuableInOnePress,
   issueFailure,
+  needsTaxPoint,
   readIssues,
   readReadiness,
 } from "../../lib/invoice-issue";
 import { ActionButton, ErrorNote } from "./action";
-import { Prose } from "./page";
+import { Prose, TOUCH } from "./page";
 import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
 
@@ -26,14 +28,17 @@ import { useErpSession } from "./session-context";
  * document.reprint, and renders nothing. Hiding either button only saves
  * somebody a refusal.
  */
-export function InvoiceIssue({ documentId }: { documentId: string }) {
+export function InvoiceIssue({ documentId, draft }: { documentId: string; draft: boolean }) {
   const { ui } = useT();
   const { session } = useErpSession();
   const queryClient = useQueryClient();
   const [opened, setOpened] = useState<DocumentOutputResult | null>(null);
 
   const mayRead = hasPermission(session, "sales.read");
-  const mayIssue = hasPermission(session, "document.issue");
+  // A draft is moved to Issued by the same press, which is the lifecycle's
+  // own move and asks for its permission too (20260923500000).
+  const mayIssue =
+    hasPermission(session, "document.issue") && (!draft || hasPermission(session, "sales.invoice"));
   const mayReprint = hasPermission(session, "document.reprint");
 
   const issues = useQuery({
@@ -51,10 +56,21 @@ export function InvoiceIssue({ documentId }: { documentId: string }) {
     enabled: mayRead && mayIssue && current === null,
   });
   const ready = readReadiness(readiness.data);
+  const askTaxPoint = needsTaxPoint(ready);
+  // The date of the invoice, which is the tax point when it is issued within
+  // fourteen days of the supply. The person changes it when it is not.
+  const [taxPoint, setTaxPoint] = useState(() => new Date().toLocaleDateString("en-CA"));
 
+  // One press (20260923500000): the tax point it states, then the issue, which
+  // moves a draft to Issued and posts it before it numbers it and files the PDF.
   const issue = useMutation({
     mutationFn: async () => {
       try {
+        if (askTaxPoint)
+          await callErp<unknown>("erp_set_invoice_tax_point", {
+            p_document_id: documentId,
+            p_tax_point: taxPoint,
+          });
         return await documentOutput({ data: { action: "issue", documentId } });
       } catch (error) {
         throw issueFailure(error);
@@ -62,9 +78,20 @@ export function InvoiceIssue({ documentId }: { documentId: string }) {
     },
     onSuccess: (result) => {
       setOpened(result);
-      void queryClient.invalidateQueries({ queryKey: ["erp_document_issues"] });
+      for (const key of [
+        "erp_document_issues",
+        "erp_sales_invoice_issue_readiness",
+        "erp_document",
+        "erp_documents",
+        "erp_available_transitions",
+      ])
+        void queryClient.invalidateQueries({ queryKey: [key] });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ["erp_sales_invoice_issue_readiness"] });
     },
   });
+  const blocking = ready.missing.filter((m) => m.refusal !== "CLOVEERP_INVOICE_TAX_POINT_MISSING");
 
   const reprint = useMutation({
     mutationFn: async (documentIssueId: string) => {
@@ -112,17 +139,32 @@ export function InvoiceIssue({ documentId }: { documentId: string }) {
           </>
         ) : mayIssue ? (
           <>
+            {!readiness.isPending && askTaxPoint ? (
+              <label className="flex items-center gap-2 text-sm">
+                <span>{ui("Tax point")}</span>
+                <input
+                  type="date"
+                  value={taxPoint}
+                  onChange={(e) => setTaxPoint(e.target.value)}
+                  className={`${TOUCH} rounded-md border border-input bg-background px-2 text-sm`}
+                />
+              </label>
+            ) : null}
             <ActionButton
               busy={issue.isPending}
-              disabled={readiness.isPending || !ready.can_issue}
+              disabled={
+                readiness.isPending ||
+                !issuableInOnePress(ready) ||
+                (askTaxPoint && taxPoint === "")
+              }
               onClick={() => issue.mutate()}
             >
               {ui("Issue the invoice")}
             </ActionButton>
-            {!readiness.isPending && !ready.can_issue && ready.missing.length > 0 ? (
+            {!readiness.isPending && blocking.length > 0 ? (
               <span className="text-xs text-muted-foreground">
                 {ui("Before it is issued, this invoice needs:")}{" "}
-                {ready.missing.map((m) => m.field).join(", ")}
+                {blocking.map((m) => m.field).join(", ")}
               </span>
             ) : null}
           </>

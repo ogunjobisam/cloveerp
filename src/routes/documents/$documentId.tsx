@@ -250,7 +250,9 @@ function Document() {
 
       {/* A sales invoice is issued here: its permanent number and the PDF the
           customer receives, through the numbered issue path. */}
-      {doc.document_type === "sales_invoice" ? <InvoiceIssue documentId={documentId} /> : null}
+      {doc.document_type === "sales_invoice" ? (
+        <InvoiceIssue documentId={documentId} draft={doc.state === "draft"} />
+      ) : null}
 
       {/* What the supplier charged is a fact on their paperwork, not something
           to work out from our own rules, so it is typed in from their invoice.

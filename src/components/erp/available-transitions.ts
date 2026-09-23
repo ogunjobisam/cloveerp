@@ -96,7 +96,9 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // Accepted because an order was raised from it (20260923400000).
   quotation: ["accept"],
   sales_order: ["pick", "despatch", "invoice"],
-  sales_invoice: ["settle", "credit"],
+  // Issued by "Issue the invoice", which numbers it in the same press
+  // (20260923500000).
+  sales_invoice: ["issue", "settle", "credit"],
   purchase_invoice: ["pay"],
 };
 
