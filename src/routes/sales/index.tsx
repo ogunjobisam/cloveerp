@@ -5,6 +5,7 @@ import {
   ActionBar,
   HeaderActions,
   pickBatch,
+  pickChangeSet,
   pickFrom,
   pickItem,
   pickLine,
@@ -20,7 +21,7 @@ import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow, type FlowSpec } from "../../components/erp/process-flow";
 import { unstagedActions } from "../../lib/flow-actions";
-import { DELIVER_THIS_ORDER, SALES_KPIS } from "../../lib/modules";
+import { DELIVER_THIS_ORDER, SALES_KPIS, salesPolicyArgs } from "../../lib/modules";
 
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — Clove ERP" }] }),
@@ -188,6 +189,47 @@ const SALES_ACTIONS: ActionSpec[] = [
       reason("p_reason", "Reason", true),
     ],
     invalidates: ["erp_documents", "erp_release_sequence"],
+  },
+  {
+    label: "Propose the sales policy",
+    description:
+      "How much more than was ordered a delivery may take, and how little may be left for a line to count as delivered. Proposed as a change like any other configuration.",
+    permission: "administration.configure",
+    fn: "erp_propose_sales_policy",
+    mapArgs: salesPolicyArgs,
+    fields: [
+      {
+        kind: "select",
+        name: "p_entity_code",
+        label: "Company",
+        options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+        hint: "Leave unchosen to set the policy for the whole organisation.",
+      },
+      {
+        kind: "select",
+        name: "p_site_code",
+        label: "Site",
+        options: { fn: "erp_sites", value: "code", label: ["code", "name"] },
+        hint: "Leave unchosen to apply the policy across the whole company.",
+      },
+      {
+        kind: "number",
+        name: "over_ship_pct",
+        label: "Over-delivery allowed (%)",
+        hint: "How much more than was ordered a delivery may take. 0 allows none; left empty, the broader setting applies.",
+      },
+      {
+        kind: "number",
+        name: "short_close_pct",
+        label: "Short close (%)",
+        hint: "A line counts as delivered once no more than this share of it is left. 0 means every unit; left empty, the broader setting applies.",
+      },
+      {
+        ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+        hint: "Leave unchosen to start a new change for this proposal.",
+      },
+    ],
+    invalidates: ["erp_change_sets"],
   },
   {
     label: "Raise a customer return",
