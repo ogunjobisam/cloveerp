@@ -17,7 +17,23 @@ export type Transition = {
   /** The transition's guard evaluates true against this document's numbers. */
   guard_passes: boolean;
   is_automatic: boolean;
+  /**
+   * The refusal the door would raise for this move before it is pressed
+   * (erp.transition_refusal, 20260923600000): an approval waiting on somebody
+   * else, one refused, or one the caller asked for. Null when it would take it.
+   */
+  refused?: string | null;
 };
+
+/**
+ * Whether a person can complete this move now: they may make it, its guard
+ * passes against the document, and the door would not refuse it. A move that
+ * fails any of these is not drawn (20260923600000); the database refuses it
+ * regardless.
+ */
+export function isCompletable(t: Transition): boolean {
+  return t.permitted && t.guard_passes && !t.is_automatic && !t.refused;
+}
 
 /**
  * The moves a document's current state has, as `erp_available_transitions`
@@ -126,6 +142,32 @@ export function offersAnyTransition(
   exclude: readonly string[] = [],
 ): boolean {
   return manualTransitions(documentType, transitions).some(
-    (t) => t.permitted && !t.is_automatic && !exclude.includes(t.code),
+    (t) => isCompletable(t) && !exclude.includes(t.code),
   );
+}
+
+/** What each refusal the list can foresee says to the person who would have pressed. */
+export const HELD_BECAUSE: Readonly<Record<string, string>> = {
+  CLOVEERP_DOCUMENT_APPROVAL_PENDING: "Waiting on somebody else's approval.",
+  CLOVEERP_DOCUMENT_APPROVAL_REJECTED:
+    "The approval asked for was refused. Send it back to draft to change what was refused.",
+  CLOVEERP_DOCUMENT_SELF_APPROVAL: "You asked for this approval, so somebody else gives it.",
+};
+
+/** Said once when a move is held on its guard rather than on a refusal. */
+export const HELD_ON_A_CONDITION =
+  "Some moves wait on a condition this document does not meet yet.";
+
+/**
+ * Why the moves a person may make are not drawn: one line each, in the order
+ * first met, and nothing for a move that is drawn (20260923600000).
+ */
+export function heldReasons(transitions: readonly Transition[]): string[] {
+  const reasons: string[] = [];
+  for (const t of transitions) {
+    if (!t.permitted || t.is_automatic || isCompletable(t)) continue;
+    const reason = t.refused ? (HELD_BECAUSE[t.refused] ?? null) : HELD_ON_A_CONDITION;
+    if (reason && !reasons.includes(reason)) reasons.push(reason);
+  }
+  return reasons;
 }

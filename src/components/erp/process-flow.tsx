@@ -27,7 +27,13 @@ import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import type { ActionSpec } from "./actions-bar";
 import { StatusPill } from "./auto";
 import { useCurrencies } from "./currencies";
-import { offersAnyTransition, useAvailableTransitions } from "./available-transitions";
+import {
+  heldReasons,
+  isCompletable,
+  manualTransitions,
+  offersAnyTransition,
+  useAvailableTransitions,
+} from "./available-transitions";
 import { DocumentTransitions } from "./document-transitions";
 import { NewDocumentForType } from "./documents";
 import { Pill } from "./panel";
@@ -307,12 +313,9 @@ function StageAction({
 }) {
   const { ui } = useT();
 
-  if (!permitted)
-    return (
-      <ActionButton variant="secondary" disabled title="You do not hold the permission for this.">
-        {ui(action.label)}
-      </ActionButton>
-    );
+  // Not drawn where it cannot be completed (20260923600000): the database
+  // refuses it regardless.
+  if (!permitted) return null;
 
   if (settled)
     return (
@@ -606,7 +609,8 @@ function StageRecord({
       ? undefined
       : moves.error || !Array.isArray(moves.data)
         ? null
-        : moves.data.map((t) => t.code);
+        : // Only what the person can complete here (20260923600000).
+          moves.data.filter((t) => isCompletable(t)).map((t) => t.code);
 
   const minorUnits = (code: string) => minorUnitsOf(currencies, code);
   const fields = row && source ? summariseRecord(row, source, minorUnits, stage.partyRole) : [];
@@ -638,6 +642,9 @@ function StageRecord({
     offers.length > 0 &&
     offers.every((o) => o.offer === "hide") &&
     !movesOffered &&
+    // A move held back is not "nothing applies": the page says why instead
+    // (20260923600000).
+    heldReasons(manualTransitions(documentType, transitions)).length === 0 &&
     !(isDocument && moves.isPending);
 
   return (

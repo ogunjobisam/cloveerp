@@ -6,6 +6,8 @@ import {
   DOOR_ONLY_TRANSITIONS,
   isDoorOnlyTransition,
   manualTransitions,
+  heldReasons,
+  isCompletable,
   offersAnyTransition,
   type Transition,
 } from "../components/erp/available-transitions";
@@ -673,5 +675,50 @@ describe("how many steps a strip puts on a row", () => {
 
   test("a width too narrow for one step still draws one per row", () => {
     expect(stepsPerRow(8, 0)).toBe(1);
+  });
+});
+
+describe("a move is drawn only where it can be completed", () => {
+  const move = (extra: Partial<Transition> = {}): Transition => ({
+    code: "approve",
+    name: "Approve",
+    to_state: "approved",
+    permitted: true,
+    guard_passes: true,
+    is_automatic: false,
+    refused: null,
+    ...extra,
+  });
+
+  test("permitted, its guard passing, not automatic and not refused", () => {
+    expect(isCompletable(move())).toBe(true);
+    expect(isCompletable(move({ permitted: false }))).toBe(false);
+    expect(isCompletable(move({ guard_passes: false }))).toBe(false);
+    expect(isCompletable(move({ is_automatic: true }))).toBe(false);
+    expect(isCompletable(move({ refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }))).toBe(false);
+  });
+
+  test("a move held back says why once, and a move nobody may make says nothing", () => {
+    expect(
+      heldReasons([
+        move({ refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }),
+        move({ code: "close", guard_passes: false }),
+        move({ code: "send", guard_passes: false }),
+        move({ code: "cancel", permitted: false }),
+        move({ code: "submit" }),
+      ]),
+    ).toEqual([
+      "Waiting on somebody else's approval.",
+      "Some moves wait on a condition this document does not meet yet.",
+    ]);
+    expect(heldReasons([move({ refused: "CLOVEERP_SOMETHING_ELSE" })])).toEqual([]);
+  });
+
+  test("a document whose only permitted move is refused offers nothing", () => {
+    expect(
+      offersAnyTransition("purchase_order", [
+        move({ refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }),
+      ]),
+    ).toBe(false);
   });
 });

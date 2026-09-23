@@ -111,9 +111,13 @@ type Reversal = {
   reverses_journal_number: string | null;
 };
 
+/** Whether a committed line can still be amended (erp.amendment_allowed), and if not why. */
+type Amendment = { allowed: boolean; cut_off: string | null; detail: string | null };
+
 type Payload = {
   document: Doc | null;
   lines: Line[];
+  amendment?: Amendment | null;
   lineage: Lineage[];
   reversal: Reversal[];
   available_transitions: Transition[];
@@ -302,6 +306,7 @@ function Document() {
         documentId={documentId}
         lines={data.lines}
         committed={doc.is_committed}
+        amendment={data.amendment ?? null}
         money={money}
         minorUnits={minorUnits}
         currency={doc.currency}
@@ -719,6 +724,7 @@ function Lines({
   documentId,
   lines,
   committed,
+  amendment,
   money,
   minorUnits,
   currency,
@@ -726,6 +732,7 @@ function Lines({
   documentId: string;
   lines: Line[];
   committed: boolean;
+  amendment: Amendment | null;
   money: (m: number) => string;
   minorUnits: number;
   currency: string;
@@ -749,6 +756,13 @@ function Lines({
               ? "This document is committed: the outside world has seen it, so lines are no longer editable. Amendment and reversal are what change it now."
               : "Prices are entered in major units and stored as an integer count of minor ones."}
           </Prose>
+          {/* Amend is drawn only where the database would take it
+              (20260923600000); where it would not, the reason is said once. */}
+          {committed && amendment && !amendment.allowed && amendment.detail ? (
+            <Prose className="mt-1 text-xs text-muted-foreground">
+              {`No line can be amended now: ${amendment.detail}.`}
+            </Prose>
+          ) : null}
         </div>
 
         {/* erp.add_document_line refuses a committed document outright, so
@@ -835,7 +849,7 @@ function Lines({
                     >
                       Reprice
                     </button>
-                  ) : (
+                  ) : amendment?.allowed !== false ? (
                     /* A committed line changes only by amendment: a new
                        quantity, a reason, and the old figure kept beside it. */
                     <ActionDialog
@@ -874,7 +888,7 @@ function Lines({
                       invalidates={["erp_document", "erp_documents"]}
                       submitLabel="Amend"
                     />
-                  )}
+                  ) : null}
                 </td>
               </tr>
             ))}
