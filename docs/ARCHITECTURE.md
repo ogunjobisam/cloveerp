@@ -25,7 +25,7 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 | **Modules**            | <!-- count:modules -->13<!-- /count --> installable modules, each a change set of rules, lifecycles and approval chains promoted through B6 exactly as a customer's own change would be.                                                                                     |
 | **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
 | **Interface**          | An application over a curated API of <!-- count:doors -->688<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
-| **Build**              | Every migration applied on every push — to a base a previous build proved, and nightly to an empty database — then <!-- count:catalogue_checks -->336<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
+| **Build**              | Every migration applied on every push — to a base a previous build proved, and nightly to an empty database — then <!-- count:catalogue_checks -->339<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 
 Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:ref_tables -->78<!-- /count --> product-content tables,
@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:policies -->369<!-- /count --> row-security policies and
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->520<!-- /count --> migrations and
-<!-- count:sql_lines -->318483<!-- /count --> lines of SQL.
+<!-- count:migrations -->522<!-- /count --> migrations and
+<!-- count:sql_lines -->323393<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -109,7 +109,7 @@ nobody wrote down:
 | `erp_meta`    | <!-- count:meta_tables -->76<!-- /count --> tables                                                | Platform metadata: the registers, the allow-lists, the exemptions, incidents, releases   |
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
-| `erp_test`    | <!-- count:suites -->235<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
+| `erp_test`    | <!-- count:suites -->238<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
 | `public`      | <!-- count:doors -->688<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 
 Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`; `pg_cron` and `pg_net`
@@ -150,8 +150,8 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->4950<!-- /count --> English strings, a German core pack
-of <!-- count:de_strings -->695<!-- /count -->, a tenant's own terms under
+<!-- count:en_strings -->4966<!-- /count --> English strings, a German core pack
+of <!-- count:de_strings -->696<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 
 **B6 — Change promotion.** Configuration in a live environment cannot be edited
@@ -225,7 +225,7 @@ seeded with a year of trading.
 
 **The catalogue.** `erp.ci_check_catalogue()` reads `pg_proc` and returns every
 check the build can call — <!-- count:assertions -->118<!-- /count --> structural
-assertions, <!-- count:suites -->235<!-- /count --> adversarial suites, the
+assertions, <!-- count:suites -->238<!-- /count --> adversarial suites, the
 whole-database reconciliation last, over every organisation, every posting rule
 in force and every bound company. The runner hands the names it ran back to
 `erp.assert_ci_ran()`, which refuses if the catalogue holds one it did not run.

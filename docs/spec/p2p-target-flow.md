@@ -38,9 +38,10 @@ The seeded lifecycle makes the user do work the system should do:
   full receipt and full invoicing.
 - Conversion is clicked twice. The requisition's `order` transition and the
   creation of the PO are separate user actions for one decision.
-- Settlement is missing from the cycle. The lifecycle stops at goods receipt.
-  Supplier invoice and payment exist elsewhere in the schema but are not part of
-  the configured procurement flow, so matching has no defined home.
+- Settlement was installed separately. The supplier bill has its own lifecycle
+  and three-way matching (`erp.match_three_way()`), but it came from a second
+  card, Procurement controls. Corrected in PR4 (20260922390000): one press of
+  Procurement installs both.
 
 Counted end to end, the current happy path is roughly 13 user actions to get
 from a request to a closed, received purchase order. The Sage equivalent is 5.

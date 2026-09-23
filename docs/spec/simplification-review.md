@@ -690,13 +690,18 @@ Target flow, parameters and assertions in full: `docs/spec/p2p-target-flow.md`.
 One correction to that document — it states settlement is missing from the cycle.
 It is not: `purchase_invoice` exists with its own machine and three-way matching
 is automatic and tolerance-driven via `erp.match_three_way()`
-(`20260829250000_procurement_depth.sql:528, 1156`). What is missing is that the
-procurement lifecycle configuration does not include it. Node P4 fixes that;
-update the spec text in the same PR.
+(`20260829250000_procurement_depth.sql:528, 1156`). What was missing is that the
+procurement lifecycle configuration did not include it. Node P4 fixed that in
+PR4 (20260922390000): one press of Procurement installs the supplier bill and
+credit note lifecycles with it, and `p2p-target-flow.md` is corrected.
 
-**P1** Reseed both machines: requisition loses `order`; purchase order loses
-`receive_partial`, `receive_rest`, `receive_all` and `close`, and `send` is
-renamed `issue`. A PO created from an approved requisition is born `approved`.
+**P1** Reseed both machines. Corrected in PR4 (20260922380000): no move is
+removed and no code is renamed, because a document runs on the version it
+started on. The requisition's `order` and the purchase order's
+`receive_partial` become automatic, the moves P2 derives are refused pressed
+over nothing, and `send` reads "Issue to supplier". A PO converted from an
+approved requisition, unchanged and to the supplier and site it named, is born
+`approved` by the new move `inherit_approval`.
 **P2** Derive requisition `ordered` from lineage; PO `partially_received`,
 `received` and `closed` from posted receipts and matched invoices.
 **P3** The thirteen parameters, authored through `configure_procurement`, all
