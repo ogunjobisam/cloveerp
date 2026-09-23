@@ -721,6 +721,14 @@ describe("a move is drawn only where it can be completed", () => {
     expect(heldReasons([move({ refused: "CLOVEERP_SOMETHING_ELSE" })])).toEqual([]);
   });
 
+  test("a discount or credit step its holder may not give says so instead of Approve", () => {
+    const refused = move({ code: "approve", refused: "CLOVEERP_PERMISSION_DENIED" });
+    expect(isCompletable(refused)).toBe(false);
+    expect(heldReasons([refused])).toEqual([
+      "This step is for somebody who may approve discounts or release credit.",
+    ]);
+  });
+
   test("a document whose only permitted move is refused offers nothing", () => {
     expect(
       offersAnyTransition("purchase_order", [
