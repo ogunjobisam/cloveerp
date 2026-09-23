@@ -160,6 +160,8 @@ export const HELD_BECAUSE: Readonly<Record<string, string>> = {
   CLOVEERP_DOCUMENT_APPROVAL_REJECTED:
     "The approval asked for was refused. Send it back to draft to change what was refused.",
   CLOVEERP_DOCUMENT_SELF_APPROVAL: "You asked for this approval, so somebody else gives it.",
+  CLOVEERP_PERMISSION_DENIED:
+    "This step is for somebody who may approve discounts or release credit.",
 };
 
 /** Said once when a move is held on its guard rather than on a refusal. */
