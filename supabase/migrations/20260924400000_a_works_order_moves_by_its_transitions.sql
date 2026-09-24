@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260924300000  A works order moves by its transitions
+-- 20260924400000  A works order moves by its transitions
 -- -----------------------------------------------------------------------------
 -- PR7, M1: node M1 of docs/spec/simplification-review.md, as checked against
 -- the built database before this was written.
@@ -102,7 +102,7 @@ language sql
 immutable
 set search_path = ''
 as $$
-  -- The works order's lifecycle (20260924300000), read by
+  -- The works order's lifecycle (20260924400000), read by
   -- erp.configure_production() for a new install and by the upgrade register
   -- for an organisation on version 1, so the two cannot disagree. The moves
   -- are the ones the doors made before there was a lifecycle, each with the
@@ -130,7 +130,7 @@ as $$
 $$;
 
 comment on function erp.works_order_lifecycle_item() is
-  'The works order''s lifecycle (20260924300000): the configuration item '
+  'The works order''s lifecycle (20260924400000): the configuration item '
   'erp.configure_production() and the production upgrade register both read.';
 
 do $configure$
@@ -139,7 +139,7 @@ declare
   v_def text := pg_get_functiondef(v_sig::regprocedure);
   v_old constant text := $o$      jsonb_build_object('kind','config','key','production.issue_method','payload',
 $o$;
-  v_new constant text := $n$      -- The lifecycle (20260924300000), from its one helper.
+  v_new constant text := $n$      -- The lifecycle (20260924400000), from its one helper.
       erp.works_order_lifecycle_item(),
       jsonb_build_object('kind','config','key','production.issue_method','payload',
 $n$;
@@ -160,7 +160,7 @@ $configure$;
 update erp_ref.module_installer
    set current_version = 2,
        description = description
-         || ' Version 2 (20260924300000): a works order moves by a lifecycle, with a '
+         || ' Version 2 (20260924400000): a works order moves by a lifecycle, with a '
          || 'permission on every move and a line in the history for each.'
  where install_code = 'production' and current_version = 1;
 
@@ -234,7 +234,7 @@ $$;
 revoke all on function erp.move_works_order(uuid, text, erp.works_order_status, text) from public, anon;
 
 comment on function erp.move_works_order(uuid, text, erp.works_order_status, text) is
-  'The one place a works order''s status is written (20260924300000): by its '
+  'The one place a works order''s status is written (20260924400000): by its '
   'transition where the order started a lifecycle, and as before where it did not. '
   'Called by the doors that do the work, after they have authorised it.';
 
@@ -289,7 +289,7 @@ declare
     values (v_tenant, wo.entity_id, wo.site_id, r.item_id, 'works_order',
             r.required_quantity - r.issued_quantity, r.uom_id, 'committed',
             wo.planned_end);$o$;
-  v_new1 constant text := $n$    -- Against the order (20260924300000), so closing it releases its own
+  v_new1 constant text := $n$    -- Against the order (20260924400000), so closing it releases its own
     -- commitment and nobody else's, and its availability can leave it out.
     -- Nothing is committed for a component already issued in full.
     if r.required_quantity - r.issued_quantity > 0 then
@@ -417,7 +417,7 @@ declare
      and demand_kind = 'works_order' and status = 'committed'
      and item_id in (select c.item_id from erp.works_order_component c
                       where c.works_order_id = p_works_order_id);$o$;
-  v_new1 constant text := $n$  -- Its own, and nobody else's (20260924300000). Every other order's
+  v_new1 constant text := $n$  -- Its own, and nobody else's (20260924400000). Every other order's
   -- commitment for the same items at the same site went with it before.
   -- An order raised before the lifecycle may still hold a commitment written
   -- without it that could not be matched to it, and that is released as it
@@ -450,7 +450,7 @@ begin
 end
 $close$;
 
--- Hours are recorded on an order on the floor (20260924300000). Not on one
+-- Hours are recorded on an order on the floor (20260924400000). Not on one
 -- never released, nor one cancelled, which this pull request makes possible:
 -- a cancelled order is one nobody worked on. After a close they are still
 -- accepted, as they were, until settlement decides whether they may be (M2).
@@ -564,7 +564,7 @@ revoke all on function erp.cancel_works_order(uuid, text) from public, anon;
 
 comment on function erp.cancel_works_order(uuid, text) is
   'Cancels a works order nobody has started, with a reason, and releases what it '
-  'had committed (20260924300000). Authorises production.release.';
+  'had committed (20260924400000). Authorises production.release.';
 
 create or replace function public.erp_cancel_works_order(p_works_order_id uuid, p_reason text)
 returns text
@@ -658,7 +658,7 @@ declare
   v_def text := pg_get_functiondef(v_sig::regprocedure);
   v_old constant text := $o$  -- ── Trading, up to the day this runs or the time this statement has ────────
 $o$;
-  v_new constant text := $n$  -- ── Production's newer version (20260924300000) ───────────────────────────
+  v_new constant text := $n$  -- ── Production's newer version (20260924400000) ───────────────────────────
   begin
     if exists (select 1 from erp.module_installation i
                 where i.tenant_id = v_tenant and i.install_code = 'production') then
@@ -707,7 +707,7 @@ as $function$
            'column_name', x.column_name, 'detail', x.detail))
     from (values
       ('erp', 'works_order', 'status',
-       'A works order moves by its lifecycle since 20260924300000, and the column follows it. Its one writer is erp.move_works_order(), which also moves an order raised before its organisation took the lifecycle, by the column, as every order moved before. The row goes when no organisation is left on version 1 of production.'),
+       'A works order moves by its lifecycle since 20260924400000, and the column follows it. Its one writer is erp.move_works_order(), which also moves an order raised before its organisation took the lifecycle, by the column, as every order moved before. The row goes when no organisation is left on version 1 of production.'),
       ('erp', 'planned_order', 'status',
        'The same shape as a works order, and carrying two states — reviewed and firmed — that node M7 removes as dead. Its moves belong on the spine with the rest.'),
       ('erp', 'count_task', 'status',
@@ -718,7 +718,7 @@ $function$;
 update erp_meta.enforcement_gate
    set tolerated_findings = 6,
        rationale = rationale
-         || ' Six from 20260924300000: the works order''s four writers are one, erp.move_works_order().'
+         || ' Six from 20260924400000: the works order''s four writers are one, erp.move_works_order().'
  where gate = 'no_state_side_doors' and tolerated_findings = 9;
 
 do $gate$
@@ -1018,7 +1018,7 @@ revoke all on function erp_test.assert_works_order_lifecycle_suite() from public
 comment on function erp_test.assert_works_order_lifecycle_suite() is
   'A works order moves by its lifecycle where it has one and by its column where it '
   'was raised before, cancels only unstarted, and releases only its own commitment '
-  '(20260924300000).';
+  '(20260924400000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- B4. The words the screen says for it
@@ -1026,7 +1026,7 @@ comment on function erp_test.assert_works_order_lifecycle_suite() is
 
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key(v.text), 'en', v.text,
-       'A screen string, rendered through ui(). A works order cancelled from the desk (20260924300000).'
+       'A screen string, rendered through ui(). A works order cancelled from the desk (20260924400000).'
   from (values
     ('Cancel a works order'),
     ('For an order nobody has started: nothing taken out, nothing taken in and no hours recorded. What it had set aside is released. An order that has started is closed instead.'),
