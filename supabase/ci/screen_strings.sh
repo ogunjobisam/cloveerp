@@ -76,36 +76,97 @@ for v in sorted({m.group(2) for m in pat.finditer(src)}):
     print(v)
 PY
 
-# The prop strings. A JSX opening tag is scanned rather than regexed whole,
-# because a prop's value can contain a `>` and the tag can span lines; the
-# scanner tracks quoting and brace depth so it stops at the tag's own `>`
-# rather than at one inside an expression.
-python3 - "$SRC" > "$WORK/props.txt" <<'PY'
+# The scanners sources 3 and 4 share. A JSX opening tag, or an action's object
+# literal, is scanned rather than regexed whole, because a prop's value can
+# contain a `>` and the tag can span lines; the scanner tracks quoting and
+# brace depth so it stops at the tag's own `>` rather than at one inside an
+# expression.
+#
+# It skips comments, and has to. An apostrophe in one — "the organisation's
+# first" — is prose, not a quote. Read as a quote, it put what followed inside
+# a string that closed only at the next stray apostrophe, if ever: a tag's scan
+# ran off the end of the file and yielded nothing, so every word in it went
+# unchecked, and an object's ran on into its neighbours. Nothing said so,
+# because a tag that yields nothing looks like a tag with nothing to say, and
+# adding an unrelated action to a file was enough to change which words were
+# hidden. On the day this was fixed, 56 strings in 8 files were hidden that way
+# — the Organisation screen's sites card among them. Words in a comment are not
+# on the screen either, so they are not harvested.
+cat > "$WORK/tsx_scan.py" <<'PY'
+import re
+
+def code(src, i):
+    """src from i, read as TypeScript: (character, quoted) for all but comments.
+    quoted is true inside a string literal, where a brace or `>` is only text."""
+    quote = None
+    while i < len(src):
+        c = src[i]
+        if quote:
+            if c == "\\":
+                yield src[i:i + 2], True
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            yield c, True
+        elif c in "\"'`":
+            quote = c
+            yield c, True
+        elif src.startswith("//", i):
+            i = src.find("\n", i)
+            if i < 0:
+                return
+            continue
+        elif src.startswith("/*", i):
+            i = src.find("*/", i + 2)
+            if i < 0:
+                return
+            i += 2
+            continue
+        else:
+            yield c, False
+        i += 1
+
+def spans(src, name):
+    """The text of each <Name …> opening tag, less its comments."""
+    for m in re.finditer(r"<" + name + r"(?=[\s/>])", src):
+        depth, text = 0, []
+        for c, quoted in code(src, m.end()):
+            if not quoted:
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                elif c == ">" and depth == 0:
+                    yield "".join(text)
+                    break
+            text.append(c)
+
+def objects_with_fn(src):
+    """Object literals carrying `fn: "…"` — an action declared outside any JSX."""
+    for m in re.finditer(r'\bfn:\s*"', src):
+        start = src.rfind("{", 0, m.start())
+        if start < 0:
+            continue
+        depth, text = 0, []
+        for c, quoted in code(src, start):
+            text.append(c)
+            if not quoted:
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        yield "".join(text)
+                        break
+PY
+
+# The prop strings.
+PYTHONPATH="$WORK" python3 - "$SRC" > "$WORK/props.txt" <<'PY'
 import re, pathlib, sys
+from tsx_scan import spans
 
 COMPONENTS = {"ActionBar": ("title", "note"), "AutoPanel": ("title", "description", "empty")}
-
-def opening_tags(src, name):
-    for m in re.finditer(r"<" + name + r"(?=[\s/>])", src):
-        i, depth, instr = m.end(), 0, None
-        while i < len(src):
-            c = src[i]
-            if instr:
-                if c == "\\":
-                    i += 2
-                    continue
-                if c == instr:
-                    instr = None
-            elif c in "\"'`":
-                instr = c
-            elif c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-            elif c == ">" and depth == 0:
-                yield src[m.end() : i]
-                break
-            i += 1
 
 found = set()
 for path in pathlib.Path(sys.argv[1]).rglob("*.tsx"):
@@ -115,7 +176,7 @@ for path in pathlib.Path(sys.argv[1]).rglob("*.tsx"):
     for component, props in COMPONENTS.items():
         if f"<{component}" not in src:
             continue
-        for attrs in opening_tags(src, component):
+        for attrs in spans(src, component):
             for prop in props:
                 for m in re.finditer(prop + r'="((?:[^"\\]|\\.)*)"', attrs):
                     found.add(m.group(1))
@@ -123,8 +184,9 @@ for value in sorted(found):
     print(value)
 PY
 
-python3 - "$SRC" > "$WORK/form.txt" <<'PY'
+PYTHONPATH="$WORK" python3 - "$SRC" > "$WORK/form.txt" <<'PY'
 import re, pathlib, sys
+from tsx_scan import spans, objects_with_fn
 
 # Components that render the strings handed to them through ui(). Anything not
 # on this list renders its props raw, so its words are not renameable and must
@@ -133,55 +195,6 @@ import re, pathlib, sys
 COMPONENTS = ("ActionBar", "ActionDialog", "AutoPanel", "InquiryBoard")
 PROPS = ("title", "note", "description", "empty", "submitLabel")
 KEYS = ("label", "hint", "title", "description", "submitLabel", "header", "empty")
-
-def spans(src, name):
-    """The text of each <Name …> opening tag, quote- and brace-aware."""
-    for m in re.finditer(r"<" + name + r"(?=[\s/>])", src):
-        i, depth, instr = m.end(), 0, None
-        while i < len(src):
-            c = src[i]
-            if instr:
-                if c == "\\":
-                    i += 2
-                    continue
-                if c == instr:
-                    instr = None
-            elif c in "\"'`":
-                instr = c
-            elif c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-            elif c == ">" and depth == 0:
-                yield src[m.end():i]
-                break
-            i += 1
-
-def objects_with_fn(src):
-    """Object literals carrying `fn: "…"` — an action declared outside any JSX."""
-    for m in re.finditer(r'\bfn:\s*"', src):
-        start = src.rfind("{", 0, m.start())
-        if start < 0:
-            continue
-        i, depth, instr = start, 0, None
-        while i < len(src):
-            c = src[i]
-            if instr:
-                if c == "\\":
-                    i += 2
-                    continue
-                if c == instr:
-                    instr = None
-            elif c in "\"'`":
-                instr = c
-            elif c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    yield src[start:i + 1]
-                    break
-            i += 1
 
 def harvest(text, out):
     for p in PROPS:

@@ -24,8 +24,8 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 | **Foundation, B1–B10** | Complete, and every later Part built on it.                                                                                                                                                                                                                                  |
 | **Modules**            | <!-- count:modules -->13<!-- /count --> installable modules, each a change set of rules, lifecycles and approval chains promoted through B6 exactly as a customer's own change would be.                                                                                     |
 | **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
-| **Interface**          | An application over a curated API of <!-- count:doors -->690<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
-| **Build**              | Every migration applied on every push — to a base a previous build proved, and nightly to an empty database — then <!-- count:catalogue_checks -->346<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
+| **Interface**          | An application over a curated API of <!-- count:doors -->692<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
+| **Build**              | Every migration applied on every push — to a base a previous build proved, and nightly to an empty database — then <!-- count:catalogue_checks -->347<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 
 Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:ref_tables -->78<!-- /count --> product-content tables,
@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:policies -->369<!-- /count --> row-security policies and
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->534<!-- /count --> migrations and
-<!-- count:sql_lines -->332493<!-- /count --> lines of SQL.
+<!-- count:migrations -->537<!-- /count --> migrations and
+<!-- count:sql_lines -->333581<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -93,7 +93,7 @@ rationale rather than left to judgement, and an assertion refuses an exception
 nobody wrote down:
 
 - **`erp_meta.security_definer_allowance`** — <!-- count:definer_allowances -->204<!-- /count --> entries. A `SECURITY DEFINER` function runs as the owner, who bypasses row-level security. Every one in the product schemas is listed with the reason it needs the privilege.
-- **`erp_meta.public_write_allowance`** — <!-- count:write_allowances -->506<!-- /count --> entries. The doors permitted to be volatile, each naming the gate it reaches. A volatile `public.erp_*` function that is not listed fails the build; so does one whose gate no longer authorises.
+- **`erp_meta.public_write_allowance`** — <!-- count:write_allowances -->508<!-- /count --> entries. The doors permitted to be volatile, each naming the gate it reaches. A volatile `public.erp_*` function that is not listed fails the build; so does one whose gate no longer authorises.
 - **`erp_meta.check_run_exemption`** — the catalogue checks CI cannot run without an argument, each naming what drives it instead.
 - **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->20<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->3<!-- /count --> waiting for their screen with the path recorded.
 - **`erp_meta.linter_finding_allowance`** — the host's security lints, reimplemented in `erp.linter_report()`, with every remaining finding either fixed or allowed with a reason.
@@ -109,8 +109,8 @@ nobody wrote down:
 | `erp_meta`    | <!-- count:meta_tables -->76<!-- /count --> tables                                                | Platform metadata: the registers, the allow-lists, the exemptions, incidents, releases   |
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
-| `erp_test`    | <!-- count:suites -->245<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
-| `public`      | <!-- count:doors -->690<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
+| `erp_test`    | <!-- count:suites -->246<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
+| `public`      | <!-- count:doors -->692<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 
 Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`; `pg_cron` and `pg_net`
 where the host has them.
@@ -150,7 +150,7 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->5002<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->5054<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->699<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 
@@ -225,7 +225,7 @@ seeded with a year of trading.
 
 **The catalogue.** `erp.ci_check_catalogue()` reads `pg_proc` and returns every
 check the build can call — <!-- count:assertions -->118<!-- /count --> structural
-assertions, <!-- count:suites -->245<!-- /count --> adversarial suites, the
+assertions, <!-- count:suites -->246<!-- /count --> adversarial suites, the
 whole-database reconciliation last, over every organisation, every posting rule
 in force and every bound company. The runner hands the names it ran back to
 `erp.assert_ci_ran()`, which refuses if the catalogue holds one it did not run.
