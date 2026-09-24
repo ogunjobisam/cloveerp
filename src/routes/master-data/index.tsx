@@ -20,6 +20,7 @@ import { Field, RecordBrowser, RecordSection } from "../../components/erp/record
 import { callErp, hasPermission } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
+import { partyAddressArgs } from "../../lib/invoice-details";
 
 /**
  * Products and business partners.
@@ -153,6 +154,49 @@ function MasterData() {
         title="Partners, roles and duplicates"
         note="A business partner is one record with the roles it plays. Two records for one partner are merged into a survivor, with the reason kept."
         actions={[
+          {
+            label: "Set a business partner's address",
+            description:
+              "Where invoices, deliveries or remittances go. A new address of the same kind replaces the one before as the default; the old one is kept on record.",
+            permission: "master_data.write",
+            fn: "erp_set_party_address",
+            mapArgs: partyAddressArgs,
+            fields: [
+              pickParty(undefined, "p_party_id", "Business partner"),
+              {
+                kind: "choice",
+                name: "p_address_kind",
+                label: "Kind of address",
+                required: true,
+                default: "billing",
+                choices: [
+                  { value: "billing", label: "Billing" },
+                  { value: "delivery", label: "Delivery" },
+                  { value: "collection", label: "Collection" },
+                  { value: "remittance", label: "Remittance" },
+                  { value: "returns", label: "Returns" },
+                ],
+              },
+              {
+                kind: "text",
+                name: "line_1",
+                label: "Address, first line",
+                required: true,
+                placeholder: "2 Buyer Street",
+              },
+              {
+                kind: "text",
+                name: "line_2",
+                label: "Address, second line",
+                placeholder: "Unit 4",
+              },
+              { kind: "text", name: "p_locality", label: "Town", placeholder: "York" },
+              { kind: "text", name: "p_postcode", label: "Postcode", placeholder: "YO1 1AA" },
+              pickCountry("p_country_code", "Country", false),
+              { kind: "text", name: "p_label", label: "Label", placeholder: "Accounts payable" },
+            ],
+            invalidates: ["erp_parties"],
+          },
           {
             label: "Create a business partner with roles",
             description: "The record and every role it plays, in one step.",
