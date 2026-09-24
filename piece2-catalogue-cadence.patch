@@ -1,0 +1,70 @@
+--- a/.github/workflows/schema.yml
++++ b/.github/workflows/schema.yml
+@@ -712,7 +712,7 @@
+         uses: actions/cache/restore@v4
+         with:
+           path: ${{ runner.temp }}/catalogue.proved
+-          key: clove-erp-proved-v1-${{ steps.keys.outputs.catalogue }}
++          key: clove-erp-proved-v2-${{ steps.keys.outputs.catalogue }}-push
+ 
+       - name: Who proved it
+         if: steps.proved.outputs.cache-hit == 'true'
+@@ -749,6 +749,17 @@
+         # This replaces two hand-typed lists that between them left twelve
+         # assertions unrun, including all four reconciliations. A check that
+         # exists and is not run is a check that is not there.
++        #
++        # At the cadence of the event, since 20260924550000. A push runs every
++        # check not registered in erp_meta.check_cadence — five demonstration
++        # suites that trade an organisation for twenty minutes between them —
++        # and the nightly, the from-empty build, runs every check. The runner
++        # prints what a push leaves by name, and erp.assert_ci_ran() is told
++        # the cadence, so a push that left anything unregistered unrun still
++        # refuses. The marker above is keyed by cadence for the same reason:
++        # a push's pass is not a nightly's.
++        env:
++          CATALOGUE_CADENCE: ${{ steps.keys.outputs.full == 'yes' && 'nightly' || 'push' }}
+         run: |
+           set -euo pipefail
+           supabase/ci/run_checks.sh
+@@ -760,7 +771,7 @@
+         uses: actions/cache/save@v4
+         with:
+           path: ${{ runner.temp }}/catalogue.proved
+-          key: clove-erp-proved-v1-${{ steps.keys.outputs.catalogue }}
++          key: clove-erp-proved-v2-${{ steps.keys.outputs.catalogue }}-push
+ 
+       - name: A check that is not run fails the build
+         # The negative proof, in a transaction that is rolled back: create an
+@@ -773,17 +784,23 @@
+           begin;
+           create function erp.assert_zz_unrun() returns text language sql as $f$ select 'never run' $f$;
+           do $$
+-          declare v_names text[];
++          declare v_names text[]; v_cadence text;
+           begin
+             select array_agg(qualified_name) into v_names
+               from erp.ci_check_catalogue() where qualified_name <> 'erp.assert_zz_unrun';
+-            perform erp.assert_ci_ran(v_names);
+-            raise exception 'CLOVEERP_CI_UNGUARDED: a check that was not run passed the build';
+-          exception when others then
+-            if sqlerrm not like 'CLOVEERP_CHECK_NOT_RUN:%' or sqlerrm not like '%erp.assert_zz_unrun%' then
+-              raise;
+-            end if;
+-            raise notice 'refused as it should: %', left(sqlerrm, 80);
++            -- At both cadences: an unregistered check is owed by a push as
++            -- much as by the nightly, and a cadence must not be a way past it.
++            foreach v_cadence in array array['nightly', 'push'] loop
++              begin
++                perform erp.assert_ci_ran(v_names, v_cadence);
++                raise exception 'CLOVEERP_CI_UNGUARDED: a check that was not run passed the build at cadence %', v_cadence;
++              exception when others then
++                if sqlerrm not like 'CLOVEERP_CHECK_NOT_RUN:%' or sqlerrm not like '%erp.assert_zz_unrun%' then
++                  raise;
++                end if;
++                raise notice 'refused as it should at cadence %: %', v_cadence, left(sqlerrm, 80);
++              end;
++            end loop;
+           end $$;
+           rollback;
+           SQL
