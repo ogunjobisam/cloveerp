@@ -419,19 +419,31 @@ export const allocationPolicyArgs = (values: Record<string, string>): Record<str
  * percentages that were given, as numbers, and the company, site and change
  * the proposal belongs to (20260924000000).
  */
-export const salesPolicyArgs = (values: Record<string, string>): Record<string, unknown> => {
-  const policy: Record<string, number> = {};
-  for (const key of ["over_ship_pct", "short_close_pct"]) {
-    const raw = (values[key] ?? "").trim();
-    if (raw !== "") policy[key] = Number(raw);
-  }
-  const args: Record<string, unknown> = { p_value: policy };
-  for (const name of ["p_entity_code", "p_site_code", "p_change_set_id"]) {
-    const raw = values[name] ?? "";
-    if (raw !== "") args[name] = raw;
-  }
-  return args;
-};
+const policyArgs =
+  (keys: readonly string[]) =>
+  (values: Record<string, string>): Record<string, unknown> => {
+    const policy: Record<string, number> = {};
+    for (const key of keys) {
+      const raw = (values[key] ?? "").trim();
+      if (raw !== "") policy[key] = Number(raw);
+    }
+    const args: Record<string, unknown> = { p_value: policy };
+    for (const name of ["p_entity_code", "p_site_code", "p_change_set_id"]) {
+      const raw = values[name] ?? "";
+      if (raw !== "") args[name] = raw;
+    }
+    return args;
+  };
+
+export const salesPolicyArgs = policyArgs(["over_ship_pct", "short_close_pct"]);
+
+/** The production policy's form (20260924500000), sent as the sales policy's is. */
+export const productionPolicyArgs = policyArgs([
+  "over_completion_pct",
+  "short_completion_pct",
+  "scrap_pct",
+  "release_shortage_pct",
+]);
 
 /** A count, coloured by whether zero is the good answer. */
 const zeroIsGood = (n: number, label: string) => ({
@@ -2709,8 +2721,10 @@ export const PRODUCTION: ModuleDef = {
         label: "Take out materials",
         hint: "Stock leaves the store and joins the order's cost.",
         list: WORKS_ORDER_LIST,
-        // Issuing and receiving take a released order or one under way.
-        states: ["released", "in_progress"],
+        // Issuing and receiving take a released order, one under way, and one
+        // completed but not closed, whose last units may still come off the
+        // line (20260924500000).
+        states: ["released", "in_progress", "completed"],
         recordArg: "p_works_order_id",
         actionFn: "erp_issue_to_works_order",
       },
@@ -2718,7 +2732,7 @@ export const PRODUCTION: ModuleDef = {
         label: "Record hours",
         hint: "Hours worked on each operation, so the difference from plan means something.",
         list: WORKS_ORDER_LIST,
-        states: ["released", "in_progress"],
+        states: ["released", "in_progress", "completed"],
         recordArg: "p_works_order_id",
         actionFn: "erp_book_operation_time",
       },
@@ -2726,7 +2740,7 @@ export const PRODUCTION: ModuleDef = {
         label: "Take in finished goods",
         hint: "Finished quantity, and scrap, back into stock.",
         list: WORKS_ORDER_LIST,
-        states: ["released", "in_progress"],
+        states: ["released", "in_progress", "completed"],
         recordArg: "p_works_order_id",
         actionFn: "erp_receive_works_order_output",
       },
@@ -2883,16 +2897,8 @@ export const PRODUCTION: ModuleDef = {
           "p_works_order_id",
           "Works order",
         ),
-        {
-          kind: "choice",
-          name: "p_allow_shortage",
-          label: "Release despite shortages",
-          boolean: true,
-          choices: [
-            { value: "false", label: "No" },
-            { value: "true", label: "Yes" },
-          ],
-        },
+        // How short an order may be released is the production policy's to
+        // say (20260924500000), not a switch on this form.
       ],
       invalidates: ["erp_works_orders"],
     },
@@ -2988,6 +2994,59 @@ export const PRODUCTION: ModuleDef = {
         reason("p_reason", "Why it is cancelled", true),
       ],
       invalidates: ["erp_works_orders"],
+    },
+    {
+      label: "Propose the production policy",
+      description:
+        "How far past its quantity a works order may be taken in, how little may be left for it to count as completed, how much of it may be scrapped, and how short of material it may be released. Proposed as a change like any other configuration.",
+      permission: "administration.configure",
+      fn: "erp_propose_production_policy",
+      mapArgs: productionPolicyArgs,
+      fields: [
+        {
+          kind: "select",
+          name: "p_entity_code",
+          label: "Company",
+          options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+          hint: "Leave unchosen to set the policy for the whole organisation.",
+        },
+        {
+          kind: "select",
+          name: "p_site_code",
+          label: "Site",
+          options: { fn: "erp_sites", value: "code", label: ["code", "name"] },
+          hint: "Leave unchosen to apply the policy across the whole company.",
+        },
+        {
+          kind: "number",
+          name: "over_completion_pct",
+          label: "Over-completion allowed (%)",
+          hint: "How far past its quantity an order may be taken in. 0 allows none; left empty, the broader setting applies.",
+        },
+        {
+          kind: "number",
+          name: "short_completion_pct",
+          label: "Short completion (%)",
+          hint: "An order counts as completed once no more than this share of it is left to make. 0 means every unit; left empty, the broader setting applies.",
+        },
+        {
+          kind: "number",
+          name: "scrap_pct",
+          label: "Scrap allowed (%)",
+          hint: "How much of an order's quantity may be booked as scrap across its operations. Left empty, the broader setting applies.",
+        },
+        {
+          kind: "number",
+          name: "release_shortage_pct",
+          label: "Release short by up to (%)",
+          hint: "How short of any component, as a share of what the order needs of it, an order may be released. 0 means none short; left empty, the broader setting applies.",
+        },
+        {
+          ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+          hint: "Leave unchosen to start a new change for this proposal.",
+        },
+      ],
+      invalidates: ["erp_change_sets"],
     },
   ],
 
