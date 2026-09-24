@@ -437,6 +437,15 @@ const policyArgs =
 
 export const salesPolicyArgs = policyArgs(["over_ship_pct", "short_close_pct"]);
 
+/**
+ * Undoing a works order's issue or receipt (20260924600000). The order is chosen
+ * only to list its movements; the door takes the movement and the reason.
+ */
+export const undoMovementArgs = (values: Record<string, string>): Record<string, unknown> => ({
+  p_movement_id: Number(values["p_movement_id"] ?? ""),
+  p_reason: (values["p_reason"] ?? "").trim(),
+});
+
 /** The production policy's form (20260924500000), sent as the sales policy's is. */
 export const productionPolicyArgs = policyArgs([
   "over_completion_pct",
@@ -2994,6 +3003,72 @@ export const PRODUCTION: ModuleDef = {
         reason("p_reason", "Why it is cancelled", true),
       ],
       invalidates: ["erp_works_orders"],
+    },
+    {
+      label: "Return materials to stock",
+      description:
+        "A component issued to an order still open, back on the shelf at what it left at. The order's issued quantity and the stock's value move with it.",
+      permission: "production.execute",
+      fn: "erp_return_works_order_issue",
+      mapArgs: undoMovementArgs,
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        {
+          kind: "select",
+          name: "p_movement_id",
+          label: "Issue to return",
+          required: true,
+          hint: "Only issues not already returned can be returned, once each.",
+          options: {
+            fn: "erp_works_order_movements",
+            args: { p_kind: "issue" },
+            argsFrom: { p_works_order_id: "p_works_order_id" },
+            value: "movement_id",
+            label: ["item", "quantity", "occurred_at"],
+          },
+        },
+        reason("p_reason", "Why it is returned", true),
+      ],
+      invalidates: ["erp_works_orders", "erp_works_order_movements", "erp_stock_health"],
+    },
+    {
+      label: "Reverse finished goods taken in",
+      description:
+        "Finished goods an order still open took in, taken back out of stock. The order made less than it said; its stage does not move.",
+      permission: "production.execute",
+      fn: "erp_reverse_works_order_output",
+      mapArgs: undoMovementArgs,
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        {
+          kind: "select",
+          name: "p_movement_id",
+          label: "Receipt to reverse",
+          required: true,
+          hint: "Only receipts not already reversed can be reversed, once each, while the goods are still where they were put.",
+          options: {
+            fn: "erp_works_order_movements",
+            args: { p_kind: "receipt" },
+            argsFrom: { p_works_order_id: "p_works_order_id" },
+            value: "movement_id",
+            label: ["item", "quantity", "occurred_at"],
+          },
+        },
+        reason("p_reason", "Why it is reversed", true),
+      ],
+      invalidates: ["erp_works_orders", "erp_works_order_movements", "erp_stock_health"],
     },
     {
       label: "Propose the production policy",
