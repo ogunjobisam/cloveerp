@@ -63,7 +63,9 @@ function contract(lineCount: number, customerName: string): InvoiceContract {
 const twoHundredLines = renderSalesInvoicePdf(contract(200, "Buyer Ltd"));
 
 async function pageTexts(bytes: Uint8Array): Promise<string[]> {
-  const task = getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false });
+  // A copy: pdfjs takes the buffer it is handed, and the two-hundred-line
+  // bytes are read by two tests.
+  const task = getDocument({ data: bytes.slice(), useWorkerFetch: false, isEvalSupported: false });
   const doc = await task.promise;
   const pages: string[] = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
