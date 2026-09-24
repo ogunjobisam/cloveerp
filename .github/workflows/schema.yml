@@ -420,6 +420,19 @@ jobs:
               echo "── $(basename "$f")"
               $PSQL --single-transaction -f "$f"
             done
+            # The restore path analyses because nothing else would; this path
+            # was trusted to autovacuum, which analyses a table only once it
+            # has changed by fifty rows and a tenth, so a reference table of
+            # forty rows is never analysed and every plan over it runs on the
+            # default guess. On the nightly of 24 September the reopen suite
+            # took 3,495 s from an empty cluster and 185 s on a restored and
+            # analysed one, the same suite on the same day. An experiment: the
+            # same ANALYZE here, so both paths start their suites on the same
+            # statistics, and the per-check timings the runner now prints say
+            # whether that was the difference.
+            analyse_started=$(date +%s)
+            $PSQL -c 'analyze'
+            echo "analysed the replayed database in $(( $(date +%s) - analyse_started )) s"
             capture
             echo "built from the migrations, and cached for the next run"
           }
@@ -627,7 +640,15 @@ jobs:
         # way the product does, through erp.ensure_demo_configuration() and
         # erp.seed_demo_history(), so the whole-database step below has a
         # ledger, a stock ledger, a subledger and a genealogy to disagree with.
-        run: $PSQL -f supabase/ci/seed_demo.sql
+        #
+        # And analysed afterwards: the seed writes months of trading into
+        # tables that were empty a moment ago, and every suite after it plans
+        # its queries over that organisation. The same reason the restore is
+        # analysed above.
+        run: |
+          set -euo pipefail
+          $PSQL -f supabase/ci/seed_demo.sql
+          $PSQL -c 'analyze'
 
       - name: What live assurance costs, check by check
         # The deploy proves live with erp.platform_assurance(): every registered
