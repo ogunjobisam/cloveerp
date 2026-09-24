@@ -10,7 +10,7 @@
   "doors": 692,
   "doors_pending_screen": 3,
   "doors_writing": 508,
-  "en_strings": 5044,
+  "en_strings": 5051,
   "enums": 83,
   "erp_tables": 251,
   "erp_views": 16,
@@ -36,7 +36,7 @@
   "promotable_surfaces": 43,
   "ref_tables": 78,
   "spec_version": "v1.6",
-  "sql_lines": 333453,
+  "sql_lines": 333166,
   "suites": 245,
   "triggers": 823,
   "write_allowances": 508
