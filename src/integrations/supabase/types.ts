@@ -2082,7 +2082,7 @@ export type Database = {
         Returns: Json
       }
       erp_release_works_order: {
-        Args: { p_allow_shortage?: boolean; p_works_order_id: string }
+        Args: { p_works_order_id: string }
         Returns:
           | "draft"
           | "planned"
