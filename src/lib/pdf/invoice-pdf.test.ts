@@ -57,8 +57,15 @@ function contract(lineCount: number, customerName: string): InvoiceContract {
   };
 }
 
+// Rendered once and read by two tests. The renderer is deterministic (the
+// commercial-document suite proves one payload gives one set of bytes), and a
+// two-hundred-line render is the dearest thing in this file.
+const twoHundredLines = renderSalesInvoicePdf(contract(200, "Buyer Ltd"));
+
 async function pageTexts(bytes: Uint8Array): Promise<string[]> {
-  const task = getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false });
+  // A copy: pdfjs takes the buffer it is handed, and the two-hundred-line
+  // bytes are read by two tests.
+  const task = getDocument({ data: bytes.slice(), useWorkerFetch: false, isEvalSupported: false });
   const doc = await task.promise;
   const pages: string[] = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
@@ -71,7 +78,7 @@ async function pageTexts(bytes: Uint8Array): Promise<string[]> {
 }
 
 test("a two hundred line invoice paginates and closes with its summary and totals", async () => {
-  const bytes = await renderSalesInvoicePdf(contract(200, "Buyer Ltd"));
+  const bytes = await twoHundredLines;
   const pages = await pageTexts(bytes);
   // 200 lines cannot fit one page, and the reserved closing block means the
   // last page carries the summary and the totals together.
@@ -93,7 +100,7 @@ test("the sterling sign and a non-ASCII customer name embed without loss", async
 
 test("page N of M is written once the final count is known", async () => {
   const one = await renderSalesInvoicePdf(contract(2, "Buyer Ltd"));
-  const many = await renderSalesInvoicePdf(contract(200, "Buyer Ltd"));
+  const many = await twoHundredLines;
   const onePages = await pageTexts(one);
   const manyPages = await pageTexts(many);
   expect(onePages).toHaveLength(1);
