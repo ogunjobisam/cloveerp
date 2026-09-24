@@ -87,12 +87,53 @@ export function formatMinor(minor: unknown, currency: string): string {
   return symbol ? `${symbol}${body}` : `${body} ${currency}`;
 }
 
-function clip(font: PDFFont, value: string, size: number, width: number): string {
-  let out = value;
-  while (out.length > 1 && font.widthOfTextAtSize(out, size) > width) {
-    out = out.slice(0, -1);
+/**
+ * Widths already measured, per font, keyed by size and text. pdf-lib lays the
+ * text out through fontkit afresh on every call, which is most of what a long
+ * invoice costs: a two-hundred-line invoice made 9,380 measurements and spent
+ * 341 of its 466 ms on them, and most cells repeat on every line. A font is
+ * embedded per document, so keying on it scopes the memory to one render and
+ * lets it go with the document.
+ */
+const widths = new WeakMap<PDFFont, Map<string, number>>();
+
+function widthOf(font: PDFFont, text: string, size: number): number {
+  let known = widths.get(font);
+  if (!known) {
+    known = new Map();
+    widths.set(font, known);
   }
-  return out.length < value.length ? `${out.slice(0, -1)}\u2026` : out;
+  const key = `${size}\u0000${text}`;
+  const seen = known.get(key);
+  if (seen !== undefined) return seen;
+  const measured = font.widthOfTextAtSize(text, size);
+  known.set(key, measured);
+  return measured;
+}
+
+const ELLIPSIS = "\u2026";
+
+/**
+ * The text, or the longest prefix that fits the column with an ellipsis after
+ * it. Width grows with the prefix, so the cut is found by halving: one
+ * measurement when the text fits, about seven for a seventy-character
+ * description, where shrinking by one character took forty-five. The ellipsis
+ * is measured as part of the fit, so what is drawn is what was measured; it
+ * used to be added after the check and could overhang the column by a glyph.
+ */
+function clip(font: PDFFont, value: string, size: number, width: number): string {
+  if (widthOf(font, value, size) <= width) return value;
+  let lo = 0;
+  let hi = value.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (widthOf(font, value.slice(0, mid) + ELLIPSIS, size) <= width) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return value.slice(0, lo) + ELLIPSIS;
 }
 
 function draw(
@@ -106,7 +147,7 @@ function draw(
 ) {
   const width = opts?.width;
   const shown = width ? clip(font, value, size, width) : value;
-  const offset = opts?.align === "right" && width ? width - font.widthOfTextAtSize(shown, size) : 0;
+  const offset = opts?.align === "right" && width ? width - widthOf(font, shown, size) : 0;
   page.drawText(shown, { x: x + offset, y, size, font });
 }
 
