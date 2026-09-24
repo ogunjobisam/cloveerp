@@ -414,6 +414,25 @@ export const allocationPolicyArgs = (values: Record<string, string>): Record<str
   return args;
 };
 
+/**
+ * The sales policy's form, as erp_propose_sales_policy takes it: the two
+ * percentages that were given, as numbers, and the company, site and change
+ * the proposal belongs to (20260924000000).
+ */
+export const salesPolicyArgs = (values: Record<string, string>): Record<string, unknown> => {
+  const policy: Record<string, number> = {};
+  for (const key of ["over_ship_pct", "short_close_pct"]) {
+    const raw = (values[key] ?? "").trim();
+    if (raw !== "") policy[key] = Number(raw);
+  }
+  const args: Record<string, unknown> = { p_value: policy };
+  for (const name of ["p_entity_code", "p_site_code", "p_change_set_id"]) {
+    const raw = values[name] ?? "";
+    if (raw !== "") args[name] = raw;
+  }
+  return args;
+};
+
 /** A count, coloured by whether zero is the good answer. */
 const zeroIsGood = (n: number, label: string) => ({
   value: String(n),
