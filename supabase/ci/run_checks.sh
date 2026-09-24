@@ -29,7 +29,7 @@
 # passes 49/49 on a host without pg_jsonschema because erp.jsonb_matches_schema()
 # enforces `required` in SQL before asking the extension.
 #
-# Two cadences, since 20260924550000. A push runs every check not registered
+# Two cadences, since 20260924560000. A push runs every check not registered
 # in erp_meta.check_cadence; the nightly runs every check. The register names
 # five demonstration suites whose fixtures trade an organisation for minutes,
 # twenty of the twenty-seven a push used to wait. What a push leaves is printed

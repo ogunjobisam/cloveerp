@@ -14,7 +14,7 @@
          # assertions unrun, including all four reconciliations. A check that
          # exists and is not run is a check that is not there.
 +        #
-+        # At the cadence of the event, since 20260924550000. A push runs every
++        # At the cadence of the event, since 20260924560000. A push runs every
 +        # check not registered in erp_meta.check_cadence — five demonstration
 +        # suites that trade an organisation for twenty minutes between them —
 +        # and the nightly, the from-empty build, runs every check. The runner

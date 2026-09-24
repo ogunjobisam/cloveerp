@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260924550000  The catalogue has a cadence
+-- 20260924560000  The catalogue has a cadence
 -- -----------------------------------------------------------------------------
 -- Every push walks every check in erp.ci_check_catalogue(), and on 24 September
 -- the walk on main took 27 minutes: 348 checks, of which five took 20 minutes
