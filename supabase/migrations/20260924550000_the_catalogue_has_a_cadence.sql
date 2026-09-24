@@ -475,8 +475,9 @@ declare
 begin
   create temp table if not exists _ci_coverage on commit drop as
     select * from erp_test.ci_coverage_suite();
-  select count(*), count(*) filter (where not passed),
-         string_agg(format('  %s — %s', case_name, detail), E'\n') filter (where not passed)
+  select count(*), count(*) filter (where not coalesce(passed, false)),
+         string_agg(format('  %s — %s', case_name, detail), E'\n')
+           filter (where not coalesce(passed, false))
     into v_all, v_fail, v_detail
     from _ci_coverage;
   drop table _ci_coverage;
