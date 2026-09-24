@@ -18,6 +18,7 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
+import { companyInvoiceDetailsArgs } from "../../lib/invoice-details";
 import { toMinor } from "../../lib/money";
 
 /**
@@ -447,6 +448,62 @@ function Organisation() {
                   false,
                 ),
                 hint: "For a subsidiary.",
+              },
+            ],
+            invalidates: ["erp_entities"],
+          },
+          {
+            label: "Set a company's invoice details",
+            description:
+              "The registration number, registered office and VAT number every invoice the company issues must carry. What is left empty keeps what is recorded; an office given replaces the one recorded.",
+            permission: "administration.configure",
+            fn: "erp_set_company_invoice_details",
+            mapArgs: companyInvoiceDetailsArgs,
+            fields: [
+              {
+                kind: "select",
+                name: "p_entity_code",
+                label: "Company",
+                required: true,
+                options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+              },
+              {
+                kind: "text",
+                name: "p_registration_number",
+                label: "Company registration number",
+                placeholder: "07123456",
+              },
+              {
+                kind: "text",
+                name: "office_line_1",
+                label: "Registered office, first line",
+                placeholder: "1 Ledger Way",
+              },
+              {
+                kind: "text",
+                name: "office_line_2",
+                label: "Registered office, second line",
+                placeholder: "Suite 4",
+              },
+              { kind: "text", name: "p_office_locality", label: "Town", placeholder: "Leeds" },
+              {
+                kind: "text",
+                name: "p_office_postcode",
+                label: "Postcode",
+                placeholder: "LS1 1AA",
+              },
+              pickCountry("p_office_country_code", "Country", false),
+              {
+                kind: "text",
+                name: "p_vat_number",
+                label: "VAT number",
+                placeholder: "GB123456789",
+              },
+              {
+                kind: "date",
+                name: "p_vat_registered_from",
+                label: "VAT registered from",
+                hint: "For a company not yet registered: the date its registration took effect. Left empty, today.",
               },
             ],
             invalidates: ["erp_entities"],
