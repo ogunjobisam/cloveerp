@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260924500000  A draft is asked for the VAT no rule will give it
+-- 20260924520000  A draft is asked for the VAT no rule will give it
 -- -----------------------------------------------------------------------------
 -- Found on review of PR6 M4. A company registered for VAT, with no tax
 -- configuration promoted, raises a draft sales invoice. Its readiness
@@ -108,7 +108,7 @@ comment on function erp.document_tax_is_determinable(uuid) is
   'invoice or credit, not cancelled, of a company with a tax rule in force and '
   'a VAT registration on the document date, that can be told to be a sale. '
   'The determination and the invoice''s readiness both ask it, so a draft is '
-  'not called ready for VAT its issue will not find (20260924500000).';
+  'not called ready for VAT its issue will not find (20260924520000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- B2. The determination asks it
@@ -147,7 +147,7 @@ $o$;
   b2 constant text := $n$  -- Whether there is anything to determine by, on the document's date, for a
   -- company registered to charge it, on a sale. The invoice's readiness asks
   -- the same question, so the two cannot disagree about a draft
-  -- (20260924500000).
+  -- (20260924520000).
   if not erp.document_tax_is_determinable(p_document_id) then
     return 0;
   end if;
@@ -185,7 +185,7 @@ $o$;
   b2 constant text := $n$  v_draft := coalesce(erp.object_current_state('document', p_document_id), 'draft') = 'draft';
   -- And only where its issue will find that VAT: the determination asks
   -- erp.document_tax_is_determinable() before it determines anything, and a
-  -- line it leaves without a rate is refused at the press (20260924500000).
+  -- line it leaves without a rate is refused at the press (20260924520000).
   v_found := v_draft and erp.document_tax_is_determinable(p_document_id);
 $n$;
   a3 constant text := $o$      if v_line ->> 'net_minor' is null or (v_line ->> 'tax_rate_pct' is null and not v_draft) then
@@ -244,7 +244,7 @@ $n$;
       left(v_prev -> 'missing' #>> '{}', 90);
 $o$;
   b2 constant text := $n$    -- The draft is asked too: no tax rule is in force in this fixture, so its
-    -- issue would determine nothing and refuse it by line (20260924500000).
+    -- issue would determine nothing and refuse it by line (20260924520000).
     -- Case 22f is a draft a rule covers.
     return query select 'a VAT invoice with a line carrying no VAT rate is refused by line, and so is a draft no tax rule in force will give one',
       (v_prev -> 'missing') @> '[{"refusal":"CLOVEERP_INVOICE_LINE_TAX_MISSING"}]'::jsonb
@@ -253,7 +253,7 @@ $o$;
 $n$;
   a3 constant text := $o$    -- 22 -----------------------------------------------------------------
 $o$;
-  b3 constant text := $n$    -- 22e (20260924500000) -------------------------------------------------
+  b3 constant text := $n$    -- 22e (20260924520000) -------------------------------------------------
     -- The review of PR6 M4: a draft of a company registered for VAT, with no
     -- tax rule in force and its tax point stated. The readiness and the press
     -- refuse it by the same line, and no number is spent.

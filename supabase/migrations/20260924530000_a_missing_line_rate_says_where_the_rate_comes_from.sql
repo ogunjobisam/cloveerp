@@ -1,12 +1,12 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260924510000  A missing line rate says where the rate comes from
+-- 20260924530000  A missing line rate says where the rate comes from
 -- -----------------------------------------------------------------------------
 -- CLOVEERP_INVOICE_LINE_TAX_MISSING told a person to "complete the line
 -- amount and VAT rate". Nobody types a line's VAT rate: it is determined as
 -- the invoice is issued, from the tax the company has set up
--- (erp.determine_tax_on_commit). Since 20260924500000 the readiness raises
+-- (erp.determine_tax_on_commit). Since 20260924520000 the readiness raises
 -- this refusal against a draft that no tax rule in force will give a rate,
 -- and the only thing that helps there is setting tax up. The next action now
 -- says so, in the Configuration screen's own words. What it refuses and why
@@ -32,7 +32,7 @@ declare
 $o$;
   b1 constant text := $n$        and v_msg like 'CLOVEERP_INVOICE_LINE_TAX_MISSING:%'
         -- And the person is sent to the tax set-up, not to a rate nobody
-        -- can type (20260924510000).
+        -- can type (20260924530000).
         and exists (select 1 from erp_ref.refusal f
                      where f.code = 'CLOVEERP_INVOICE_LINE_TAX_MISSING'
                        and f.next_action like '%open Configuration, install Tax%')
