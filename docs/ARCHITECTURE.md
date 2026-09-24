@@ -29,13 +29,13 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 
 Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:ref_tables -->78<!-- /count --> product-content tables,
-<!-- count:meta_tables -->76<!-- /count --> platform tables,
+<!-- count:meta_tables -->77<!-- /count --> platform tables,
 <!-- count:enums -->83<!-- /count --> enumerated types,
 <!-- count:policies -->369<!-- /count --> row-security policies and
 <!-- count:triggers -->823<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->541<!-- /count --> migrations and
-<!-- count:sql_lines -->335891<!-- /count --> lines of SQL.
+<!-- count:migrations -->542<!-- /count --> migrations and
+<!-- count:sql_lines -->336458<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -106,7 +106,7 @@ nobody wrote down:
 | ------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `erp`         | <!-- count:erp_tables -->251<!-- /count --> tables, <!-- count:erp_views -->16<!-- /count --> views | Tenant data and the engines                                                              |
 | `erp_ref`     | <!-- count:ref_tables -->78<!-- /count --> tables                                                 | Product content — what the product knows, identical for every tenant                     |
-| `erp_meta`    | <!-- count:meta_tables -->76<!-- /count --> tables                                                | Platform metadata: the registers, the allow-lists, the exemptions, incidents, releases   |
+| `erp_meta`    | <!-- count:meta_tables -->77<!-- /count --> tables                                                | Platform metadata: the registers, the allow-lists, the exemptions, incidents, releases   |
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
 | `erp_test`    | <!-- count:suites -->248<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |

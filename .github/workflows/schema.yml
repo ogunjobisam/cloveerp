@@ -241,11 +241,18 @@ jobs:
           # catch-up seeds its cash from the date), so a pass is reused for a
           # day and never longer. Nothing under src/ is in it: the steps that
           # read src/ run every time regardless.
-          catalogue="$(git ls-tree -r HEAD -- supabase/migrations supabase/ci/00_host_bootstrap.sql \
-                         supabase/ci/seed_demo.sql supabase/ci/run_checks.sh \
-                       | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40)-$(date -u +%F)"
+          catalogue_tree() {
+            git ls-tree -r "$1" -- supabase/migrations supabase/ci/00_host_bootstrap.sql \
+                                  supabase/ci/seed_demo.sql supabase/ci/run_checks.sh \
+              | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40
+          }
+          catalogue_head="$(catalogue_tree HEAD)"
+          catalogue="${catalogue_head}-$(date -u +%F)"
           echo "catalogue=$catalogue" >> "$GITHUB_OUTPUT"
           echo "catalogue key: $catalogue"
+          # Until the comparison at the foot of this step says otherwise, the
+          # catalogue is walked. Every early exit below keeps it that way.
+          echo "catalogue_unchanged=no" >> "$GITHUB_OUTPUT"
 
           # The nightly run, and a dispatch that asks for it, build from an
           # empty cluster whatever the cache holds: that is the from-nothing
@@ -313,6 +320,24 @@ jobs:
             echo "incremental=no" >> "$GITHUB_OUTPUT"
           else
             echo "incremental=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Whether the catalogue has anything new to say. Its verdict is a
+          # function of the four inputs catalogue_tree() names (the day aside,
+          # which the nightly covers), and a branch that changes none of them
+          # asks the question the base already answered. On 24 September a
+          # pull request that touched only src/ restored main's database in
+          # nine seconds and then walked all 348 checks for fifteen minutes,
+          # because the marker below is scoped to the ref that saved it and
+          # main had not finished saving its own. The comparison is against
+          # the merge base, as the migration keys above are, so it holds on
+          # main too: a merge that adds no database change skips, and the
+          # push that introduced a change is the one that walks.
+          if [[ "$(catalogue_tree "$merge_base")" == "$catalogue_head" ]]; then
+            echo "catalogue_unchanged=yes" >> "$GITHUB_OUTPUT"
+            echo "the catalogue's inputs are the base's: the walk adds nothing here"
+          else
+            echo "the catalogue's inputs differ from the base's: the walk runs"
           fi
 
       - name: A database, if these migrations have built one before
@@ -700,8 +725,18 @@ jobs:
             echo "Already proved today by $proved, for the same migrations, bootstrap, seed and runner; not walked again. The nightly run walks it from an empty cluster regardless."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Nothing this branch changes reaches the catalogue
+        if: steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged == 'yes'
+        run: |
+          set -euo pipefail
+          echo "no migration, bootstrap, seed or runner differs from the base: the catalogue's verdict is the base's, and it is not walked here. The nightly run walks it from an empty cluster regardless."
+          {
+            echo "## Catalogue"
+            echo "Not walked: this branch changes no migration, bootstrap, seed or runner, so the verdict is the base's. The nightly run walks it from an empty cluster regardless."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Every check in the catalogue
-        if: steps.proved.outputs.cache-hit != 'true'
+        if: steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged != 'yes'
         # No list. erp.ci_check_catalogue() reads pg_proc and returns every
         # erp.assert_* and erp_test.assert_* the build can call, in order:
         # structural assertions, adversarial suites, the one procedure, and
@@ -721,7 +756,7 @@ jobs:
           echo "run ${{ github.run_id }} of ${{ github.sha }} on $(date -u +%F)" > "$RUNNER_TEMP/catalogue.proved"
 
       - name: Remember that it passed
-        if: success() && steps.keys.outputs.full != 'yes' && steps.proved.outputs.cache-hit != 'true'
+        if: success() && steps.keys.outputs.full != 'yes' && steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged != 'yes'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/catalogue.proved
