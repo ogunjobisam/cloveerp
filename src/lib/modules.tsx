@@ -2971,6 +2971,24 @@ export const PRODUCTION: ModuleDef = {
       ],
       invalidates: ["erp_works_orders"],
     },
+    {
+      label: "Cancel a works order",
+      description:
+        "For an order nobody has started: nothing taken out, nothing taken in and no hours recorded. What it had set aside is released. An order that has started is closed instead.",
+      permission: "production.release",
+      fn: "erp_cancel_works_order",
+      fields: [
+        pickFrom(
+          "erp_works_orders",
+          "works_order_id",
+          ["order_number", "status"],
+          "p_works_order_id",
+          "Works order",
+        ),
+        reason("p_reason", "Why it is cancelled", true),
+      ],
+      invalidates: ["erp_works_orders"],
+    },
   ],
 
   kpis: [
