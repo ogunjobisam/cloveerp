@@ -9,6 +9,7 @@ import {
   pageSize,
   printed,
   splitWorklist,
+  statusUnknown,
   worklistOrder,
   type CountTaskRow,
 } from "./count-worklist";
@@ -41,6 +42,13 @@ describe("a row of erp_count_tasks, whatever age the door is", () => {
     expect(r.posted_by_system).toBe(false);
     expect(r.counted_by_me).toBe(false);
     expect(r.expected).toBe(10);
+  });
+
+  test("the stock status 20260928100000 added reads as given, and as null when the door does not return it", () => {
+    expect(normalise({ task_id: "t", stock_status: "quarantine" }).stock_status).toBe("quarantine");
+    expect(normalise({ task_id: "t" }).stock_status).toBeNull();
+    // Null alone is an older door, not a count of unknown status.
+    expect(statusUnknown(row({ task_id: "t", stock_status: null }))).toBe(false);
   });
 
   test("a numeric sent as text is read as a number", () => {
@@ -86,6 +94,17 @@ describe("why a count waits", () => {
       code: "post_refused",
       detail: "23502 CLOVEERP_COUNT_HAS_NO_PLACE: the count names no location",
     });
+  });
+
+  test("a count of unknown stock status says so, and keeps what follows", () => {
+    const raw =
+      "status_unknown: when this count was raised the place also held 4 quarantine, so which of its stock the count is of is not known";
+    expect(heldReason(raw)).toEqual({
+      code: "status_unknown",
+      detail:
+        "when this count was raised the place also held 4 quarantine, so which of its stock the count is of is not known",
+    });
+    expect(statusUnknown(row({ task_id: "t", post_held_reason: raw }))).toBe(true);
   });
 
   test("a code not known here arrives whole", () => {
@@ -195,6 +214,51 @@ describe("a row offers only what its door accepts, to somebody who may", () => {
       recount: false,
       cancel: null,
     });
+  });
+
+  test("open, of unknown stock status: Cancel and no Record, which the door would refuse", () => {
+    const r = row({
+      task_id: "t",
+      status: "open",
+      stock_status: null,
+      post_held_reason:
+        "status_unknown: when this count was raised the place also held 4 quarantine",
+    });
+    expect(actionsFor(r, counter)).toEqual({
+      record: false,
+      post: false,
+      postIsSomebodyElses: false,
+      recount: false,
+      cancel: "inventory.count",
+    });
+    // A quarantined count whose status is known is recorded as any other.
+    expect(
+      actionsFor(row({ task_id: "q", status: "open", stock_status: "quarantine" }), counter).record,
+    ).toBe(true);
+  });
+
+  test("counted or refused, or approved with a difference, of unknown stock status: only Cancel, and no Post", () => {
+    const held =
+      "status_unknown: when this count was raised the place held 5 available, 5 quarantine";
+    for (const status of ["counted", "rejected"]) {
+      expect(actionsFor(row({ task_id: "t", status, post_held_reason: held }), adjuster)).toEqual({
+        record: false,
+        post: false,
+        postIsSomebodyElses: false,
+        recount: false,
+        cancel: "inventory.adjust",
+      });
+    }
+    const approved = row({
+      task_id: "a",
+      status: "approved",
+      variance: -1,
+      post_held_reason: held,
+    });
+    expect(actionsFor(approved, adjuster).post).toBe(false);
+    expect(actionsFor(approved, adjuster).postIsSomebodyElses).toBe(false);
+    // One that found what was expected moves nothing, and posts.
+    expect(actionsFor({ ...approved, variance: 0 }, adjuster).post).toBe(true);
   });
 
   test("counted outside tolerance, or refused: Count it again and Cancel, both inventory.adjust", () => {
