@@ -432,6 +432,7 @@ describe("a move another document makes is never a button", () => {
       ],
       sales_invoice: ["issue", "settle", "credit"],
       purchase_invoice: ["pay"],
+      count_sheet: ["issue", "close"],
     });
   });
 
