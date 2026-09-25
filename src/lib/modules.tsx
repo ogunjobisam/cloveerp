@@ -499,17 +499,17 @@ export const RELEASE_BATCH: ActionSpec = {
       kind: "text",
       name: "p_basis",
       label: "Basis",
-      required: true,
+      required: false,
       placeholder: "Certificate of analysis 4471 reviewed",
-      hint: "What you relied on to decide.",
+      hint: "Needed where an inspection plan sampled the batch. What you relied on to decide.",
     },
     {
       kind: "text",
       name: "p_signature",
       label: "Signature",
-      required: true,
+      required: false,
       placeholder: "Your full name",
-      hint: "Typed in full. It is kept against the release.",
+      hint: "Needed where an inspection plan sampled the batch. Typed in full; it is kept against the release.",
     },
   ],
   invalidates: ["erp_batches", "erp_stock_health"],
@@ -3254,7 +3254,8 @@ export const QUALITY: ModuleDef = {
       {
         label: "Inspect",
         hint: "The result against the specification, recorded against the batch.",
-        fedBy: "Inspections appear here once an event is reported or a receipt needs inspecting.",
+        fedBy:
+          "Inspections appear here once a receipt needs inspecting, or when one is asked for from the actions.",
 
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
@@ -3356,6 +3357,37 @@ export const QUALITY: ModuleDef = {
         pickBatch(),
       ],
       invalidates: ["erp_quality_events"],
+    },
+    {
+      label: "Raise an inspection",
+      description:
+        "Inspect a batch where it is held, against its inspection plan. The batch waits for the result before it is released.",
+      permission: "quality.inspect",
+      fn: "erp_raise_inspection",
+      fields: [
+        pickSite(),
+        pickFrom("erp_batches", "batch_id", ["batch_number", "item"], "p_batch_id", "Batch"),
+        {
+          kind: "select",
+          name: "p_plan_id",
+          label: "Inspection plan",
+          required: false,
+          hint: "Leave empty and the plan that covers the product is used.",
+          options: {
+            fn: "erp_inspection_plans",
+            argsFrom: { p_batch_id: "p_batch_id", p_site_id: "p_site_id" },
+            value: "inspection_plan_id",
+            label: ["name", "applies_to", "trigger_point"],
+          },
+        },
+        {
+          kind: "number",
+          name: "p_quantity",
+          label: "Quantity to inspect",
+          hint: "Leave empty to inspect what the batch holds here.",
+        },
+      ],
+      invalidates: ["erp_inspections", "erp_batches"],
     },
     {
       label: "Record an inspection result",

@@ -290,5 +290,28 @@ describe("the verbs the walkthrough found unreachable", () => {
     expect(inspection.options.argsFrom).toEqual({ p_batch_id: "p_batch_id" });
     expect(inspection.options.value).toBe("inspection_id");
     expect(QUALITY.actions).toContain(RELEASE_BATCH);
+    // Asked for only where a plan sampled the batch (20260925300000); the
+    // database demands them there.
+    for (const name of ["p_basis", "p_signature"]) {
+      expect(RELEASE_BATCH.fields?.find((f) => f.name === name)?.required).toBe(false);
+    }
+  });
+
+  test("an inspection is asked for from the actions, against a plan that covers the batch", () => {
+    const raise = (QUALITY.actions ?? []).find((a) => a.fn === "erp_raise_inspection");
+    expect(raise?.permission).toBe("quality.inspect");
+    expect(raise?.fields?.map((f) => f.name)).toEqual([
+      "p_site_id",
+      "p_batch_id",
+      "p_plan_id",
+      "p_quantity",
+    ]);
+    const plan = raise?.fields?.find((f) => f.name === "p_plan_id");
+    if (plan?.kind !== "select") throw new Error("the plan is not chosen from a list");
+    expect(plan.required).toBe(false);
+    expect(plan.options.fn).toBe("erp_inspection_plans");
+    expect(plan.options.argsFrom).toEqual({ p_batch_id: "p_batch_id", p_site_id: "p_site_id" });
+    // An action, not a stage: the strip's budget stays where it is.
+    expect(stagedKeys(QUALITY.flow as FlowSpec).has("erp_raise_inspection")).toBe(false);
   });
 });
