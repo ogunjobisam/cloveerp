@@ -238,6 +238,42 @@ itself a finding.
 
 ---
 
+## 20260928_stock_state_mismatches.sql
+
+The operator's half of `20260928000000_a_stock_state_is_what_the_stock_did.sql`
+(PR11 M1, decision D1). From that migration on, a transfer order or stock
+adjustment cannot be moved to a state its stock did not make. It changes no
+existing row, so documents moved that way before it stay as they were until
+somebody decides about them.
+
+- **Part 1** is plain SQL over the tables and needs nothing the migration
+  adds, so it runs the same before the deploy that carries the migration as
+  after it. It lists, for every organisation: transfers in discrepancy,
+  transfers cancelled with stock still in transit or after their stock moved
+  and was not returned, transfers whose state says stock moved that their
+  movements do not, and adjustments posted with no movement, and marks which
+  transfers the repair can take. Run it before the deploy and again after it,
+  and keep both outputs with the release. It reads only.
+- **Part 2**, after the deploy, is the same reading through
+  `erp.stock_state_mismatch_report()`, in every organisation, to check the
+  two agree. Commented out, because the function does not exist before.
+- **Part 3** is commented out. For each stranded transfer the owner agrees to
+  repair, `erp.return_stranded_transit_stock(document, reason)` reverses its
+  despatch legs not yet returned, so the goods go back to the despatching
+  site's shelf and no value moves. It runs only from a trusted session acting
+  inside the organisation, with nobody signed in, refuses any transfer that is
+  not stranded or any of whose stock arrived, and writes the database role
+  that ran it and the reason to the audit trail. The document's state is not
+  touched.
+
+Nothing else is repaired. A transfer in discrepancy cannot leave it until
+goods arrive, and nothing here writes an arrival. An adjustment posted with no
+movement is corrected by a new adjustment, raised on the desk.
+
+Not yet run on live.
+
+---
+
 ## 20260831_live_reconciliation.sql
 
 Brings the production project (`xpzffnnhnhcqyjqcueja`) to the schema `main`
