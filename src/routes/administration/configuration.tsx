@@ -42,22 +42,15 @@ type ModuleInstallation = {
 };
 
 /**
- * The erp_ref.reason_category codes, as seeded. The writers refuse anything
- * else, and a new category is a product change rather than a row, so a fixed
- * list is the honest control.
+ * The erp_ref.reason_category codes the product reads, each through
+ * erp.check_reason_code(). The writers refuse anything else, and a retired
+ * category is refused by name (20260925700000), so a fixed list is the honest
+ * control.
  */
 const REASON_CATEGORIES = [
   { value: "STOCK_ADJUSTMENT", label: "Stock adjustment" },
-  { value: "SCRAP", label: "Scrap and destruction" },
   { value: "RETURN_SUPPLIER", label: "Return to supplier" },
   { value: "RETURN_CUSTOMER", label: "Customer return" },
-  { value: "ORDER_HOLD", label: "Order hold" },
-  { value: "ORDER_CANCEL", label: "Order cancellation" },
-  { value: "APPROVAL_REJECT", label: "Approval rejection" },
-  { value: "BATCH_AMENDMENT", label: "Batch amendment" },
-  { value: "ALLOCATION_OVERRIDE", label: "Allocation override" },
-  { value: "PRICE_OVERRIDE", label: "Price and discount override" },
-  { value: "PERIOD_REOPEN", label: "Period reopen" },
 ];
 
 export const Route = createFileRoute("/administration/configuration")({
@@ -445,7 +438,7 @@ function Configuration() {
 
       <ActionBar
         title="Reason codes"
-        note="Why something happened, from a list the organisation maintains: a return, a write-off, a price override. A code can insist on a note or an approval."
+        note="Why something happened, from a list the organisation maintains: a return, a write-off. A code can insist on a note or an approval."
         actions={[
           {
             label: "Add or amend a reason code",
