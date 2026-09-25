@@ -454,6 +454,26 @@ export const productionPolicyArgs = policyArgs([
   "release_shortage_pct",
 ]);
 
+/**
+ * The count posting policy's form (20260927300000), as
+ * erp_propose_count_posting_policy takes it: post or hold inside tolerance,
+ * and whether the counter's own posts itself, holding only what was answered,
+ * with the company, site and change the proposal belongs to.
+ */
+export const countPostingArgs = (values: Record<string, string>): Record<string, unknown> => {
+  const policy: Record<string, string | boolean> = {};
+  const within = values["within_tolerance"] ?? "";
+  if (within !== "") policy["within_tolerance"] = within;
+  const own = values["self_post_within_tolerance"] ?? "";
+  if (own !== "") policy["self_post_within_tolerance"] = own === "true";
+  const args: Record<string, unknown> = { p_value: policy };
+  for (const name of ["p_entity_code", "p_site_code", "p_change_set_id"]) {
+    const raw = values[name] ?? "";
+    if (raw !== "") args[name] = raw;
+  }
+  return args;
+};
+
 /** A count, coloured by whether zero is the good answer. */
 const zeroIsGood = (n: number, label: string) => ({
   value: String(n),
@@ -1014,7 +1034,8 @@ export const INVENTORY: ModuleDef = {
     },
     {
       label: "Confirm a count",
-      description: "Turn a counted task into a stock adjustment.",
+      description:
+        "Post a count agreed by its approver, or one the count posting policy holds. A count inside its tolerance posts itself as it is recorded.",
       permission: "inventory.adjust",
       fn: "erp_post_count",
       fields: [
