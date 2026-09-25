@@ -2280,7 +2280,7 @@ export const PLANNING: ModuleDef = {
 
       {
         label: "Confirm the plan",
-        hint: "A confirmed order becomes a purchase order or a works order and leaves planning.",
+        hint: "A confirmed order becomes a purchase order, or a works order released to the floor when it is due, and leaves planning.",
         to: "/procurement",
         toLabel: "Open purchasing",
       },
@@ -2443,7 +2443,7 @@ export const PLANNING: ModuleDef = {
     {
       label: "Confirm a planned order",
       description:
-        "A bought item becomes a purchase order of the type you name; a made item becomes a works order.",
+        "A bought item becomes a purchase order of the type you name; a made item becomes a works order, released to the floor once it is due to start, unless its material is short or releasing is not yours to do.",
       permission: "planning.firm",
       fn: "erp_firm_planned_order",
       fields: [
