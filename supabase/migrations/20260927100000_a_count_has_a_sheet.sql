@@ -238,14 +238,20 @@ as $$
       jsonb_build_object(
         'code','count_sheet','name_key','output.template.count_sheet',
         'kind','document','base_type','count','page','A4',
-        'blocks', jsonb_build_array(
+        'blocks', b.blocks,
+        -- The template names the document, its version renders it (§15.2):
+        -- a template with no version has nothing to render.
+        'version', jsonb_build_object(
+          'rendering_engine','pdf','required_permission','inventory.count',
+          'blocks', b.blocks))))
+    from (select jsonb_build_array(
           jsonb_build_object('kind','title','fields',jsonb_build_array('document_number')),
           jsonb_build_object('kind','issuer','fields',jsonb_build_array('entity_name')),
           jsonb_build_object('kind','summary','fields',jsonb_build_array('document_date','our_reference','line_count')),
           jsonb_build_object('kind','lines','fields',jsonb_build_array(
             'line_no','location','item_code','description','batch',
             'expected_quantity','uom','counted_quantity')),
-          jsonb_build_object('kind','signature','label_key','output.block.counted_by')))))
+          jsonb_build_object('kind','signature','label_key','output.block.counted_by')) as blocks) b
 $$;
 
 comment on function erp.count_sheet_pack_items() is
@@ -1283,7 +1289,10 @@ begin
                     and sm.object_type = 'document' and sm.status = 'active')
       and exists (select 1 from erp.output_template ot
                    where ot.tenant_id = r.tenant_id and ot.code = 'count_sheet'
-                     and ot.base_type_code = 'count' and ot.status = 'active'),
+                     and ot.base_type_code = 'count' and ot.status = 'active'
+                     and exists (select 1 from erp.output_template_version tv
+                                  where tv.tenant_id = ot.tenant_id and tv.output_template_id = ot.id
+                                    and tv.status = 'active')),
       (select string_agg(format('%s on %s, %s', dt.code, dt.base_type_code, dt.state_machine_code), '; ')
          from erp.document_type dt where dt.tenant_id = r.tenant_id and dt.base_type_code = 'count');
 
@@ -1372,7 +1381,10 @@ begin
       and exists (select 1 from erp.document_type dt
                    where dt.tenant_id = r.tenant_id and dt.code = 'count_sheet' and dt.status = 'active')
       and exists (select 1 from erp.output_template ot
-                   where ot.tenant_id = r.tenant_id and ot.code = 'count_sheet' and ot.status = 'active')
+                   where ot.tenant_id = r.tenant_id and ot.code = 'count_sheet' and ot.status = 'active'
+                     and exists (select 1 from erp.output_template_version tv
+                                  where tv.tenant_id = ot.tenant_id and tv.output_template_id = ot.id
+                                    and tv.status = 'active'))
       and not exists (select 1 from erp.plan_module_upgrade('inventory-operations')),
       format('planned %s; %s', coalesce(v_planned, 'nothing'), res::text);
 
