@@ -115,7 +115,7 @@ describe("a step lists what sits there", () => {
 
   test("a status read is narrowed by its status", () => {
     const orders = [
-      { works_order_id: "a", status: "planned" },
+      { works_order_id: "a", status: "draft" },
       { works_order_id: "b", status: "released" },
       { works_order_id: "c", status: "closed" },
     ];
