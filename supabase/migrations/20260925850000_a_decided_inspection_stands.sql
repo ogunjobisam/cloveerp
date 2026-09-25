@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20260925750000  A decided inspection stands
+-- 20260925850000  A decided inspection stands
 -- -----------------------------------------------------------------------------
 -- Found on the review of PR8 M6b (20260925400000). A reject on the floor stops
 -- every batch the works order made, and the only way round it was to decide
@@ -65,7 +65,7 @@ $o$,
     $n$  perform erp.authorise('quality.disposition', insp.entity_id, insp.site_id, null,
                         'inspection', p_inspection_id);
 
-  -- An inspection is decided while it is open, and once (20260925750000).
+  -- An inspection is decided while it is open, and once (20260925850000).
   -- Decided again, a reject became an accept and the release read the new
   -- decision. A question asked again is a new inspection, on its own record.
   if insp.status not in ('planned', 'sampling', 'testing') then
@@ -112,7 +112,7 @@ $o$,
     $n$      v_err like 'CLOVEERP_BATCH_REJECTED:%', v_err;
 
     -- 6d. Nor is the rejected inspection decided again to overturn it, even
-    -- with the reason a concession would need (20260925750000).
+    -- with the reason a concession would need (20260925850000).
     begin perform erp.disposition_inspection(v_insp3, 'accept', 'Chilled again and within limits'); v_err := 'accepted';
     exception when others then v_err := left(sqlerrm, 120); end;
     return query select 'a rejected inspection is not decided again, so a reject cannot be turned into an accept',
@@ -179,7 +179,7 @@ comment on function erp_test.assert_quality_suite() is
   'An inspection is asked for by somebody who inspects, against a plan that covers the product; a '
   'promoted plan names its product; a batch is released on a signed statement only where a plan '
   'sampled it (20260925300000); and an inspection is decided while it is open, once, and never as '
-  'pending (20260925750000).';
+  'pending (20260925850000).';
 
 -- The generators, which are idempotent and run at the end of every migration.
 
