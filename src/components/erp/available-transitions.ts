@@ -124,6 +124,9 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // (20260923500000).
   sales_invoice: ["issue", "settle", "credit"],
   purchase_invoice: ["pay"],
+  // Issued when its counts are raised and closed when the last is finished
+  // (20260927100000).
+  count_sheet: ["issue", "close"],
 };
 
 /** Whether a move of a document of this type is left to the door that makes it. */
