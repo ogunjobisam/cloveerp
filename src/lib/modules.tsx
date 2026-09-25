@@ -492,7 +492,7 @@ export const RELEASE_BATCH: ActionSpec = {
         args: { p_limit: 100 },
         argsFrom: { p_batch_id: "p_batch_id" },
         value: "inspection_id",
-        label: ["disposition", "status", "completed_at"],
+        label: ["disposition", "works_order", "operation_seq", "status", "completed_at"],
       },
     },
     {
@@ -3397,7 +3397,7 @@ export const QUALITY: ModuleDef = {
         pickFrom(
           "erp_inspections",
           "inspection_id",
-          ["item", "batch", "status"],
+          ["item", "batch", "works_order", "operation_seq", "status"],
           "p_inspection_id",
           "Inspection",
         ),
@@ -3435,7 +3435,7 @@ export const QUALITY: ModuleDef = {
         pickFrom(
           "erp_inspections",
           "inspection_id",
-          ["item", "batch", "status"],
+          ["item", "batch", "works_order", "operation_seq", "status"],
           "p_inspection_id",
           "Inspection",
         ),
