@@ -173,3 +173,21 @@
   background-size: 28px 28px;
   opacity: 0.35;
 }
+
+/* A printed page carries the one thing that asked to be printed (PR10 M3b).
+   The count sheet renders itself into <body> as [data-print-root], beside the
+   application rather than inside it. Only while it is there does printing
+   take everything else in <body> out of the layout — display rather than
+   visibility, so the desk leaves no blank pages behind it — and only the
+   sheet goes on the named page `sheet`, whose size the sheet itself declares
+   (src/components/erp/count-sheet-print.tsx). A page with no sheet open
+   prints as it always has, on whatever paper the browser was given. */
+@media print {
+  body:has(> [data-print-root]) > :not([data-print-root]) {
+    display: none !important;
+  }
+
+  [data-print-root] {
+    page: sheet;
+  }
+}

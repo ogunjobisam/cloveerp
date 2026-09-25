@@ -151,11 +151,8 @@ describe("every flow module names the states of its record steps", () => {
 
   for (const mod of MODULES.filter((m) => m.flow)) {
     const flow = mod.flow as FlowSpec;
-    // Stock's count step is being reworked elsewhere; its read is left as it was.
-    const exempt = new Set(["Count"]);
     test(`${mod.key}: each step with a verb for its records names their states`, () => {
       const bare = stagesWithRecordVerbs(flow)
-        .filter((s) => !exempt.has(s.label))
         .filter((s) => !s.states || s.states.length === 0)
         .map((s) => s.label);
       expect(bare).toEqual([]);
