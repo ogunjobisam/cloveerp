@@ -2273,7 +2273,7 @@ export const PLANNING: ModuleDef = {
           nounPlural: "planned orders",
         },
         // Suggested by a run and not yet turned into an order or cancelled.
-        states: ["suggested", "reviewed", "firmed"],
+        states: ["suggested"],
         recordArg: "p_planned_order_id",
         actionFn: "erp_firm_planned_order",
       },
@@ -2712,7 +2712,7 @@ export const PRODUCTION: ModuleDef = {
           "Orders appear here once one is created, or once a planned order is confirmed in planning.",
 
         list: WORKS_ORDER_LIST,
-        states: ["draft", "planned"],
+        states: ["draft"],
         createFn: "erp_raise_works_order",
       },
       {
@@ -2721,8 +2721,8 @@ export const PRODUCTION: ModuleDef = {
         fedBy: "Orders appear here once one has been created at the works order step.",
 
         list: WORKS_ORDER_LIST,
-        // erp.release_works_order takes a draft or planned order.
-        states: ["draft", "planned"],
+        // erp.release_works_order takes a draft order.
+        states: ["draft"],
         recordArg: "p_works_order_id",
         actionFn: "erp_release_works_order",
       },
