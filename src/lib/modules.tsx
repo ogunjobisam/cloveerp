@@ -2703,39 +2703,19 @@ export const PRODUCTION: ModuleDef = {
   flow: {
     code: "make",
     title: "Making, step by step",
-    note: "Create the order, release it to the floor, take out the materials, record the hours, take in the finished goods and close it.",
+    note: "Create the order, which goes to the floor as it is made, record the hours, take in the finished goods and close it. The materials go out as the goods come in.",
     stages: [
       {
         label: "Works order",
-        hint: "What is to be made, how much, and by when.",
+        hint: "What is to be made, how much, and by when. It is released as it is made, unless it has to wait.",
         fedBy:
           "Orders appear here once one is created, or once a planned order is confirmed in planning.",
 
         list: WORKS_ORDER_LIST,
+        // Released as it is made (20260925600000): what stays here waited,
+        // and its history says why. Releasing it is an action on the module.
         states: ["draft"],
         createFn: "erp_raise_works_order",
-      },
-      {
-        label: "Release",
-        hint: "Releasing an order is what makes it work the floor can start.",
-        fedBy: "Orders appear here once one has been created at the works order step.",
-
-        list: WORKS_ORDER_LIST,
-        // erp.release_works_order takes a draft order.
-        states: ["draft"],
-        recordArg: "p_works_order_id",
-        actionFn: "erp_release_works_order",
-      },
-      {
-        label: "Take out materials",
-        hint: "Stock leaves the store and joins the order's cost.",
-        list: WORKS_ORDER_LIST,
-        // Issuing and receiving take a released order, one under way, and one
-        // completed but not closed, whose last units may still come off the
-        // line (20260924500000).
-        states: ["released", "in_progress", "completed"],
-        recordArg: "p_works_order_id",
-        actionFn: "erp_issue_to_works_order",
       },
       {
         label: "Record hours",
@@ -2896,6 +2876,8 @@ export const PRODUCTION: ModuleDef = {
     },
     {
       label: "Release a works order",
+      description:
+        "For an order that waited: a planned order confirmed before it is due, one short of material, or one made by somebody who does not release orders.",
       permission: "production.release",
       fn: "erp_release_works_order",
       fields: [
@@ -2913,6 +2895,8 @@ export const PRODUCTION: ModuleDef = {
     },
     {
       label: "Take out materials",
+      description:
+        "By hand, for an order that does not backflush or a component taken out ahead of the goods. Backflush takes the rest as the goods come in.",
       permission: "production.execute",
       fn: "erp_issue_to_works_order",
       fields: [
