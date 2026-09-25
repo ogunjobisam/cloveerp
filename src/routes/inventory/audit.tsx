@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, pickChangeSet, pickFrom } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { useScope } from "../../components/erp/session-context";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
+import { countPostingArgs } from "../../lib/modules";
 import { formatMinor } from "../../lib/money";
 
 export const Route = createFileRoute("/inventory/audit")({
@@ -132,7 +133,7 @@ function StockAudit() {
       <PageHeader
         title={ui("Stock audit")}
         howItWorks={ui(
-          "A place nobody has counted shows as never counted rather than as agreeing. Nothing on this screen changes stock: confirm a count and the correction is made as a movement, with a reason.",
+          "A place nobody has counted shows as never counted rather than as agreeing. A count inside its tolerance corrects the stock as it is recorded, through a stock adjustment with a reason; one outside it corrects nothing until it is agreed and posted.",
         )}
       >
         {ui(
@@ -142,7 +143,7 @@ function StockAudit() {
 
       <ActionBar
         title="Counting"
-        note="Raise tasks from a counting programme, record what was found, then post it. Posting is what moves the stock: until then the count is an observation, not a correction."
+        note="Raise tasks from a counting programme and record what was found. A count inside its tolerance posts as it is recorded; one outside it is agreed by its approver and then posted."
         actions={[
           {
             label: "Raise count tasks",
@@ -165,7 +166,7 @@ function StockAudit() {
           {
             label: "Record a count",
             description:
-              "What the counter found in the place. The difference is worked out from it.",
+              "What the counter found in the place. The difference is worked out from it, and a count inside its tolerance posts as it is recorded, unless the site's count posting policy holds it.",
             permission: "inventory.count",
             fn: "erp_record_count",
             fields: [
@@ -181,7 +182,7 @@ function StockAudit() {
             // refuses the count itself.
             label: "Decide a count difference",
             description:
-              "A count outside its programme's tolerance waits for the approving role to agree. Agreed, it can be posted; refused, it stays as it was found and is not posted.",
+              "A count outside its programme's tolerance waits for the approving role to agree. Agreed, it is posted by somebody who may adjust stock; refused, it stays as it was found and is not posted.",
             // No permission: the door gates on the task being assigned to the
             // caller, and a code here would hide it from an assignee who lacks it.
             fn: "erp_decide_approval",
@@ -235,11 +236,63 @@ function StockAudit() {
           {
             label: "Confirm a count",
             description:
-              "Correct the stock by an agreed difference. Once the organisation is live, somebody other than the person who counted it posts it.",
+              "Correct the stock by a difference that was agreed, or one the site's count posting policy holds. Once the organisation is live, somebody other than the person who counted it posts it.",
             permission: "inventory.adjust",
             fn: "erp_post_count",
             fields: [countTask()],
             invalidates,
+          },
+          {
+            // inventory.count_posting (20260927300000): whether a count inside
+            // tolerance posts as it is recorded, per company or site.
+            label: "Propose the count posting policy",
+            description:
+              "Whether a count inside its tolerance posts itself as it is recorded or waits for somebody to post it, and whether the counter's own does once the organisation is live. The tolerance is the counting programme's, in units or a share of the units expected, with no threshold by value. Proposed as a change like any other configuration.",
+            permission: "administration.configure",
+            fn: "erp_propose_count_posting_policy",
+            mapArgs: countPostingArgs,
+            fields: [
+              {
+                kind: "select",
+                name: "p_entity_code",
+                label: "Company",
+                options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+                hint: "Leave unchosen to set the policy for the whole organisation.",
+              },
+              {
+                kind: "select",
+                name: "p_site_code",
+                label: "Site",
+                options: { fn: "erp_sites", value: "code", label: ["code", "name"] },
+                hint: "Leave unchosen to apply the policy across the whole company.",
+              },
+              {
+                kind: "choice",
+                name: "within_tolerance",
+                label: "A count inside tolerance",
+                choices: [
+                  { value: "post", label: "Posts as it is recorded" },
+                  { value: "hold", label: "Waits for somebody to post it" },
+                ],
+                hint: "Hold waits for somebody who may adjust stock to post each count, as outside tolerance. Left unchosen, the broader setting applies.",
+              },
+              {
+                kind: "choice",
+                name: "self_post_within_tolerance",
+                label: "The counter's own count inside tolerance",
+                boolean: true,
+                choices: [
+                  { value: "true", label: "Posts itself" },
+                  { value: "false", label: "Waits for somebody else" },
+                ],
+                hint: "Once the organisation is live. Waits leaves the counter's own count for a second person, as every count outside tolerance is. Left unchosen, the broader setting applies.",
+              },
+              {
+                ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+                hint: "Leave unchosen to start a new change for this proposal.",
+              },
+            ],
+            invalidates: ["erp_change_sets"],
           },
         ]}
       />
