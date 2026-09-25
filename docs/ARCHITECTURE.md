@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->251<!-- /count --> tenant tables,
 <!-- count:policies -->369<!-- /count --> row-security policies and
 <!-- count:triggers -->824<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->564<!-- /count --> migrations and
-<!-- count:sql_lines -->353334<!-- /count --> lines of SQL.
+<!-- count:migrations -->565<!-- /count --> migrations and
+<!-- count:sql_lines -->353460<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -95,7 +95,7 @@ nobody wrote down:
 - **`erp_meta.security_definer_allowance`** — <!-- count:definer_allowances -->204<!-- /count --> entries. A `SECURITY DEFINER` function runs as the owner, who bypasses row-level security. Every one in the product schemas is listed with the reason it needs the privilege.
 - **`erp_meta.public_write_allowance`** — <!-- count:write_allowances -->516<!-- /count --> entries. The doors permitted to be volatile, each naming the gate it reaches. A volatile `public.erp_*` function that is not listed fails the build; so does one whose gate no longer authorises.
 - **`erp_meta.check_run_exemption`** — the catalogue checks CI cannot run without an argument, each naming what drives it instead.
-- **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->22<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->5<!-- /count --> waiting for their screen with the path recorded.
+- **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->20<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->3<!-- /count --> waiting for their screen with the path recorded.
 - **`erp_meta.linter_finding_allowance`** — the host's security lints, reimplemented in `erp.linter_report()`, with every remaining finding either fixed or allowed with a reason.
 
 ---
@@ -150,7 +150,7 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->5249<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->5278<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->709<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 

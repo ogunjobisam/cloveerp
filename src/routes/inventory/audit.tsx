@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar, pickChangeSet, pickFrom } from "../../components/erp/actions-bar";
+import { CountWorklist } from "../../components/erp/count-worklist";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { useScope } from "../../components/erp/session-context";
@@ -36,14 +37,19 @@ export const Route = createFileRoute("/inventory/audit")({
 });
 
 /**
- * The audit is the book beside the count, per place.
+ * Counting, and the book beside the count, per place.
  *
- * The count tasks worklist already showed a variance — one task at a time,
- * which is the wrong unit for an audit. An auditor asks about a location, and
- * the answer has to include the locations nobody has counted: a bin with no
- * count task raised against it is invisible in a list of count tasks and is
- * precisely the thing being looked for. So every active location appears here,
- * counted or not, and "never counted" is a state rather than a blank.
+ * The top of the screen is the counter's: the worklist of places waiting to
+ * be counted, one box and one press each, in the order of the count sheet,
+ * and beneath it the counts that wait on somebody (src/components/erp/
+ * count-worklist.tsx). A count task is the counter's unit.
+ *
+ * The balances below are the auditor's, whose unit is the place. An auditor
+ * asks about a location, and the answer has to include the locations nobody
+ * has counted: a bin with no count task raised against it is invisible in a
+ * list of count tasks and is precisely the thing being looked for. So every
+ * active location appears there, counted or not, and "never counted" is a
+ * state rather than a blank.
  */
 type AuditRow = {
   location_id: string;
@@ -111,9 +117,6 @@ const stateTone = (state: AuditRow["state"]) =>
         ? "muted"
         : "ok";
 
-const countTask = () =>
-  pickFrom("erp_count_tasks", "task_id", ["item", "location", "status"], "p_task_id", "Count task");
-
 function StockAudit() {
   // The balances and the count tasks are about a place. The header names one
   // and this screen had never read it (20260920130000).
@@ -143,7 +146,7 @@ function StockAudit() {
 
       <ActionBar
         title="Counting"
-        note="Raise tasks from a counting programme and record what was found. A count inside its tolerance posts as it is recorded; one outside it is agreed by its approver and then posted."
+        note="Raise tasks from a counting programme, then record each place on the worklist below. A count outside its tolerance is decided here by its approver."
         actions={[
           {
             label: "Raise count tasks",
@@ -160,18 +163,6 @@ function StockAudit() {
                 "p_programme_code",
                 "Programme",
               ),
-            ],
-            invalidates,
-          },
-          {
-            label: "Record a count",
-            description:
-              "What the counter found in the place. The difference is worked out from it, and a count inside its tolerance posts as it is recorded, unless the site's count posting policy holds it.",
-            permission: "inventory.count",
-            fn: "erp_record_count",
-            fields: [
-              countTask(),
-              { kind: "number", name: "p_quantity", label: "Counted quantity", required: true },
             ],
             invalidates,
           },
@@ -218,29 +209,6 @@ function StockAudit() {
             }),
             invalidates: [...invalidates, "erp_my_approvals"],
             submitLabel: "Record the decision",
-          },
-          {
-            // The other half of a refusal. Until 20260922130000 refusing a
-            // count destroyed it: nothing returned a task to open, and
-            // erp_record_count refuses anything that is not open, so the place
-            // was never counted and the difference was never posted.
-            label: "Count it again",
-            description:
-              "Send a count the approver refused back to be counted. The expected figure is re-read from the records as they stand now, so anything that moved through the place since the refusal is accounted for.",
-            permission: "inventory.adjust",
-            fn: "erp_recount_task",
-            fields: [countTask()],
-            invalidates,
-            submitLabel: "Send it back to be counted",
-          },
-          {
-            label: "Confirm a count",
-            description:
-              "Correct the stock by a difference that was agreed, or one the site's count posting policy holds. Once the organisation is live, somebody other than the person who counted it posts it.",
-            permission: "inventory.adjust",
-            fn: "erp_post_count",
-            fields: [countTask()],
-            invalidates,
           },
           {
             // inventory.count_posting (20260927300000): whether a count inside
@@ -296,6 +264,8 @@ function StockAudit() {
           },
         ]}
       />
+
+      <CountWorklist />
 
       <DataPanel<AuditRow>
         title={ui("Balances by location")}

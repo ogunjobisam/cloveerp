@@ -587,9 +587,18 @@ export const INVENTORY: ModuleDef = {
           noun: "count",
           nounPlural: "counts",
         },
+        // The two states this step has a verb for, and each verb only where
+        // its door accepts it (X4): Record an open count, Post an approved
+        // one. A count outside tolerance, refused, or with its approver is
+        // the worklist's, which offers what can be done with each; posted and
+        // cancelled counts are behind "Show finished".
+        states: ["open", "approved"],
+        actionStates: { erp_record_count: ["open"], erp_post_count: ["approved"] },
         recordArg: "p_task_id",
         actionFn: "erp_record_count",
         actionFns: ["erp_post_count"],
+        to: "/inventory/audit",
+        toLabel: "Open the counting worklist",
       },
       {
         label: "Correct",
@@ -1018,7 +1027,7 @@ export const INVENTORY: ModuleDef = {
     {
       label: "Count it again",
       description:
-        "Send a count the approver refused back to be counted, re-read against the records as they stand now.",
+        "Send a count back to be counted: one its approver refused, or one counted outside its tolerance with nobody to approve it. The expected figure is re-read from the records as they stand now.",
       permission: "inventory.adjust",
       fn: "erp_recount_task",
       fields: [
