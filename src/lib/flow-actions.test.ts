@@ -289,6 +289,9 @@ describe("the verbs the walkthrough found unreachable", () => {
     expect(inspection.options.fn).toBe("erp_inspections");
     expect(inspection.options.argsFrom).toEqual({ p_batch_id: "p_batch_id" });
     expect(inspection.options.value).toBe("inspection_id");
+    // The floor's inspection of the order that made the batch is offered too,
+    // and says which order it was of (20260925400000).
+    expect(inspection.options.label).toContain("works_order");
     expect(QUALITY.actions).toContain(RELEASE_BATCH);
     // Asked for only where a plan sampled the batch (20260925300000); the
     // database demands them there.
