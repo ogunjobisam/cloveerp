@@ -447,3 +447,42 @@ Note also that the earlier claim that production matched "repository minus the
 eight migrations" was established on counts and presence, not on body content.
 It held for the shape and not for the text, which is how these eight went
 unnoticed until the digests were compared.
+
+---
+
+## 20260928_count_posts_past_their_status.sql
+
+The operator's half of `20260928100000_a_count_is_of_the_stock_it_counts.sql`
+(PR11 M2, decisions D2 and D3). Until that migration a count task had no stock
+status, and every count posted its difference to available stock: a place
+holding nothing available and a hundred in quarantine, counted at 99, was left
+reading available -1 and quarantine 100. From the migration on, a count posts
+to the status it counted. It changes no stock that was posted before.
+
+- **Part 1** is plain SQL over the tables and needs nothing the migration adds,
+  so it runs the same before the deploy that carries the migration as after
+  it. It lists, for every organisation, each count posted with a difference
+  before a count knew its status whose expectation was the quantity of
+  another status at its place when it was raised, and not the quantity
+  available: a shortfall or an excess of that status, posted to available.
+  The place then is rebuilt backwards from today's balance. A count whose
+  expectation matched available as well is not listed, because which it was
+  cannot be told. Run it before the deploy and again after it, and keep both
+  outputs with the release. It reads only.
+- **Part 2**, after the deploy, is the same reading through
+  `erp.count_posts_past_their_status_report()`, in every organisation, to
+  check the two agree. It adds what to do. Commented out, because the function
+  does not exist before.
+- **Part 3**, after the deploy, lists the counts the migration's backfill held
+  (D2): counts in flight whose expectation, when they were raised, matched no
+  single status at a place that held more than one. Each says why in
+  `post_held_reason`, and is cancelled on the Counting screen and the
+  programme raised again; one waiting for its approver is refused first. Any
+  held count already approved is put back to refused by the migration itself,
+  once, with the reason on its history. Commented out, and read only.
+
+Nothing is repaired automatically. A finding is corrected on the desk, once a
+person has checked the place and agrees, by a status change that moves the
+difference between available and the status the count was of.
+
+Not yet run on live.

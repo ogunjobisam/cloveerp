@@ -11,6 +11,7 @@ import {
   inSite,
   normalise,
   splitWorklist,
+  statusUnknown,
   type CountTaskRow,
   type RenderedDocument,
 } from "../../lib/count-worklist";
@@ -173,6 +174,49 @@ function RowVerb({
 
 const DANGER = `${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-destructive/40 px-4 text-sm font-medium text-destructive hover:bg-destructive/5`;
 
+/**
+ * The stock status a count is of, in words, where it is not simply available
+ * stock (20260928100000): the same product at the same place can be counted
+ * once for what is available and once for what is in quarantine.
+ */
+function StockStatus({ status }: { status: string | null }) {
+  const { ui } = useT();
+  let words: string;
+  switch (status) {
+    case null:
+    case "available":
+      return null;
+    case "quarantine":
+      words = ui("Quarantine");
+      break;
+    case "blocked":
+      words = ui("Blocked");
+      break;
+    case "damaged":
+      words = ui("Damaged");
+      break;
+    case "in_transit":
+      words = ui("In transit");
+      break;
+    case "in_production":
+      words = ui("In production");
+      break;
+    case "awaiting_inspection":
+      words = ui("Awaiting inspection");
+      break;
+    case "on_hold":
+      words = ui("On hold");
+      break;
+    default:
+      words = status;
+  }
+  return (
+    <span className="ml-2">
+      <Pill tone="warn">{words}</Pill>
+    </span>
+  );
+}
+
 function Product({ row }: { row: CountTaskRow }) {
   return (
     <>
@@ -181,6 +225,7 @@ function Product({ row }: { row: CountTaskRow }) {
       {row.batch ? (
         <span className="ml-2 font-mono text-xs text-muted-foreground">{row.batch}</span>
       ) : null}
+      <StockStatus status={row.stock_status} />
     </>
   );
 }
@@ -190,7 +235,11 @@ function StatePill({ row }: { row: CountTaskRow }) {
   const { ui } = useT();
   switch (row.status) {
     case "open":
-      return <Pill tone="muted">{ui("To count")}</Pill>;
+      return statusUnknown(row) ? (
+        <Pill tone="warn">{ui("Held")}</Pill>
+      ) : (
+        <Pill tone="muted">{ui("To count")}</Pill>
+      );
     case "posted":
       return (
         <Pill tone="ok">
@@ -221,7 +270,13 @@ function Why({ row }: { row: CountTaskRow }) {
   const { ui } = useT();
   const held = heldReason(row.post_held_reason);
   let words: string;
-  if (row.status === "approved" && held) {
+  if (held?.code === "status_unknown" && row.status !== "approved") {
+    // Refused, counted or with its approver, of no known stock status
+    // (20260928100000): it is cancelled, not counted again or approved.
+    words = ui(
+      "Raised before a count knew which stock it counts, at a place holding stock in more than one status. Cancel it and raise the programme again: each status is then counted on its own.",
+    );
+  } else if (row.status === "approved" && held) {
     switch (held.code) {
       case "held_by_policy":
         words = ui(
@@ -241,6 +296,11 @@ function Why({ row }: { row: CountTaskRow }) {
       case "post_refused":
         words = ui(
           "It was to post as it was recorded, and the post was refused. The figure is kept for somebody to post.",
+        );
+        break;
+      case "status_unknown":
+        words = ui(
+          "Raised before a count knew which stock it counts, at a place holding stock in more than one status, so it is not posted. It waits for somebody who may adjust stock to decide it.",
         );
         break;
       default:
@@ -390,6 +450,13 @@ function CountRow({
         <td className="py-2 pr-4 font-mono text-xs">{row.location ?? "—"}</td>
         <td className="py-2 pr-4">
           <Product row={row} />
+          {open && statusUnknown(row) ? (
+            <span className="block max-w-md text-xs text-muted-foreground">
+              {ui(
+                "Raised before a count knew which stock it counts, at a place holding stock in more than one status. Cancel it and raise the programme again: each status is then counted on its own.",
+              )}
+            </span>
+          ) : null}
         </td>
         <td className="py-2 pr-4 tabular-nums">{qty(row.expected)}</td>
         <td className="py-2 pr-4">

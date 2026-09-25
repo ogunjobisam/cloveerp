@@ -29,6 +29,13 @@ export type CountTaskRow = {
   item: string;
   item_name: string | null;
   batch: string | null;
+  /**
+   * The stock status the count is of (20260928100000): available,
+   * quarantine and so on. Null from a database older than that, and for a
+   * count raised before it whose status is not known, which its held reason
+   * says (`status_unknown`).
+   */
+  stock_status: string | null;
   site: string | null;
   site_id: string | null;
   location: string | null;
@@ -74,6 +81,7 @@ export function normalise(raw: Record<string, unknown>): CountTaskRow {
     item: text(raw["item"]) ?? "",
     item_name: text(raw["item_name"]),
     batch: text(raw["batch"]),
+    stock_status: text(raw["stock_status"]),
     site: text(raw["site"]),
     site_id: text(raw["site_id"]),
     location: text(raw["location"]),
@@ -101,11 +109,18 @@ export function normalise(raw: Record<string, unknown>): CountTaskRow {
 
 /**
  * The codes erp.count_post_hold_reason() and erp.record_count() write, as
- * `code: English text`. `unknown` keeps anything else, so a code added later
+ * `code: English text`, and `status_unknown`, which the backfill of
+ * 20260928100000 writes on a count raised before a count knew its stock
+ * status, at a place that held more than one. `unknown` keeps anything else, so a code added later
  * still reaches the screen in the database's own words.
  */
 export type HoldCode =
-  "held_by_policy" | "held_own_count" | "held_cumulative" | "post_refused" | "unknown";
+  | "held_by_policy"
+  | "held_own_count"
+  | "held_cumulative"
+  | "post_refused"
+  | "status_unknown"
+  | "unknown";
 
 export type HeldReason = {
   code: HoldCode;
@@ -122,6 +137,7 @@ const KNOWN: readonly HoldCode[] = [
   "held_own_count",
   "held_cumulative",
   "post_refused",
+  "status_unknown",
 ];
 
 export function heldReason(raw: string | null): HeldReason | null {
@@ -213,6 +229,14 @@ export function splitWorklist<T extends CountTaskRow>(
   return { toCount, exceptions };
 }
 
+/**
+ * A count held because nobody knows which stock status it is of
+ * (20260928100000). It is not recorded; it is cancelled and raised again.
+ */
+export function statusUnknown(row: CountTaskRow): boolean {
+  return heldReason(row.post_held_reason)?.code === "status_unknown";
+}
+
 /** A site chosen in the header narrows the list; no choice, or no site on the row, does not. */
 export function inSite<T extends CountTaskRow>(rows: readonly T[], siteId: string): T[] {
   if (!siteId) return [...rows];
@@ -237,11 +261,15 @@ export type RowActions = {
 /**
  * The verbs each state's door accepts, for somebody holding what it asks:
  *
- *   open                 Record (inventory.count), Cancel (inventory.count)
- *   counted, rejected    Count it again and Cancel (inventory.adjust)
+ *   open                 Record (inventory.count), Cancel (inventory.count);
+ *                        no Record where its status is not known, which
+ *                        the door refuses (CLOVEERP_COUNT_STATUS_UNKNOWN)
+ *   counted, rejected    Count it again and Cancel (inventory.adjust); only
+ *                        Cancel where its status is not known
  *   approved             Post (inventory.adjust) — not where the door would
  *                        refuse the reader for having counted it
- *                        (post_refused_to_me)
+ *                        (post_refused_to_me), nor where its status is not
+ *                        known and it found a difference
  *   pending_approval     nothing: the decision is the approver's
  *   posted, cancelled    nothing
  */
@@ -256,15 +284,25 @@ export function actionsFor(row: CountTaskRow, can: (code: string) => boolean): R
   switch (row.status) {
     case "open": {
       const count = can("inventory.count");
-      return { ...none, record: count, cancel: count ? "inventory.count" : null };
+      return {
+        ...none,
+        record: count && !statusUnknown(row),
+        cancel: count ? "inventory.count" : null,
+      };
     }
     case "counted":
     case "rejected": {
       const adjust = can("inventory.adjust");
-      return { ...none, recount: adjust, cancel: adjust ? "inventory.adjust" : null };
+      return {
+        ...none,
+        recount: adjust && !statusUnknown(row),
+        cancel: adjust ? "inventory.adjust" : null,
+      };
     }
     case "approved": {
-      const adjust = can("inventory.adjust");
+      // A count of no known status with a difference has no status to post
+      // it to; the door refuses it (CLOVEERP_COUNT_STATUS_UNKNOWN).
+      const adjust = can("inventory.adjust") && !(statusUnknown(row) && (row.variance ?? 0) !== 0);
       return {
         ...none,
         post: adjust && !row.post_refused_to_me,
