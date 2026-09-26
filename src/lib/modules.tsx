@@ -1994,11 +1994,10 @@ export const FINANCE: ModuleDef = {
           name: "p_currency",
           label: "Currency",
           required: true,
-          choices: [
-            { value: "GBP", label: "GBP — pound sterling" },
-            { value: "EUR", label: "EUR — euro" },
-            { value: "USD", label: "USD — US dollar" },
-          ],
+          // The ledger's currency only (20260929300000). Cash in a currency
+          // the customer owes nothing in is refused, and nothing posts in a
+          // foreign currency until translation is built.
+          choices: [{ value: "GBP", label: "GBP — pound sterling" }],
         },
         {
           kind: "text",
