@@ -283,8 +283,18 @@ export type ModuleDef = {
   chart?: Chart;
   worklists: Panel[];
   reports: Panel[];
-  /** The verbs. Rendered as a bar above the tabs; absent when unpermitted. */
+  /**
+   * The verbs. Those no step of the strip names are behind the header's
+   * Actions; absent when unpermitted. A module that declares `exceptions` says
+   * these are its daily verbs, and they are drawn in the header itself.
+   */
   actions?: ActionSpec[];
+  /**
+   * The verbs for the less usual day, behind the header's More, when `actions`
+   * holds the daily ones (PR11 M6). A step of the strip may still name one of
+   * them, and carries it as it would one of `actions`.
+   */
+  exceptions?: ActionSpec[];
   /** The chain of steps this module moves work along, drawn across the top. */
   flow?: FlowSpec;
   /** Reads that take arguments, so they cannot be a standing panel. */
@@ -535,6 +545,142 @@ export const RELEASE_BATCH: ActionSpec = {
   invalidates: ["erp_batches", "erp_stock_health"],
 };
 
+/** What a transfer's moves make stale: its list, and both sites' stock. */
+export const TRANSFER_INVALIDATES = [
+  "erp_transfer_orders",
+  "erp_stock_health",
+  "erp_stock_valuation",
+];
+
+/**
+ * Raising a transfer order, declared once and offered on Stock's page, where
+ * it is one of the three things done every day (PR11 M6, D15), and on Site
+ * transfers, where it is despatched and received.
+ */
+export const RAISE_TRANSFER_ORDER: ActionSpec = {
+  label: "Raise a transfer order",
+  title: "Send stock to another site",
+  description:
+    "Both sites must belong to the same company. Nothing moves until the order is approved, and a large one may need somebody else to approve it.",
+  permission: "inventory.move",
+  fn: "erp_raise_transfer_order",
+  fields: [
+    {
+      ...pickSite("p_from_site_id", "From site"),
+      hint: "Where the goods are now.",
+    },
+    {
+      ...pickSite("p_to_site_id", "To site"),
+      hint: "Where the goods are going. A different site, and the same company.",
+    },
+    {
+      kind: "rows",
+      name: "p_lines",
+      label: "What is being moved",
+      addLabel: "Add a product",
+      hint: "One row per product. No prices: a transfer moves goods at what they already cost.",
+      columns: [
+        {
+          name: "item_id",
+          label: "Product",
+          kind: "select",
+          options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+        { name: "quantity", label: "Quantity", kind: "number", placeholder: "20" },
+      ],
+    },
+    {
+      kind: "date",
+      name: "p_required_date",
+      label: "Needed by",
+      hint: "Optional. When the other site needs them.",
+    },
+    {
+      kind: "text",
+      name: "p_reference",
+      label: "Reference",
+      placeholder: "CON-4471",
+      hint: "Optional. A consignment note or your own reference.",
+    },
+  ],
+  invalidates: TRANSFER_INVALIDATES,
+};
+
+/** What an adjustment's moves make stale: its list, the stock, and the ledger. */
+export const ADJUSTMENT_INVALIDATES = [
+  "erp_stock_adjustments",
+  "erp_stock_health",
+  "erp_stock_valuation",
+  "erp_trial_balance",
+];
+
+/**
+ * Raising a stock adjustment, declared once and offered on Stock's page, where
+ * it is one of the three things done every day (PR11 M6, D15), and on Stock
+ * adjustments, where it is confirmed.
+ */
+export const RAISE_STOCK_ADJUSTMENT: ActionSpec = {
+  label: "Raise a stock adjustment",
+  title: "Say what the stock really is",
+  description:
+    "Nothing changes yet: the adjustment is a draft until it is approved and posted. Quantities are what you found, not what you want to change by — put stock found as a positive number and stock missing as a negative one.",
+  permission: "inventory.adjust",
+  fn: "erp_raise_stock_adjustment",
+  fields: [
+    {
+      ...pickSite("p_site_id", "Which shelf"),
+      hint: "The site whose stock the count was taken at.",
+    },
+    // A combo, not a select: the register is offered, and a reason of the
+    // warehouse's own words on the day is still possible, which is what
+    // erp_check_reason_code allows for a code nobody keeps.
+    {
+      kind: "combo",
+      name: "p_reason_code",
+      label: "Why it changed",
+      required: true,
+      placeholder: "COUNT_VARIANCE",
+      hint: "Pick a reason from the register, or type one of your own. Some reasons are set up to need a note beside them.",
+      options: {
+        fn: "erp_reason_codes",
+        value: "code",
+        label: ["category", "code", "name"],
+      },
+    },
+    {
+      kind: "text",
+      name: "p_note",
+      label: "What happened",
+      required: false,
+      placeholder: "A pallet went over in the racking",
+      hint: "Say what happened, in a sentence. Some reasons are set up to require this.",
+    },
+    {
+      kind: "rows",
+      name: "p_lines",
+      label: "What the count found",
+      addLabel: "Add a product",
+      hint: "One row per product. Positive for stock found, negative for stock missing. No prices: what the change is worth is whatever the books already say the stock is worth.",
+      columns: [
+        {
+          name: "item_id",
+          label: "Product",
+          kind: "select",
+          options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+        { name: "quantity", label: "Change", kind: "number", placeholder: "-2" },
+      ],
+    },
+    {
+      kind: "date",
+      name: "p_adjusted_on",
+      label: "When the count was taken",
+      hint: "The day the fact was true, which is not always today. A date before today needs the permission to post to the ledger, because it moves cost between months; a closed month refuses it; and a date after today is refused outright.",
+    },
+  ],
+  invalidates: ADJUSTMENT_INVALIDATES,
+};
+
 export const INVENTORY: ModuleDef = {
   flow: {
     code: "stock",
@@ -671,7 +817,34 @@ export const INVENTORY: ModuleDef = {
     "Knowing what is on the shelf, what it is worth, and putting right where the shelf and the ledger disagree.",
   permission: "inventory.read",
   group: "move",
+  // The three things Stock is opened for every day (PR11 M6, D15), on the page
+  // itself. Despatching and receiving a transfer, and confirming an
+  // adjustment, are on their own screens, where the document is in front of
+  // the person doing it.
   actions: [
+    RAISE_TRANSFER_ORDER,
+    RAISE_STOCK_ADJUSTMENT,
+    {
+      label: "Raise count tasks",
+      description: "Ask a counting programme for its next set of tasks.",
+      permission: "inventory.count",
+      fn: "erp_raise_count_tasks",
+      fields: [
+        pickFrom(
+          "erp_count_programmes",
+          "code",
+          ["code", "name", "status"],
+          "p_programme_code",
+          "Programme",
+        ),
+      ],
+      invalidates: ["erp_count_tasks", "erp_count_accuracy"],
+    },
+  ],
+  // Everything else Stock can do, behind the header's More: still declared,
+  // still permitted, and one press further away. The steps of the strip above
+  // still carry the verbs they name from here.
+  exceptions: [
     {
       label: "Use supplier-owned stock",
       description:
@@ -991,22 +1164,6 @@ export const INVENTORY: ModuleDef = {
         pickCurrency(),
       ],
       invalidates: ["erp_stock_valuation"],
-    },
-    {
-      label: "Raise count tasks",
-      description: "Ask a counting programme for its next set of tasks.",
-      permission: "inventory.count",
-      fn: "erp_raise_count_tasks",
-      fields: [
-        pickFrom(
-          "erp_count_programmes",
-          "code",
-          ["code", "name", "status"],
-          "p_programme_code",
-          "Programme",
-        ),
-      ],
-      invalidates: ["erp_count_tasks", "erp_count_accuracy"],
     },
     {
       label: "Record a count",

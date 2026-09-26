@@ -72,6 +72,7 @@ export function ActionButton({
   busy = false,
   disabled = false,
   title,
+  ariaLabel,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -86,6 +87,11 @@ export function ActionButton({
   // `| undefined` explicitly: the root tsconfig sets exactOptionalPropertyTypes,
   // so an optional prop does not implicitly accept an undefined value.
   title?: string | undefined;
+  /**
+   * The name a screen reader says, where the words on the button are the same
+   * on every row of a list: "Approve TO-000012" rather than ten "Approve"s.
+   */
+  ariaLabel?: string | undefined;
 }) {
   const look =
     variant === "primary"
@@ -100,6 +106,7 @@ export function ActionButton({
       onClick={onClick}
       disabled={disabled || busy}
       title={title}
+      aria-label={ariaLabel}
       className={`${TOUCH} ${look} inline-flex shrink-0 items-center justify-center rounded-md px-4 text-sm`}
     >
       {children}

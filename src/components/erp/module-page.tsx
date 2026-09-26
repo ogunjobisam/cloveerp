@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 
-import { unstagedActions } from "../../lib/flow-actions";
+import { moduleActions, pageActions } from "../../lib/flow-actions";
 import { useT } from "../../lib/i18n";
 import { type ModuleDef, type Panel } from "../../lib/modules";
-import { ActionBar, HeaderActions } from "./actions-bar";
+import { ActionBar, ActionButtons, HeaderActions } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
@@ -70,7 +70,10 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
   const { t, ui } = useT();
   const [tab, setTab] = useState<Tab>("dashboard");
   const title = t(def.titleKey, def.title);
-  const unstaged = unstagedActions(def.flow, def.actions ?? []);
+  // The verbs no step names: a module's daily ones in the header, a press
+  // each, and the rest behind the panel beside them (PR11 M6). A module with no
+  // daily verbs has every one behind the panel, as before.
+  const { daily, behind } = pageActions(def);
   const openHelp = useHowItWorks(def.howItWorks ? ui(def.howItWorks) : undefined);
 
   // Whether anything on this screen is about one place. Asked before the scope
@@ -100,15 +103,26 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
             <p className="mt-1 text-sm text-muted-foreground">{ui(def.blurb)}</p>
             <HowItWorksLink open={openHelp} />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          {/* Wraps, and never wider than the header: three daily verbs beside
+              the panel and Refresh are wider than a phone. */}
+          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             {actions}
+            {/* The few things the module is opened for every day, where they
+                are seen. Each is drawn only to a person who may do it. */}
+            {daily.length > 0 ? <ActionButtons actions={daily} /> : null}
             {/* "What you can do here" was fifteen equal buttons in the middle of
                 the page — the least-used controls on it and the loudest. Every
                 one is still here, one press away. */}
-            {unstaged.length > 0 ? (
-              <HeaderActions>
-                <ActionBar actions={unstaged} title="What you can do here" />
-              </HeaderActions>
+            {behind.length > 0 ? (
+              daily.length > 0 ? (
+                <HeaderActions label={ui("More")}>
+                  <ActionBar actions={behind} title="Less often" />
+                </HeaderActions>
+              ) : (
+                <HeaderActions>
+                  <ActionBar actions={behind} title="What you can do here" />
+                </HeaderActions>
+              )
             ) : null}
             <RefreshButton />
           </div>
@@ -158,7 +172,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
           {/* Inside the tab, not above both. On the Reports tab the whole
               pipeline — search, list, pagination, buttons — stood between the
               tab strip and the first report. */}
-          {def.flow ? <ProcessFlow flow={def.flow} actions={def.actions ?? []} /> : null}
+          {def.flow ? <ProcessFlow flow={def.flow} actions={moduleActions(def)} /> : null}
           {/* The verbs no step names are in the header's Actions panel. They
               used to be switched off whenever there was a strip, which left
               every one of them declared, permitted and unreachable; they are

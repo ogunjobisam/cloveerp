@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickDocument, pickSite } from "../../components/erp/actions-bar";
+import { ActionBar, pickDocument } from "../../components/erp/actions-bar";
+import { DecisionMoves } from "../../components/erp/decision-moves";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
+import { ADJUSTMENT_INVALIDATES, RAISE_STOCK_ADJUSTMENT } from "../../lib/modules";
 
 export const Route = createFileRoute("/inventory/adjustments")({
   head: () => ({
@@ -51,22 +53,18 @@ type AdjustmentRow = {
 /**
  * The tone of an adjustment's state. A draft is the one worth colouring: it has
  * changed nothing and will keep changing nothing until somebody approves it,
- * which is the fact people most often miss about this screen.
+ * which is the fact people most often miss about this screen. One waiting for
+ * its approver has changed nothing either.
  */
 function stateTone(state: string | null): "ok" | "warn" | "muted" {
   if (state === "posted") return "ok";
-  if (state === "draft") return "warn";
+  if (state === "draft" || state === "pending_approval") return "warn";
   return "muted";
 }
 
 function StockAdjustments() {
   const { ui } = useT();
-  const invalidates = [
-    "erp_stock_adjustments",
-    "erp_stock_health",
-    "erp_stock_valuation",
-    "erp_trial_balance",
-  ];
+  const invalidates = ADJUSTMENT_INVALIDATES;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -83,67 +81,7 @@ function StockAdjustments() {
         title="Raise and post an adjustment"
         note="An adjustment is approved before anything is written, because a write-off nobody agreed to is stock disappearing off the books. Dating one before today needs the permission to post to the ledger as well, and a closed period refuses it outright."
         actions={[
-          {
-            label: "Raise a stock adjustment",
-            title: "Say what the stock really is",
-            description:
-              "Nothing changes yet: the adjustment is a draft until it is approved and posted. Quantities are what you found, not what you want to change by — put stock found as a positive number and stock missing as a negative one.",
-            permission: "inventory.adjust",
-            fn: "erp_raise_stock_adjustment",
-            fields: [
-              {
-                ...pickSite("p_site_id", "Which shelf"),
-                hint: "The site whose stock the count was taken at.",
-              },
-              // A combo, not a select: the register is offered, and a reason of
-              // the warehouse's own words on the day is still possible, which
-              // is what erp_check_reason_code allows for a code nobody keeps.
-              {
-                kind: "combo",
-                name: "p_reason_code",
-                label: "Why it changed",
-                required: true,
-                placeholder: "COUNT_VARIANCE",
-                hint: "Pick a reason from the register, or type one of your own. Some reasons are set up to need a note beside them.",
-                options: {
-                  fn: "erp_reason_codes",
-                  value: "code",
-                  label: ["category", "code", "name"],
-                },
-              },
-              {
-                kind: "text",
-                name: "p_note",
-                label: "What happened",
-                required: false,
-                placeholder: "A pallet went over in the racking",
-                hint: "Say what happened, in a sentence. Some reasons are set up to require this.",
-              },
-              {
-                kind: "rows",
-                name: "p_lines",
-                label: "What the count found",
-                addLabel: "Add a product",
-                hint: "One row per product. Positive for stock found, negative for stock missing. No prices: what the change is worth is whatever the books already say the stock is worth.",
-                columns: [
-                  {
-                    name: "item_id",
-                    label: "Product",
-                    kind: "select",
-                    options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
-                  },
-                  { name: "quantity", label: "Change", kind: "number", placeholder: "-2" },
-                ],
-              },
-              {
-                kind: "date",
-                name: "p_adjusted_on",
-                label: "When the count was taken",
-                hint: "The day the fact was true, which is not always today. A date before today needs the permission to post to the ledger, because it moves cost between months; a closed month refuses it; and a date after today is refused outright.",
-              },
-            ],
-            invalidates,
-          },
+          RAISE_STOCK_ADJUSTMENT,
           {
             label: "Confirm a stock adjustment",
             title: "Write the count into the books",
@@ -191,6 +129,16 @@ function StockAdjustments() {
                 <td className="py-2 pr-4 tabular-nums">{r.adjusted_on}</td>
                 <td className="py-2 pr-4">
                   <Pill tone={stateTone(r.state)}>{r.state ?? "—"}</Pill>
+                  {/* Approve and Reject, on an adjustment waiting for its
+                      approver, to the people its approval asked (PR11 M6).
+                      Nothing is drawn until the lifecycle has such a state. */}
+                  <DecisionMoves
+                    documentId={r.document_id}
+                    documentNumber={r.document_number}
+                    documentType="stock_adjustment"
+                    state={r.state}
+                    invalidates={invalidates}
+                  />
                 </td>
                 <td className="py-2 pr-4 font-mono text-xs" title={r.reason_note ?? undefined}>
                   {r.reason_code ?? "—"}

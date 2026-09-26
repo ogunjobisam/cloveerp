@@ -695,3 +695,175 @@ test.describe("the counter works down a list", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("stock's decisions are on the rows, and its page carries its day", () => {
+  // PR11 M6. A transfer over its organisation's threshold waits in Pending
+  // approval; one under it is raised approved (20260928200000). The row draws
+  // Approve and Reject from erp_available_transitions, and only on a row that
+  // waits, so a transfer under the threshold never shows either.
+  const doc = (n: number) => `00000000-0000-4000-8000-0000000f${String(n).padStart(4, "0")}`;
+  const transfer = (n: number, state: string, quantity: number) => ({
+    document_id: doc(n),
+    document_number: `TRF-00000${n}`,
+    state,
+    from_site: "ZZ-A",
+    to_site: "ZZ-B",
+    document_date: "2026-09-26",
+    required_date: null,
+    lines: 1,
+    quantity,
+    in_transit: 0,
+    value_moved_minor: 0,
+    currency: "GBP",
+  });
+  const move = (
+    code: string,
+    name: string,
+    to_state: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    code,
+    name,
+    to_state,
+    permitted: true,
+    guard_passes: true,
+    is_automatic: false,
+    refused: null,
+    ...extra,
+  });
+  const DECIDE = [
+    move("approve", "Approve", "approved"),
+    move("approve_within_threshold", "Approve within threshold", "approved", {
+      is_automatic: true,
+    }),
+    move("reject", "Reject", "draft"),
+  ];
+
+  test("Approve appears only on a transfer over the threshold, and goes through the transition door", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_transfer_orders", [
+      transfer(1, "approved", 1),
+      transfer(2, "pending_approval", 5),
+      transfer(3, "closed", 2),
+    ]);
+    backend.rpc("erp_available_transitions", DECIDE);
+    const asked: unknown[] = [];
+    page.on("request", (r) => {
+      if (r.url().endsWith("/rpc/erp_available_transitions")) asked.push(r.postDataJSON());
+    });
+    await page.goto("/inventory/transfers");
+
+    const row = (n: number) => page.getByRole("row", { name: new RegExp(`TRF-00000${n}`) });
+    await expect(row(2).getByRole("button", { name: "Approve TRF-000002" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(row(2).getByRole("button", { name: "Reject TRF-000002" })).toBeVisible();
+    // Derived, and never a button.
+    await expect(page.getByRole("button", { name: /Approve within threshold/ })).toHaveCount(0);
+    // Under the threshold, and finished: nothing to decide, and nothing asked.
+    for (const n of [1, 3]) {
+      await expect(row(n).getByRole("button", { name: /^(Approve|Reject) / })).toHaveCount(0);
+    }
+    expect(asked).toEqual([{ p_document_id: doc(2) }]);
+
+    backend.rpc("erp_transition_document", { document_id: doc(2), state: "approved" });
+    const sent = page.waitForRequest(/rpc\/erp_transition_document$/);
+    await row(2).getByRole("button", { name: "Approve TRF-000002" }).click();
+    expect((await sent).postDataJSON()).toEqual({
+      p_document_id: doc(2),
+      p_transition_code: "approve",
+    });
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("the person who raised it is not offered Approve, and is told why", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_transfer_orders", [transfer(2, "pending_approval", 5)]);
+    backend.rpc("erp_available_transitions", [
+      move("approve", "Approve", "approved", { refused: "CLOVEERP_DOCUMENT_SELF_APPROVAL" }),
+      move("reject", "Reject", "draft", { permitted: false }),
+    ]);
+    await page.goto("/inventory/transfers");
+
+    const row = page.getByRole("row", { name: /TRF-000002/ });
+    await expect(row).toContainText("You asked for this approval, so somebody else gives it.", {
+      timeout: 20_000,
+    });
+    await expect(row.getByRole("button")).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("an adjustment waiting for approval gets the same decision, with nothing named for it", async ({
+    page,
+    backend,
+  }) => {
+    const adjustment = (n: number, state: string) => ({
+      document_id: doc(10 + n),
+      document_number: `ADJ-00000${n}`,
+      state,
+      site: "ZZ-A",
+      adjusted_on: "2026-09-26",
+      reason_code: "DAMAGE",
+      reason_note: null,
+      lines: 1,
+      found: 0,
+      missing: 30,
+      cost_minor: 15000,
+      currency: "GBP",
+    });
+    backend.rpc("erp_stock_adjustments", [
+      adjustment(1, "draft"),
+      adjustment(2, "pending_approval"),
+    ]);
+    backend.rpc("erp_available_transitions", DECIDE);
+    await page.goto("/inventory/adjustments");
+
+    const row = (n: number) => page.getByRole("row", { name: new RegExp(`ADJ-00000${n}`) });
+    await expect(row(2).getByRole("button", { name: "Approve ADJ-000002" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(row(1).getByRole("button", { name: /^(Approve|Reject) / })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("Stock's page carries three daily actions, and the exceptions drawer holds the rest", async ({
+    page,
+    backend,
+  }) => {
+    await page.goto("/inventory");
+    const header = page.locator("header").filter({ has: page.getByRole("heading", { level: 1 }) });
+    const daily = ["Raise a transfer order", "Raise a stock adjustment", "Raise count tasks"];
+    for (const name of daily) {
+      await expect(header.getByRole("button", { name, exact: true })).toBeVisible({
+        timeout: 20_000,
+      });
+    }
+    // Only a way to the rest, called for what it is.
+    await expect(header.getByRole("button", { name: "Actions" })).toHaveCount(0);
+
+    await header.getByRole("button", { name: "More" }).click();
+    const drawer = page.getByRole("dialog", { name: "More" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: "Less often" })).toBeVisible();
+    for (const name of [
+      "Use supplier-owned stock",
+      "Create a batch",
+      "Split a batch",
+      "Release a batch",
+      "Raise replenishment tasks",
+      "Set a standard cost",
+    ]) {
+      await expect(drawer.getByRole("button", { name, exact: true })).toBeVisible();
+    }
+    // Not twice: the daily ones are not in the drawer, and a step's verb stays
+    // on its step.
+    for (const name of [...daily, "Write off stock", "Record a count"]) {
+      await expect(drawer.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
+    expect(backend.crashes).toEqual([]);
+  });
+});

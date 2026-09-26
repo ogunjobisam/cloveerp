@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { friendlyError } from "@/lib/errors";
 
 import { callErp } from "../../lib/erp";
+import { moduleActions } from "../../lib/flow-actions";
 import { prettifyRoutine } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { MODULES, allTiles } from "../../lib/modules";
@@ -55,7 +56,7 @@ function routineLabel(fn: string): string {
   if (!routineLabels) {
     const index = new Map<string, string>();
     for (const mod of MODULES) {
-      for (const action of mod.actions ?? [])
+      for (const action of moduleActions(mod))
         if (!index.has(action.fn)) index.set(action.fn, action.label);
       for (const inquiry of mod.inquiries ?? [])
         if (!index.has(inquiry.fn)) index.set(inquiry.fn, inquiry.label);

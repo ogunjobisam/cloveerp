@@ -12,7 +12,7 @@ import {
   type Transition,
 } from "../components/erp/available-transitions";
 import type { FlowSpec, Stage } from "../components/erp/process-flow";
-import { actionKey } from "./flow-actions";
+import { actionKey, moduleActions } from "./flow-actions";
 import { formatMinorTotals, formatMinorWhole } from "./money";
 import { MODULES } from "./modules";
 import {
@@ -173,7 +173,7 @@ describe("every flow module names the states of its record steps", () => {
     });
 
     test(`${mod.key}: every verb a step gates by state is a verb it carries`, () => {
-      const keys = new Set((mod.actions ?? []).map(actionKey));
+      const keys = new Set(moduleActions(mod).map(actionKey));
       const unknown = flow.stages.flatMap((s) =>
         Object.keys(s.actionStates ?? {}).filter((k) => !keys.has(k)),
       );

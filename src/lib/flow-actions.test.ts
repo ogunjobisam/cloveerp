@@ -6,12 +6,22 @@ import type { ActionSpec } from "../components/erp/actions-bar";
 import type { FlowSpec } from "../components/erp/process-flow";
 import {
   actionKey,
+  moduleActions,
+  pageActions,
   recordAnswer,
   stageActionKeys,
   stagedKeys,
   unstagedActions,
 } from "./flow-actions";
-import { MODULES, PLANNING, QUALITY, RELEASE_BATCH } from "./modules";
+import {
+  INVENTORY,
+  MODULES,
+  PLANNING,
+  QUALITY,
+  RAISE_STOCK_ADJUSTMENT,
+  RAISE_TRANSFER_ORDER,
+  RELEASE_BATCH,
+} from "./modules";
 
 /**
  * Every verb a module declares can be reached from its screen.
@@ -171,8 +181,13 @@ describe("the module page draws the bar beside the strip", () => {
   );
 
   test("the bar lists the actions no step names", () => {
-    expect(page).toContain("unstagedActions(def.flow, def.actions ?? [])");
-    expect(page).toMatch(/<ActionBar\s+actions=\{unstaged\}/);
+    expect(page).toContain("const { daily, behind } = pageActions(def);");
+    expect(page).toMatch(/<ActionBar\s+actions=\{behind\}/);
+    expect(page).toContain("<ActionButtons actions={daily} />");
+  });
+
+  test("the strip carries a verb whichever list declares it", () => {
+    expect(page).toContain("<ProcessFlow flow={def.flow} actions={moduleActions(def)} />");
   });
 
   test("the bar is not switched off by the strip", () => {
@@ -224,11 +239,12 @@ describe("every module with a strip: every verb is reachable", () => {
 
   for (const mod of withFlow) {
     const flow = mod.flow as FlowSpec;
-    const actions = mod.actions ?? [];
+    const actions = moduleActions(mod);
     // The strip looks a step's verb up by this key; a later declaration under
     // the same key answers for an earlier one.
     const byKey = new Map(actions.map((a) => [actionKey(a), a]));
-    const onBar = new Set(unstagedActions(flow, actions));
+    const { daily, behind } = pageActions(mod);
+    const onBar = new Set([...daily, ...behind]);
     const staged = stagedKeys(flow);
 
     test(`${mod.key}: no two verbs share the name a step would open them by`, () => {
@@ -241,7 +257,7 @@ describe("every module with a strip: every verb is reachable", () => {
     });
 
     for (const action of actions) {
-      test(`${mod.key}: "${action.label}" is on a step or on the bar`, () => {
+      test(`${mod.key}: "${action.label}" is on a step, in the header or on the bar`, () => {
         const openedByAStep =
           staged.has(actionKey(action)) && byKey.get(actionKey(action)) === action;
         expect(openedByAStep || onBar.has(action)).toBe(true);
@@ -316,5 +332,74 @@ describe("the verbs the walkthrough found unreachable", () => {
     expect(plan.options.argsFrom).toEqual({ p_batch_id: "p_batch_id", p_site_id: "p_site_id" });
     // An action, not a stage: the strip's budget stays where it is.
     expect(stagedKeys(QUALITY.flow as FlowSpec).has("erp_raise_inspection")).toBe(false);
+  });
+});
+
+describe("a module's daily verbs and the rest (PR11 M6)", () => {
+  const flow: FlowSpec = {
+    code: "t",
+    title: "T",
+    note: "",
+    stages: [{ label: "Step", hint: "", createFn: "erp_staged" }],
+  } as FlowSpec;
+
+  test("with no exceptions, every verb no step names is behind the panel, as before", () => {
+    const actions = [act("erp_a"), act("erp_staged"), act("erp_b")];
+    expect(pageActions({ flow, actions })).toEqual({
+      daily: [],
+      behind: [act("erp_a"), act("erp_b")],
+    });
+  });
+
+  test("with exceptions, the actions are the daily ones and the exceptions are behind the panel", () => {
+    const actions = [act("erp_a")];
+    const exceptions = [act("erp_b"), act("erp_staged"), act("erp_c")];
+    expect(pageActions({ flow, actions, exceptions })).toEqual({
+      daily: [act("erp_a")],
+      behind: [act("erp_b"), act("erp_c")],
+    });
+  });
+
+  test("an empty list of exceptions still makes the actions daily", () => {
+    expect(pageActions({ actions: [act("erp_a")], exceptions: [] })).toEqual({
+      daily: [act("erp_a")],
+      behind: [],
+    });
+  });
+
+  test("the strip is handed both lists, the daily first", () => {
+    expect(moduleActions({ actions: [act("erp_a")], exceptions: [act("erp_b")] })).toEqual([
+      act("erp_a"),
+      act("erp_b"),
+    ]);
+    expect(moduleActions({})).toEqual([]);
+  });
+
+  test("Stock's page has three daily verbs: raise a transfer, raise an adjustment, raise counts", () => {
+    const { daily } = pageActions(INVENTORY);
+    expect(daily.map((a) => a.fn)).toEqual([
+      "erp_raise_transfer_order",
+      "erp_raise_stock_adjustment",
+      "erp_raise_count_tasks",
+    ]);
+    expect(daily[0]).toBe(RAISE_TRANSFER_ORDER);
+    expect(daily[1]).toBe(RAISE_STOCK_ADJUSTMENT);
+  });
+
+  test("Stock loses no verb: each is daily, behind the panel or on a step, and once", () => {
+    const { daily, behind } = pageActions(INVENTORY);
+    const staged = stagedKeys(INVENTORY.flow as FlowSpec);
+    const all = moduleActions(INVENTORY);
+    // Twenty-two before PR11 M6, and the two raises it brings here.
+    expect(all.length).toBe(24);
+    for (const a of all) {
+      const places = [daily.includes(a), behind.includes(a), staged.has(actionKey(a))].filter(
+        Boolean,
+      ).length;
+      expect(places, a.label).toBe(1);
+    }
+    // Write-off stays where it was: on the Correct step (M4 changes its route,
+    // not its door).
+    expect(staged.has("erp_write_off_stock")).toBe(true);
   });
 });

@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickDocument, pickSite } from "../../components/erp/actions-bar";
+import { ActionBar, pickDocument } from "../../components/erp/actions-bar";
+import { DecisionMoves } from "../../components/erp/decision-moves";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
+import { RAISE_TRANSFER_ORDER, TRANSFER_INVALIDATES } from "../../lib/modules";
 
 export const Route = createFileRoute("/inventory/transfers")({
   head: () => ({
@@ -65,7 +67,7 @@ function stateTone(state: string | null): "ok" | "warn" | "muted" {
 
 function SiteTransfers() {
   const { ui } = useT();
-  const invalidates = ["erp_transfer_orders", "erp_stock_health", "erp_stock_valuation"];
+  const invalidates = TRANSFER_INVALIDATES;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -82,54 +84,7 @@ function SiteTransfers() {
         title="Raise and move a transfer"
         note="A transfer order is approved before anything leaves a shelf, despatched when the lorry is loaded, and received when it arrives. The value crosses at the last step, in one figure, so both sites always add up to what the company holds."
         actions={[
-          {
-            label: "Raise a transfer order",
-            title: "Send stock to another site",
-            description:
-              "Both sites must belong to the same company. Nothing moves until the order is approved, and a large one may need somebody else to approve it.",
-            permission: "inventory.move",
-            fn: "erp_raise_transfer_order",
-            fields: [
-              {
-                ...pickSite("p_from_site_id", "From site"),
-                hint: "Where the goods are now.",
-              },
-              {
-                ...pickSite("p_to_site_id", "To site"),
-                hint: "Where the goods are going. A different site, and the same company.",
-              },
-              {
-                kind: "rows",
-                name: "p_lines",
-                label: "What is being moved",
-                addLabel: "Add a product",
-                hint: "One row per product. No prices: a transfer moves goods at what they already cost.",
-                columns: [
-                  {
-                    name: "item_id",
-                    label: "Product",
-                    kind: "select",
-                    options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
-                  },
-                  { name: "quantity", label: "Quantity", kind: "number", placeholder: "20" },
-                ],
-              },
-              {
-                kind: "date",
-                name: "p_required_date",
-                label: "Needed by",
-                hint: "Optional. When the other site needs them.",
-              },
-              {
-                kind: "text",
-                name: "p_reference",
-                label: "Reference",
-                placeholder: "CON-4471",
-                hint: "Optional. A consignment note or your own reference.",
-              },
-            ],
-            invalidates,
-          },
+          RAISE_TRANSFER_ORDER,
           {
             label: "Despatch a transfer",
             title: "Load the goods",
@@ -182,6 +137,15 @@ function SiteTransfers() {
                 <td className="py-2 pr-4 font-mono text-xs">{r.to_site ?? "—"}</td>
                 <td className="py-2 pr-4">
                   <Pill tone={stateTone(r.state)}>{r.state ?? "—"}</Pill>
+                  {/* Approve and Reject, on a transfer over its threshold,
+                      to the people its approval asked (PR11 M6). */}
+                  <DecisionMoves
+                    documentId={r.document_id}
+                    documentNumber={r.document_number}
+                    documentType="transfer_order"
+                    state={r.state}
+                    invalidates={invalidates}
+                  />
                 </td>
                 <td className="py-2 pr-4 tabular-nums">{r.quantity}</td>
                 <td className="py-2 pr-4 tabular-nums">{r.in_transit}</td>
