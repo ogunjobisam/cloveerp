@@ -269,7 +269,9 @@ export type RowActions = {
  *   approved             Post (inventory.adjust) — not where the door would
  *                        refuse the reader for having counted it
  *                        (post_refused_to_me), nor where its status is not
- *                        known and it found a difference
+ *                        known and it found a difference; Cancel
+ *                        (inventory.adjust) where its post was refused or
+ *                        its status is not known, and nothing has posted
  *   pending_approval     nothing: the decision is the approver's
  *   posted, cancelled    nothing
  */
@@ -303,10 +305,20 @@ export function actionsFor(row: CountTaskRow, can: (code: string) => boolean): R
       // A count of no known status with a difference has no status to post
       // it to; the door refuses it (CLOVEERP_COUNT_STATUS_UNKNOWN).
       const adjust = can("inventory.adjust") && !(statusUnknown(row) && (row.variance ?? 0) !== 0);
+      // Put back, with a reason, once its post was refused or while its
+      // status is not known, and only while nothing has been posted for it
+      // (20260928500000): the door refuses any other approved count.
+      const code = heldReason(row.post_held_reason)?.code;
+      const putBack =
+        can("inventory.adjust") &&
+        (code === "post_refused" || code === "status_unknown") &&
+        row.adjustment_document_id === null &&
+        row.posted_at === null;
       return {
         ...none,
         post: adjust && !row.post_refused_to_me,
         postIsSomebodyElses: adjust && row.post_refused_to_me,
+        cancel: putBack ? "inventory.adjust" : null,
       };
     }
     default:

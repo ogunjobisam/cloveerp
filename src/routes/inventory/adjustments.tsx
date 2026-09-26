@@ -16,7 +16,7 @@ export const Route = createFileRoute("/inventory/adjustments")({
       {
         name: "description",
         content:
-          "Make the system agree with the shelf. A stock adjustment carries the day the count was taken, the reason the stock changed, and an approval before anything is written.",
+          "Make the system agree with the shelf. A stock adjustment carries the day the count was taken, the reason the stock changed, and, over the organisation's threshold, an approval before anything is written.",
       },
       { property: "og:title", content: "Stock adjustments — Clove ERP" },
       {
@@ -71,7 +71,7 @@ function StockAdjustments() {
       <PageHeader
         title={ui("Stock adjustments")}
         howItWorks={ui(
-          "An adjustment carries the date the count was taken, the reason it changed, and an approval before anything is written. Its cost is counted on the day the count was taken, not the day it was typed in.",
+          "An adjustment carries the date the count was taken and the reason it changed, and over the organisation's threshold it waits for an approval before anything is written. Its cost is counted on the day the count was taken, not the day it was typed in.",
         )}
       >
         {ui("Making the system agree with the shelf.")}
@@ -79,7 +79,7 @@ function StockAdjustments() {
 
       <ActionBar
         title="Raise and post an adjustment"
-        note="An adjustment is approved before anything is written, because a write-off nobody agreed to is stock disappearing off the books. Dating one before today needs the permission to post to the ledger as well, and a closed period refuses it outright."
+        note="An adjustment is posted as it is raised unless it is worth more than the organisation's threshold, or gives a reason set up to need approval once a threshold is set: then it waits for somebody else to approve it, and is posted as they do. Dating one before today needs the permission to post to the ledger as well, and a closed period refuses it outright."
         actions={[
           RAISE_STOCK_ADJUSTMENT,
           {

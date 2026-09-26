@@ -623,7 +623,7 @@ export const RAISE_STOCK_ADJUSTMENT: ActionSpec = {
   label: "Raise a stock adjustment",
   title: "Say what the stock really is",
   description:
-    "Nothing changes yet: the adjustment is a draft until it is approved and posted. Quantities are what you found, not what you want to change by — put stock found as a positive number and stock missing as a negative one.",
+    "Posted as it is raised, unless it is worth more than the organisation's threshold: then it waits for somebody else to approve it. Quantities are what you found, not what you want to change by — put stock found as a positive number and stock missing as a negative one.",
   permission: "inventory.adjust",
   fn: "erp_raise_stock_adjustment",
   fields: [
@@ -639,7 +639,8 @@ export const RAISE_STOCK_ADJUSTMENT: ActionSpec = {
       name: "p_reason_code",
       label: "Why it changed",
       required: true,
-      placeholder: "COUNT_VARIANCE",
+      // COUNT_VARIANCE is the count's own (20260928500000).
+      placeholder: "DAMAGE_STORAGE",
       hint: "Pick a reason from the register, or type one of your own. Some reasons are set up to need a note beside them.",
       options: {
         fn: "erp_reason_codes",

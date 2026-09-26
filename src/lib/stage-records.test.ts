@@ -431,6 +431,7 @@ describe("a move another document makes is never a button", () => {
       purchase_invoice: ["pay"],
       count_sheet: ["issue", "close"],
       transfer_order: ["approve_within_threshold", "issued", "in_transit", "received", "close"],
+      stock_adjustment: ["approve_within_threshold", "approve_with_count", "post"],
     });
   });
 
@@ -452,6 +453,33 @@ describe("a move another document makes is never a button", () => {
         "cancel_approved",
       ]),
     ).toEqual(["submit", "approve", "reject", "cancel", "cancel_approved"]);
+  });
+
+  test("a stock adjustment offers approval and cancelling, and leaves the derived approvals and the post to their doors", () => {
+    // Version 2 of its lifecycle (20260928500000): approved within its
+    // threshold when nobody was asked, approved with its count when a count
+    // raised it, and posted by the door that writes the stock. Version 1's
+    // approve from draft is a person's, and its post is the door's too.
+    expect(
+      codes("stock_adjustment", [
+        "submit",
+        "approve",
+        "approve_within_threshold",
+        "approve_with_count",
+        "reject",
+        "post",
+        "cancel",
+        "cancel_approved",
+        "approved_to_cancelled",
+      ]),
+    ).toEqual([
+      "submit",
+      "approve",
+      "reject",
+      "cancel",
+      "cancel_approved",
+      "approved_to_cancelled",
+    ]);
   });
 
   test("a sent purchase order offers no receiving, and keeps the short close a person records", () => {
