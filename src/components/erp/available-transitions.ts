@@ -149,6 +149,9 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // count when it is that count's variance, and posted by the door that
   // writes the stock (20260928500000).
   stock_adjustment: ["approve_within_threshold", "approve_with_count", "post"],
+  // Posted by Apply cash, which opens it, once its lines total what its
+  // journals banked (20260930000000).
+  cash_receipt: ["post"],
 };
 
 /** Whether a move of a document of this type is left to the door that makes it. */

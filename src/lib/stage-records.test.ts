@@ -414,7 +414,7 @@ describe("a move another document makes is never a button", () => {
       list.map((c) => move(c)),
     ).map((t) => t.code);
 
-  test("the list is the moves a receipt, a conversion, a pick, a despatch, an invoice, a payment or a credit note makes", () => {
+  test("the list is the moves a receipt, a conversion, a pick, a despatch, an invoice, a payment, a credit note or the cash makes", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
       requisition: ["order"],
       purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
@@ -432,6 +432,7 @@ describe("a move another document makes is never a button", () => {
       count_sheet: ["issue", "close"],
       transfer_order: ["approve_within_threshold", "issued", "in_transit", "received", "close"],
       stock_adjustment: ["approve_within_threshold", "approve_with_count", "post"],
+      cash_receipt: ["post"],
     });
   });
 
