@@ -486,3 +486,30 @@ person has checked the place and agrees, by a status change that moves the
 difference between available and the status the count was of.
 
 Not yet run on live.
+
+---
+
+## 20260929_grni_residue.sql
+
+The operator's half of `20260929000000_goods_received_not_invoiced_is_checked_at_close.sql`
+(PR12 M1, decisions D1 and D2). From that migration the close's "Goods received
+not invoiced reviewed" runs `erp.assert_grni_reconciles()`: the receipts still
+open at order price, the ledger balance on the account and the balance sheet as
+at today must agree to the penny. It is waivable with a reason, and it is not in
+the deploy's whole-database gate, so an organisation carrying a residue meets it
+at its next close and nowhere else.
+
+- **Part 1** is plain SQL over the tables and needs nothing the migration adds.
+  It is `erp.grni_reconciliation()`'s arithmetic for every organisation, with
+  what is dated after today beside it. It reads only.
+- **Part 2** breaks each organisation's account down by what posted it, the
+  posting rule and its version, so the causes the check's hint names can be
+  read off: supplier bills registered before procurement-controls v4,
+  consignment consumption, manual journals, and postings dated after today.
+- **Part 3**, after the deploy, is the check itself in each organisation.
+  Commented out, because the function does not exist before.
+
+Nothing is repaired. A residue is cleared by a journal an accountant posts, or
+waived at the close with a reason that says which cause it is.
+
+Not yet run on live.

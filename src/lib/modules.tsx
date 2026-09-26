@@ -4555,7 +4555,7 @@ export const PURCHASING_KPIS: Kpi[] = [
     compute: (rows, { money }) =>
       rows.length === 0
         ? null
-        : { value: money(rows, "open_value_minor"), hint: "open on the balance sheet" },
+        : { value: money(rows, "open_value_minor"), hint: "open receipts at order price, today" },
   },
   {
     label: "Invoices that do not match",
