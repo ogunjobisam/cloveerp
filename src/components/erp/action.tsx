@@ -34,7 +34,12 @@ import { useT } from "../../lib/i18n";
 import { priceLookupArgs, resolvedPrice, type ResolvedPrice } from "../../lib/line-price";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { permissionName } from "../../lib/permission-name";
-import { actionOutcome, documentOutcome, planningOutcome } from "../../lib/plain-words";
+import {
+  actionOutcome,
+  cashOutcome,
+  documentOutcome,
+  planningOutcome,
+} from "../../lib/plain-words";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
@@ -998,6 +1003,12 @@ const FOLLOW_UP_BY_FN: Record<
       : undefined;
     return planningOutcome(label, run);
   },
+  // A receipt's rows say what it applied, wrote off and kept on account
+  // (20260929400000), in the currency the form sent.
+  erp_apply_cash: (result, args) =>
+    Promise.resolve(
+      cashOutcome(result, typeof args["p_currency"] === "string" ? args["p_currency"] : "GBP"),
+    ),
 };
 
 export function ActionDialog({

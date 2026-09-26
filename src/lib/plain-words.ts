@@ -1,4 +1,5 @@
 import { prettifyField } from "./friendly";
+import { formatMinor } from "./money";
 
 /**
  * Words a customer reads, made from words the database wrote.
@@ -251,6 +252,46 @@ export function actionOutcome(
     return `${label}: ${count} ${plural(count, "record", "records")} created.`;
   }
   return `${label} — done.`;
+}
+
+/**
+ * What a receipt did, from the rows erp_apply_cash answers (20260929400000).
+ *
+ * A row for each invoice the cash reached, and one with no item for what was
+ * left over after all of them. The settlement tolerance decides the rest
+ * (20260929300000): a short on the last invoice within it is written off, and
+ * a remainder is written off within it or kept on the customer's account
+ * beyond it. "Cash applied to 2 open items" said none of that, and counted the
+ * remainder as an item. A database older than 20260929400000 does not say what
+ * it wrote off or kept, and only the leftover is named.
+ */
+export function cashOutcome(result: unknown, currency: string): string | null {
+  if (!Array.isArray(result)) return null;
+  const rows = result.map(asRecord).filter((r): r is Row => r !== null);
+  const minor = (r: Row, key: string) => {
+    const n = Number(r[key]);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const items = rows.filter((r) => typeof r["subledger_item_id"] === "string");
+  const rest = rows.find(
+    (r) => r["subledger_item_id"] === null || r["subledger_item_id"] === undefined,
+  );
+  const money = (n: number) => formatMinor(n, currency);
+
+  const applied = items.reduce((sum, r) => sum + minor(r, "applied_minor"), 0);
+  const writtenOff = rows.reduce((sum, r) => sum + minor(r, "written_off_minor"), 0);
+  const onAccount = rows.reduce((sum, r) => sum + minor(r, "on_account_minor"), 0);
+  const leftOver = rest ? minor(rest, "remaining_minor") : 0;
+  const says = rows.some((r) => "on_account_minor" in r || "written_off_minor" in r);
+
+  const parts = [
+    `${money(applied)} applied to ${items.length} open ${plural(items.length, "invoice", "invoices")}`,
+  ];
+  if (writtenOff > 0) parts.push(`${money(writtenOff)} written off within the tolerance`);
+  if (onAccount > 0) parts.push(`${money(onAccount)} on account`);
+  if (!says && leftOver > 0) parts.push(`${money(leftOver)} left over`);
+  const last = parts.pop() ?? "";
+  return `${parts.length > 0 ? `${parts.join(", ")} and ${last}` : last}.`;
 }
 
 /**

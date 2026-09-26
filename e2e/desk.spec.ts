@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures/backend";
+import { DEMO_SESSION, expect, test } from "./fixtures/backend";
 
 /**
  * The parts of the desk that are behaviour rather than markup.
@@ -865,5 +865,280 @@ test.describe("stock's decisions are on the rows, and its page carries its day",
       await expect(drawer.getByRole("button", { name, exact: true })).toHaveCount(0);
     }
     expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("the close is two presses", () => {
+  // PR12 M5. Opening the close runs every task's check and completes what
+  // passes; closing asks them again and closes every ledger of the month
+  // (20260929200000). The screen draws each press only where
+  // erp_close_checklist says its door would take it (20260929400000).
+  const GL = "00000000-0000-4000-8000-0000000c0001";
+  const COMMIT = "00000000-0000-4000-8000-0000000c0002";
+  const TASK = (n: number) => `00000000-0000-4000-8000-0000000c01${String(n).padStart(2, "0")}`;
+  const period = (id: string, ledger: string, status = "open") => ({
+    fiscal_period_id: id,
+    code: "2026-09",
+    status,
+    starts_on: "2026-09-01",
+    ends_on: "2026-09-30",
+    ledger,
+  });
+  const sibling = (id: string, ledger: string, status = "open") => ({
+    fiscal_period_id: id,
+    code: "2026-09",
+    status,
+    ledger,
+  });
+  const task = (n: number, code: string, name: string, extra: Record<string, unknown> = {}) => ({
+    task_id: TASK(n),
+    code,
+    name,
+    seq: n * 10,
+    status: "complete",
+    blocking_check: `erp.assert_${code}()`,
+    is_waivable: true,
+    blocked_by: null,
+    check_passes: true,
+    check_failure: null,
+    completed_by: "E2E Demo",
+    completed_at: "2026-10-01T09:00:00Z",
+    waiver_reason: null,
+    check_output: `${name}: holds`,
+    owner_role_code: null,
+    can_complete: false,
+    can_waive: false,
+    ...extra,
+  });
+  const checklist = (extra: Record<string, unknown>) => ({
+    period: period(GL, "GL", "closing"),
+    tasks: [],
+    state: "not_opened",
+    blocking: null,
+    can_open: false,
+    can_close: false,
+    open_tasks: 0,
+    failing_checks: 0,
+    failing_since_completed: 0,
+    siblings: [sibling(COMMIT, "COMMIT", "closing")],
+    checklist_period: { fiscal_period_id: GL, code: "2026-09", ledger: "GL" },
+    ...extra,
+  });
+  const DONE = [
+    task(1, "stock_reconciles", "Stock ledger reconciles", { is_waivable: false }),
+    task(2, "grni_reviewed", "Goods received not invoiced reviewed"),
+    task(3, "trial_balance", "Trial balance reviewed and signed", { is_waivable: false }),
+  ];
+  const presses = (page: Page) => page.locator("[data-close-presses]");
+
+  test("Open, then Close: two presses, each drawn only where its door takes it", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc(
+      "erp_close_checklist",
+      checklist({
+        period: period(GL, "GL"),
+        siblings: [sibling(COMMIT, "COMMIT")],
+        checklist_period: null,
+        can_open: true,
+      }),
+    );
+    await page.goto("/finance/close");
+
+    await expect(presses(page).getByRole("button", { name: "Open the close" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(presses(page).getByRole("button", { name: "Close the period" })).toHaveCount(0);
+    await expect(page.locator("[data-closes-with]")).toContainText("COMMIT 2026-09");
+
+    // What the database says once the close is open: every check passed.
+    backend.rpc("erp_open_period_close", 3);
+    backend.rpc(
+      "erp_close_checklist",
+      checklist({ tasks: DONE, state: "ready", can_open: true, can_close: true }),
+    );
+    const opened = page.waitForRequest(/rpc\/erp_open_period_close$/);
+    await presses(page).getByRole("button", { name: "Open the close" }).click();
+    expect((await opened).postDataJSON()).toEqual({ p_fiscal_period_id: GL });
+
+    // Nothing to tick: the opening completed all three, and Close is drawn.
+    const close = presses(page).getByRole("button", { name: "Close the period" });
+    await expect(close).toBeVisible();
+    await expect(
+      presses(page).getByRole("button", { name: /^(Open the close|Run the checks again)$/ }),
+    ).toHaveCount(0);
+    await expect(page.locator("tr[data-task]")).toHaveCount(3);
+    await expect(page.locator('tr[data-task="grni_reviewed"]')).toContainText(
+      "Goods received not invoiced reviewed: holds",
+    );
+    await expect(page.locator("tr[data-task]").getByRole("button")).toHaveCount(0);
+
+    backend.rpc("erp_close_period", null);
+    backend.rpc(
+      "erp_close_checklist",
+      checklist({
+        period: period(GL, "GL", "closed"),
+        tasks: DONE,
+        state: "closed",
+        siblings: [sibling(COMMIT, "COMMIT", "closed")],
+      }),
+    );
+    const closed = page.waitForRequest(/rpc\/erp_close_period$/);
+    await close.click();
+    expect((await closed).postDataJSON()).toEqual({ p_fiscal_period_id: GL });
+
+    await expect(page.getByText("This period is closed.")).toBeVisible();
+    await expect(presses(page)).toHaveCount(0);
+    expect(
+      backend.called.filter((fn) =>
+        ["erp_open_period_close", "erp_close_period", "erp_complete_close_task"].includes(fn),
+      ),
+    ).toEqual(["erp_open_period_close", "erp_close_period"]);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a failing task says what its check said and offers a waiver; a tie that fails offers none", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc(
+      "erp_close_checklist",
+      checklist({
+        tasks: [
+          DONE[0],
+          task(2, "grni_reviewed", "Goods received not invoiced reviewed", {
+            status: "open",
+            completed_by: null,
+            completed_at: null,
+            check_output: null,
+            check_passes: false,
+            check_failure:
+              "CLOVEERP_GRNI_DOES_NOT_RECONCILE: account 2100 holds £957.00 more than the open receipts",
+            can_waive: true,
+          }),
+          task(3, "trial_balance", "Trial balance reviewed and signed", {
+            status: "open",
+            is_waivable: false,
+            completed_by: null,
+            completed_at: null,
+            check_output: null,
+            check_passes: false,
+            check_failure: "CLOVEERP_TRIAL_BALANCE_UNBALANCED: debits exceed credits by 1",
+          }),
+        ],
+        state: "in_progress",
+        blocking: "Goods received not invoiced reviewed is not done yet.",
+        can_open: true,
+        open_tasks: 2,
+        failing_checks: 2,
+      }),
+    );
+    await page.goto("/finance/close");
+
+    const grni = page.locator('tr[data-task="grni_reviewed"]');
+    await expect(grni).toContainText("£957.00 more than the open receipts", { timeout: 20_000 });
+    await expect(grni).toContainText("Check fails");
+    await expect(
+      grni.getByRole("button", { name: "Complete Goods received not invoiced reviewed" }),
+    ).toHaveCount(0);
+
+    const tie = page.locator('tr[data-task="trial_balance"]');
+    await expect(tie).toContainText("debits exceed credits by 1");
+    await expect(tie).toContainText("Cannot be waived");
+    await expect(tie.getByRole("button")).toHaveCount(0);
+
+    // The checks can be asked again; the month cannot be closed.
+    await expect(presses(page).getByRole("button", { name: "Run the checks again" })).toBeVisible();
+    await expect(presses(page).getByRole("button", { name: "Close the period" })).toHaveCount(0);
+
+    // A waiver asks why, and does not go without an answer.
+    await grni.getByRole("button", { name: "Waive Goods received not invoiced reviewed" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Waive" }).click();
+    await expect(dialog).toBeVisible();
+    expect(backend.called).not.toContain("erp_complete_close_task");
+
+    backend.rpc("erp_complete_close_task", "FAILED: the difference is £957.00");
+    const sent = page.waitForRequest(/rpc\/erp_complete_close_task$/);
+    await dialog
+      .getByLabel(/Why it is passed/)
+      .fill("Reviewed with the buyer: a price query on PO-000123");
+    await dialog.getByRole("button", { name: "Waive" }).click();
+    expect((await sent).postDataJSON()).toEqual({
+      p_task_id: TASK(2),
+      p_waiver_reason: "Reviewed with the buyer: a price query on PO-000123",
+    });
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("COMMIT's month reads as GL's checklist, and says which ledger keeps it", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc(
+      "erp_close_checklist",
+      checklist({
+        period: period(COMMIT, "COMMIT", "closing"),
+        siblings: [sibling(GL, "GL", "closing")],
+        tasks: DONE,
+        state: "ready",
+        can_close: true,
+      }),
+    );
+    await page.goto("/finance/close");
+
+    await expect(page.locator("[data-checklist-on]")).toContainText("GL 2026-09", {
+      timeout: 20_000,
+    });
+    await expect(page.locator("[data-closes-with]")).toContainText("GL 2026-09");
+    await expect(page.locator("tr[data-task]")).toHaveCount(3);
+    await expect(page.getByText("The close has not been opened for this period yet.")).toHaveCount(
+      0,
+    );
+
+    backend.rpc("erp_close_period", null);
+    const sent = page.waitForRequest(/rpc\/erp_close_period$/);
+    await presses(page).getByRole("button", { name: "Close the period" }).click();
+    expect((await sent).postDataJSON()).toEqual({ p_fiscal_period_id: COMMIT });
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("somebody who may read the books but not close them", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "finance.close_period"),
+      },
+    });
+
+    test("is offered no press, whatever the checklist says", async ({ page, backend }) => {
+      backend.rpc(
+        "erp_close_checklist",
+        checklist({
+          tasks: [
+            task(2, "grni_reviewed", "Goods received not invoiced reviewed", {
+              status: "open",
+              check_passes: false,
+              check_failure: "CLOVEERP_GRNI_DOES_NOT_RECONCILE: a difference",
+              can_waive: true,
+              can_complete: true,
+            }),
+          ],
+          state: "in_progress",
+          can_open: true,
+          can_close: true,
+        }),
+      );
+      await page.goto("/finance/close");
+
+      await expect(page.locator('tr[data-task="grni_reviewed"]')).toContainText("a difference", {
+        timeout: 20_000,
+      });
+      await expect(presses(page)).toHaveCount(0);
+      await expect(page.locator("tr[data-task]").getByRole("button")).toHaveCount(0);
+      expect(backend.crashes).toEqual([]);
+    });
   });
 });
