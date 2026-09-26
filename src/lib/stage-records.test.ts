@@ -430,7 +430,28 @@ describe("a move another document makes is never a button", () => {
       sales_invoice: ["issue", "settle", "credit"],
       purchase_invoice: ["pay"],
       count_sheet: ["issue", "close"],
+      transfer_order: ["approve_within_threshold", "issued", "in_transit", "received", "close"],
     });
+  });
+
+  test("a transfer order offers approval and cancelling, and leaves loading, booking in and closing to their doors", () => {
+    // Version 2 of its lifecycle (20260928200000): the despatch and receive
+    // doors move the stock, the approval within the threshold and the close
+    // are derived, and a person approves, rejects, submits again or cancels.
+    expect(
+      codes("transfer_order", [
+        "submit",
+        "approve",
+        "approve_within_threshold",
+        "reject",
+        "issued",
+        "in_transit",
+        "received",
+        "close",
+        "cancel",
+        "cancel_approved",
+      ]),
+    ).toEqual(["submit", "approve", "reject", "cancel", "cancel_approved"]);
   });
 
   test("a sent purchase order offers no receiving, and keeps the short close a person records", () => {
