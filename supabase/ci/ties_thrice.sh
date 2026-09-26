@@ -22,8 +22,10 @@
 # read from the close tasks the month was closed on, the ones erp.set_close_task_tie()
 # stamped unwaivable, so a fifth tie added to the product is run by this the day
 # it lands and a tie removed from it fails the count. It also refuses to run at
-# all unless the period is 'closed', because ties asserted before a close are
-# the weaker claim the build already made.
+# all unless the period is 'closed', and closed with the month's other ledgers
+# (a month's checklist is raised once, on GL, and COMMIT closes with it:
+# 20260929200000), because ties asserted before a close are the weaker claim
+# the build already made.
 #
 # Runs after supabase/ci/close_month.sh, which closes ci-demo's seeded month.
 # Reads PSQL from the environment like run_checks.sh.
@@ -53,10 +55,12 @@ declare
   r      record;
   v_out  text;
   v_n    integer;
+  v_half text;
 begin
   -- The month the build closed: the only period of this organisation carrying
-  -- a close checklist. `strict` rather than a silent first row.
-  select fp.id, fp.code, fp.status::text as status into strict p
+  -- a close checklist, its COMMIT period having closed on it. `strict` rather
+  -- than a silent first row.
+  select fp.id, fp.code, fp.status::text as status, fp.closed_at into strict p
     from erp.fiscal_period fp
    where fp.tenant_id = erp.require_tenant_id()
      and exists (select 1 from erp.close_task t
@@ -67,6 +71,19 @@ begin
       'CLOVEERP_CI_TIES_BEFORE_CLOSE: % is %, so these are not the ties the Definition of Done names',
       p.code, p.status
       using hint = 'supabase/ci/close_month.sh runs first. A tie asserted outside a close is the weaker claim.';
+  end if;
+
+  select count(*),
+         string_agg(fp.code || ' ' || fp.status::text, ', ')
+           filter (where fp.status <> 'closed' or fp.closed_at is distinct from p.closed_at)
+    into v_n, v_half
+    from erp.period_siblings(p.id) s(id)
+    join erp.fiscal_period fp on fp.tenant_id = erp.require_tenant_id() and fp.id = s.id;
+  if v_n = 0 or v_half is not null then
+    raise exception
+      'CLOVEERP_CI_TIES_MONTH_HALF_CLOSED: % closed on its own, not with its other ledgers (%)',
+      p.code, coalesce(v_half, 'it has none')
+      using hint = 'erp.close_period() closes the month on every statutory and management ledger at one moment (20260929200000).';
   end if;
 
   for r in select t.seq, t.code, t.blocking_check
