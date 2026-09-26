@@ -100,6 +100,13 @@ export function useAvailableTransitions(
  * requisition only by the conversion that raises it, unchanged and to the
  * supplier the requisition named, so it is never a button.
  *
+ * 20260928200000 added the transfer order. It is loaded and booked in by the
+ * despatch and receive doors, which move the stock; approved within its
+ * threshold when its value asked nobody; and closed when all of it has
+ * arrived. The receiving site may still close one received in full, which the
+ * database takes from it alone, but a transfer received in full closes in the
+ * same press, so there is nothing to draw.
+ *
  * The database refuses each of these moves pressed over nothing (the receipt,
  * the conversion and the cash are what it checks), so this is only what the
  * screens offer, not what holds them. Each entry here is a row in
@@ -127,6 +134,10 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // Issued when its counts are raised and closed when the last is finished
   // (20260927100000).
   count_sheet: ["issue", "close"],
+  // Loaded and booked in by "Despatch a transfer" and "Receive a transfer";
+  // approved within its threshold when nobody was asked, and closed when all
+  // of it has arrived (20260928200000).
+  transfer_order: ["approve_within_threshold", "issued", "in_transit", "received", "close"],
 };
 
 /** Whether a move of a document of this type is left to the door that makes it. */

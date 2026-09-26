@@ -51,11 +51,15 @@ type TransferRow = {
 /**
  * The tone of a transfer's state. On the road is the one worth colouring:
  * that stock is the despatching site's and pickable by nobody, which is the
- * fact a warehouse most often has to be told twice.
+ * fact a warehouse most often has to be told twice. Waiting for approval is
+ * the other: nothing can be loaded until somebody else decides it
+ * (20260928200000). Discrepancy is kept for a transfer raised before then.
  */
 function stateTone(state: string | null): "ok" | "warn" | "muted" {
   if (state === "received" || state === "closed") return "ok";
-  if (state === "in_transit" || state === "discrepancy") return "warn";
+  if (state === "in_transit" || state === "pending_approval" || state === "discrepancy") {
+    return "warn";
+  }
   return "muted";
 }
 
@@ -82,7 +86,7 @@ function SiteTransfers() {
             label: "Raise a transfer order",
             title: "Send stock to another site",
             description:
-              "Both sites must belong to the same company. Nothing moves yet: the order is a draft until it is approved.",
+              "Both sites must belong to the same company. Nothing moves until the order is approved, and a large one may need somebody else to approve it.",
             permission: "inventory.move",
             fn: "erp_raise_transfer_order",
             fields: [
