@@ -1491,25 +1491,32 @@ export const INVENTORY: ModuleDef = {
 };
 
 /**
- * The three verbs the period close actually has.
+ * The period close's verbs (PR12 M5).
+ *
+ * The close is two presses (20260929200000): opening it runs every task's
+ * check and completes what passes, and closing it asks the checks again and
+ * shuts every ledger of the month together. What is left between them is a
+ * task whose check failed, or one nothing checks, and that is the third verb.
  *
  * Declared once and offered in two places: the finance module page, where they
- * sit among everything else finance can do, and /finance/close, which is the
- * screen a person opens at month end and where they are the only verbs that
- * matter. Reopening a period and closing a fiscal year stay on the module page
- * — neither is part of working a close, and the close screen is the one screen
- * in finance that should carry nothing it does not need.
+ * sit among everything else finance can do, and /finance/close, which draws
+ * Open and Close for the month it shows, and a waiver on each task, only where
+ * the doors would take them; these, with a period to choose, are how it
+ * reaches any other month. Reopening a period and closing a fiscal year stay on
+ * the module page — neither is part of working a close.
  */
 export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
   {
-    label: "Open a period close",
+    label: "Open the close",
+    description:
+      "Opens the month on every ledger that closes with it, runs every task's check, and completes each one that passes. What fails is left for a waiver.",
     permission: "finance.close_period",
     fn: "erp_open_period_close",
     fields: [
       pickFrom(
         "erp_fiscal_periods",
         "fiscal_period_id",
-        ["code", "status"],
+        ["code", "ledger", "status"],
         "p_fiscal_period_id",
         "Period",
       ),
@@ -1517,7 +1524,31 @@ export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_fiscal_periods", "erp_close_status", "erp_close_checklist"],
   },
   {
-    label: "Complete a close task",
+    label: "Close the period",
+    description:
+      "Asks every completed task's check again, then closes the month on every ledger that closes with it. Nothing more is posted into it unless it is reopened.",
+    permission: "finance.close_period",
+    fn: "erp_close_period",
+    fields: [
+      pickFrom(
+        "erp_fiscal_periods",
+        "fiscal_period_id",
+        ["code", "ledger", "status"],
+        "p_fiscal_period_id",
+        "Period",
+      ),
+    ],
+    invalidates: [
+      "erp_fiscal_periods",
+      "erp_close_status",
+      "erp_close_checklist",
+      "erp_trial_balance",
+    ],
+  },
+  {
+    label: "Waive a close task",
+    description:
+      "For a task opening the close left open: waive one whose check fails, with the reason it is passed, or complete one nothing checks by leaving the reason empty. The four ties cannot be waived.",
     permission: "finance.close_period",
     fn: "erp_complete_close_task",
     fields: [
@@ -1533,32 +1564,10 @@ export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
         name: "p_waiver_reason",
         label: "Waiver reason",
         placeholder: "Why the task is being passed without being done",
-        hint: "Only needed when skipping the task rather than completing it.",
+        hint: "Read at audit. Leave it empty only to complete a task nothing checks.",
       },
     ],
     invalidates: ["erp_close_status", "erp_close_checklist", "erp_book_ties"],
-  },
-  {
-    label: "Close a period",
-    description:
-      "Closes the period once its close has been opened and every task is complete or waived. Nothing more is posted into it unless it is reopened.",
-    permission: "finance.close_period",
-    fn: "erp_close_period",
-    fields: [
-      pickFrom(
-        "erp_fiscal_periods",
-        "fiscal_period_id",
-        ["code", "status"],
-        "p_fiscal_period_id",
-        "Period",
-      ),
-    ],
-    invalidates: [
-      "erp_fiscal_periods",
-      "erp_close_status",
-      "erp_close_checklist",
-      "erp_trial_balance",
-    ],
   },
 ];
 
@@ -1654,7 +1663,7 @@ export const FINANCE: ModuleDef = {
       },
       {
         label: "Close",
-        hint: "Open a period's close, work through its tasks, close the period, and at the end of the year close the year for good.",
+        hint: "Open the close, which runs every check; waive what fails with a reason; close the period, and its ledgers close together. At the end of the year close the year for good.",
         fedBy:
           "Periods appear here once Financials is installed, which creates the fiscal calendar.",
 

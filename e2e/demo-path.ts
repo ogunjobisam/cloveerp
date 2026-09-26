@@ -81,15 +81,15 @@ const CLOSE_AND_TIE: readonly Step[] = [
   {
     path: "/finance",
     stage: "Close",
-    does: "Open the period's close, work through the tasks it raises, and close the period.",
+    does: "Open the period's close, which runs every task's check, and close the period: its ledgers close together.",
     doors: ["erp_open_period_close", "erp_close_period"],
     leaves: "The fiscal period closed, so nothing further posts into it.",
   },
   {
     path: "/finance/close",
-    does: "Work down the checklist the close raised: each task with its state, who completed or waived it, what it is waiting on, and whether its check would pass right now. Three of them carry a tie and cannot be waived.",
+    does: "Read what the opening left: each task with its state, who completed or waived it, what it is waiting on, and what its check said. Waive what fails with a reason; the ties cannot be waived.",
     doors: ["erp_close_checklist", "erp_complete_close_task"],
-    leaves: "Every close task complete or waived, which is what lets the period close.",
+    leaves: "Every close task complete or waived, which is what lets Close the period be pressed.",
   },
   {
     path: "/finance/statements",

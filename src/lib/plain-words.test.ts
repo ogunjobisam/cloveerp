@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { formatMinor } from "./money";
 import {
   actionOutcome,
+  cashOutcome,
   approvalStep,
   approvalSubject,
   asSentence,
@@ -200,6 +202,51 @@ describe("a toast names what was made", () => {
     expect(actionOutcome("Raise putaway tasks", 1, undefined, "erp_raise_putaway_tasks")).toBe(
       "1 putaway task raised.",
     );
+  });
+
+  test("a receipt says what it applied, wrote off and kept on account, and counts no remainder as an invoice", () => {
+    const gbp = (n: number) => formatMinor(n, "GBP");
+    const item = (applied: number, extra: Record<string, unknown> = {}) => ({
+      subledger_item_id: `i-${applied}`,
+      applied_minor: applied,
+      remaining_minor: 0,
+      written_off_minor: 0,
+      on_account_minor: 0,
+      ...extra,
+    });
+    const rest = (remaining: number, extra: Record<string, unknown> = {}) => ({
+      subledger_item_id: null,
+      applied_minor: 0,
+      remaining_minor: remaining,
+      written_off_minor: 0,
+      on_account_minor: 0,
+      ...extra,
+    });
+    // A penny short, written off on the invoice it was short on.
+    expect(cashOutcome([item(59999, { written_off_minor: 1 })], "GBP")).toBe(
+      `${gbp(59999)} applied to 1 open invoice and ${gbp(1)} written off within the tolerance.`,
+    );
+    // £100 over, kept on the customer's account.
+    expect(
+      cashOutcome([item(40000), item(20000), rest(10000, { on_account_minor: 10000 })], "GBP"),
+    ).toBe(`${gbp(60000)} applied to 2 open invoices and ${gbp(10000)} on account.`);
+    // A penny over, credited within the tolerance.
+    expect(cashOutcome([item(60000), rest(1, { written_off_minor: 1 })], "GBP")).toBe(
+      `${gbp(60000)} applied to 1 open invoice and ${gbp(1)} written off within the tolerance.`,
+    );
+    // Short beyond it: applied, and nothing else to say.
+    expect(cashOutcome([item(59899)], "GBP")).toBe(`${gbp(59899)} applied to 1 open invoice.`);
+    // A database that does not say what it kept names what was left over.
+    expect(
+      cashOutcome(
+        [
+          { subledger_item_id: "a", applied_minor: 500, remaining_minor: 200 },
+          { subledger_item_id: null, applied_minor: 0, remaining_minor: 200 },
+        ],
+        "GBP",
+      ),
+    ).toBe(`${gbp(500)} applied to 1 open invoice and ${gbp(200)} left over.`);
+    expect(cashOutcome("nope", "GBP")).toBeNull();
   });
 
   test("counts, nought and an answer with nothing to count keep their sentences", () => {

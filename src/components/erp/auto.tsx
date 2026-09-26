@@ -108,7 +108,18 @@ function render(value: unknown): ReactNode {
 export function StatusPill({ value }: { value: unknown }) {
   const s = String(value ?? "").toLowerCase();
   const bad = ["failed", "error", "rejected", "blocked", "quarantined", "overdue", "breached"];
-  const warn = ["pending", "open", "draft", "planned", "proposed", "on_hold", "held", "partial"];
+  // Part paid (20260929100000) is owed still, as partial is.
+  const warn = [
+    "pending",
+    "open",
+    "draft",
+    "planned",
+    "proposed",
+    "on_hold",
+    "held",
+    "partial",
+    "part_paid",
+  ];
   const ok = ["active", "closed", "posted", "released", "completed", "approved", "applied", "ok"];
   const tone = bad.some((x) => s.includes(x))
     ? "bad"
