@@ -134,8 +134,10 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   ],
   // Issued by "Issue the invoice", which numbers it in the same press
   // (20260923500000).
-  sales_invoice: ["issue", "settle", "credit"],
-  purchase_invoice: ["pay"],
+  // Paid in part, and the rest, are the cash's; credited from part paid is
+  // the credit note's (20260929100000).
+  sales_invoice: ["issue", "settle", "credit", "part_settle", "settle_rest", "credit_rest"],
+  purchase_invoice: ["pay", "part_pay", "pay_rest"],
   // Issued when its counts are raised and closed when the last is finished
   // (20260927100000).
   count_sheet: ["issue", "close"],

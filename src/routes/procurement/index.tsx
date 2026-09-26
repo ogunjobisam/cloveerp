@@ -770,8 +770,9 @@ const PURCHASE_TO_PAY: FlowSpec = {
       fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
       typeCode: "purchase_invoice",
-      // Being entered, owed, or in dispute. Paid is the end of it.
-      states: ["draft", "registered", "disputed"],
+      // Being entered, owed in full or in part (20260929100000), or in
+      // dispute. Paid is the end of it.
+      states: ["draft", "registered", "part_paid", "disputed"],
       // A line is invoiced only onto a bill still being written: registered,
       // it has posted, and erp.invoice_against refuses it.
       actionStates: { erp_invoice_against: ["draft"] },

@@ -427,8 +427,8 @@ describe("a move another document makes is never a button", () => {
         "despatch_rest",
         "invoice",
       ],
-      sales_invoice: ["issue", "settle", "credit"],
-      purchase_invoice: ["pay"],
+      sales_invoice: ["issue", "settle", "credit", "part_settle", "settle_rest", "credit_rest"],
+      purchase_invoice: ["pay", "part_pay", "pay_rest"],
       count_sheet: ["issue", "close"],
       transfer_order: ["approve_within_threshold", "issued", "in_transit", "received", "close"],
       stock_adjustment: ["approve_within_threshold", "approve_with_count", "post"],
@@ -557,6 +557,13 @@ describe("a move another document makes is never a button", () => {
       "resolve",
       "cancel",
     ]);
+  });
+
+  test("an invoice or bill paid in part offers no button: the rest of the money and the credit note move it on", () => {
+    // Part paid is derived from the cash, and so is paid from there
+    // (20260929100000).
+    expect(codes("sales_invoice", ["part_settle", "settle_rest", "credit_rest"])).toEqual([]);
+    expect(codes("purchase_invoice", ["part_pay", "pay_rest"])).toEqual([]);
   });
 
   test("the list is by type: the same code elsewhere, or an unknown type, is left alone", () => {

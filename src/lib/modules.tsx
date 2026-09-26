@@ -1574,8 +1574,9 @@ export const FINANCE: ModuleDef = {
         fedBy: "Invoices appear here once a delivery has been despatched and invoiced.",
 
         typeCode: "sales_invoice",
-        // Being raised, or issued and owed. Paid or credited, it is settled.
-        states: ["draft", "issued"],
+        // Being raised, or issued and owed, in full or in part
+        // (20260929100000). Paid or credited, it is settled.
+        states: ["draft", "issued", "part_paid"],
         partyRole: "customer",
         recordArg: "p_invoice_id",
         createFn: "erp_invoice_from_delivery",
