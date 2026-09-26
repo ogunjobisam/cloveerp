@@ -281,6 +281,28 @@ describe("a row offers only what its door accepts, to somebody who may", () => {
     }
   });
 
+  test("approved, its post refused or its status not known: Cancel for somebody who may adjust stock, until something posts", () => {
+    // cancel_approved (20260928500000): the door puts back only these, and
+    // only while no adjustment has been written for them.
+    for (const reason of [
+      "post_refused: 23502 CLOVEERP_COUNT_HAS_NO_PLACE: the count names no location",
+      "status_unknown: when this count was raised the place held 5 available, 5 quarantine",
+    ]) {
+      const r = row({ task_id: "t", status: "approved", variance: -1, post_held_reason: reason });
+      expect(actionsFor(r, adjuster).cancel).toBe("inventory.adjust");
+      expect(actionsFor(r, counter).cancel).toBeNull();
+      expect(actionsFor({ ...r, adjustment_document_id: "adj" }, adjuster).cancel).toBeNull();
+      expect(actionsFor({ ...r, posted_at: "2026-09-28T10:00:00Z" }, adjuster).cancel).toBeNull();
+    }
+    // Held by the policy, or agreed by its approver: posted, not cancelled.
+    for (const reason of ["held_by_policy: x", "held_own_count: x", "held_cumulative: x", null]) {
+      expect(
+        actionsFor(row({ task_id: "t", status: "approved", post_held_reason: reason }), everything)
+          .cancel,
+      ).toBeNull();
+    }
+  });
+
   test("approved: Post for somebody who may adjust stock", () => {
     expect(actionsFor(row({ task_id: "t", status: "approved" }), adjuster).post).toBe(true);
     expect(actionsFor(row({ task_id: "t", status: "approved" }), counter).post).toBe(false);

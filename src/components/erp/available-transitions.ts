@@ -107,6 +107,11 @@ export function useAvailableTransitions(
  * database takes from it alone, but a transfer received in full closes in the
  * same press, so there is nothing to draw.
  *
+ * 20260928500000 added the stock adjustment. It is approved within its
+ * threshold when its value asked nobody, approved with its count when a count
+ * raised it, and posted by the door that writes its stock, which the approval
+ * asks for; a person submits, approves, rejects or cancels it.
+ *
  * The database refuses each of these moves pressed over nothing (the receipt,
  * the conversion and the cash are what it checks), so this is only what the
  * screens offer, not what holds them. Each entry here is a row in
@@ -138,6 +143,10 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // approved within its threshold when nobody was asked, and closed when all
   // of it has arrived (20260928200000).
   transfer_order: ["approve_within_threshold", "issued", "in_transit", "received", "close"],
+  // Approved within its threshold when nobody was asked, approved with its
+  // count when it is that count's variance, and posted by the door that
+  // writes the stock (20260928500000).
+  stock_adjustment: ["approve_within_threshold", "approve_with_count", "post"],
 };
 
 /** Whether a move of a document of this type is left to the door that makes it. */
