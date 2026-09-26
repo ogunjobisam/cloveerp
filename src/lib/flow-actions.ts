@@ -76,3 +76,33 @@ export function unstagedActions(flow: FlowSpec | undefined, actions: ActionSpec[
   const staged = stagedKeys(flow);
   return actions.filter((a) => !staged.has(actionKey(a)));
 }
+
+/** A module's verbs as its page reads them. */
+type ModuleVerbs = {
+  flow?: FlowSpec | undefined;
+  actions?: ActionSpec[] | undefined;
+  exceptions?: ActionSpec[] | undefined;
+};
+
+/**
+ * Every verb a module declares, daily and exceptional, in their declared order.
+ * What the strip looks a step's verb up in, so a verb moved behind More is
+ * still carried by the step that names it.
+ */
+export function moduleActions(def: ModuleVerbs): ActionSpec[] {
+  return [...(def.actions ?? []), ...(def.exceptions ?? [])];
+}
+
+/**
+ * Where a module page draws each verb no step names (PR11 M6).
+ *
+ * `daily` is drawn in the header, a press each; `behind` is in the header's
+ * panel. A module with no `exceptions` has no daily verbs, and every verb is
+ * behind the panel, as it always was. Nothing a module declares is in neither,
+ * unless a step of its strip carries it.
+ */
+export function pageActions(def: ModuleVerbs): { daily: ActionSpec[]; behind: ActionSpec[] } {
+  const actions = unstagedActions(def.flow, def.actions ?? []);
+  if (def.exceptions === undefined) return { daily: [], behind: actions };
+  return { daily: actions, behind: unstagedActions(def.flow, def.exceptions) };
+}

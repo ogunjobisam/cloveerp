@@ -109,23 +109,38 @@ export function ActionBar({
         </Prose>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
-        {actions.map((a) => (
-          <ActionDialog
-            key={`${a.fn}-${a.label}`}
-            trigger={<ActionButton variant="secondary">{ui(a.label)}</ActionButton>}
-            title={a.title ?? a.label}
-            {...(a.description ? { description: a.description } : {})}
-            {...(a.permission ? { permission: a.permission } : {})}
-            fn={a.fn}
-            fields={a.fields ?? []}
-            {...(a.mapArgs ? { mapArgs: a.mapArgs } : {})}
-            {...(a.emptyNote ? { emptyNote: a.emptyNote } : {})}
-            invalidates={a.invalidates ?? []}
-            submitLabel={a.submitLabel ?? a.label}
-          />
-        ))}
+        <ActionButtons actions={actions} />
       </div>
     </section>
+  );
+}
+
+/**
+ * The buttons of a bar, with no card around them: each opens its form, and
+ * none is drawn to a person without its permission. Shared by the bar and by
+ * the module page's header, which draws a module's daily verbs (PR11 M6), so
+ * an action is still drawn one way wherever it appears.
+ */
+export function ActionButtons({ actions }: { actions: ActionSpec[] }) {
+  const { ui } = useT();
+  return (
+    <>
+      {actions.map((a) => (
+        <ActionDialog
+          key={`${a.fn}-${a.label}`}
+          trigger={<ActionButton variant="secondary">{ui(a.label)}</ActionButton>}
+          title={a.title ?? a.label}
+          {...(a.description ? { description: a.description } : {})}
+          {...(a.permission ? { permission: a.permission } : {})}
+          fn={a.fn}
+          fields={a.fields ?? []}
+          {...(a.mapArgs ? { mapArgs: a.mapArgs } : {})}
+          {...(a.emptyNote ? { emptyNote: a.emptyNote } : {})}
+          invalidates={a.invalidates ?? []}
+          submitLabel={a.submitLabel ?? a.label}
+        />
+      ))}
+    </>
   );
 }
 
@@ -145,9 +160,12 @@ export function ActionBar({
  * every word on the panel is still harvested by supabase/ci/screen_strings.sh
  * from the ActionBar it is written on.
  */
-export function HeaderActions({ children }: { children: ReactNode }) {
+export function HeaderActions({ children, label }: { children: ReactNode; label?: string }) {
   const { ui } = useT();
   const [open, setOpen] = useState(false);
+  // "Actions" when the panel holds every verb; a module that draws its daily
+  // ones beside it calls the panel something that says it is the rest.
+  const name = label ?? ui("Actions");
 
   return (
     <>
@@ -160,7 +178,7 @@ export function HeaderActions({ children }: { children: ReactNode }) {
         aria-expanded={open}
         className={`${TOUCH} inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-input px-4 text-sm font-medium hover:bg-muted`}
       >
-        {ui("Actions")}
+        {name}
         <ChevronDown aria-hidden className="size-3.5 opacity-60" />
       </button>
       <Sheet open={open} onOpenChange={setOpen}>
@@ -171,7 +189,7 @@ export function HeaderActions({ children }: { children: ReactNode }) {
           aria-describedby={undefined}
           className="flex w-[92vw] max-w-lg flex-col gap-4 overflow-y-auto"
         >
-          <SheetTitle className="text-base">{ui("Actions")}</SheetTitle>
+          <SheetTitle className="text-base">{name}</SheetTitle>
           {children}
         </SheetContent>
       </Sheet>
