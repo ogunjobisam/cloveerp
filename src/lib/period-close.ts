@@ -205,7 +205,7 @@ export function closePresses(c: Checklist, can: (code: string) => boolean): Clos
     may && c.can_open
       ? c.state === "not_opened"
         ? "open"
-        : c.state === "in_progress"
+        : c.state === "in_progress" || c.state === "ready"
           ? "rerun"
           : null
       : null;
