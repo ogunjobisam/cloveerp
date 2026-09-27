@@ -112,6 +112,10 @@ export function useAvailableTransitions(
  * raised it, and posted by the door that writes its stock, which the approval
  * asks for; a person submits, approves, rejects or cancels it.
  *
+ * 20261001100000 added the VAT return. It is opened and finalised in one press
+ * by finalising its period, which computes its boxes first, so there is no
+ * draft anybody could finalise by hand.
+ *
  * The database refuses each of these moves pressed over nothing (the receipt,
  * the conversion and the cash are what it checks), so this is only what the
  * screens offer, not what holds them. Each entry here is a row in
@@ -155,6 +159,9 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // Posted by the payment run, which opens it, once its lines total what its
   // journals paid (20260930200000).
   cash_payment: ["post"],
+  // Finalised by "Finalise" on its period, which opens it with its boxes
+  // computed, in the same press (20261001100000).
+  vat_return: ["finalise"],
 };
 
 /**
@@ -163,17 +170,18 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
  *
  * A count sheet is opened when its counts are raised (20260927100000), a cash
  * receipt by Apply cash or a settlement statement (20260930000000,
- * 20260930100000), and a supplier payment by the payment run
- * (20260930200000). The database refuses each of them opened, given a line or
- * changed by hand, an administrator included, so no screen offers New, Add
- * line, Reprice or Amend on one. The finished state is terminal and not
- * committed, so the committed flag alone would draw a posted receipt as if it
- * were still a draft.
+ * 20260930100000), a supplier payment by the payment run (20260930200000), and
+ * a VAT return by finalising its period (20261001100000). The database refuses
+ * each of them opened, given a line or changed by hand, an administrator
+ * included, so no screen offers New, Add line, Reprice or Amend on one. The
+ * finished state is terminal and not committed, so the committed flag alone
+ * would draw a posted receipt as if it were still a draft.
  */
 export const DOOR_OPENED_TYPES: Readonly<Record<string, string>> = {
   count_sheet: "closed",
   cash_receipt: "posted",
   cash_payment: "posted",
+  vat_return: "finalised",
 };
 
 /** Whether nobody opens or writes a document of this type by hand. */
