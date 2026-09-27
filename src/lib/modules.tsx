@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Field } from "../components/erp/action";
+import { AllocateOnAccount } from "../components/erp/allocate-on-account";
 import type { Column } from "../components/erp/auto";
 import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
@@ -2204,6 +2205,27 @@ export const FINANCE: ModuleDef = {
         { header: "Overdue", cell: moneyCell("overdue_minor"), numeric: true },
         { header: "Days overdue", cell: "oldest_days", numeric: true },
         { header: "Level", cell: "level_code" },
+      ],
+    },
+    {
+      // Cash a customer paid beyond what they owed, kept on their account
+      // (20260929300000), and the one exception it raises: allocating it to
+      // their next invoice (20260930400000). Allocate is drawn on a row only
+      // where the read says the reader may and names an invoice to take it.
+      title: "Credit on account",
+      description:
+        "Cash customers paid beyond what they owed, kept on their account until it is allocated to an invoice.",
+      fn: "erp_on_account_credits",
+      empty:
+        "Nothing is kept on account. Cash beyond what a customer owes lands here, to be allocated to their next invoice.",
+      rowKey: (r, i) => String(r["credit_item_id"] ?? i),
+      columns: [
+        { header: "Customer", cell: "party_name" },
+        { header: "Company", cell: "company" },
+        date("Kept on", "kept_on"),
+        { header: "Receipt", cell: (r) => String(r["receipt_number"] ?? "—") },
+        { header: "Left", cell: moneyCell("left_minor", "currency"), numeric: true },
+        { header: "Allocate", cell: (r) => <AllocateOnAccount row={r} /> },
       ],
     },
     {

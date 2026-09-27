@@ -43,6 +43,7 @@ import {
   receiptOutcome,
   type Outcome,
 } from "../../lib/plain-words";
+import { allocationOutcome } from "../../lib/on-account";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
@@ -1031,6 +1032,9 @@ const FOLLOW_UP_BY_FN: Record<
   // The run, what left the bank, and the payment each supplier was sent
   // (20260930200000), whose page prints its remittance advice.
   erp_pay_payment_run: (result, _args, label) => Promise.resolve(paymentRunOutcome(result, label)),
+  // What a credit on account allocated, to which invoice, and what that
+  // invoice still owes (20260930400000).
+  erp_allocate_on_account: (result) => Promise.resolve(allocationOutcome(result)),
 };
 
 /** The documents an outcome names, each a link to its page. */
