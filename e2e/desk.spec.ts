@@ -1409,3 +1409,109 @@ test.describe("the cash documents are on the desk", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a credit kept on account is allocated from its row", () => {
+  // PR13 M5 (20260930400000). Credit on account lists what customers paid
+  // beyond what they owed, and Allocate is drawn on a row only where the read
+  // says the reader may allocate it and names an invoice to take it.
+  const CREDIT = "00000000-0000-4000-8000-00000000cc01";
+  const HELD = "00000000-0000-4000-8000-00000000cc02";
+  const INV = "00000000-0000-4000-8000-00000000cc11";
+  const credit = (extra: Record<string, unknown> = {}) => ({
+    credit_item_id: CREDIT,
+    party_id: "00000000-0000-4000-8000-00000000c057",
+    party_name: "Vela Industrial",
+    entity_id: "00000000-0000-4000-8000-0000000000e1",
+    company: "MAIN",
+    currency: "GBP",
+    kept_on: "2026-09-27",
+    credit_minor: 10000,
+    left_minor: 10000,
+    receipt_id: "00000000-0000-4000-8000-00000000ca51",
+    receipt_number: "RCPT-000012",
+    allocatable: true,
+    invoices: [
+      { document_id: INV, document_number: "INV-000042", owes_minor: 30000, due_on: "2026-10-27" },
+    ],
+    ...extra,
+  });
+
+  test("Allocate is on the row the database takes it for, and says what it did", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_on_account_credits", [
+      credit(),
+      // Another company's, which this reader may not post in, and one with no
+      // invoice to take it: neither is offered.
+      credit({ credit_item_id: HELD, party_name: "Orla Foods", allocatable: false }),
+      credit({
+        credit_item_id: "00000000-0000-4000-8000-00000000cc03",
+        party_name: "Tern Hardware",
+        invoices: [],
+      }),
+    ]);
+    backend.rpc("erp_allocate_on_account", {
+      credit_item_id: CREDIT,
+      invoice_id: INV,
+      invoice_number: "INV-000042",
+      allocated_minor: 10000,
+      currency: "GBP",
+      credit_left_minor: 0,
+      invoice_owes_minor: 20000,
+      invoice_state: "part_paid",
+      journal_id: "00000000-0000-4000-8000-00000000cc21",
+      receipt_id: "00000000-0000-4000-8000-00000000ca51",
+      receipt_number: "RCPT-000012",
+    });
+
+    await page.goto("/finance");
+    await expect(page.getByRole("cell", { name: "Orla Foods", exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("cell", { name: "RCPT-000012" }).first()).toBeVisible();
+    const allocate = page.getByRole("button", { name: /^Allocate / });
+    await expect(allocate).toHaveCount(1);
+    await expect(allocate).toHaveAccessibleName("Allocate £100.00 on account for Vela Industrial");
+
+    await allocate.click();
+    const form = page.getByRole("dialog", { name: "Allocate a credit on account" });
+    await expect(form.getByLabel("Invoice")).toHaveValue(INV);
+    const sent = page.waitForRequest(/rpc\/erp_allocate_on_account$/);
+    await form.getByRole("button", { name: "Allocate" }).click();
+    const args = (await sent).postDataJSON() as Record<string, unknown>;
+    expect(args).toMatchObject({ p_credit_item: CREDIT, p_invoice: INV });
+    // Left empty, the amount is the door's to decide.
+    expect(args).not.toHaveProperty("p_amount_minor");
+
+    await expect(
+      page.getByText(
+        "£100.00 of the credit on account allocated to INV-000042, which owes £200.00.",
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open INV-000042" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("somebody who may read the books but not post", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "finance.post"),
+      },
+    });
+
+    test("sees the credit and is offered no Allocate, whatever the row says", async ({
+      page,
+      backend,
+    }) => {
+      backend.rpc("erp_on_account_credits", [credit()]);
+      await page.goto("/finance");
+      await expect(page.getByRole("cell", { name: "Vela Industrial", exact: true })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(page.getByRole("button", { name: /^Allocate / })).toHaveCount(0);
+      expect(backend.crashes).toEqual([]);
+    });
+  });
+});
