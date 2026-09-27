@@ -444,6 +444,8 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/finance/cost-centres": "Cost centres, and what a posting is stamped with. Seeded.",
   "/finance/journals":
     "Accruals and corrections typed by hand. Financials draws it as a step, and neither flow needs one: every posting on the demo path comes from a document.",
+  "/finance/vat":
+    "The VAT periods, finalised and exported. The demonstration's past quarters are finalised as its trading is built, leaving the latest to finalise; neither flow files a return.",
   "/governance": "Change requests and approvals over configuration, not over documents.",
   "/inventory/adjustments":
     "Where a stock adjustment is written. The seeded month contains one; nobody types it during the demonstration.",

@@ -45,6 +45,7 @@ import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensio
 import { Route as FinanceJournalsRouteImport } from './routes/finance/journals'
 import { Route as FinanceReconciliationRouteImport } from './routes/finance/reconciliation'
 import { Route as FinanceStatementsRouteImport } from './routes/finance/statements'
+import { Route as FinanceVatRouteImport } from './routes/finance/vat'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as InventoryAdjustmentsRouteImport } from './routes/inventory/adjustments'
@@ -263,6 +264,11 @@ const FinanceStatementsRoute = FinanceStatementsRouteImport.update({
   path: '/finance/statements',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceVatRoute = FinanceVatRouteImport.update({
+  id: '/finance/vat',
+  path: '/finance/vat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
   id: '/governance/',
   path: '/governance/',
@@ -448,6 +454,7 @@ export interface FileRoutesByFullPath {
   '/finance/journals': typeof FinanceJournalsRoute
   '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
+  '/finance/vat': typeof FinanceVatRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -515,6 +522,7 @@ export interface FileRoutesByTo {
   '/finance/journals': typeof FinanceJournalsRoute
   '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
+  '/finance/vat': typeof FinanceVatRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -583,6 +591,7 @@ export interface FileRoutesById {
   '/finance/journals': typeof FinanceJournalsRoute
   '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
+  '/finance/vat': typeof FinanceVatRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -652,6 +661,7 @@ export interface FileRouteTypes {
     | '/finance/journals'
     | '/finance/reconciliation'
     | '/finance/statements'
+    | '/finance/vat'
     | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -719,6 +729,7 @@ export interface FileRouteTypes {
     | '/finance/journals'
     | '/finance/reconciliation'
     | '/finance/statements'
+    | '/finance/vat'
     | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -786,6 +797,7 @@ export interface FileRouteTypes {
     | '/finance/journals'
     | '/finance/reconciliation'
     | '/finance/statements'
+    | '/finance/vat'
     | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -854,6 +866,7 @@ export interface RootRouteChildren {
   FinanceJournalsRoute: typeof FinanceJournalsRoute
   FinanceReconciliationRoute: typeof FinanceReconciliationRoute
   FinanceStatementsRoute: typeof FinanceStatementsRoute
+  FinanceVatRoute: typeof FinanceVatRoute
   InventoryAdjustmentsRoute: typeof InventoryAdjustmentsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
   InventoryForecastRoute: typeof InventoryForecastRoute
@@ -1140,6 +1153,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceStatementsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/vat': {
+      id: '/finance/vat'
+      path: '/finance/vat'
+      fullPath: '/finance/vat'
+      preLoaderRoute: typeof FinanceVatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/governance/': {
       id: '/governance/'
       path: '/governance'
@@ -1382,6 +1402,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceJournalsRoute: FinanceJournalsRoute,
   FinanceReconciliationRoute: FinanceReconciliationRoute,
   FinanceStatementsRoute: FinanceStatementsRoute,
+  FinanceVatRoute: FinanceVatRoute,
   InventoryAdjustmentsRoute: InventoryAdjustmentsRoute,
   InventoryAuditRoute: InventoryAuditRoute,
   InventoryForecastRoute: InventoryForecastRoute,
