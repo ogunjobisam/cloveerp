@@ -121,13 +121,35 @@ function Block({ block }: { block: RenderedBlock }) {
 }
 
 /** The rendered sheet: a preview over the desk on the screen, alone on paper when printed. */
-export function CountSheetPrint({
+export function CountSheetPrint(props: {
+  sheet: RenderedDocument;
+  onPrint: () => void;
+  onClose: () => void;
+  printing: boolean;
+}) {
+  const { ui } = useT();
+  return (
+    <RenderedPrint {...props} name={ui("Count sheet")} printLabel={ui("Print the count sheet")} />
+  );
+}
+
+/**
+ * Any document a door rendered through its organisation's layout, drawn the
+ * same way: a supplier payment's remittance advice (PR13 M4) as well as a
+ * count sheet. `name` is what it is called when the layout gives no title, and
+ * `printLabel` the words on its print button.
+ */
+export function RenderedPrint({
   sheet,
+  name,
+  printLabel,
   onPrint,
   onClose,
   printing,
 }: {
   sheet: RenderedDocument;
+  name: string;
+  printLabel: string;
   onPrint: () => void;
   onClose: () => void;
   printing: boolean;
@@ -142,14 +164,14 @@ export function CountSheetPrint({
       {/* The layout's paper, on the sheet's own page only. */}
       <style>{`@page sheet { size: ${pageSize(sheet.page)}; margin: 12mm; }`}</style>
       <section
-        aria-label={sheet.title ?? ui("Count sheet")}
+        aria-label={sheet.title ?? name}
         className="mx-auto flex max-w-4xl flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:p-5 print:max-w-none print:rounded-none print:border-0 print:bg-white print:p-0 print:text-black"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-          <p className="text-sm font-semibold">{sheet.title ?? ui("Count sheet")}</p>
+          <p className="text-sm font-semibold">{sheet.title ?? name}</p>
           <div className="flex gap-2">
             <ActionButton variant="secondary" busy={printing} onClick={onPrint}>
-              {ui("Print the count sheet")}
+              {printLabel}
             </ActionButton>
             <ActionButton variant="secondary" onClick={onClose}>
               {ui("Close")}

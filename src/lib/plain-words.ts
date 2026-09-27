@@ -294,6 +294,96 @@ export function cashOutcome(result: unknown, currency: string): string | null {
   return `${parts.length > 0 ? `${parts.join(", ")} and ${last}` : last}.`;
 }
 
+/** A document an outcome names, and the way to it. */
+export type OutcomeDocument = { documentId: string; number: string };
+
+/** A sentence saying what happened, and the documents it names, in its order. */
+export type Outcome = { message: string; documents: OutcomeDocument[] };
+
+/**
+ * The receipts Apply cash opened, from its rows, in the order the rows name
+ * them (20260930000000). Usually one; one per company where the cash reached
+ * invoices of two (PR13 D5); none where the organisation is on receivables
+ * version 1, whose rows name no document.
+ */
+export function receiptIds(result: unknown): string[] {
+  if (!Array.isArray(result)) return [];
+  const ids: string[] = [];
+  for (const row of result.map(asRecord)) {
+    const id = row?.["document_id"];
+    if (typeof id === "string" && id !== "" && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * What a receipt did, led by the receipt it made: "RCPT-000012: £600.00
+ * applied to 1 open invoice and £100.00 on account." A receipt whose number
+ * could not be read is still linked, as "the receipt"; rows that name no
+ * receipt say what they did and nothing more.
+ */
+export function receiptOutcome(
+  result: unknown,
+  currency: string,
+  receipts: readonly { documentId: string; number: string | null }[],
+): Outcome | null {
+  const did = cashOutcome(result, currency);
+  if (did === null) return null;
+  const documents = receipts.map((r, i) => ({
+    documentId: r.documentId,
+    number: r.number ?? (receipts.length === 1 ? "the receipt" : `receipt ${i + 1}`),
+  }));
+  const numbered = documents.filter((_, i) => receipts[i]?.number);
+  if (numbered.length === 0) return { message: did, documents };
+  return { message: `${joinAnd(numbered.map((d) => d.number))}: ${did}`, documents };
+}
+
+/**
+ * What paying a run did, from erp_pay_payment_run's answer: the run, what left
+ * the bank, and the supplier payments it made (20260930200000), each of which
+ * prints a remittance advice from its own page. An organisation on procurement
+ * controls version 6 makes no payment, and the sentence counts the bills.
+ */
+export function paymentRunOutcome(result: unknown, label: string): Outcome | null {
+  const r = asRecord(result);
+  if (!r) return null;
+  const currency = text(r, "currency") ?? "GBP";
+  const paid = Number(r["paid_minor"]);
+  if (!Number.isFinite(paid)) return null;
+  const run = text(r, "reference") ?? label;
+  const payments = Array.isArray(r["payments"])
+    ? r["payments"].map(asRecord).flatMap((p) => {
+        const id = p?.["document_id"];
+        const number = p ? text(p, "document_number") : null;
+        return typeof id === "string" && number ? [{ documentId: id, number }] : [];
+      })
+    : [];
+  const bills = Number(r["lines_paid"]);
+  const writtenOff = Number(r["written_off_minor"]);
+  const held = Number(r["held"]);
+
+  const parts = [`${run} paid ${formatMinor(paid, currency)}`];
+  if (payments.length > 0)
+    parts[0] += ` to ${payments.length} ${plural(payments.length, "supplier", "suppliers")}: ${joinAnd(
+      payments.map((p) => p.number),
+    )}`;
+  else if (Number.isFinite(bills) && bills > 0)
+    parts[0] += ` on ${bills} ${plural(bills, "bill", "bills")}`;
+  if (Number.isFinite(writtenOff) && writtenOff > 0)
+    parts.push(`${formatMinor(writtenOff, currency)} written off within the tolerance`);
+  const sentence = `${parts.join(", and ")}.`;
+  const heldNote =
+    Number.isFinite(held) && held > 0
+      ? ` ${held} ${plural(held, "line was", "lines were")} held and not paid.`
+      : "";
+  return { message: `${sentence}${heldNote}`, documents: payments };
+}
+
+function joinAnd(words: readonly string[]): string {
+  if (words.length <= 1) return words[0] ?? "";
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1] ?? ""}`;
+}
+
 /**
  * What a planning run produced, from its row in erp_planning_runs.
  *

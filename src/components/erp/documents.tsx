@@ -5,6 +5,7 @@ import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
+import { documentTone, isDoorOpened } from "./available-transitions";
 import { useErpSession, useScope } from "./session-context";
 import { LoadingRows, Prose } from "./page";
 import { Pill, Table } from "./panel";
@@ -171,7 +172,7 @@ export function DocumentPanel({
                     is the point past which the outside world believes the
                     document, and for a delivery it is the moment stock left.
                   */}
-                  <Pill tone={d.is_committed ? "ok" : "muted"}>
+                  <Pill tone={documentTone(d.document_type, d.state, d.is_committed)}>
                     {d.state_name ?? d.state ?? "—"}
                   </Pill>
                 </td>
@@ -381,7 +382,11 @@ export function NewDocumentForType({
   const { data: types, isPending } = useQuery({
     queryKey: ["erp_document_types", { p_base_type_code: "" }],
     queryFn: () => callErp<DocType[]>("erp_document_types", {}),
+    enabled: !isDoorOpened(typeCode),
   });
+  // Nobody raises a count sheet, a receipt or a payment by hand: the routine
+  // that makes one opens it, and the database refuses anybody else.
+  if (isDoorOpened(typeCode)) return null;
   // Drawn, disabled, while the types are read. It used to be absent until then
   // and appear under a moving cursor — which is how a click meant for the
   // button beside it lands on this one.
@@ -392,7 +397,7 @@ export function NewDocumentForType({
       </ActionButton>
     );
   const type = types?.find((t) => t.code === typeCode);
-  if (!type) return null;
+  if (!type || isDoorOpened(type.base_type_code)) return null;
   return (
     <NewDocumentAction
       type={type}

@@ -7,7 +7,7 @@ import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { decisionWords, type ApprovalDecision } from "../../lib/approval-decisions";
-import { callErp } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import {
@@ -21,10 +21,15 @@ import {
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "../../components/erp/currencies";
 import {
+  documentTone,
+  isDoorOpened,
   useAvailableTransitions,
   type Transition,
 } from "../../components/erp/available-transitions";
 import { DocumentTransitions } from "../../components/erp/document-transitions";
+import { RenderedPrint } from "../../components/erp/count-sheet-print";
+import { useErpSession } from "../../components/erp/session-context";
+import { usePrintRendered } from "../../components/erp/use-print-rendered";
 
 /**
  * One document, whatever kind of document it is.
@@ -137,6 +142,8 @@ function useDocumentTypeNames() {
     queryFn: () => callErp<DocType[]>("erp_document_types", {}),
   });
   return {
+    /** The base type a configured type is of, once the types are read. */
+    baseOf: (code: string) => data?.find((t) => t.code === code)?.base_type_code ?? null,
     ofType: (code: string) => data?.find((t) => t.code === code)?.name ?? prettifyField(code),
     ofBase: (base: string) =>
       data?.find((t) => t.base_type_code === base)?.name ?? prettifyField(base),
@@ -181,6 +188,10 @@ function Document() {
 
   const minorUnits = minorUnitsOf(currencies, doc.currency);
   const money = (m: number) => formatMinor(m, doc.currency, minorUnits);
+  // What only a routine opens and writes: a count sheet, a cash receipt, a
+  // supplier payment. Its lines are its routine's, and nothing edits them here.
+  const base = typeNames.baseOf(doc.document_type);
+  const doorOpened = isDoorOpened(doc.document_type) || isDoorOpened(base);
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -190,7 +201,9 @@ function Document() {
 
       <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
-          <Pill tone={doc.is_committed ? "ok" : "muted"}>{doc.state_name ?? doc.state ?? "—"}</Pill>
+          <Pill tone={documentTone(base ?? doc.document_type, doc.state, doc.is_committed)}>
+            {doc.state_name ?? doc.state ?? "—"}
+          </Pill>
           <span className="text-sm tabular-nums">{money(doc.total_minor)}</span>
           {doc.their_reference ? (
             <span className="text-xs text-muted-foreground">their ref {doc.their_reference}</span>
@@ -304,10 +317,18 @@ function Document() {
         />
       ) : null}
 
+      {/* A supplier payment prints the remittance advice the supplier is sent
+          (20260930200000), for whoever may pay; the door asks finance.post in
+          the payment's company. */}
+      {(base ?? doc.document_type) === "cash_payment" ? (
+        <RemittanceAdvice documentId={documentId} number={doc.document_number} />
+      ) : null}
+
       <Lines
         documentId={documentId}
         lines={data.lines}
         committed={doc.is_committed}
+        writtenByDoor={doorOpened}
         amendment={data.amendment ?? null}
         money={money}
         minorUnits={minorUnits}
@@ -320,7 +341,7 @@ function Document() {
           issued invoice have no approval, and the card invited the reader to
           stamp a chain onto one anyway. It stays wherever a chain exists, so
           nothing already recorded is hidden. */}
-      {doc.is_committed ? (
+      {doc.is_committed || doorOpened ? (
         <ApprovalChainWhenStamped documentId={documentId} />
       ) : (
         <ApprovalChain documentId={documentId} />
@@ -726,6 +747,7 @@ function Lines({
   documentId,
   lines,
   committed,
+  writtenByDoor,
   amendment,
   money,
   minorUnits,
@@ -734,6 +756,8 @@ function Lines({
   documentId: string;
   lines: Line[];
   committed: boolean;
+  /** Only the routine that opened it writes its lines; the database refuses a person. */
+  writtenByDoor: boolean;
   amendment: Amendment | null;
   money: (m: number) => string;
   minorUnits: number;
@@ -754,9 +778,11 @@ function Lines({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">Lines ({lines.length})</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            {committed
-              ? "This document is committed: the outside world has seen it, so lines are no longer editable. Amendment and reversal are what change it now."
-              : "Prices are entered in major units and stored as an integer count of minor ones."}
+            {writtenByDoor
+              ? "The routine that opened this document wrote its lines, and nobody adds or changes one here."
+              : committed
+                ? "This document is committed: the outside world has seen it, so lines are no longer editable. Amendment and reversal are what change it now."
+                : "Prices are entered in major units and stored as an integer count of minor ones."}
           </Prose>
           {/* Amend is drawn only where the database would take it
               (20260923600000); where it would not, the reason is said once. */}
@@ -769,7 +795,7 @@ function Lines({
 
         {/* erp.add_document_line refuses a committed document outright, so
             offering it would be a lie rather than a restriction. */}
-        {!committed ? (
+        {!committed && !writtenByDoor ? (
           <ActionDialog
             trigger={<ActionButton>Add line</ActionButton>}
             title="Add a line"
@@ -841,7 +867,7 @@ function Lines({
                 <td className="py-2 pr-4 text-right tabular-nums">{money(l.unit_price_minor)}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{money(l.net_minor)}</td>
                 <td className="py-2 pr-4">
-                  {!committed ? (
+                  {writtenByDoor ? null : !committed ? (
                     <button
                       type="button"
                       onClick={() => price.mutate({ p_line_id: l.line_id })}
@@ -1248,6 +1274,57 @@ function SupplierTax({
           invalidates={["erp_document", "erp_documents"]}
         />
       </header>
+    </section>
+  );
+}
+
+const REMITTANCE = { fn: "erp_render_remittance_advice", permission: "finance.post" } as const;
+
+/**
+ * A supplier payment's remittance advice, printed from the payment's page
+ * (PR13 M4).
+ *
+ * public.erp_render_remittance_advice renders the payment through the
+ * organisation's remittance layout (20260930200000) and stores and sends
+ * nothing; this draws what it rendered, as a count sheet is drawn, and prints
+ * it. Offered to somebody who may pay suppliers, which is what the door asks.
+ */
+function RemittanceAdvice({ documentId, number }: { documentId: string; number: string }) {
+  const { ui } = useT();
+  const { session } = useErpSession();
+  const print = usePrintRendered(REMITTANCE);
+  if (!hasPermission(session, print.permission)) return null;
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">{ui("Remittance advice")}</h2>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">
+            {ui(
+              "The bills this payment paid, for the supplier. Printed or downloaded here; nothing is sent.",
+            )}
+          </Prose>
+        </div>
+        <ActionButton
+          variant="secondary"
+          busy={print.printing}
+          onClick={() => print.open(documentId)}
+        >
+          {ui("Print the remittance advice")}
+          <span className="sr-only"> {number}</span>
+        </ActionButton>
+      </div>
+      <ErrorNote error={print.render.error} />
+      {print.sheet ? (
+        <RenderedPrint
+          sheet={print.sheet}
+          name={ui("Remittance advice")}
+          printLabel={ui("Print the remittance advice")}
+          onPrint={print.print}
+          onClose={print.close}
+          printing={print.printing}
+        />
+      ) : null}
     </section>
   );
 }

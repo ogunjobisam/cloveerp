@@ -1142,3 +1142,270 @@ test.describe("the close is two presses", () => {
     });
   });
 });
+
+test.describe("the cash documents are on the desk", () => {
+  // PR13 M4. Apply cash opens a receipt (20260930000000) and a payment run a
+  // payment per supplier (20260930200000). The Cash in step lists the
+  // receipts, each outcome names the document it made and links to it, and a
+  // payment's page prints its remittance advice. Nobody opens, adds a line to
+  // or posts either by hand, so no screen offers it.
+  const RCPT = "00000000-0000-4000-8000-00000000ca51";
+  const PMT1 = "00000000-0000-4000-8000-00000000ba71";
+  const PMT2 = "00000000-0000-4000-8000-00000000ba72";
+  const CUST = "00000000-0000-4000-8000-00000000c057";
+  const RUN = "00000000-0000-4000-8000-00000000f0a1";
+  const receipt = (extra: Record<string, unknown> = {}) => ({
+    document_id: RCPT,
+    document_number: "RCPT-000012",
+    document_type: "cash_receipt",
+    document_date: "2026-09-27",
+    required_date: null,
+    currency: "GBP",
+    party: "Vela Industrial",
+    total_minor: 70000,
+    state: "posted",
+    state_name: "Posted",
+    is_committed: false,
+    is_cancelled: false,
+    ...extra,
+  });
+  const cashDocument = (doc: Record<string, unknown>, lines: Record<string, unknown>[]) => ({
+    document: { their_reference: null, ...doc },
+    lines,
+    lineage: [],
+    reversal: [],
+    amendment: null,
+    available_transitions: [],
+  });
+  const line = (n: number, description: string, net: number) => ({
+    line_id: `00000000-0000-4000-8000-0000000011${String(n).padStart(2, "0")}`,
+    line_no: n * 10,
+    description,
+    quantity: 1,
+    unit_price_minor: net,
+    net_minor: net,
+    item: null,
+    supplier_item_code: null,
+  });
+  const step = (page: Page, label: string) =>
+    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 7`) });
+
+  test("Cash in lists its receipts, and Apply cash names the receipt it made and opens it", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_documents", [receipt()]);
+    // The type is configured, so a New would have something to raise.
+    backend.rpc("erp_document_types", [
+      {
+        document_type_id: "00000000-0000-4000-8000-0000000071e1",
+        code: "cash_receipt",
+        name: "Cash receipt",
+        base_type_code: "cash_receipt",
+        requires_party: true,
+        requires_site: false,
+        currency: "GBP",
+        create_permission: "finance.post",
+      },
+    ]);
+    backend.rpc("erp_parties", [{ party_id: CUST, code: "VELA", name: "Vela Industrial" }]);
+    backend.rpc("erp_apply_cash", [
+      {
+        subledger_item_id: "00000000-0000-4000-8000-0000000051e1",
+        applied_minor: 60000,
+        remaining_minor: 10000,
+        written_off_minor: 0,
+        on_account_minor: 0,
+        document_id: RCPT,
+      },
+      {
+        subledger_item_id: null,
+        applied_minor: 0,
+        remaining_minor: 10000,
+        written_off_minor: 0,
+        on_account_minor: 10000,
+        document_id: RCPT,
+      },
+    ]);
+    backend.rpc(
+      "erp_document",
+      cashDocument({ ...receipt(), their_reference: "BACS-0927" }, [
+        line(1, "INV-000041", 60000),
+        line(2, "On account", 10000),
+      ]),
+    );
+
+    await page.goto("/finance");
+    await step(page, "Cash in").click({ timeout: 20_000 });
+
+    // The receipts are the step's list, and choosing one offers what the
+    // step offers: Apply cash, and no New, which the database would refuse.
+    await page.getByRole("button", { name: /^RCPT-000012/ }).click();
+    await expect(page.getByRole("link", { name: "Open the document" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^New cash in/i })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Apply cash", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Apply cash" });
+    await form.getByLabel("Business partner").selectOption(CUST);
+    await form.getByLabel("Amount").fill("700.00");
+    await form.getByLabel("Currency").selectOption("GBP");
+    await form.getByLabel("Reference").fill("BACS-0927");
+    const sent = page.waitForRequest(/rpc\/erp_apply_cash$/);
+    await form.getByRole("button", { name: "Apply cash" }).click();
+    expect((await sent).postDataJSON()).toMatchObject({
+      p_party_id: CUST,
+      p_amount_minor: 70000,
+      p_currency: "GBP",
+      p_reference: "BACS-0927",
+    });
+
+    // The outcome leads with the receipt, and links to it.
+    await expect(
+      page.getByText("RCPT-000012: £600.00 applied to 1 open invoice and £100.00 on account."),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Open RCPT-000012" }).click();
+    await expect(page).toHaveURL(new RegExp(`/documents/${RCPT}$`));
+    await expect(page.getByRole("heading", { name: "RCPT-000012", level: 1 })).toBeVisible();
+
+    // Its lines are the cash, and nothing on the page changes them.
+    await expect(page.getByRole("cell", { name: "INV-000041" })).toBeVisible();
+    await expect(
+      page.getByText(/The routine that opened this document wrote its lines/),
+    ).toBeVisible();
+    for (const name of ["Add line", "Reprice", "Amend", "Post"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole("button", { name: /remittance/i })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("paying a run names each supplier's payment, and a payment prints its remittance advice", async ({
+    page,
+    backend,
+  }) => {
+    await page.addInitScript(() => {
+      window.print = () => {
+        (window as unknown as { __printed?: boolean }).__printed = true;
+      };
+    });
+    backend.rpc("erp_payment_proposals", [
+      {
+        proposal_id: RUN,
+        reference: "PAY-000003",
+        payment_date: "2026-09-27",
+        currency: "GBP",
+        total_minor: 90000,
+        status: "approved",
+      },
+    ]);
+    backend.rpc("erp_pay_payment_run", {
+      proposal_id: RUN,
+      reference: "PAY-000003",
+      currency: "GBP",
+      lines_paid: 3,
+      paid_minor: 90000,
+      written_off_minor: 0,
+      documents_settled: 3,
+      held: 0,
+      payments: [
+        { document_id: PMT1, document_number: "PMT-000001", party_id: "s1", paid_minor: 50000 },
+        { document_id: PMT2, document_number: "PMT-000002", party_id: "s2", paid_minor: 40000 },
+      ],
+    });
+    backend.rpc(
+      "erp_document",
+      cashDocument(
+        {
+          document_id: PMT1,
+          document_number: "PMT-000001",
+          document_type: "cash_payment",
+          document_date: "2026-09-27",
+          currency: "GBP",
+          party: "Anvil Supplies",
+          total_minor: 50000,
+          state: "posted",
+          state_name: "Posted",
+          is_committed: false,
+        },
+        [
+          line(1, "PINV-000007, your ref AS-1", 20000),
+          line(2, "PINV-000008, your ref AS-2", 30000),
+        ],
+      ),
+    );
+    backend.rpc("erp_render_remittance_advice", {
+      template: "remittance_advice",
+      title: "Remittance advice",
+      kind: "document",
+      page: "A4",
+      locale: "en",
+      document_id: PMT1,
+      blocks: [
+        {
+          kind: "title",
+          fields: [{ field: "document_number", label: "Reference", value: "PMT-000001" }],
+        },
+        {
+          kind: "issuer",
+          fields: [{ field: "entity_name", label: "Company", value: "E2E Entity" }],
+        },
+        {
+          kind: "addressee",
+          fields: [{ field: "party_name", label: "Supplier", value: "Anvil Supplies" }],
+        },
+        {
+          kind: "lines",
+          columns: [
+            { field: "line_no", label: "Line" },
+            { field: "description", label: "Bill" },
+            { field: "net_amount", label: "Paid" },
+          ],
+          rows: [
+            { line_no: 10, description: "PINV-000007, your ref AS-1", net_amount: "200.00" },
+            { line_no: 20, description: "PINV-000008, your ref AS-2", net_amount: "300.00" },
+          ],
+        },
+        { kind: "totals", fields: [{ field: "total_net", label: "Total", value: "500.00" }] },
+      ],
+    });
+
+    await page.goto("/finance");
+    await step(page, "Pay").click({ timeout: 20_000 });
+    await page.getByRole("button", { name: /^PAY-000003/ }).click();
+    await page.getByRole("button", { name: "Pay an approved run", exact: true }).click();
+    const sent = page.waitForRequest(/rpc\/erp_pay_payment_run$/);
+    await page
+      .getByRole("dialog", { name: "Pay an approved run" })
+      .getByRole("button", { name: "Pay an approved run" })
+      .click();
+    expect((await sent).postDataJSON()).toMatchObject({ p_proposal_id: RUN });
+
+    await expect(
+      page.getByText("PAY-000003 paid £900.00 to 2 suppliers: PMT-000001 and PMT-000002."),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open PMT-000002" })).toBeVisible();
+    await page.getByRole("link", { name: "Open PMT-000001" }).click();
+    await expect(page).toHaveURL(new RegExp(`/documents/${PMT1}$`));
+
+    const print = page.getByRole("button", { name: "Print the remittance advice PMT-000001" });
+    const rendered = page.waitForRequest(/rpc\/erp_render_remittance_advice$/);
+    await print.click({ timeout: 20_000 });
+    expect((await rendered).postDataJSON()).toEqual({ p_document_id: PMT1 });
+
+    const paper = page.locator("[data-print-root]");
+    await expect(paper.getByRole("heading", { name: "PMT-000001" })).toBeVisible();
+    for (const label of ["Bill", "Paid"]) {
+      await expect(paper.getByRole("columnheader", { name: label })).toBeVisible();
+    }
+    await expect(paper.getByRole("row")).toHaveCount(3);
+    await expect(paper).toContainText("PINV-000008, your ref AS-2");
+    await expect(paper).toContainText("500.00");
+    expect(
+      await page.evaluate(() => (window as unknown as { __printed?: boolean }).__printed),
+    ).toBe(true);
+    for (const name of ["Add line", "Reprice", "Amend", "Post"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
+    expect(backend.crashes).toEqual([]);
+  });
+});

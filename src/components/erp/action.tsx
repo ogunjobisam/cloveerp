@@ -36,9 +36,12 @@ import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/mon
 import { permissionName } from "../../lib/permission-name";
 import {
   actionOutcome,
-  cashOutcome,
   documentOutcome,
+  paymentRunOutcome,
   planningOutcome,
+  receiptIds,
+  receiptOutcome,
+  type Outcome,
 } from "../../lib/plain-words";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
@@ -981,11 +984,16 @@ export function outcomeOf(label: string, result: unknown, emptyNote?: string, fn
 /**
  * Routines that answer with the id of what they made, whose outcome is read
  * from it. A planning run returns its id; its row says how many planned orders
- * and exceptions it raised, and "Run planning — done." said neither.
+ * and exceptions it raised, and "Run planning — done." said neither. An
+ * outcome that names documents links to each (PR13 M4).
  */
 const FOLLOW_UP_BY_FN: Record<
   string,
-  (result: unknown, args: Record<string, unknown>, label: string) => Promise<string | null>
+  (
+    result: unknown,
+    args: Record<string, unknown>,
+    label: string,
+  ) => Promise<string | Outcome | null>
 > = {
   erp_run_planning: async (result, args, label) => {
     if (typeof result !== "string") return null;
@@ -1004,12 +1012,45 @@ const FOLLOW_UP_BY_FN: Record<
     return planningOutcome(label, run);
   },
   // A receipt's rows say what it applied, wrote off and kept on account
-  // (20260929400000), in the currency the form sent.
-  erp_apply_cash: (result, args) =>
-    Promise.resolve(
-      cashOutcome(result, typeof args["p_currency"] === "string" ? args["p_currency"] : "GBP"),
-    ),
+  // (20260929400000), in the currency the form sent, and name the receipt
+  // they were written on (20260930000000), whose number is read from it.
+  erp_apply_cash: async (result, args) => {
+    const currency = typeof args["p_currency"] === "string" ? args["p_currency"] : "GBP";
+    const receipts = await Promise.all(
+      receiptIds(result).map((documentId) =>
+        callErp<{ document: { document_number?: string } | null }>("erp_document", {
+          p_document_id: documentId,
+        }).then(
+          (p) => ({ documentId, number: p.document?.document_number ?? null }),
+          () => ({ documentId, number: null }),
+        ),
+      ),
+    );
+    return receiptOutcome(result, currency, receipts);
+  },
+  // The run, what left the bank, and the payment each supplier was sent
+  // (20260930200000), whose page prints its remittance advice.
+  erp_pay_payment_run: (result, _args, label) => Promise.resolve(paymentRunOutcome(result, label)),
 };
+
+/** The documents an outcome names, each a link to its page. */
+function OutcomeLinks({ documents }: { documents: Outcome["documents"] }) {
+  const { ui } = useT();
+  return (
+    <span data-outcome-documents="" className="flex flex-wrap gap-x-3 gap-y-1">
+      {documents.map((d) => (
+        <Link
+          key={d.documentId}
+          to="/documents/$documentId"
+          params={{ documentId: d.documentId }}
+          className="font-medium underline underline-offset-2"
+        >
+          {fill(ui("Open {document}"), { document: d.number })}
+        </Link>
+      ))}
+    </span>
+  );
+}
 
 export function ActionDialog({
   trigger,
@@ -1225,11 +1266,18 @@ export function ActionDialog({
       // A toast that names the document it made needs no second line saying
       // what the form acted on.
       const plain = outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn], fn);
-      const say = (message: string) =>
-        toast(
-          message,
-          context && documentOutcome(result) === null ? { description: context } : undefined,
-        );
+      const say = (message: string | Outcome) =>
+        typeof message !== "string" && message.documents.length > 0
+          ? // Named documents are the outcome's second line, each a link, and
+            // it stays long enough to follow one.
+            toast(message.message, {
+              description: <OutcomeLinks documents={message.documents} />,
+              duration: 20_000,
+            })
+          : toast(
+              typeof message === "string" ? message : message.message,
+              context && documentOutcome(result) === null ? { description: context } : undefined,
+            );
       const followUp = FOLLOW_UP_BY_FN[fn];
       if (followUp)
         void followUp(result, args, ui(title)).then(

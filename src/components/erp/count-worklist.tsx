@@ -1,7 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, type RefObject, useId, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 
 import { ErpError, callErp, hasPermission } from "../../lib/erp";
 import {
@@ -13,11 +12,11 @@ import {
   splitWorklist,
   statusUnknown,
   type CountTaskRow,
-  type RenderedDocument,
 } from "../../lib/count-worklist";
 import { useT } from "../../lib/i18n";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction, type Field } from "./action";
 import { CountSheetPrint } from "./count-sheet-print";
+import { usePrintRendered } from "./use-print-rendered";
 import { EmptyState, LoadingRows, Prose, TOUCH } from "./page";
 import { Pill, Table } from "./panel";
 import { useErpSession, useScope } from "./session-context";
@@ -65,58 +64,8 @@ const POST = { fn: "erp_post_count", permission: "inventory.adjust" } as const;
 const RECOUNT = { fn: "erp_recount_task", permission: "inventory.adjust" } as const;
 const DOOR = { fn: "erp_render_count_sheet", permission: "inventory.count" } as const;
 
-/**
- * Render the sheet, draw it, then open the print dialog on it — once. A second
- * press while the first is rendering, or while its dialog is open, is ignored
- * rather than queued behind it as a second dialog.
- */
-function usePrintCountSheet() {
-  const [sheet, setSheet] = useState<RenderedDocument | null>(null);
-  const busy = useRef(false);
-  const [printing, setPrinting] = useState(false);
-
-  function print() {
-    if (busy.current) return;
-    busy.current = true;
-    setPrinting(true);
-    try {
-      window.print();
-    } finally {
-      busy.current = false;
-      setPrinting(false);
-    }
-  }
-
-  const render = useMutation({
-    mutationFn: (documentId: string) =>
-      callErp<RenderedDocument>(DOOR.fn, { p_document_id: documentId }),
-    onSuccess: (rendered) => {
-      // Drawn before the print dialog opens, or the paper is the last sheet.
-      flushSync(() => setSheet(rendered));
-      busy.current = false;
-      print();
-    },
-    onError: () => {
-      busy.current = false;
-    },
-  });
-
-  function open(documentId: string) {
-    if (busy.current || render.isPending) return;
-    busy.current = true;
-    render.mutate(documentId);
-  }
-
-  return {
-    sheet,
-    render,
-    open,
-    print,
-    printing: printing || render.isPending,
-    close: () => setSheet(null),
-    permission: DOOR.permission,
-  };
-}
+/** The count sheet, rendered and printed through its door (PR10 M3b). */
+const usePrintCountSheet = () => usePrintRendered(DOOR);
 
 const qty = (n: number | null) =>
   n === null ? "—" : new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(n);

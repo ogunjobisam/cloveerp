@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import {
   DOOR_ONLY_TRANSITIONS,
+  DOOR_OPENED_TYPES,
+  documentTone,
   isDoorOnlyTransition,
+  isDoorOpened,
   manualTransitions,
   heldReasons,
   isCompletable,
@@ -791,5 +794,39 @@ describe("a move is drawn only where it can be completed", () => {
         move({ refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }),
       ]),
     ).toBe(false);
+  });
+});
+
+describe("what only a routine opens is never raised or edited by hand (PR13 M4)", () => {
+  test("the count sheet, the cash receipt and the supplier payment, each with the state it is finished in", () => {
+    expect(DOOR_OPENED_TYPES).toEqual({
+      count_sheet: "closed",
+      cash_receipt: "posted",
+      cash_payment: "posted",
+    });
+    expect(isDoorOpened("cash_receipt")).toBe(true);
+    expect(isDoorOpened("sales_invoice")).toBe(false);
+    expect(isDoorOpened("toString")).toBe(false);
+    expect(isDoorOpened(null)).toBe(false);
+  });
+
+  test("a posted receipt reads done, though posted is not a committed state", () => {
+    expect(documentTone("cash_receipt", "posted", false)).toBe("ok");
+    expect(documentTone("cash_payment", "draft", false)).toBe("muted");
+    expect(documentTone("sales_invoice", "posted", false)).toBe("muted");
+    expect(documentTone("sales_invoice", "issued", true)).toBe("ok");
+  });
+
+  test("the Cash in step lists posted receipts, and its only verb is Apply cash", () => {
+    const money = MODULES.find((m) => m.flow?.code === "money")?.flow;
+    const cashIn = money?.stages.find((s) => s.createFn === "erp_apply_cash");
+    expect(cashIn?.typeCode).toBe("cash_receipt");
+    expect(cashIn?.states).toEqual(["posted"]);
+    expect(cashIn?.actionFn).toBeUndefined();
+    expect(cashIn?.actionFns).toBeUndefined();
+    // One step of seven keeps no list of its own: Journals, which is a screen.
+    expect(money?.stages.filter((s) => !s.typeCode && !s.list).map((s) => s.label)).toEqual([
+      "Journals",
+    ]);
   });
 });
