@@ -1911,6 +1911,8 @@ export type Database = {
           p_lines?: Json
           p_reason?: string
           p_reason_code: string
+          p_tax_code?: string
+          p_tax_minor?: number
         }
         Returns: Json
       }
