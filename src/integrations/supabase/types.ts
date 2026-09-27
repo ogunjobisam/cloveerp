@@ -3073,6 +3073,10 @@ export type Database = {
         Returns: Json
       }
       erp_vat_obligations: { Args: { p_entity_id?: string }; Returns: Json }
+      erp_vat_return_export: {
+        Args: { p_document_id: string; p_format?: string }
+        Returns: Json
+      }
       erp_vocabularies: { Args: never; Returns: Json }
       erp_void_document_issue: {
         Args: { p_document_issue_id: string; p_reason: string }
