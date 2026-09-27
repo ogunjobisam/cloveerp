@@ -275,9 +275,11 @@ function Document() {
 
       {/* What the supplier charged is a fact on their paperwork, not something
           to work out from our own rules, so it is typed in from their invoice.
-          Offered on a purchase invoice before it is registered, which is when
-          erp.state_supplier_tax accepts it. */}
-      {doc.document_type === "purchase_invoice" && !doc.is_committed ? (
+          Offered on a purchase invoice before it is registered, and on a
+          supplier credit note before it is issued, which is when
+          erp.state_supplier_tax accepts it (20261001400000). */}
+      {(doc.document_type === "purchase_invoice" || doc.document_type === "purchase_credit_note") &&
+      !doc.is_committed ? (
         <SupplierTax documentId={documentId} currency={doc.currency} minorUnits={minorUnits} />
       ) : null}
 
@@ -1219,7 +1221,7 @@ function ReversePosting({
   );
 }
 
-/** The tax a supplier's invoice states, typed in from the invoice itself. */
+/** The tax a supplier's invoice or credit note states, typed in from it. */
 function SupplierTax({
   documentId,
   currency,
@@ -1235,9 +1237,9 @@ function SupplierTax({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">Tax the supplier charged</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            Taken from the supplier's invoice, not worked out here: what they charged is their
-            decision under their own obligations. Spread across the lines by what each is worth, at
-            the rate on their invoice.
+            Taken from the supplier's invoice or credit note, not worked out here: what they charged
+            or give back is their decision under their own obligations. Spread across the lines by
+            what each is worth, at the rate on their paperwork.
           </Prose>
         </div>
 
