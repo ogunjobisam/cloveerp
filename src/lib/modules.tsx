@@ -2939,7 +2939,7 @@ export const PRODUCTION: ModuleDef = {
   flow: {
     code: "make",
     title: "Making, step by step",
-    note: "Create the order, which goes to the floor as it is made, record the hours, take in the finished goods and close it. The materials go out as the goods come in.",
+    note: "Create the order, which goes to the floor as it is made, record the hours and take in the finished goods. The materials go out as the goods come in, and the order closes itself with the last of them.",
     stages: [
       {
         label: "Works order",
@@ -2970,13 +2970,13 @@ export const PRODUCTION: ModuleDef = {
         actionFn: "erp_receive_works_order_output",
       },
       {
-        label: "Close",
-        hint: "Closing an order settles the difference from plan and stops further hours being recorded.",
+        label: "Closed",
+        hint: "An order closes itself as the last of its goods comes in, and settles the difference from plan. One closed short, or held for review, is closed from Close a works order.",
         list: WORKS_ORDER_LIST,
-        // erp.close_works_order takes an order under way or completed.
-        states: ["in_progress", "completed"],
-        recordArg: "p_works_order_id",
-        actionFn: "erp_close_works_order",
+        // Closed by the receipt that completes it (20261001700000), so there
+        // is nothing to press on the clean path. Closing short, or an order a
+        // firm reviews first, is the module's action.
+        states: ["closed"],
       },
     ],
   },
