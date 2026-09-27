@@ -903,6 +903,10 @@ export type Database = {
         Args: { p_document_issue_id: string; p_reason: string }
         Returns: Json
       }
+      erp_finalise_vat_return: {
+        Args: { p_entity_id: string; p_period_end: string }
+        Returns: Json
+      }
       erp_firm_planned_order: {
         Args: { p_document_type_code?: string; p_planned_order_id: string }
         Returns: string
@@ -3068,6 +3072,7 @@ export type Database = {
         Args: { p_entity_id?: string; p_from: string; p_to: string }
         Returns: Json
       }
+      erp_vat_obligations: { Args: { p_entity_id?: string }; Returns: Json }
       erp_vocabularies: { Args: never; Returns: Json }
       erp_void_document_issue: {
         Args: { p_document_issue_id: string; p_reason: string }
