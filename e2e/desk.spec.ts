@@ -1515,3 +1515,227 @@ test.describe("a credit kept on account is allocated from its row", () => {
     });
   });
 });
+
+test.describe("a VAT return is two presses", () => {
+  // PR14 M4 (20261001300000). The obligations say what the two doors would
+  // take for this reader: Finalise on the period a company finalises next,
+  // Export on a finalised return. Nothing else is drawn, and the file the
+  // export door returns is saved as it came.
+  const MAIN = "00000000-0000-4000-8000-0000000000e1";
+  const RETURN = "00000000-0000-4000-8000-00000000ba01";
+  const BOXES = {
+    box1_minor: 25458,
+    box2_minor: 0,
+    box3_minor: 25458,
+    box4_minor: 0,
+    box5_minor: 25458,
+    box5_is: "payable",
+    box6_pounds: 1780,
+    box7_pounds: 0,
+    box8_pounds: 0,
+    box9_pounds: 0,
+  };
+  const period = (
+    start: string,
+    end: string,
+    status: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    entity_id: MAIN,
+    company: "MAIN",
+    vrn: "GB123456789",
+    currency: "GBP",
+    frequency: "quarterly",
+    stagger: 1,
+    period_start: start,
+    period_end: end,
+    due_on: "2026-02-07",
+    status,
+    return_document_id: null,
+    return_number: null,
+    boxes: BOXES,
+    entries: 3,
+    carried_forward: { entries: 0, net_minor: 0, tax_minor: 0, over_threshold: false },
+    is_next: false,
+    take_from: start,
+    can_finalise: false,
+    finalise_blocked_by: null,
+    can_export: false,
+    ...extra,
+  });
+  const DONE = period("2025-08-23", "2025-09-30", "finalised", {
+    return_document_id: "00000000-0000-4000-8000-00000000ba00",
+    return_number: "VAT-000001",
+    take_from: null,
+    can_export: true,
+  });
+  const NEXT = period("2025-10-01", "2025-12-31", "overdue", {
+    is_next: true,
+    take_from: "2025-08-23",
+    can_finalise: true,
+  });
+  const LATER = period("2026-01-01", "2026-03-31", "overdue", {
+    finalise_blocked_by: "An earlier period is not finalised yet; finalise that one first.",
+  });
+  const OPEN = period("2026-07-01", "2026-09-30", "open", {
+    finalise_blocked_by: "The period ends on 2026-09-30; it can be finalised from the day after.",
+  });
+  const findings = (exceptions: unknown[]) => [{ entity_id: MAIN, ...BOXES, exceptions }];
+  const FLAG = {
+    finding: "a purchase from abroad states no tax, and may need the reverse charge",
+    blocks: false,
+    reference: "PINV-000004",
+    detail: "PINV-000004 is from a supplier in NL; the reverse charge is not computed",
+  };
+
+  test("Finalise on the next period, then Export its return: two presses, and the file is the body", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_vat_obligations", [DONE, NEXT, LATER, OPEN]);
+    backend.rpc("erp_vat_boxes", findings([FLAG]));
+    await page.goto("/finance/vat");
+
+    const next = page.locator('[data-vat-return="2025-12-31"]');
+    await expect(next).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("[data-vat-return]")).toHaveCount(1);
+    await expect(next.locator('[data-box="5"]')).toContainText("£254.58");
+    await expect(next.locator('[data-box="6"]')).toContainText("£1,780");
+    await expect(next.locator('[data-vat-finding="flag"]')).toContainText("PINV-000004");
+    await expect(page.locator('tr[data-vat-period="2026-03-31"]')).toContainText("Overdue");
+    await expect(page.locator('tr[data-vat-period="2026-09-30"]')).toContainText("Open");
+    // The findings asked for are the ones finalising checks: from the first
+    // day the return takes to its period's end.
+    expect(backend.called).toContain("erp_vat_boxes");
+
+    const finalise = page.getByRole("button", { name: /^Finalise / });
+    await expect(finalise).toHaveCount(1);
+    await expect(finalise).toHaveAccessibleName("Finalise MAIN 2025-10-01 – 2025-12-31");
+
+    backend.rpc("erp_finalise_vat_return", {
+      document_id: RETURN,
+      document_number: "VAT-000002",
+      state: "finalised",
+    });
+    backend.rpc("erp_vat_obligations", [
+      DONE,
+      {
+        ...NEXT,
+        status: "finalised",
+        is_next: false,
+        can_finalise: false,
+        can_export: true,
+        return_document_id: RETURN,
+        return_number: "VAT-000002",
+        take_from: null,
+      },
+      { ...LATER, is_next: true, can_finalise: true, finalise_blocked_by: null },
+      OPEN,
+    ]);
+    const sent = page.waitForRequest(/rpc\/erp_finalise_vat_return$/);
+    await finalise.click();
+    expect((await sent).postDataJSON()).toEqual({ p_entity_id: MAIN, p_period_end: "2025-12-31" });
+
+    const exported = page.locator('[data-vat-export="VAT-000002"]');
+    await expect(exported).toBeVisible();
+    await expect(page.locator('[data-vat-return="2026-03-31"]')).toBeVisible();
+
+    const body = "field,value\nreturn,VAT-000002\n";
+    backend.rpc("erp_vat_return_export", {
+      document_id: RETURN,
+      document_number: "VAT-000002",
+      format: "csv",
+      filename: "VAT-000002_2025-10-01_2025-12-31.csv",
+      media_type: "text/csv",
+      sha256: "0f",
+      body,
+    });
+    const asked = page.waitForRequest(/rpc\/erp_vat_return_export$/);
+    const saved = page.waitForEvent("download");
+    await exported.getByRole("button", { name: "Export VAT-000002 Nine boxes (CSV)" }).click();
+    expect((await asked).postDataJSON()).toEqual({ p_document_id: RETURN, p_format: "csv" });
+    const file = await saved;
+    expect(file.suggestedFilename()).toBe("VAT-000002_2025-10-01_2025-12-31.csv");
+    const path = await file.path();
+    expect(path).not.toBeNull();
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync(path, "utf8")).toBe(body);
+    await expect(exported.locator("[data-vat-saved]")).toContainText(
+      "VAT-000002_2025-10-01_2025-12-31.csv",
+    );
+
+    expect(
+      backend.called.filter((fn) =>
+        ["erp_finalise_vat_return", "erp_vat_return_export"].includes(fn),
+      ),
+    ).toEqual(["erp_finalise_vat_return", "erp_vat_return_export"]);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a finding that blocks takes Finalise away, and the row says why", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_vat_obligations", [
+      {
+        ...NEXT,
+        can_finalise: false,
+        finalise_blocked_by:
+          "1 finding(s) block this return, the first INV-000038: INV-000038 determined 25459",
+      },
+    ]);
+    backend.rpc(
+      "erp_vat_boxes",
+      findings([
+        FLAG,
+        {
+          finding: "the tax determined is not the tax the ledger carries",
+          blocks: true,
+          reference: "INV-000038",
+          detail: "INV-000038 determined 25459 and journal J-1 moved tax control by 25458",
+        },
+      ]),
+    );
+    await page.goto("/finance/vat");
+
+    const next = page.locator('[data-vat-return="2025-12-31"]');
+    await expect(next.locator("[data-vat-blocked]")).toContainText(
+      "1 finding(s) block this return",
+      {
+        timeout: 20_000,
+      },
+    );
+    await expect(next.locator("[data-vat-finding]").first()).toHaveAttribute(
+      "data-vat-finding",
+      "blocks",
+    );
+    await expect(page.getByRole("button", { name: /^Finalise / })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("somebody who may read the books but not close them", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "finance.close_period"),
+      },
+    });
+
+    test("sees the periods and the boxes and is offered no press, whatever the rows say", async ({
+      page,
+      backend,
+    }) => {
+      backend.rpc("erp_vat_obligations", [DONE, NEXT, OPEN]);
+      backend.rpc("erp_vat_boxes", findings([]));
+      await page.goto("/finance/vat");
+
+      await expect(page.locator('[data-vat-return="2025-12-31"] [data-box="1"]')).toContainText(
+        "£254.58",
+        { timeout: 20_000 },
+      );
+      await expect(page.locator("[data-vat-export]")).toContainText("VAT-000001");
+      await expect(page.getByRole("button", { name: /^(Finalise|Export) / })).toHaveCount(0);
+      expect(backend.crashes).toEqual([]);
+    });
+  });
+});

@@ -2323,7 +2323,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Tax report",
-      description: "Taxable amount and tax by code, for this calendar quarter so far.",
+      description:
+        "Taxable amount and tax by code, for this calendar quarter so far, signed: credit notes and reversals reduce it, as they do the ledger. Returns are made from VAT returns.",
       fn: "erp_tax_report",
       // erp_tax_report(p_from, p_to) has no default period, and the panel asked
       // with neither date, so it never answered. It also read net_minor, which
@@ -4994,6 +4995,15 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "The checklist that has to be true before the books are closed: every task, who did it, and what the close is waiting for.",
     permission: ["finance.close_period", "finance.read"],
+    group: "settle",
+  },
+  {
+    path: "/finance/vat",
+    titleKey: "nav.finance_vat",
+    title: "VAT returns",
+    blurb:
+      "Each VAT period with its due date and nine boxes from the ledger, finalised in one press and exported for the bridging software that files it.",
+    permission: ["finance.read", "finance.close_period"],
     group: "settle",
   },
   {
