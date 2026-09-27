@@ -3064,6 +3064,10 @@ export type Database = {
         Returns: Json
       }
       erp_validate_import: { Args: { p_batch_id: string }; Returns: Json }
+      erp_vat_boxes: {
+        Args: { p_entity_id?: string; p_from: string; p_to: string }
+        Returns: Json
+      }
       erp_vocabularies: { Args: never; Returns: Json }
       erp_void_document_issue: {
         Args: { p_document_issue_id: string; p_reason: string }
