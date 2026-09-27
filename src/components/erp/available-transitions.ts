@@ -157,6 +157,44 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   cash_payment: ["post"],
 };
 
+/**
+ * Types that only a routine opens and writes, by type code, each with the
+ * state it is finished in.
+ *
+ * A count sheet is opened when its counts are raised (20260927100000), a cash
+ * receipt by Apply cash or a settlement statement (20260930000000,
+ * 20260930100000), and a supplier payment by the payment run
+ * (20260930200000). The database refuses each of them opened, given a line or
+ * changed by hand, an administrator included, so no screen offers New, Add
+ * line, Reprice or Amend on one. The finished state is terminal and not
+ * committed, so the committed flag alone would draw a posted receipt as if it
+ * were still a draft.
+ */
+export const DOOR_OPENED_TYPES: Readonly<Record<string, string>> = {
+  count_sheet: "closed",
+  cash_receipt: "posted",
+  cash_payment: "posted",
+};
+
+/** Whether nobody opens or writes a document of this type by hand. */
+export function isDoorOpened(documentType: string | null | undefined): boolean {
+  return Boolean(documentType && Object.hasOwn(DOOR_OPENED_TYPES, documentType));
+}
+
+/**
+ * The tone of a document's state pill: done once it is committed, or once a
+ * type only a routine writes has reached the state it is finished in.
+ */
+export function documentTone(
+  documentType: string | null | undefined,
+  state: string | null | undefined,
+  committed: boolean,
+): "ok" | "muted" {
+  if (committed) return "ok";
+  const finished = documentType ? DOOR_OPENED_TYPES[documentType] : undefined;
+  return finished !== undefined && state === finished ? "ok" : "muted";
+}
+
 /** Whether a move of a document of this type is left to the door that makes it. */
 export function isDoorOnlyTransition(
   documentType: string | null | undefined,

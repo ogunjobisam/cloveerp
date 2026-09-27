@@ -1593,6 +1593,15 @@ export const FINANCE: ModuleDef = {
       {
         label: "Cash in",
         hint: "Money received, applied against the invoices it settles.",
+        fedBy:
+          "Receipts appear here once cash is applied: Apply cash opens one for what the bank received.",
+
+        // The receipts Apply cash and the settlement statements opened
+        // (20260930000000, 20260930100000), posted by the system as each is
+        // opened. Nobody raises one by hand, so the step offers no New.
+        typeCode: "cash_receipt",
+        states: ["posted"],
+        partyRole: "customer",
         createFn: "erp_apply_cash",
       },
       {
@@ -2016,7 +2025,14 @@ export const FINANCE: ModuleDef = {
           hint: "Your own reference for this, such as the bank payment reference.",
         },
       ],
-      invalidates: ["erp_receivables_ageing", "erp_dunning_worklist", "erp_trial_balance"],
+      invalidates: [
+        "erp_receivables_ageing",
+        "erp_dunning_worklist",
+        "erp_trial_balance",
+        // The receipt it opened, on the Cash in step, and the invoices it paid.
+        "erp_documents",
+        "erp_document",
+      ],
     },
     {
       label: "Invoice a delivery",

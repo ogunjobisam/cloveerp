@@ -6,6 +6,9 @@ import { formatMinor } from "./money";
 import {
   actionOutcome,
   cashOutcome,
+  paymentRunOutcome,
+  receiptIds,
+  receiptOutcome,
   approvalStep,
   approvalSubject,
   asSentence,
@@ -500,5 +503,111 @@ describe("the refusal texts this change registers are plain", () => {
     ]) {
       expect([fragment, migration.includes(fragment)]).toEqual([fragment, true]);
     }
+  });
+});
+
+describe("a cash document says what it is (PR13 M4)", () => {
+  const gbp = (n: number) => formatMinor(n, "GBP");
+  const R1 = "00000000-0000-4000-8000-0000000000r1";
+  const R2 = "00000000-0000-4000-8000-0000000000r2";
+  const row = (
+    document_id: string | null,
+    applied: number,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    subledger_item_id: `i-${applied}`,
+    applied_minor: applied,
+    remaining_minor: 0,
+    written_off_minor: 0,
+    on_account_minor: 0,
+    document_id,
+    ...extra,
+  });
+
+  test("the receipts are the documents the rows name, once each, in their order", () => {
+    expect(receiptIds([row(R1, 100), row(R1, 200), row(R2, 300)])).toEqual([R1, R2]);
+    // Receivables version 1 names none.
+    expect(receiptIds([row(null, 100)])).toEqual([]);
+    expect(receiptIds(null)).toEqual([]);
+    expect(receiptIds({ document_id: R1 })).toEqual([]);
+  });
+
+  test("Apply cash leads with the receipt it made, and links to it", () => {
+    const rest = {
+      subledger_item_id: null,
+      applied_minor: 0,
+      remaining_minor: 10000,
+      written_off_minor: 0,
+      on_account_minor: 10000,
+      document_id: R1,
+    };
+    expect(
+      receiptOutcome([row(R1, 60000), rest], "GBP", [{ documentId: R1, number: "RCPT-000012" }]),
+    ).toEqual({
+      message: `RCPT-000012: ${gbp(60000)} applied to 1 open invoice and ${gbp(10000)} on account.`,
+      documents: [{ documentId: R1, number: "RCPT-000012" }],
+    });
+    // Two companies' invoices, two receipts (D5).
+    expect(
+      receiptOutcome([row(R1, 100), row(R2, 200)], "GBP", [
+        { documentId: R1, number: "RCPT-000012" },
+        { documentId: R2, number: "RCPT-000013" },
+      ])?.message,
+    ).toBe(`RCPT-000012 and RCPT-000013: ${gbp(300)} applied to 2 open invoices.`);
+  });
+
+  test("a receipt whose number could not be read is still linked, and no receipt says only what the cash did", () => {
+    expect(receiptOutcome([row(R1, 500)], "GBP", [{ documentId: R1, number: null }])).toEqual({
+      message: `${gbp(500)} applied to 1 open invoice.`,
+      documents: [{ documentId: R1, number: "the receipt" }],
+    });
+    expect(receiptOutcome([row(null, 500)], "GBP", [])).toEqual({
+      message: `${gbp(500)} applied to 1 open invoice.`,
+      documents: [],
+    });
+    expect(receiptOutcome(null, "GBP", [])).toBeNull();
+  });
+
+  test("paying a run names each supplier's payment, and links to each", () => {
+    const answer = {
+      proposal_id: "p",
+      reference: "PAY-000003",
+      currency: "GBP",
+      lines_paid: 3,
+      paid_minor: 90000,
+      written_off_minor: 0,
+      documents_settled: 3,
+      held: 1,
+      payments: [
+        { document_id: "d1", document_number: "PMT-000001", party_id: "s1", paid_minor: 50000 },
+        { document_id: "d2", document_number: "PMT-000002", party_id: "s2", paid_minor: 40000 },
+      ],
+    };
+    expect(paymentRunOutcome(answer, "Pay an approved run")).toEqual({
+      message: `PAY-000003 paid ${gbp(90000)} to 2 suppliers: PMT-000001 and PMT-000002. 1 line was held and not paid.`,
+      documents: [
+        { documentId: "d1", number: "PMT-000001" },
+        { documentId: "d2", number: "PMT-000002" },
+      ],
+    });
+    expect(
+      paymentRunOutcome(
+        { ...answer, held: 0, written_off_minor: 1, payments: [answer.payments[0]] },
+        "Pay",
+      )?.message,
+    ).toBe(
+      `PAY-000003 paid ${gbp(90000)} to 1 supplier: PMT-000001, and ${gbp(1)} written off within the tolerance.`,
+    );
+  });
+
+  test("a run paid on procurement controls version 6 makes no payment, and counts its bills", () => {
+    expect(
+      paymentRunOutcome(
+        { reference: "PAY-000004", currency: "GBP", lines_paid: 2, paid_minor: 1000, held: 0 },
+        "Pay",
+      ),
+    ).toEqual({ message: `PAY-000004 paid ${gbp(1000)} on 2 bills.`, documents: [] });
+    expect(paymentRunOutcome("not an answer", "Pay")).toBeNull();
+    expect(paymentRunOutcome({ reference: "PAY-1" }, "Pay")).toBeNull();
   });
 });

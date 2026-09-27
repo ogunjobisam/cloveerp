@@ -28,6 +28,7 @@ import type { ActionSpec } from "./actions-bar";
 import { StatusPill } from "./auto";
 import { useCurrencies } from "./currencies";
 import {
+  documentTone,
   heldReasons,
   isCompletable,
   manualTransitions,
@@ -658,7 +659,13 @@ function StageRecord({
             <span className="truncate">{join(row, source.title)}</span>
             {source.fn === DOCUMENT_READ ? (
               <span className="font-sans">
-                <Pill tone={row["is_committed"] === true ? "ok" : "muted"}>
+                <Pill
+                  tone={documentTone(
+                    typeof row["document_type"] === "string" ? row["document_type"] : null,
+                    state,
+                    row["is_committed"] === true,
+                  )}
+                >
                   {String(row["state_name"] ?? row["state"] ?? "—")}
                 </Pill>
               </span>
