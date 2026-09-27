@@ -145,8 +145,11 @@ export type Database = {
         }
         Returns: {
           applied_minor: number
+          document_id: string
+          on_account_minor: number
           remaining_minor: number
           subledger_item_id: string
+          written_off_minor: number
         }[]
       }
       erp_apply_change_request: {
