@@ -152,6 +152,9 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // Posted by Apply cash, which opens it, once its lines total what its
   // journals banked (20260930000000).
   cash_receipt: ["post"],
+  // Posted by the payment run, which opens it, once its lines total what its
+  // journals paid (20260930200000).
+  cash_payment: ["post"],
 };
 
 /** Whether a move of a document of this type is left to the door that makes it. */
