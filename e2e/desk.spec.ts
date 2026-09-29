@@ -1775,4 +1775,23 @@ test.describe("despatch offers only what its doors take", () => {
     // Every site: the step names none, so the door is asked for all of them.
     expect(asked).toContainEqual(expect.objectContaining({ p_site_id: null }));
   });
+
+  // LPR2, L4 (20261002400000): despatch is two presses. Ship these deliveries
+  // opens the shipment and books the carrier the rate card recommends, so the
+  // strip draws no carrier or booking step between the two.
+  test("despatch is two steps, and the first one ships", async ({ page, backend }) => {
+    backend.rpc("erp_deliveries_to_ship", [delivery(1, "MAIN")]);
+    await page.goto("/logistics");
+
+    const first = page.getByRole("button", { name: /^Delivery, step 1 of 2, 1 outstanding$/ });
+    await expect(first).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByRole("button", { name: /^Proof of delivery, step 2 of 2/ }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Carrier|Book carrier), step/ })).toHaveCount(
+      0,
+    );
+    await first.click();
+    await expect(page.getByRole("button", { name: "Ship these deliveries" }).first()).toBeVisible();
+  });
 });

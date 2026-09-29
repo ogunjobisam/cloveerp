@@ -320,23 +320,9 @@ export const ORDER_TO_CASH: Flow = {
     {
       path: "/logistics",
       stage: "Delivery",
-      does: "Plan a shipment: the posted deliveries leaving one site on one day, gathered into one.",
-      doors: ["erp_plan_shipment"],
-      leaves: "A shipment, planned.",
-    },
-    {
-      path: "/logistics",
-      stage: "Carrier",
-      does: "Choose who is taking it, against which service and at what rate.",
-      doors: ["erp_select_carrier"],
-      leaves: "The shipment with its carrier chosen.",
-    },
-    {
-      path: "/logistics",
-      stage: "Book carrier",
-      does: "Book it. The booking is the commitment the carrier sees.",
-      doors: ["erp_book_shipment"],
-      leaves: "The shipment, booked, with its cost landing on the stock.",
+      does: "Ship these deliveries: the posted deliveries of one site to one customer, booked with the carrier the rate card recommends in the same press.",
+      doors: ["erp_ship_deliveries"],
+      leaves: "A shipment, numbered SHP- and booked.",
     },
     {
       path: "/logistics",
