@@ -69,7 +69,7 @@ as $$
          dt.code,
          'erp_ref.document_type.affects_finance is true for base type '
            || dt.base_type_code
-           || ', so posting this document raises ERPWARE_NO_POSTING_RULE'
+           || ', so posting this document raises CLOVEERP_NO_POSTING_RULE'
     from erp.document_type dt
     join erp.tenant t on t.id = dt.tenant_id
     join erp_ref.document_type bt on bt.code = dt.base_type_code
@@ -85,7 +85,7 @@ as $$
          'a document type names a posting rule with no version in force',
          dt.code || ' → ' || dt.posting_rule_code,
          'a rule is promoted with an effective date; a document outside every '
-         'version''s range raises ERPWARE_NO_POSTING_RULE_IN_FORCE and must '
+         'version''s range raises CLOVEERP_NO_POSTING_RULE_IN_FORCE and must '
          'not be guessed at'
     from erp.document_type dt
     join erp.tenant t on t.id = dt.tenant_id
@@ -112,7 +112,7 @@ as $$
          format('%s on %s wants account %s', pr.code, e.code, l.value ->> 'account'),
          'erp.post_document_finance() resolves each line to an account by code '
          'AND entity, so this document type refuses on this company with '
-         'ERPWARE_UNKNOWN_ACCOUNT while working everywhere else'
+         'CLOVEERP_UNKNOWN_ACCOUNT while working everywhere else'
     from erp.document_type dt
     join erp.tenant t on t.id = dt.tenant_id
     join erp_ref.document_type bt on bt.code = dt.base_type_code
@@ -146,7 +146,7 @@ as $$
   select t.code, 'posting path',
          'a posting rule in force names no ledger',
          pr.code,
-         'erp.post_document_finance() raises ERPWARE_POSTING_RULE_HAS_NO_LEDGER '
+         'erp.post_document_finance() raises CLOVEERP_POSTING_RULE_HAS_NO_LEDGER '
          'before it writes anything'
     from erp.posting_rule pr
     join erp.tenant t on t.id = pr.tenant_id

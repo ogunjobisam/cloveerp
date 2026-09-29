@@ -1,35 +1,79 @@
-set lock_timeout = '30s';
-
--- =============================================================================
--- Open counts come first where the order allows
+-- ═════════════════════════════════════════════════════════════════════════════
+-- The count task door puts open counts first
+-- ═════════════════════════════════════════════════════════════════════════════
 --
--- 20260927220223 made public.erp_count_tasks(integer) list open counts first,
--- so the Stock audit worklist's first 500 rows are open work before history.
--- Its version sorts before the two migrations whose door it restated, so a
--- build from an empty database refused it (CLOVEERP_ANCHOR_MOVED), and it has
--- been emptied (registered in supabase/ci/migrations_edited.txt).
+-- The restatement Lovable wrote as 20260927220223 (41be47fb), carried forward
+-- to where it belongs.
 --
--- This re-applies the same definition, word for word, after 20260928100000
--- in the order. On live, which already runs it, the result is the same door.
--- It refuses unless the door is one 20260928100000 left, or this one, so a
--- body that has moved since is not overwritten.
+-- ── WHAT WAS WRONG ───────────────────────────────────────────────────────────
+--
+-- public.erp_count_tasks ordered its rows by status name, so approved,
+-- cancelled and counted sorted before open. The Stock audit worklist reads the
+-- first 500 and filters to open work on the screen, so enough finished history
+-- pushed every open count past the cap and the worklist said nothing was
+-- waiting while counters held sheets. 20260927220223 fixed the ordering, and
+-- in doing so broke the build twice:
+--
+--   * Its version sorts before 20260927400000 and 20260928100000, the two
+--     migrations that built the door it restates (its own header named
+--     20260929500000). Production applied it after both and took it; a
+--     database built from nothing reaches it first, its anchors are not there
+--     yet, and the replay stops. Every build of main from an empty cluster,
+--     the nightly and every pull request's, has failed on it since 2ac3961b.
+--   * It created a public door without erp.assert_public_api_safe() in the
+--     same transaction, which supabase/ci/boundary_in_migration.sh refuses.
+--
+-- ── WHAT THIS CHANGES ────────────────────────────────────────────────────────
+--
+--   * 20260927220223 is reduced to a note that runs nothing, with the owner's
+--     leave on 29 September, and registered in supabase/ci/migrations_edited.txt
+--     against this migration, as that register exists for. Its version stays,
+--     because production has recorded it.
+--   * This restates the door with 20260927220223's body, unchanged, and proves
+--     it governed. On production, where the body is already in place, it
+--     writes the same body again and nothing changes; on a database built from
+--     nothing it makes the change 20260927220223 was meant to make, after the
+--     door exists.
 -- =============================================================================
 
+-- The door is either the one 20260928100000 left (a database built from
+-- nothing) or the one 20260927220223 left (production), or stop: a
+-- restatement over a body that has moved since would drop whatever moved it.
 do $door_anchor$
 declare
-  v_def text := pg_get_functiondef('public.erp_count_tasks(integer)'::regprocedure);
+  v_sig constant text := 'public.erp_count_tasks(integer)';
+  v_def text := pg_get_functiondef(v_sig::regprocedure);
+  v_needles constant text[] := array[
+    $o$'stock_status', c.stock_status,$o$,
+    $o$     where c.tenant_id = erp.current_tenant_id()
+$o$,
+    $o$ STABLE
+$o$];
+  v_orders constant text[] := array[
+    $o$     order by c.status, c.created_at desc limit greatest(p_limit, 1)) t$o$,
+    $o$     order by (c.status = 'open') desc, c.created_at desc limit greatest(p_limit, 1)) t$o$];
+  v_hits integer;
+  v_found integer := 0;
 begin
-  if position($o$'stock_status', c.stock_status,$o$ in v_def) = 0
-     or position($o$where c.tenant_id = erp.current_tenant_id()$o$ in v_def) = 0 then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: public.erp_count_tasks(integer) is not the door 20260928100000 left';
+  for v_i in 1 .. array_length(v_needles, 1) loop
+    v_hits := (length(v_def) - length(replace(v_def, v_needles[v_i], ''))) / length(v_needles[v_i]);
+    if v_hits <> 1 then
+      raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor % found % time(s)', v_sig, v_i, v_hits;
+    end if;
+  end loop;
+  for v_i in 1 .. array_length(v_orders, 1) loop
+    v_found := v_found + (length(v_def) - length(replace(v_def, v_orders[v_i], ''))) / length(v_orders[v_i]);
+  end loop;
+  if v_found <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % orders its rows neither as 20260928100000 nor as 20260927220223 left it', v_sig;
   end if;
-  if (select p.prosecdef or p.proconfig is distinct from array['search_path=""']
-        from pg_proc p where p.oid = 'public.erp_count_tasks(integer)'::regprocedure) then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: public.erp_count_tasks(integer) is no longer a plain door with an empty search path';
+  if (select p.prosecdef or p.prolang <> (select l.oid from pg_language l where l.lanname = 'sql')
+             or p.proconfig is distinct from array['search_path=""']
+        from pg_proc p where p.oid = v_sig::regprocedure) then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is no longer a plain sql door with an empty search path', v_sig;
   end if;
 end
 $door_anchor$;
-
 
 create or replace function public.erp_count_tasks(p_limit integer default 200)
 returns jsonb
@@ -38,7 +82,7 @@ stable
 set search_path = ''
 as $$
   -- Every count task of the organisation, open work first (20260927400000,
-  -- ordered so in fact from 20261001905000): where it stands, the sheet and
+  -- ordered so in fact from 20261001900000): where it stands, the sheet and
   -- line it is on, the adjustment its post wrote, whether the system posted
   -- it, why an approved one waits, and whether the reader counted it. It
   -- authorises nothing; the tenant filter and row security scope it, and
@@ -91,8 +135,7 @@ comment on function public.erp_count_tasks(integer) is
   'each stands, the count sheet and line it is on (null when raised with no sheet), the stock '
   'adjustment its post wrote, whether the system posted it as it was recorded, why an approved count '
   'waits for somebody to post it, and whether the reader counted it (20260927400000; open-first '
-  'ordering made true in 20261001905000). Authorises nothing; the tenant filter and row security scope it.';
-
+  'ordering made true in 20261001900000). Authorises nothing; the tenant filter and row security scope it.';
 -- The generators, which are idempotent and run at the end of every migration.
 select erp.apply_row_security();
 select erp.apply_platform_internal_security();
