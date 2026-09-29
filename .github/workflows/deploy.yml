@@ -810,7 +810,28 @@ jobs:
             echo "::warning::platform_assurance() took ${seconds} s on live, more than the 35 s it should stay under; its statement_timeout is 55 s. The slowest checks are listed above."
           fi
           echo "platform_assurance: every registered check green in ${seconds} s"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
+          # When the reconciliation refuses, say what the refused documents'
+          # journals did, from every organisation that is not live
+          # (erp.describe_vat_disagreements(), 20261002200000). A migration's
+          # warnings do not survive supabase db push; psql prints a notice.
+          if ! psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"; then
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -qc "
+              do \$d\$
+              declare r record; v jsonb;
+              begin
+                for r in select tn.id, tn.code from erp.tenant tn where tn.deleted_at is null order by tn.code loop
+                  perform erp_meta.act_in_tenant(r.id);
+                  continue when erp.environment_is_live();
+                  v := erp.describe_vat_disagreements();
+                  if jsonb_array_length(v) > 0 then
+                    raise notice 'vat disagreements in %: %', r.code, jsonb_pretty(v);
+                  end if;
+                end loop;
+                perform erp_meta.stop_acting_in_tenant();
+              end
+              \$d\$;" || true
+            exit 1
+          fi
           # The release is proved: the database it produced passed. A release
           # row without proved_at is a deploy that applied and did not check.
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.prove_release('${RELEASE_ID}');"
