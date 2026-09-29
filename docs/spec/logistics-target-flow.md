@@ -4,7 +4,8 @@ Implementable spec. Held to `docs/spec/flow-doctrine.md`, and written as the
 companion `docs/spec/simplification-review.md` §11 asked for: "Logistics beyond
 two carriers ... needs its own spec."
 
-Status: target state, for approval. Not what is built today. Section 1 records
+Status: target state, approved 29 September 2026 with option A for settlement
+(section 7). Not what is built today. Section 1 records
 the gap, read from a database built from `main` at 2ac3961b.
 
 ## 0. Instruction to the implementing agent
@@ -150,7 +151,7 @@ planned ──book (logistics.plan)──▶ booked ──deliver (logistics.des
 ## 5. Parameters and defaults
 
 One config type, `logistics.shipping_policy`, cycle `despatch`, every default
-the clean path. Six parameters against the budget of fifteen:
+the clean path. Five parameters against the budget of fifteen:
 
 - `auto_select_carrier` (true). The ship door takes the recommended tariff.
   False asks the planner to choose, which is one field more on the same press,
@@ -165,7 +166,6 @@ the clean path. Six parameters against the budget of fifteen:
   derived and logged as the system's move.
 - `consolidate` (`customer_day`). The ship door's picker offers the posted
   deliveries of one customer from one site and one day together, ticked.
-- `freight_accrual` (false). See section 7.
 
 ## 6. Correctness nodes, independent of the flow
 
@@ -182,13 +182,13 @@ These fix defects today and do not wait for the rest:
   some delivered on time, one late, so the screen and delivery performance show
   real rows.
 
-## 7. Settlement: decision needed before building
+## 7. Settlement: option A, decided 29 September
 
 Expected against actual freight needs a carrier's bill in the system, and the
 system has no door for a bill without a goods receipt. There are two ways to
-give it one. This spec recommends the first.
+give it one. Option A was chosen; B is recorded as the road not taken.
 
-- **A. A service bill against the shipment (recommended).** A purchase invoice
+- **A. A service bill against the shipment (chosen).** A purchase invoice
   on the carrier's party, born from a delivered shipment (doctrine 2),
   carrying the booked cost as its expected total. The difference is judged
   against `cost_override_tolerance_pct`: inside it the bill registers, and
@@ -196,13 +196,18 @@ give it one. This spec recommends the first.
   route C7 built. The cost posts to a carriage-outwards account on the bill,
   as a service bill does, with no accrual. This adds one press, Bill from
   shipment, and a despatch budget of three.
-- **B. Accrue at booking.** Booking posts the expected freight to an accrual;
+- **B. Accrue at booking (not taken).** Booking posts the expected freight to an accrual;
   the bill clears it and the variance posts. It is more complete and it is the
   heavier build: a posting rule on the shipment document, an accrual account
-  in the chart packs, and a clearing check at period close.
+  in the chart packs, and a clearing check at period close. Not taken: A
+  measures expected against actual freight without touching the ledger
+  twice, and an organisation that wants accruals can ask for B later
+  without A being undone.
 
-Either option changes procurement's bill door, which is order-to-cash and
-procure-to-pay territory, so it is its own PR, last, after a spike note like C8.
+A still changes procurement's bill door, which is procure-to-pay territory,
+so it is its own PR, last. The spike sizes it and confirms the
+carriage-outwards account exists in every chart pack; if a pack lacks one,
+stop and say so rather than adding an account unasked.
 
 ## 8. Nodes and PRs
 
@@ -241,10 +246,10 @@ nodes:
     proves: erp_test.logistics_suite; e2e - the exceptions drawer holds only what needs a person
 
   - id: L6
-    title: logistics.shipping_policy - six parameters, defaults the clean path
+    title: logistics.shipping_policy - five parameters, defaults the clean path
     needs: [L4, L5]
     pr: LPR3
-    proves: erp.assert_parameter_budget - despatch holds six
+    proves: erp.assert_parameter_budget - despatch holds five
 
   - id: L7
     title: Despatch step budget of two, walked
@@ -259,13 +264,13 @@ nodes:
     proves: demonstration Despatch screen and delivery performance show real rows
 
   - id: L9
-    title: Freight settlement - spike, then option A or B of section 7
+    title: Freight settlement - option A, a service bill born from the delivered shipment
     needs: [L7]
     pr: LPR4
-    proves: a decision note, then erp_test.freight_settlement_suite
+    proves: erp_test.freight_settlement_suite; the despatch budget walked at three, Bill from shipment the third press
 ```
 
-PR order, one at a time: LPR1, LPR2, LPR3, then LPR4 after the spike. LPR1 is
+PR order, one at a time: LPR1, LPR2, LPR3, then LPR4. LPR1 is
 small and fixes a screen that cannot complete today, so it can ship on its own.
 
 ## 9. Acceptance
@@ -274,8 +279,11 @@ The cycle is done when all of these hold. They join the §10 gates.
 
 - The shipment is on the document spine. Gates 2 and 3 cover it, and every one
   of its states is reachable.
-- Despatch is two presses from posted deliveries to delivered, walked in
-  `erp_test.step_budget_suite`, and the strip draws no more.
+- Despatch is two presses from posted deliveries to delivered, and three to a
+  registered carrier's bill, walked in `erp_test.step_budget_suite`; the strip
+  draws no more.
+- Expected and actual freight are both recorded, and a bill outside the
+  tolerance lands disputed rather than posting.
 - No press re-types what the system knows: carrier, service and cost come from
   the rate card unless overridden.
 - The despatch cycle holds at most fifteen parameters, each defaulting to the
