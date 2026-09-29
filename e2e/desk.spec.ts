@@ -963,11 +963,12 @@ test.describe("the close is two presses", () => {
     expect((await opened).postDataJSON()).toEqual({ p_fiscal_period_id: GL });
 
     // Nothing to tick: the opening completed all three, and Close is drawn.
+    // A ready month still offers the checks again (closePresses, 2ac3961), and
+    // never the opening a second time.
     const close = presses(page).getByRole("button", { name: "Close the period" });
     await expect(close).toBeVisible();
-    await expect(
-      presses(page).getByRole("button", { name: /^(Open the close|Run the checks again)$/ }),
-    ).toHaveCount(0);
+    await expect(presses(page).getByRole("button", { name: "Run the checks again" })).toBeVisible();
+    await expect(presses(page).getByRole("button", { name: "Open the close" })).toHaveCount(0);
     await expect(page.locator("tr[data-task]")).toHaveCount(3);
     await expect(page.locator('tr[data-task="grni_reviewed"]')).toContainText(
       "Goods received not invoiced reviewed: holds",
