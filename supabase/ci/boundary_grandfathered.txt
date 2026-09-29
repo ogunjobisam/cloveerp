@@ -51,9 +51,3 @@
 # asserts, so a build from empty is governed at that point.
 20260904584000_4240c356-c3ae-4eda-91c5-def7ea0b8efa.sql
 
-
-# Written through the Lovable editor on 27 September and deployed the same
-# night, without the assertion. It restates public.erp_count_tasks(integer)
-# with open counts first: same signature, same grants, no gate. The next
-# migration that asserts, 20261001900000, proves it governed in the same build.
-20260927220223_736a779f-77d3-4783-8f03-af8af8c35ca7.sql
