@@ -825,6 +825,24 @@ jobs:
                   v := erp.describe_vat_disagreements();
                   if jsonb_array_length(v) > 0 then
                     raise notice 'vat disagreements in %: %', r.code, jsonb_pretty(v);
+                    -- Every version of the rules those documents post by, and
+                    -- the organisation's module versions: which one posted it.
+                    raise notice 'posting rules in %: %', r.code, (
+                      select jsonb_pretty(coalesce(jsonb_agg(jsonb_build_object(
+                               'code', pr.code, 'version', pr.version, 'status', pr.status,
+                               'entity_specific', pr.entity_id is not null,
+                               'from', pr.effective_from, 'to', pr.effective_to,
+                               'lines', pr.posting_lines) order by pr.code, pr.version), '[]'::jsonb))
+                        from erp.posting_rule pr
+                       where pr.tenant_id = r.id
+                         and pr.code in (select dt.posting_rule_code
+                                           from erp.document d
+                                           join erp.document_type dt on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
+                                          where d.tenant_id = r.id
+                                            and d.document_number in (select x ->> 'document' from jsonb_array_elements(v) x)));
+                    raise notice 'modules in %: %', r.code, (
+                      select string_agg(mi.install_code || ' v' || coalesce(mi.installer_version::text, '?'), ', ' order by mi.install_code)
+                        from erp.module_installation mi where mi.tenant_id = r.id);
                   end if;
                 end loop;
                 perform erp_meta.stop_acting_in_tenant();
