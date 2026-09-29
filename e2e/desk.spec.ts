@@ -1739,3 +1739,40 @@ test.describe("a VAT return is two presses", () => {
     });
   });
 });
+
+test.describe("despatch offers only what its doors take", () => {
+  // LPR1, L2 of docs/spec/logistics-target-flow.md. The strip's first step
+  // listed deliveries in draft while its one verb, Plan a shipment, takes only
+  // posted deliveries no shipment carries (erp_deliveries_to_ship). The step
+  // now reads that door, across every site (20261002000000).
+  const delivery = (n: number, site: string) => ({
+    document_id: `00000000-0000-4000-8000-0000000d${String(n).padStart(4, "0")}`,
+    document_number: `DN-00010${n}`,
+    document_date: "2026-09-28",
+    party: "Acme Stores",
+    state: "posted",
+    state_name: "Posted",
+    site_id: `00000000-0000-4000-8000-00000000${String(n).padStart(4, "0")}`,
+    site,
+  });
+
+  test("the Delivery step lists what Plan a shipment takes, asked across every site", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_deliveries_to_ship", [delivery(1, "MAIN"), delivery(2, "NORTH")]);
+    const asked: unknown[] = [];
+    page.on("request", (r) => {
+      if (r.url().endsWith("/rpc/erp_deliveries_to_ship")) asked.push(r.postDataJSON());
+    });
+    await page.goto("/logistics");
+
+    const step = page.getByRole("button", { name: /^Delivery, step 1 of \d+, 2 outstanding$/ });
+    await expect(step).toBeVisible({ timeout: 20_000 });
+    await step.click();
+    await expect(page.getByText("DN-000101")).toBeVisible();
+    await expect(page.getByText("DN-000102")).toBeVisible();
+    // Every site: the step names none, so the door is asked for all of them.
+    expect(asked).toContainEqual(expect.objectContaining({ p_site_id: null }));
+  });
+});
