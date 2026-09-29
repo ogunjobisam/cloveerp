@@ -193,7 +193,8 @@ export type ClosePresses = {
  *
  *   not_opened    Open (the door raises the checklist and runs the checks)
  *   in_progress   Run the checks again (the same door, over what is left)
- *   ready         Close
+ *   ready         Close; or Run the checks again, where a check has failed
+ *                 since and the close would be refused
  *   closed        nothing
  *
  * each only where the checklist says the door would take it for this reader
@@ -205,7 +206,7 @@ export function closePresses(c: Checklist, can: (code: string) => boolean): Clos
     may && c.can_open
       ? c.state === "not_opened"
         ? "open"
-        : c.state === "in_progress" || c.state === "ready"
+        : c.state === "in_progress" || (c.state === "ready" && !c.can_close)
           ? "rerun"
           : null
       : null;
