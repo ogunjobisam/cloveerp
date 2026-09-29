@@ -1,23 +1,18 @@
 -- =============================================================================
--- 20260927220223 — emptied; repaired by 20261001905000
+-- 20260927220223 — Open counts come first in the count-task door
 --
--- This file was written through the Lovable editor on 27 September as
--- "20260929500000 — Open counts come first in the count-task door", and
--- deployed that night. It restated public.erp_count_tasks(integer) so that
--- open counts sort first, and it refused to run unless the door stood as
--- 20260928100000 left it.
+-- Written by Lovable (41be47fb) and applied to production on 27 September.
+-- It restated public.erp_count_tasks so open counts sort first, and it sorts
+-- before 20260927400000 and 20260928100000, the two migrations that built the
+-- door it restated: a database built from nothing reached it before its door
+-- existed, and the replay stopped. Its version stays, because production has
+-- recorded it.
 --
--- Its version sorts before 20260927400000 and 20260928100000, the two
--- migrations whose door it restates. Live applied it after them, because the
--- deploy applies a late-arriving file wherever it arrives. A build from an
--- empty database applies it in version order, before them, and its own
--- anchor refused with CLOVEERP_ANCHOR_MOVED, so no build from empty could
--- finish.
---
--- Live has already run this file, so emptying it changes nothing there. The
--- ordering it made true is re-applied, in the right place in the order, by
--- 20261001905000_open_counts_come_first_where_the_order_allows.sql, and the
--- edit is registered in supabase/ci/migrations_edited.txt.
+-- Its restatement moved, unchanged, to
+-- 20261001900000_the_count_task_door_puts_open_counts_first.sql, which runs
+-- after its door exists and proves the door governed in its own transaction.
+-- Reduced to this note with the owner's leave on 29 September, and registered
+-- in supabase/ci/migrations_edited.txt against that migration.
 -- =============================================================================
 
 select 1;

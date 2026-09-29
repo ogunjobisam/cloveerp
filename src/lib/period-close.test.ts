@@ -109,8 +109,9 @@ describe("the two presses", () => {
   });
 
   test("a ready month offers Close only where the door would take it", () => {
+    // Close and nothing beside it: the close is two presses, open and close.
     expect(closePresses(checklist({ state: "ready", can_close: true }), all)).toEqual({
-      open: "rerun",
+      open: null,
       close: true,
     });
     // A completed check failing since: the door would refuse the close, so the
