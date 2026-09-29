@@ -4138,14 +4138,23 @@ export const LOGISTICS: ModuleDef = {
     stages: [
       {
         label: "Delivery",
-        hint: "Picked goods waiting to leave. A delivery is what a shipment carries.",
-        fedBy: "Deliveries appear here once one is created from a confirmed sales order.",
+        hint: "Posted deliveries that no shipment carries yet, from every site. A shipment carries them to one customer.",
+        fedBy:
+          "Deliveries appear here once they are posted, that is once the goods have left stock.",
 
-        typeCode: "delivery",
-        // Waiting to leave. Posted, the goods have gone.
-        states: ["draft"],
-        partyRole: "customer",
-        recordArg: "p_delivery_id",
+        // What Plan a shipment takes, read from the door its picker reads: a
+        // posted delivery that no shipment still standing carries. The step
+        // listed drafts, which that door refuses (20261002000000).
+        list: {
+          fn: "erp_deliveries_to_ship",
+          args: { p_site_id: null },
+          id: "document_id",
+          title: ["document_number"],
+          subtitle: ["party", "site", "document_date"],
+          status: "state_name",
+          noun: "delivery",
+          nounPlural: "deliveries",
+        },
         createFn: "erp_plan_shipment",
       },
       {
@@ -4184,7 +4193,9 @@ export const LOGISTICS: ModuleDef = {
   titleKey: "module.logistics",
   title: "Despatch",
   blurb: "Getting picked goods out of the door and proving they arrived.",
-  howItWorks: "The carrier's cost is added to the value of the stock it carried.",
+  // Said what nothing did: the freight was never added to stock (20261002000000).
+  howItWorks:
+    "A shipment carries posted deliveries to one customer. Its freight is priced from the carrier's rate card and shared across its deliveries by weight.",
   permission: "logistics.read",
   group: "move",
   actions: [
@@ -4257,9 +4268,11 @@ export const LOGISTICS: ModuleDef = {
           name: "p_carrier_code",
           label: "Carrier",
           required: true,
+          // The carriers the organisation may book with, from erp.carrier: the
+          // parties with a carrier role included any that no rate card names,
+          // which erp_book_shipment refuses (20261002000000).
           options: {
-            fn: "erp_parties",
-            args: { p_role_kind: "carrier" },
+            fn: "erp_carriers",
             value: "code",
             label: ["code", "name"],
           },
