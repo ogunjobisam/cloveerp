@@ -22,17 +22,12 @@
 # written once. They are named in boundary_grandfathered.txt rather than the bar
 # being lowered — a rule with a visible list of exceptions is still a rule.
 #
-# One pushed after the rule began is repaired forward instead: a later
-# migration that calls the assertion, paired with it in boundary_repaired.txt,
-# as migrations_edited.txt pairs an edited migration with its repair.
-#
 # Usage: supabase/ci/boundary_in_migration.sh
 set -euo pipefail
 
 HERE="$(dirname "$0")"
 MIGRATIONS="$HERE/../migrations"
 GRANDFATHERED="$HERE/boundary_grandfathered.txt"
-REPAIRED="$HERE/boundary_repaired.txt"
 
 FAILED=0
 CHECKED=0
@@ -45,23 +40,6 @@ is_grandfathered() {
     case "$line" in ""|"#"*) continue ;; esac
     [ "$line" = "$base" ] && return 0
   done < "$GRANDFATHERED"
-  return 1
-}
-
-# A migration pushed without the proof is repaired forward by a later one that
-# asserts it (boundary_repaired.txt). The entry counts only when that repair
-# exists, sorts after the file it repairs, and itself calls the assertion.
-is_repaired() {
-  local base="$1" missing repair
-  [ -f "$REPAIRED" ] || return 1
-  while read -r missing repair _; do
-    case "$missing" in ""|"#"*) continue ;; esac
-    [ "$missing" = "$base" ] || continue
-    [ -n "$repair" ] && [ -f "$MIGRATIONS/$repair" ] || return 1
-    [[ "$repair" > "$base" ]] || return 1
-    grep -qi 'assert_public_api_safe' "$MIGRATIONS/$repair" || return 1
-    return 0
-  done < "$REPAIRED"
   return 1
 }
 
@@ -81,10 +59,6 @@ for f in "$MIGRATIONS"/*.sql; do
     continue
   fi
 
-  if is_repaired "$base"; then
-    continue
-  fi
-
   echo "✗ $base creates a function in schema public and does not call" >&2
   echo "  erp.assert_public_api_safe() in the same migration." >&2
   echo "  §16.2: an ungoverned entry point must not survive its own transaction." >&2
@@ -100,22 +74,6 @@ while read -r line; do
     FAILED=1
   fi
 done < "$GRANDFATHERED"
-
-# The same for the repair register, and an entry whose repair would not be
-# accepted is named rather than left to fail as though it were not there.
-if [ -f "$REPAIRED" ]; then
-  while read -r missing repair _; do
-    case "$missing" in ""|"#"*) continue ;; esac
-    if [ ! -f "$MIGRATIONS/$missing" ]; then
-      echo "✗ $REPAIRED names $missing, which does not exist." >&2
-      FAILED=1
-    elif ! is_repaired "$missing"; then
-      echo "✗ $REPAIRED repairs $missing with '$repair', which does not exist, does not" >&2
-      echo "  sort after it, or does not call erp.assert_public_api_safe()." >&2
-      FAILED=1
-    fi
-  done < "$REPAIRED"
-fi
 
 if [ "$FAILED" -ne 0 ]; then
   echo >&2
