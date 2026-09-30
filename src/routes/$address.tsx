@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Centred, Gate, SignIn } from "../components/erp/gate";
 import { NotFoundComponent } from "../components/erp/not-found";
-import { callErp, isConfigured } from "../lib/erp";
-import { addressPath, addressShaped, readAddressLookup } from "../lib/tenant-address";
+import { isConfigured } from "../lib/erp";
+import { addressPath, addressShaped } from "../lib/tenant-address";
+import { tenantByAddress } from "../lib/tenant-address.functions";
 
 /**
  * An organisation's own way in: cloveerp.com/acme.
@@ -43,8 +44,8 @@ function AddressPage() {
 
   const lookup = useQuery({
     queryKey: ["erp_tenant_by_address", code],
-    queryFn: async () =>
-      readAddressLookup(await callErp<unknown>("erp_tenant_by_address", { p_code: code })),
+    // Asked on the server: a signed-out visitor may call no door themselves.
+    queryFn: () => tenantByAddress({ data: { code } }),
     enabled: isConfigured && shaped,
     staleTime: 5 * 60_000,
   });

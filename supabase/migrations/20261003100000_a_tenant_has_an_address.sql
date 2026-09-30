@@ -10,11 +10,13 @@
 -- derives the organisation from the account that signs in, and nothing here
 -- reads a code to decide what a session may see. What an address does:
 --
---   1. Signed out, it names the organisation on the sign-in form. That needs
---      a door a signed-out visitor can call: erp_tenant_by_address, which
---      answers a code with the organisation's current code and name and
---      nothing else. It does say whether a code is held — an address that
---      names its organisation cannot avoid that — and it says no more.
+--   1. Signed out, it names the organisation on the sign-in form. anon may
+--      execute no erp_* door (erp.public_api_report refuses one, with no
+--      register to excuse it), so the form asks a server function, which
+--      calls erp_tenant_by_address with the service client. The door answers
+--      a code with the organisation's current code and name and nothing else,
+--      and only service_role may execute it. It does say whether a code is
+--      held — an address that names its organisation cannot avoid that.
 --   2. An administrator can change it (erp_set_tenant_address, authorising
 --      administration.configure). The old code is kept against the
 --      organisation, keeps opening the new one, and no other organisation
@@ -28,6 +30,14 @@
 -- The code stays at most 63 characters on the way in — one DNS label — so the
 -- same code can become acme.cloveerp.com later without a rename. Existing
 -- codes are not touched: the rule applies when a code is set.
+--
+-- Two prefixes mean something already: demo- makes an organisation a
+-- demonstration (erp.tenant_is_demonstration), and suites own zz. Fixtures
+-- set both through erp.provision_tenant, so the trigger admits them; what a
+-- person chooses — at onboarding or on the Organisation screen — may not
+-- start with either (erp.refuse_unchosen_address).
+
+set lock_timeout = '30s';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. What may not be an address
@@ -165,12 +175,44 @@ create trigger t_tenant_code_is_an_address
   before insert or update of code on erp.tenant
   for each row execute function erp.tenant_code_is_an_address();
 
+-- What a person chooses is held to more than the trigger holds a fixture to:
+-- the rule, and neither prefix that already means something.
+create or replace function erp.refuse_unchosen_address(p_code text, p_tenant uuid default null)
+returns void
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  v_code    text := lower(btrim(coalesce(p_code, '')));
+  v_refusal text;
+begin
+  if v_code like 'demo-%' or v_code like 'zz%' then
+    raise exception 'CLOVEERP_ADDRESS_RESERVED: an address may not start with "demo-" or "zz", which the product uses for its own organisations'
+      using errcode = '23514',
+            hint = 'Choose an address that starts with your organisation''s name.';
+  end if;
+  v_refusal := erp.tenant_code_refusal(v_code, p_tenant);
+  if v_refusal is not null then
+    raise exception '%', v_refusal
+      using errcode = '23514',
+            hint = 'Choose another address. The form suggests one from the organisation''s name.';
+  end if;
+end;
+$$;
+
+revoke all on function erp.refuse_unchosen_address(text, uuid) from public, anon;
+
+comment on function erp.refuse_unchosen_address(text, uuid) is
+  'Refuses an address a person chose that the trigger would refuse, or that starts with demo- or zz (20261003100000).';
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. The doors
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- A code, answered with the organisation's current code and its name — or
--- null. Called signed out, by the sign-in form at /<code>. An organisation
+-- null. Called by the server function behind the sign-in form at /<code>,
+-- with the service client; no session role may execute it. An organisation
 -- marked deleted has no address.
 create or replace function public.erp_tenant_by_address(p_code text)
 returns jsonb
@@ -190,18 +232,20 @@ as $$
    limit 1
 $$;
 
-revoke all on function public.erp_tenant_by_address(text) from public;
-grant execute on function public.erp_tenant_by_address(text) to anon, authenticated, service_role;
+revoke all on function public.erp_tenant_by_address(text) from public, anon, authenticated;
+grant execute on function public.erp_tenant_by_address(text) to service_role;
 
 comment on function public.erp_tenant_by_address(text) is
   'The organisation an address names: its current code and name, or null. '
-  'Callable signed out, by the sign-in form at /<code>; answers nothing else (20261003100000).';
+  'Executed by service_role only, from the server function behind the sign-in form at /<code>; '
+  'answers nothing else (20261003100000).';
 
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('public', 'erp_tenant_by_address',
    'UNGATED BY DESIGN: a signed-out visitor at /<code> has no organisation and no '
-   'permission, and the sign-in form needs the organisation''s name. Runs as its '
-   'owner because erp.tenant and erp_meta.retired_tenant_code are closed to anon. '
+   'permission, and the sign-in form needs the organisation''s name. Executable by '
+   'service_role alone, from src/lib/tenant-address.functions.ts; no session role '
+   'reaches it. Runs as its owner because erp_meta.retired_tenant_code is closed. '
    'It answers a code with that organisation''s current code and name and nothing '
    'else, and reads no other table. Saying whether a code is held is what an '
    'address does. erp_test.tenant_address_suite proves what it answers.'),
@@ -237,6 +281,7 @@ begin
   if v_was = v_code then
     return jsonb_build_object('code', v_code, 'previous', null, 'changed', false);
   end if;
+  perform erp.refuse_unchosen_address(v_code, v_tenant);
 
   update erp.tenant t set code = v_code where t.id = v_tenant;
 
@@ -275,6 +320,23 @@ insert into erp_meta.public_write_allowance (function_name, gate, rationale) val
 on conflict (function_name) do update set gate = excluded.gate, rationale = excluded.rationale;
 
 select erp_meta.add_help_actions('/administration/organisation', array['erp_set_tenant_address']);
+
+-- Onboarding takes the address as chosen, so it is held to the same rule. The
+-- gate stays the first line (erp_test.invitation_only_suite reads the order);
+-- the address is refused before anything is made.
+create or replace function public.erp_onboard_tenant(p_name text, p_code text)
+returns jsonb
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+begin
+  perform erp.require_organisation_by_invitation();
+  perform erp.refuse_unchosen_address(p_code);
+  return erp.onboard_tenant(p_name, lower(btrim(p_code)));
+end;
+$$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. The routes are reserved, as the build proves
@@ -363,7 +425,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 9;
+  c_expected constant integer := 11;
   v_cases integer := 0;
   v_tag   text := substr(md5(gen_random_uuid()::text), 1, 8);
   a1      uuid := gen_random_uuid();
@@ -389,14 +451,14 @@ begin
     perform set_config('request.jwt.claims', json_build_object('sub', a2)::text, true);
     perform erp.claim_invitation(rb.admin_token);
 
-    -- 1. Signed out, the door answers a code with the name, as anon calls it.
-    v_step := 'looking up an address signed out';
+    -- 1. The server function's call: the service role asks by code.
+    v_step := 'looking up an address as the service role';
     perform set_config('request.jwt.claims', '', true);
-    execute 'set local role anon';
+    execute 'set local role service_role';
     v_answer := public.erp_tenant_by_address('ZZTA-' || v_tag || ' ');
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
-    case_name := 'a signed-out visitor is told the organisation''s code and name, and nothing else';
+    case_name := 'the lookup answers a code with the organisation''s code and name, and nothing else';
     passed := v_answer = jsonb_build_object('code', 'zzta-' || v_tag, 'name', 'Address Suite A');
     detail := coalesce(v_answer::text, 'no answer');
     return next;
@@ -408,7 +470,19 @@ begin
     detail := 'null for an unheld code';
     return next;
 
-    -- 3. The administrator renames through the door, as the data API calls it.
+    -- 3. No session role reaches the lookup: only the server function asks.
+    v_cases := v_cases + 1;
+    case_name := 'neither a signed-out visitor nor a signed-in person may execute the lookup';
+    passed := not has_function_privilege('anon', 'public.erp_tenant_by_address(text)', 'execute')
+          and not has_function_privilege('authenticated', 'public.erp_tenant_by_address(text)', 'execute')
+          and has_function_privilege('service_role', 'public.erp_tenant_by_address(text)', 'execute');
+    detail := format('anon %s, authenticated %s, service_role %s',
+      has_function_privilege('anon', 'public.erp_tenant_by_address(text)', 'execute'),
+      has_function_privilege('authenticated', 'public.erp_tenant_by_address(text)', 'execute'),
+      has_function_privilege('service_role', 'public.erp_tenant_by_address(text)', 'execute'));
+    return next;
+
+    -- 4. The administrator renames through the door, as the data API calls it.
     v_step := 'renaming as the administrator';
     perform set_config('request.jwt.claims',
       json_build_object('sub', a1, 'role', 'authenticated')::text, true);
@@ -422,7 +496,7 @@ begin
     detail := coalesce(v_answer::text, 'no answer');
     return next;
 
-    -- 4. Another organisation may not take the retired address.
+    -- 5. Another organisation may not take the retired address.
     v_err := null;
     perform set_config('request.jwt.claims',
       json_build_object('sub', a2, 'role', 'authenticated')::text, true);
@@ -437,7 +511,7 @@ begin
     detail := coalesce(v_err, 'it was taken');
     return next;
 
-    -- 5. Nor a held one.
+    -- 6. Nor a held one.
     v_err := null;
     execute 'set local role authenticated';
     begin
@@ -450,7 +524,7 @@ begin
     detail := coalesce(v_err, 'it was taken');
     return next;
 
-    -- 6. Nor a reserved one, nor one of the wrong shape.
+    -- 7. Nor a reserved one, nor one of the wrong shape.
     v_err := null;
     execute 'set local role authenticated';
     begin
@@ -473,7 +547,21 @@ begin
     detail := coalesce(v_err, 'it was taken');
     return next;
 
-    -- 7. The organisation takes its own old address back.
+    -- A prefix that makes an organisation a demonstration is not chosen.
+    v_err := null;
+    execute 'set local role authenticated';
+    begin
+      perform public.erp_set_tenant_address('demo-' || v_tag);
+    exception when others then v_err := left(sqlerrm, 200); end;
+    execute format('set local role %I', v_owner);
+    v_cases := v_cases + 1;
+    case_name := 'nobody chooses an address that would make their organisation a demonstration';
+    passed := v_err like 'CLOVEERP_ADDRESS_RESERVED:%'
+          and not erp.tenant_is_demonstration(rb.tenant_id);
+    detail := coalesce(v_err, 'it was taken');
+    return next;
+
+    -- 8. The organisation takes its own old address back.
     perform set_config('request.jwt.claims',
       json_build_object('sub', a1, 'role', 'authenticated')::text, true);
     execute 'set local role authenticated';
@@ -488,7 +576,7 @@ begin
     detail := coalesce(v_answer::text, 'no answer');
     return next;
 
-    -- 8. Nobody signed out reaches the write door.
+    -- 9. Nobody signed out reaches the write door.
     v_step := 'renaming signed out';
     v_err := null;
     perform set_config('request.jwt.claims', '', true);
@@ -551,8 +639,8 @@ begin
       E'\n  ' || v_detail
       using hint = 'An address would open the wrong organisation, be taken from its owner, or be changed by somebody who may not. Read the case that failed.';
   end if;
-  if v_total <> 9 then
-    raise exception 'CLOVEERP_TENANT_ADDRESS_SUITE_SHRANK: % case(s), expected 9', v_total
+  if v_total <> 11 then
+    raise exception 'CLOVEERP_TENANT_ADDRESS_SUITE_SHRANK: % case(s), expected 11', v_total
       using hint = 'A suite that loses a case reports success. Restore the case or re-pin the count.';
   end if;
   return format('tenant address: %s/%s cases passed', v_total, v_total);
@@ -573,13 +661,10 @@ select erp.apply_audit_coverage();
 select erp.apply_live_config_guards();
 select erp.apply_execute_grants();
 
--- apply_execute_grants() grants from the invoker reach, which does not name a
--- door a signed-out visitor calls. Granted again after it, so the reach report
--- and this door agree on the one thing anon may execute here.
-grant execute on function public.erp_tenant_by_address(text) to anon, authenticated, service_role;
-
 select erp.assert_isolation();
 select erp.assert_public_api_safe();
+select erp.assert_authorising_doors_are_volatile();
+select erp.assert_invoker_doors_executable();
 select erp.assert_no_public_execute();
 select erp.assert_no_legacy_refusal_prefix();
 select erp.assert_refusals_name_next_action();

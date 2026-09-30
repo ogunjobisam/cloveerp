@@ -9,7 +9,7 @@
 # at /acme would take the address of an organisation that has held it for a
 # year, without an error anywhere.
 #
-# The database refuses a reserved code on the way in (erp.tenant_code_admits).
+# The database refuses a reserved code on the way in (the trigger on erp.tenant.code).
 # What it cannot see is the list of routes. This hands it every top-level
 # route name under src/routes, and erp.assert_route_names_reserved() refuses
 # one that erp_meta.reserved_tenant_code does not hold — and one that an
