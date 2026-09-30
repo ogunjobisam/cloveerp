@@ -33,7 +33,7 @@ alter table erp_meta.reserved_tenant_code
 
 comment on column erp_meta.reserved_tenant_code.platform_may_hold is
   'Whether the platform''s own organisation may take this code: true for the '
-  'product''s own words, false for the application''s routes (20261003500000).';
+  'product''s own words, false for the application''s routes (20261003510000).';
 
 update erp_meta.reserved_tenant_code
    set platform_may_hold = true
@@ -72,7 +72,7 @@ $$;
 
 comment on function erp.tenant_code_refusal(text, uuid) is
   'Why a code may not be an organisation''s address, or null when it may; the '
-  'platform''s own organisation may hold the product''s own words (20261003500000).';
+  'platform''s own organisation may hold the product''s own words (20261003510000).';
 
 create or replace function erp.refuse_unchosen_address(p_code text, p_tenant uuid default null)
 returns void
@@ -172,9 +172,11 @@ begin
 
   perform erp.refuse_unchosen_address(v_code, v_t.id);
 
-  perform set_config('erp.job_tenant_id', v_t.id::text, true);
+  -- Inside the organisation it names, not the operator's own
+  -- (erp.assert_console_acts_in_its_organisation, 20260914080000).
+  perform erp_meta.act_in_tenant(v_t.id);
   update erp.tenant t set code = v_code where t.id = v_t.id;
-  perform set_config('erp.job_tenant_id', '', true);
+  perform erp_meta.stop_acting_in_tenant();
 
   perform erp_meta.platform_log(v, 'platform.tenant_address_changed', v_t.id, v_code, p_reason,
                                 jsonb_build_object('previous', v_t.code, 'code', v_code));
@@ -188,7 +190,7 @@ grant execute on function public.erp_platform_set_tenant_address(uuid, text, tex
 
 comment on function public.erp_platform_set_tenant_address(uuid, text, text) is
   'Changes an organisation''s address from the platform console, for operators and '
-  'above, with a reason; the old address keeps opening the new (20261003500000).';
+  'above, with a reason; the old address keeps opening the new (20261003510000).';
 
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('public', 'erp_platform_set_tenant_address',
@@ -377,7 +379,7 @@ $$;
 revoke all on function erp_test.assert_platform_address_suite() from public, anon;
 
 comment on function erp_test.assert_platform_address_suite() is
-  'The platform takes its own name, and the console changes an address (20261003500000).';
+  'The platform takes its own name, and the console changes an address (20261003510000).';
 
 -- The generators, which are idempotent and run at the end of every migration.
 select erp.apply_row_security();
