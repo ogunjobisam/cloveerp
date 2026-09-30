@@ -128,6 +128,7 @@ export function OrganisationPage({ code, role }: { code: string; role: PlatformR
   }
 
   const inside = (mine.data ?? []).some((m) => m.tenant_id === t.id && m.is_active);
+  const member = (mine.data ?? []).some((m) => m.tenant_id === t.id && m.is_member === true);
 
   return (
     <div className="flex flex-col gap-5">
@@ -159,7 +160,7 @@ export function OrganisationPage({ code, role }: { code: string; role: PlatformR
             : ""}
         </p>
         <div className="mt-4">
-          <OrganisationActions tenant={t} role={role} inside={inside} size="full" />
+          <OrganisationActions tenant={t} role={role} inside={inside} member={member} size="full" />
         </div>
       </section>
 

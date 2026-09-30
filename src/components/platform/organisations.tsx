@@ -100,6 +100,7 @@ export function Companies({ role }: { role: PlatformRole }) {
     queryFn: () => callErp<MyTenancy[]>("erp_platform_my_tenancies"),
   });
   const inside = new Set((mine.data ?? []).filter((m) => m.is_active).map((m) => m.tenant_id));
+  const member = new Set((mine.data ?? []).filter((m) => m.is_member).map((m) => m.tenant_id));
 
   const rows = tenants.data ?? [];
 
@@ -291,7 +292,12 @@ export function Companies({ role }: { role: PlatformRole }) {
                   {t.sites === 1 ? "site" : "sites"}
                 </td>
                 <td className="py-3 pr-0">
-                  <OrganisationActions tenant={t} role={role} inside={inside.has(t.id)} />
+                  <OrganisationActions
+                    tenant={t}
+                    role={role}
+                    inside={inside.has(t.id)}
+                    member={member.has(t.id)}
+                  />
                 </td>
               </tr>
             ))}

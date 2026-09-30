@@ -50,12 +50,18 @@ export function OrganisationActions({
   tenant: t,
   role,
   inside,
+  member = false,
   size = "compact",
 }: {
   tenant: PlatformTenant;
   role: PlatformRole;
   /** Whether the signed-in person is currently inside this organisation. */
   inside: boolean;
+  /**
+   * Whether the signed-in person is this organisation's own member rather than
+   * a visitor. A member opens it; there is no support access to leave.
+   */
+  member?: boolean;
   size?: "compact" | "full";
 }) {
   const queryClient = useQueryClient();
@@ -74,6 +80,11 @@ export function OrganisationActions({
     onSuccess: refresh,
   });
 
+  const open = useMutation({
+    mutationFn: () => callErp("erp_set_active_tenant", { p_tenant_id: t.id }),
+    onSuccess: () => void refresh().then(() => navigate({ to: "/" })),
+  });
+
   const reactivate = useMutation({
     mutationFn: () =>
       callErp("erp_platform_set_tenant_status", {
@@ -84,11 +95,22 @@ export function OrganisationActions({
     onSuccess: refresh,
   });
 
-  const clickError = leave.error ?? reactivate.error ?? null;
+  const clickError = leave.error ?? open.error ?? reactivate.error ?? null;
 
   return (
     <div className="flex flex-wrap items-start gap-2">
-      {inside ? (
+      {member && inside ? (
+        <button
+          type="button"
+          disabled={open.isPending}
+          onClick={() => open.mutate()}
+          title="You are a member of this organisation: this switches to it"
+          className={`${button} border-primary/50 bg-primary/5`}
+        >
+          <LogIn className={icon} />
+          {open.isPending ? "Opening…" : "Open"}
+        </button>
+      ) : inside ? (
         <button
           type="button"
           disabled={leave.isPending}
