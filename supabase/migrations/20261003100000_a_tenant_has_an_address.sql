@@ -31,11 +31,13 @@
 -- same code can become acme.cloveerp.com later without a rename. Existing
 -- codes are not touched: the rule applies when a code is set.
 --
--- Two prefixes mean something already: demo- makes an organisation a
--- demonstration (erp.tenant_is_demonstration), and suites own zz. Fixtures
--- set both through erp.provision_tenant, so the trigger admits them; what a
--- person chooses — at onboarding or on the Organisation screen — may not
--- start with either (erp.refuse_unchosen_address).
+-- One prefix means something already: demo- makes an organisation a
+-- demonstration (erp.tenant_is_demonstration), which quietens its email and
+-- lets the catch-up trade in it. Fixtures set it through
+-- erp.provision_tenant, so the trigger admits it; what a person chooses — at
+-- onboarding or on the Organisation screen — may not start with it
+-- (erp.refuse_unchosen_address). zz is the suites' prefix by convention and
+-- is not refused: suites onboard through the same door with zz codes.
 
 set lock_timeout = '30s';
 
@@ -176,7 +178,7 @@ create trigger t_tenant_code_is_an_address
   for each row execute function erp.tenant_code_is_an_address();
 
 -- What a person chooses is held to more than the trigger holds a fixture to:
--- the rule, and neither prefix that already means something.
+-- the rule, and not the prefix that makes an organisation a demonstration.
 create or replace function erp.refuse_unchosen_address(p_code text, p_tenant uuid default null)
 returns void
 language plpgsql
@@ -187,8 +189,8 @@ declare
   v_code    text := lower(btrim(coalesce(p_code, '')));
   v_refusal text;
 begin
-  if v_code like 'demo-%' or v_code like 'zz%' then
-    raise exception 'CLOVEERP_ADDRESS_RESERVED: an address may not start with "demo-" or "zz", which the product uses for its own organisations'
+  if v_code like 'demo-%' then
+    raise exception 'CLOVEERP_ADDRESS_RESERVED: an address may not start with "demo-", which marks the product''s own demonstration organisations'
       using errcode = '23514',
             hint = 'Choose an address that starts with your organisation''s name.';
   end if;
@@ -204,7 +206,7 @@ $$;
 revoke all on function erp.refuse_unchosen_address(text, uuid) from public, anon;
 
 comment on function erp.refuse_unchosen_address(text, uuid) is
-  'Refuses an address a person chose that the trigger would refuse, or that starts with demo- or zz (20261003100000).';
+  'Refuses an address a person chose that the trigger would refuse, or that starts with demo- (20261003100000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. The doors
@@ -441,11 +443,11 @@ begin
     v_step := 'two organisations, each with its administrator signed in';
     perform set_config('request.jwt.claims', '', true);
     select * into ra from erp.provision_tenant(
-      'zzta-' || v_tag, 'Address Suite A', 'a@zzta-' || v_tag || '.test', 'A Admin');
+      'addra-' || v_tag, 'Address Suite A', 'a@addr-' || v_tag || '.test', 'A Admin');
     select * into rb from erp.provision_tenant(
-      'zztb-' || v_tag, 'Address Suite B', 'b@zzta-' || v_tag || '.test', 'B Admin');
+      'addrb-' || v_tag, 'Address Suite B', 'b@addr-' || v_tag || '.test', 'B Admin');
     insert into auth.users (id, email) values
-      (a1, 'a@zzta-' || v_tag || '.test'), (a2, 'b@zzta-' || v_tag || '.test');
+      (a1, 'a@addr-' || v_tag || '.test'), (a2, 'b@addr-' || v_tag || '.test');
     perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
     perform erp.claim_invitation(ra.admin_token);
     perform set_config('request.jwt.claims', json_build_object('sub', a2)::text, true);
@@ -455,18 +457,18 @@ begin
     v_step := 'looking up an address as the service role';
     perform set_config('request.jwt.claims', '', true);
     execute 'set local role service_role';
-    v_answer := public.erp_tenant_by_address('ZZTA-' || v_tag || ' ');
+    v_answer := public.erp_tenant_by_address('ADDRA-' || v_tag || ' ');
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
     case_name := 'the lookup answers a code with the organisation''s code and name, and nothing else';
-    passed := v_answer = jsonb_build_object('code', 'zzta-' || v_tag, 'name', 'Address Suite A');
+    passed := v_answer = jsonb_build_object('code', 'addra-' || v_tag, 'name', 'Address Suite A');
     detail := coalesce(v_answer::text, 'no answer');
     return next;
 
     -- 2. A code nobody holds is null.
     v_cases := v_cases + 1;
     case_name := 'a code nobody holds answers nothing';
-    passed := public.erp_tenant_by_address('zzta-none-' || v_tag) is null;
+    passed := public.erp_tenant_by_address('addra-none-' || v_tag) is null;
     detail := 'null for an unheld code';
     return next;
 
@@ -487,12 +489,12 @@ begin
     perform set_config('request.jwt.claims',
       json_build_object('sub', a1, 'role', 'authenticated')::text, true);
     execute 'set local role authenticated';
-    v_answer := public.erp_set_tenant_address('zztc-' || v_tag);
+    v_answer := public.erp_set_tenant_address('addrc-' || v_tag);
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
     case_name := 'an administrator changes the address, and the old one opens the new';
-    passed := (select t.code from erp.tenant t where t.id = ra.tenant_id) = 'zztc-' || v_tag
-          and (public.erp_tenant_by_address('zzta-' || v_tag) ->> 'code') = 'zztc-' || v_tag;
+    passed := (select t.code from erp.tenant t where t.id = ra.tenant_id) = 'addrc-' || v_tag
+          and (public.erp_tenant_by_address('addra-' || v_tag) ->> 'code') = 'addrc-' || v_tag;
     detail := coalesce(v_answer::text, 'no answer');
     return next;
 
@@ -502,7 +504,7 @@ begin
       json_build_object('sub', a2, 'role', 'authenticated')::text, true);
     execute 'set local role authenticated';
     begin
-      perform public.erp_set_tenant_address('zzta-' || v_tag);
+      perform public.erp_set_tenant_address('addra-' || v_tag);
     exception when others then v_err := left(sqlerrm, 200); end;
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
@@ -515,7 +517,7 @@ begin
     v_err := null;
     execute 'set local role authenticated';
     begin
-      perform public.erp_set_tenant_address('zztc-' || v_tag);
+      perform public.erp_set_tenant_address('addrc-' || v_tag);
     exception when others then v_err := left(sqlerrm, 200); end;
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
@@ -565,14 +567,14 @@ begin
     perform set_config('request.jwt.claims',
       json_build_object('sub', a1, 'role', 'authenticated')::text, true);
     execute 'set local role authenticated';
-    v_answer := public.erp_set_tenant_address('zzta-' || v_tag);
+    v_answer := public.erp_set_tenant_address('addra-' || v_tag);
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
     case_name := 'an organisation may take back an address it had';
-    passed := (select t.code from erp.tenant t where t.id = ra.tenant_id) = 'zzta-' || v_tag
-          and not exists (select 1 from erp_meta.retired_tenant_code x where x.code = 'zzta-' || v_tag)
+    passed := (select t.code from erp.tenant t where t.id = ra.tenant_id) = 'addra-' || v_tag
+          and not exists (select 1 from erp_meta.retired_tenant_code x where x.code = 'addra-' || v_tag)
           and exists (select 1 from erp_meta.retired_tenant_code x
-                       where x.code = 'zztc-' || v_tag and x.owner_tenant_id = ra.tenant_id);
+                       where x.code = 'addrc-' || v_tag and x.owner_tenant_id = ra.tenant_id);
     detail := coalesce(v_answer::text, 'no answer');
     return next;
 
@@ -582,13 +584,13 @@ begin
     perform set_config('request.jwt.claims', '', true);
     execute 'set local role anon';
     begin
-      perform public.erp_set_tenant_address('zztd-' || v_tag);
+      perform public.erp_set_tenant_address('addrd-' || v_tag);
     exception when others then v_err := left(sqlerrm, 200); end;
     execute format('set local role %I', v_owner);
     v_cases := v_cases + 1;
     case_name := 'a signed-out caller cannot change an address';
     passed := v_err is not null
-          and not exists (select 1 from erp.tenant t where t.code = 'zztd-' || v_tag);
+          and not exists (select 1 from erp.tenant t where t.code = 'addrd-' || v_tag);
     detail := coalesce(v_err, 'it was changed');
     return next;
 
@@ -609,7 +611,7 @@ begin
       using detail = coalesce(v_state, 'A case was added or lost. Update the count deliberately.'),
             hint = 'Read where the fixture stopped; a case that cannot run is a case that fails.';
   end if;
-  if exists (select 1 from erp.tenant t where t.code in ('zzta-' || v_tag, 'zztb-' || v_tag, 'zztc-' || v_tag))
+  if exists (select 1 from erp.tenant t where t.code in ('addra-' || v_tag, 'addrb-' || v_tag, 'addrc-' || v_tag))
      or exists (select 1 from auth.users u where u.id in (a1, a2)) then
     raise exception 'CLOVEERP_TENANT_ADDRESS_SUITE_LEAKED: the fixture was not undone'
       using hint = 'The suite must raise CLOVEERP_SUITE_UNDO inside its block so everything it made rolls back.';
