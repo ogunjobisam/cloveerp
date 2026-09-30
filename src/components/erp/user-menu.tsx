@@ -14,6 +14,7 @@ import {
 import { callErp, hasPermission, type ErpSession } from "../../lib/erp";
 import { usePlatformMe } from "../../lib/platform";
 import { useT } from "../../lib/i18n";
+import { rolesLabel } from "../../lib/roles-label";
 import { TOUCH } from "./page";
 
 type MyTenant = {
@@ -50,7 +51,7 @@ export function UserMenu({
   onNavigate?: () => void;
   className?: string;
 }) {
-  const { t } = useT();
+  const { t, ui } = useT();
   const queryClient = useQueryClient();
 
   const { data: tenants } = useQuery({
@@ -69,6 +70,11 @@ export function UserMenu({
   });
 
   const name = session.principal?.display_name ?? "Signed in";
+  const access = rolesLabel(
+    session.roles,
+    (r) => (r.name_key ? t(r.name_key, r.name) : r.name),
+    ui("as support"),
+  );
   const email = session.principal?.email ?? null;
   const mayAdminister = hasPermission(session, "administration.configure");
   // One account belongs to exactly one company (spec §2). Platform staff are
@@ -85,13 +91,23 @@ export function UserMenu({
         <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold text-foreground">
           {initials(name)}
         </span>
-        <span className="hidden max-w-[10rem] truncate md:inline">{name}</span>
+        <span className="hidden min-w-0 flex-col items-start text-left leading-tight md:flex">
+          <span className="max-w-[12rem] truncate">{name}</span>
+          {access ? (
+            <span className="max-w-[12rem] truncate text-[11px] text-muted-foreground">
+              {access}
+            </span>
+          ) : null}
+        </span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
           <span className="truncate text-sm font-medium">{name}</span>
+          {access ? (
+            <span className="truncate text-xs font-normal text-muted-foreground">{access}</span>
+          ) : null}
           {email ? (
             <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
           ) : null}
