@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { accountResolver, partyKeysFrom } from "./crosswalk";
 import { controlFigure, controlQuantity, partyResolver, readFile } from "./pipeline";
 import { unleashedProducts } from "./profiles/unleashed-products";
+import { unleashedTerm, xeroTerm } from "./profiles/party";
+import { unleashedCustomers, unleashedSuppliers } from "./profiles/unleashed-parties";
 import { chartKey, controlKindOf, xeroChart } from "./profiles/xero-chart";
 import { unleashedStock } from "./profiles/unleashed-stock";
 import { xeroAgedPayables, xeroAgedReceivables } from "./profiles/xero-aged";
@@ -24,7 +26,18 @@ const fixture = (name: string) =>
 const ctx = (
   keys: Record<string, string> = {},
   defaultLocation = "",
-  more: Partial<Pick<ProfileContext, "account" | "chartLoaded" | "accounts" | "chartChoices">> = {},
+  more: Partial<
+    Pick<
+      ProfileContext,
+      | "account"
+      | "chartLoaded"
+      | "accounts"
+      | "chartChoices"
+      | "partyRoles"
+      | "defaultPartyRole"
+      | "termsFromXero"
+    >
+  > = {},
 ): ProfileContext => ({
   partyCode: partyResolver(keys),
   account: () => null,
@@ -32,6 +45,9 @@ const ctx = (
   defaultLocation,
   accounts: [],
   chartChoices: {},
+  partyRoles: {},
+  defaultPartyRole: "none",
+  termsFromXero: false,
   ...more,
 });
 
@@ -47,32 +63,62 @@ const messagesAt = (r: ProfileResult, line: number) =>
 
 describe("Xero contacts", () => {
   const r = run(xeroContacts, "xero-contacts.csv");
+  const row = (i: number) => r.rows[i] as Record<string, unknown>;
 
-  test("an AccountNumber is the code; a blank one is derived from the name", () => {
-    expect(r.rows[0]).toMatchObject({ code: "BAY001", name: "Bayside Club", country_code: "AU" });
-    expect(r.rows[1]).toMatchObject({ code: "HAMILTONSMITHLTD", name: "Hamilton Smith Ltd" });
+  test("each contact is one whole profile, keyed by its Xero name", () => {
+    expect(row(0)).toMatchObject({
+      source: "xero",
+      legacy_key: "Bayside Club",
+      code: "BAY001",
+      name: "Bayside Club",
+      country_code: "AU",
+    });
+    expect(row(1)).toMatchObject({ code: "HAMILTONSMITHLTD", name: "Hamilton Smith Ltd" });
   });
 
-  test("a VAT number is put in HMRC's form, and a bare nine digits gains its GB", () => {
-    expect(r.rows[1]?.["tax_identifier"]).toBe("GB123456789");
-    expect(r.rows[2]?.["tax_identifier"]).toBe("GB123456789");
+  test("the postal address is billing and carries every line, the town and the postcode", () => {
+    expect(row(0)["addresses"]).toEqual([
+      {
+        kind: "billing",
+        lines: ["148 Bay Harbour Road"],
+        locality: "Ridge Heights",
+        region: "Madeupville",
+        postcode: "VIC 3999",
+        country_code: "AU",
+      },
+    ]);
+    expect((row(1)["addresses"] as { lines: string[] }[])[0]?.lines).toEqual([
+      "Unit 4, Mill Lane",
+      "Line two\r\nwith a break",
+    ]);
   });
 
-  test("a malformed VAT number is kept and flagged", () => {
-    expect(r.rows[3]?.["tax_identifier"]).toBe("GB12345");
+  test("a town with no first line is left out and said", () => {
+    expect(row(2)["addresses"]).toBeUndefined();
+    expect(
+      r.findings.some((f) => f.message.startsWith("the billing address has no first line")),
+    ).toBe(true);
+  });
+
+  test("the default contact carries the person, email and phone", () => {
+    expect(row(0)["contact"]).toEqual({
+      name: "Bob Partridge",
+      email: "secretary@bayside.example",
+      phone: "+61 3 5555 0123",
+    });
+  });
+
+  test("a VAT number is put in HMRC's form, and a malformed one is kept and flagged", () => {
+    expect(row(1)["tax_identifier"]).toBe("GB123456789");
+    expect(row(2)["tax_identifier"]).toBe("GB123456789");
+    expect(row(3)["tax_identifier"]).toBe("GB12345");
     expect(r.findings.some((f) => f.severity === "warning" && f.message.includes("GB12345"))).toBe(
       true,
     );
   });
 
-  test("the UK's other names are GB", () => {
-    expect(r.rows[1]?.["country_code"]).toBe("GB");
-    expect(r.rows[2]?.["country_code"]).toBe("GB");
-    expect(r.rows[3]?.["country_code"]).toBe("GB");
-  });
-
   test("a doubled quote in a name survives", () => {
-    expect(r.rows[4]?.["name"]).toBe('Ridgeway "Old" Bank');
+    expect(row(4)["name"]).toBe('Ridgeway "Old" Bank');
   });
 
   test("an unknown country and a missing name are refused, not staged", () => {
@@ -82,26 +128,139 @@ describe("Xero contacts", () => {
     expect(r.rows).toHaveLength(5);
   });
 
-  test("only keys the party door accepts are staged", () => {
-    const allowed = new Set([
-      "code",
-      "name",
-      "legal_name",
-      "tax_identifier",
-      "registration_number",
-      "country_code",
-    ]);
-    for (const row of r.rows) for (const k of Object.keys(row)) expect(allowed.has(k)).toBe(true);
+  test("with no role chosen, contacts have none and the role step is named", () => {
+    expect(row(0)["roles"]).toBeUndefined();
+    expect(r.parties.map((p) => p.roles.length)).toEqual([0, 0, 0, 0, 0]);
+    expect(r.findings.some((f) => f.message.startsWith("5 contacts have no role yet"))).toBe(true);
   });
 
-  test("addresses, contacts and terms are reported as waiting, not dropped", () => {
-    expect(r.deferred.some((d) => d.startsWith("POAddressLine1"))).toBe(true);
-    expect(r.deferred.some((d) => d.startsWith("DueDateSalesTerm"))).toBe(true);
-    expect(r.deferred.some((d) => d.startsWith("EmailAddress"))).toBe(true);
+  test("Xero terms are read and held back while Unleashed is the source", () => {
+    expect(row(0)["customer_terms"]).toBeUndefined();
+    expect(
+      r.findings.some((f) => f.message.startsWith("3 Xero payment terms are read and not staged")),
+    ).toBe(true);
+  });
+
+  test("with a default role and terms from Xero, terms follow the roles", () => {
+    const withTerms = run(
+      xeroContacts,
+      "xero-contacts.csv",
+      ctx({}, "", {
+        defaultPartyRole: "customer",
+        termsFromXero: true,
+        partyRoles: { PowerDirect: ["supplier"] },
+      }),
+    );
+    const at = (i: number) => withTerms.rows[i] as Record<string, unknown>;
+    expect(at(0)).toMatchObject({
+      roles: ["customer"],
+      customer_terms: { payment_terms_code: "EOM30" },
+    });
+    expect(at(1)).toMatchObject({
+      roles: ["customer"],
+      customer_terms: { payment_terms_code: "NET30" },
+    });
+    expect(at(3)).toMatchObject({
+      roles: ["supplier"],
+      supplier_terms: { payment_terms_code: "NET30" },
+    });
+    expect(at(3)["customer_terms"]).toBeUndefined();
   });
 
   test("the names it staged are kept for the ledgers", () => {
     expect(r.partyKeys["Hamilton Smith Ltd"]).toBe("HAMILTONSMITHLTD");
+  });
+});
+
+describe("Unleashed customers and suppliers", () => {
+  const xero = { "Hamilton Smith Ltd": "HAMILTONSMITHLTD" };
+  const r = run(unleashedCustomers, "unleashed-customers.csv", ctx(xero));
+  const row = (i: number) => r.rows[i] as Record<string, unknown>;
+
+  test("a customer carries its role, currency, term and credit limit", () => {
+    expect(row(0)).toMatchObject({
+      source: "unleashed",
+      legacy_key: "BAYSIDE",
+      code: "BAYSIDE",
+      roles: ["customer"],
+      customer_terms: { currency: "AUD", payment_terms_code: "NET30", credit_limit_minor: 500000 },
+    });
+  });
+
+  test("a party Xero already loaded keeps its Xero code", () => {
+    expect(row(1)).toMatchObject({ legacy_key: "HAM01", code: "HAMILTONSMITHLTD" });
+    expect(
+      r.findings.some(
+        (f) => f.message === "HAM01 is HAMILTONSMITHLTD from Xero's contacts; it keeps that code",
+      ),
+    ).toBe(true);
+  });
+
+  test("a term Clove has no code for maps to the nearest, and says so", () => {
+    expect(row(1)["customer_terms"]).toMatchObject({ payment_terms_code: "EOM30" });
+    expect(row(2)["customer_terms"]).toMatchObject({ payment_terms_code: "NET14" });
+    expect(
+      r.findings.some((f) => f.message === "20 days has no term of its own; NET14 is the nearest"),
+    ).toBe(true);
+  });
+
+  test("both addresses, the UK's other name included", () => {
+    expect(row(1)["addresses"]).toEqual([
+      {
+        kind: "billing",
+        lines: ["Unit 4", "Mill Lane"],
+        locality: "Leeds",
+        postcode: "LS1 4AB",
+        country_code: "GB",
+      },
+      {
+        kind: "delivery",
+        lines: ["Dock 2"],
+        locality: "Leeds",
+        region: "West Yorkshire",
+        postcode: "LS2 2BB",
+        country_code: "GB",
+      },
+    ]);
+  });
+
+  test("obsolete, repeated and codeless lines are not staged", () => {
+    expect(r.rows.map((x) => x["legacy_key"])).toEqual(["BAYSIDE", "HAM01", "NEWCO"]);
+    expect(r.findings.some((f) => f.message === "skipped: OLDCO is obsolete in Unleashed")).toBe(
+      true,
+    );
+    expect(r.findings.some((f) => f.message.startsWith("BAYSIDE is also on line"))).toBe(true);
+  });
+
+  test("a supplier carries supplier terms and no credit limit", () => {
+    const s = run(unleashedSuppliers, "unleashed-suppliers.csv");
+    expect(s.rows[0]).toMatchObject({
+      code: "POWER",
+      roles: ["supplier"],
+      supplier_terms: { currency: "GBP", payment_terms_code: "EOM" },
+    });
+    expect(s.rows[1]).toMatchObject({
+      supplier_terms: { currency: "EUR", payment_terms_code: "PREPAID" },
+    });
+    expect((s.rows[0] as Record<string, unknown>)["customer_terms"]).toBeUndefined();
+  });
+});
+
+describe("payment terms", () => {
+  test("Xero's terms", () => {
+    expect(xeroTerm("30", "DAYSAFTERBILLDATE")).toEqual({ code: "NET30", note: null });
+    expect(xeroTerm("0", "DAYSAFTERBILLDATE")?.code).toBe("COD");
+    expect(xeroTerm("20", "OFFOLLOWINGMONTH")?.code).toBe("EOM30");
+    expect(xeroTerm("0", "DAYSAFTERBILLMONTH")).toEqual({ code: "EOM", note: null });
+    expect(xeroTerm("", "")).toBeNull();
+  });
+
+  test("Unleashed's terms", () => {
+    expect(unleashedTerm("Net 30")).toEqual({ code: "NET30", note: null });
+    expect(unleashedTerm("End of Month")).toEqual({ code: "EOM", note: null });
+    expect(unleashedTerm("Prepaid")).toEqual({ code: "PREPAID", note: null });
+    expect(unleashedTerm("100 days")?.code).toBe("NET90");
+    expect(unleashedTerm("whenever")).toBeNull();
   });
 });
 

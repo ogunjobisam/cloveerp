@@ -1,4 +1,5 @@
 import type { Profile } from "../types";
+import { unleashedCustomers, unleashedSuppliers } from "./unleashed-parties";
 import { unleashedProducts } from "./unleashed-products";
 import { unleashedStock } from "./unleashed-stock";
 import { xeroAgedPayables, xeroAgedReceivables } from "./xero-aged";
@@ -10,6 +11,8 @@ import { xeroTrialBalance } from "./xero-trial-balance";
 export const PROFILES: readonly Profile[] = [
   xeroChart,
   xeroContacts,
+  unleashedCustomers,
+  unleashedSuppliers,
   unleashedProducts,
   unleashedStock,
   xeroAgedReceivables,
