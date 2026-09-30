@@ -80,7 +80,7 @@ const SHIPMENT_LIST: StageList = {
   args: { p_limit: 200 },
   id: "shipment_id",
   // The document's SHP- number, or the reference of one raised before
-  // shipments were documents (20261002400000).
+  // shipments were documents (20261002500000).
   title: ["number"],
   subtitle: ["destination", "carrier"],
   status: "status",
@@ -4144,7 +4144,7 @@ export const LOGISTICS: ModuleDef = {
         // What Ship these deliveries takes, read from the door its picker
         // reads: a posted delivery that no shipment still standing carries
         // (20261002000000). One press opens the shipment and books the carrier
-        // the rate card recommends (20261002400000).
+        // the rate card recommends (20261002500000).
         list: {
           fn: "erp_deliveries_to_ship",
           args: { p_site_id: null },
@@ -4191,7 +4191,7 @@ export const LOGISTICS: ModuleDef = {
         {
           // Ticked from the deliveries no shipment carries, from every site;
           // the door refuses two sites or two customers by name
-          // (20261002400000).
+          // (20261002500000).
           kind: "multi",
           name: "p_delivery_ids",
           label: "Deliveries",

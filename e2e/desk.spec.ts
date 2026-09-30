@@ -1776,7 +1776,7 @@ test.describe("despatch offers only what its doors take", () => {
     expect(asked).toContainEqual(expect.objectContaining({ p_site_id: null }));
   });
 
-  // LPR2, L4 (20261002400000): despatch is two presses. Ship these deliveries
+  // LPR2, L4 (20261002500000): despatch is two presses. Ship these deliveries
   // opens the shipment and books the carrier the rate card recommends, so the
   // strip draws no carrier or booking step between the two.
   test("despatch is two steps, and the first one ships", async ({ page, backend }) => {

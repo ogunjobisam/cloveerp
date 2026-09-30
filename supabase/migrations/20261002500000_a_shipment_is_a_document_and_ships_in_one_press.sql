@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261002400000  A shipment is a document, and ships in one press
+-- 20261002500000  A shipment is a document, and ships in one press
 -- -----------------------------------------------------------------------------
 -- LPR2 of docs/spec/logistics-target-flow.md: nodes L3 and L4.
 --
@@ -79,7 +79,7 @@ select erp.register_refusal('CLOVEERP_SHIPMENT_DELIVERED',
 
 select erp.register_refusal('CLOVEERP_SHIPMENT_BEFORE_THE_SPINE',
   'Booking or delivering a shipment raised before shipments were documents.',
-  'It has no document, so there is no lifecycle to move it along (20261002400000).',
+  'It has no document, so there is no lifecycle to move it along (20261002500000).',
   'Cancel it, which releases its deliveries, and ship them again.');
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ values
   ('shipment', 'document.shipment', 'logistics', 'outbound', false, false, true, true,
    'A shipment: posted deliveries of one site to one customer, booked with a carrier at a cost and '
    'signed for on arrival. Opened by erp.ship_deliveries(); its detail is erp.shipment. It moves no '
-   'stock, which the deliveries moved, and posts nothing (20261002400000).',
+   'stock, which the deliveries moved, and posts nothing (20261002500000).',
    'logistics.plan')
 on conflict (code) do update
   set name_key = excluded.name_key, module_code = excluded.module_code, flow = excluded.flow,
@@ -102,7 +102,7 @@ on conflict (code) do update
       description = excluded.description, create_permission = excluded.create_permission;
 
 insert into erp_ref.resource (key, locale, value, module_code, description) values
-  ('document.shipment', 'en', 'Shipment', 'logistics', 'Document base type name (20261002400000).'),
+  ('document.shipment', 'en', 'Shipment', 'logistics', 'Document base type name (20261002500000).'),
   ('document.shipment', 'de', 'Sendung', 'logistics', null)
 on conflict do nothing;
 
@@ -116,7 +116,7 @@ language sql
 immutable
 set search_path = ''
 as $$
-  -- The shipment (20261002400000), read by erp.configure_logistics() for a new
+  -- The shipment (20261002500000), read by erp.configure_logistics() for a new
   -- install and by the upgrade register for an organisation on version 1, so
   -- the two cannot disagree. The lifecycle and the sequence before the type
   -- that names them.
@@ -148,7 +148,7 @@ as $$
 $$;
 
 comment on function erp.shipment_pack_items() is
-  'The shipment (20261002400000): its lifecycle, numbering rule and document type, the items '
+  'The shipment (20261002500000): its lifecycle, numbering rule and document type, the items '
   'erp.configure_logistics() and the logistics upgrade register both read.';
 
 do $configure$
@@ -157,7 +157,7 @@ declare
   v_def text := pg_get_functiondef(v_sig::regprocedure);
   v_old constant text := $o$'base_minor',25000,'per_kg_minor',400))))));$o$;
   v_new constant text := $n$'base_minor',25000,'per_kg_minor',400)))))
-      -- The shipment document (20261002400000), from its one helper.
+      -- The shipment document (20261002500000), from its one helper.
       || erp.shipment_pack_items());$n$;
   v_hits integer := (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old);
 begin
@@ -171,7 +171,7 @@ $configure$;
 update erp_ref.module_installer
    set current_version = 2,
        description = description
-         || ' Version 2 (20261002400000): the shipment as a document, numbered SHP- and moved '
+         || ' Version 2 (20261002500000): the shipment as a document, numbered SHP- and moved '
          || 'planned, booked, delivered or cancelled.'
  where install_code = 'logistics' and current_version = 1;
 
@@ -201,7 +201,7 @@ declare
   v_src  text := pg_get_functiondef('erp.demonstration_catch_up()'::regprocedure);
   v_old  text := E'  -- ── The rules an upgrade skipped (20261002300000) ─────────────────────────\n';
   v_new  text :=
-      E'  -- ── Logistics'' newer version (20261002400000) ─────────────────────────────\n'
+      E'  -- ── Logistics'' newer version (20261002500000) ─────────────────────────────\n'
    || E'  --\n'
    || E'  -- Version 2 is the shipment as a document: a demonstration that installed\n'
    || E'  -- logistics before it cannot ship until it has it.\n'
@@ -224,7 +224,7 @@ declare
    || v_old;
 begin
   if (length(v_src) - length(replace(v_src, v_old, ''))) / length(v_old) <> 1 then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: erp.demonstration_catch_up''s skipped-rules marker is not where 20261002400000 expects it';
+    raise exception 'CLOVEERP_ANCHOR_MOVED: erp.demonstration_catch_up''s skipped-rules marker is not where 20261002500000 expects it';
   end if;
   execute replace(v_src, v_old, v_new);
 end
@@ -251,7 +251,7 @@ end
 $fk$;
 
 comment on column erp.shipment.document_id is
-  'The shipment''s document (20261002400000): its number and its lifecycle. Null only on a shipment '
+  'The shipment''s document (20261002500000): its number and its lifecycle. Null only on a shipment '
   'raised before shipments were documents.';
 
 create or replace function erp.mirror_shipment_status(p_shipment_id uuid)
@@ -261,7 +261,7 @@ set search_path = ''
 as $$
 begin
   -- erp.shipment.status is the document's state, kept here for what reads the
-  -- column (20261002400000). The only writer on a shipment with a document,
+  -- column (20261002500000). The only writer on a shipment with a document,
   -- after each move, as erp.move_count_task() keeps count_task.status.
   update erp.shipment sh
      set status = s.code::erp.shipment_status, updated_at = now()
@@ -276,7 +276,7 @@ $$;
 revoke all on function erp.mirror_shipment_status(uuid) from public, anon, authenticated;
 
 comment on function erp.mirror_shipment_status(uuid) is
-  'Writes erp.shipment.status from its document''s state (20261002400000). The one writer of the column '
+  'Writes erp.shipment.status from its document''s state (20261002500000). The one writer of the column '
   'on a shipment with a document.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -292,7 +292,7 @@ $o$;
   v_new constant text := $n$  update erp.shipment set status = 'planned', updated_at = now() where id = v_ship;
 
   -- Opened as a document where the organisation has one to open
-  -- (20261002400000): numbered SHP-, moved by its lifecycle. One on
+  -- (20261002500000): numbered SHP-, moved by its lifecycle. One on
   -- logistics version 1 plans as it did.
   if exists (select 1 from erp.document_type dt
               where dt.tenant_id = v_tenant and dt.code = 'shipment' and dt.status = 'active') then
@@ -327,7 +327,7 @@ $o$,
                         'shipment', p_shipment_id);
 
   -- A shipment with a document is booked from planned, and only from there
-  -- (20261002400000). One raised before shipments were documents cannot be.
+  -- (20261002500000). One raised before shipments were documents cannot be.
   if sh.document_id is null
      and exists (select 1 from erp.document_type dt
                   where dt.tenant_id = v_tenant and dt.code = 'shipment' and dt.status = 'active') then
@@ -337,7 +337,7 @@ $o$,
   end if;
 $n$,
     $o$  -- Spec 5.9: "freight cost capture and allocation".$o$,
-    $n$  -- The commitment, on the document (20261002400000).
+    $n$  -- The commitment, on the document (20261002500000).
   if sh.document_id is not null then
     perform erp.transition_document(sh.document_id, 'book', 'booked with ' || p_carrier_code);
     perform erp.mirror_shipment_status(p_shipment_id);
@@ -369,7 +369,7 @@ $o$;
     raise exception 'CLOVEERP_UNKNOWN_SHIPMENT: %', p_shipment_id using errcode = '23503';
   end if;
 
-  -- Delivered, on the document (20261002400000). A shipment raised before
+  -- Delivered, on the document (20261002500000). A shipment raised before
   -- shipments were documents cannot be.
   if (select sh.document_id from erp.shipment sh where sh.tenant_id = v_tenant and sh.id = p_shipment_id) is not null then
     perform erp.transition_document(
@@ -495,7 +495,7 @@ $$;
 revoke all on function erp.ship_deliveries(uuid[], date, text, text, bigint) from public, anon, authenticated;
 
 comment on function erp.ship_deliveries(uuid[], date, text, text, bigint) is
-  'Ships posted deliveries of one site to one customer in one press (20261002400000): opens the '
+  'Ships posted deliveries of one site to one customer in one press (20261002500000): opens the '
   'shipment document, takes the carrier and service the rate card recommends unless others are named, '
   'and books it when a tariff or a cost is known; otherwise it is left planned. Returns the shipment.';
 
@@ -511,7 +511,7 @@ set search_path = ''
 as $$ select erp.ship_deliveries(p_delivery_ids, p_planned_despatch, p_carrier_code, p_service_code, p_cost_minor) $$;
 
 comment on function public.erp_ship_deliveries(uuid[], date, text, text, bigint) is
-  'Ship these deliveries (20261002400000): the Despatch strip''s first press. erp.ship_deliveries() '
+  'Ship these deliveries (20261002500000): the Despatch strip''s first press. erp.ship_deliveries() '
   'authorises logistics.plan at the deliveries'' site.';
 
 revoke all on function public.erp_ship_deliveries(uuid[], date, text, text, bigint) from public, anon;
@@ -549,7 +549,7 @@ begin
 
   if sh.document_id is null then
     -- Raised before shipments were documents: cancelled where it stands, so
-    -- its deliveries can be shipped again (20261002400000).
+    -- its deliveries can be shipped again (20261002500000).
     update erp.shipment set status = 'cancelled', updated_at = now()
      where tenant_id = v_tenant and id = p_shipment_id and status <> 'cancelled';
     return;
@@ -566,7 +566,7 @@ $$;
 revoke all on function erp.cancel_shipment(uuid, text) from public, anon, authenticated;
 
 comment on function erp.cancel_shipment(uuid, text) is
-  'Cancels a planned or booked shipment, which releases its deliveries to ship again (20261002400000). '
+  'Cancels a planned or booked shipment, which releases its deliveries to ship again (20261002500000). '
   'A delivered one is refused. One raised before shipments were documents is cancelled where it stands.';
 
 create or replace function public.erp_cancel_shipment(p_shipment_id uuid, p_reason text default null)
@@ -576,7 +576,7 @@ set search_path = ''
 as $$ select erp.cancel_shipment(p_shipment_id, p_reason) $$;
 
 comment on function public.erp_cancel_shipment(uuid, text) is
-  'Cancel a shipment and release its deliveries (20261002400000). erp.cancel_shipment() authorises '
+  'Cancel a shipment and release its deliveries (20261002500000). erp.cancel_shipment() authorises '
   'logistics.plan.';
 
 revoke all on function public.erp_cancel_shipment(uuid, text) from public, anon;
@@ -598,10 +598,10 @@ on conflict (function_name) do update set gate = excluded.gate, rationale = excl
 insert into erp_meta.api_only_door (function_name, caller, intended_screen_path, reason) values
   ('erp_select_carrier', 'pending_screen', '/logistics',
    'The carriers that quote a shipment, cheapest in time first. Ship these deliveries books the first of them '
-   'itself (20261002400000); the exceptions screen will offer the list for a shipment left planned (LPR3).'),
+   'itself (20261002500000); the exceptions screen will offer the list for a shipment left planned (LPR3).'),
   ('erp_plan_shipment', 'integration', null,
    'Plan a shipment without booking it: kept one release, onto the shipment document, for anything built '
-   'against it before Ship these deliveries replaced it on the strip (20261002400000). Withdrawn in LPR3.')
+   'against it before Ship these deliveries replaced it on the strip (20261002500000). Withdrawn in LPR3.')
 on conflict (function_name) do update
   set caller = excluded.caller, intended_screen_path = excluded.intended_screen_path, reason = excluded.reason;
 
@@ -616,7 +616,7 @@ declare
   v_pairs constant text[] := array[
     $o$    select jsonb_build_object('shipment_id', sh.id, 'reference', sh.reference,$o$,
     $n$    select jsonb_build_object('shipment_id', sh.id, 'reference', sh.reference,
-      -- The document's number where it has one (20261002400000).
+      -- The document's number where it has one (20261002500000).
       'document_id', sh.document_id, 'number', coalesce(doc.document_number, sh.reference),$n$,
     $o$      left join erp.party p on p.tenant_id = sh.tenant_id and p.id = sh.destination_party_id
 $o$,
@@ -647,7 +647,7 @@ declare
     ) as x(machine_code, transition_code, driver, detail)$o$;
   v_new text := $n$      ('supplier_invoice',     'approved_to_rejected',      'screen', ''),
 
-      -- ── Logistics (20261002400000) ────────────────────────────────────────
+      -- ── Logistics (20261002500000) ────────────────────────────────────────
       -- Booked by the ship door in the press that opens it, or by Book for
       -- one it left planned; delivered by the proof and nothing else.
       ('shipment',             'book',                      'routine', 'erp.book_shipment(uuid,text,text,bigint)'),
@@ -657,7 +657,7 @@ declare
     ) as x(machine_code, transition_code, driver, detail)$n$;
 begin
   if (length(v_src) - length(replace(v_src, v_old, ''))) / length(v_old) <> 1 then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: erp.transition_driver_register''s last row is not where 20261002400000 expects it';
+    raise exception 'CLOVEERP_ANCHOR_MOVED: erp.transition_driver_register''s last row is not where 20261002500000 expects it';
   end if;
   execute replace(v_src, v_old, v_new);
 end
@@ -671,7 +671,7 @@ update erp_meta.flow_budget
    set budget = 2, decision_steps = 2, stages = 2, stages_without_a_list = 0,
        rationale = 'Two presses from posted deliveries to a delivered shipment: Ship these deliveries, '
                 || 'which opens the shipment and books the carrier the rate card recommends, and Record '
-                || 'proof of delivery (20261002400000). The carrier bill is the third, with LPR4.'
+                || 'proof of delivery (20261002500000). The carrier bill is the third, with LPR4.'
  where flow_code = 'despatch';
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -680,7 +680,7 @@ update erp_meta.flow_budget
 
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key(v.text), 'en', v.text,
-       'A screen string, rendered through ui(). The Despatch strip in two presses (20261002400000).'
+       'A screen string, rendered through ui(). The Despatch strip in two presses (20261002500000).'
   from (values
     ('Ship the posted deliveries, then record proof of delivery when they arrive.'),
     ('Ship these deliveries'),
@@ -1026,7 +1026,7 @@ revoke all on function erp_test.shipment_document_suite() from public, anon;
 
 comment on function erp_test.shipment_document_suite() is
   'The shipment is a document on the spine, shipped in one press from posted deliveries, delivered by its '
-  'proof and cancelled with its deliveries released (20261002400000).';
+  'proof and cancelled with its deliveries released (20261002500000).';
 
 create or replace function erp_test.assert_shipment_document_suite()
 returns text
@@ -1059,7 +1059,7 @@ $$;
 revoke all on function erp_test.assert_shipment_document_suite() from public, anon;
 
 comment on function erp_test.assert_shipment_document_suite() is
-  'The shipment on the spine, and despatch in one press (20261002400000).';
+  'The shipment on the spine, and despatch in one press (20261002500000).';
 
 -- The generators, which are idempotent and run at the end of every migration.
 select erp.apply_row_security();
