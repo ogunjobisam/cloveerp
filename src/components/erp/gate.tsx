@@ -14,6 +14,12 @@ import {
 import { atLeast, usePlatformMe } from "../../lib/platform";
 import { onboardingView, pastedToken, selfServiceIsOpen } from "../../lib/self-service";
 import { tenantStorageKey } from "../../lib/tenant-storage";
+import {
+  ADDRESS_MAX,
+  ADDRESS_PATTERN,
+  suggestAddress,
+  typedAddress,
+} from "../../lib/tenant-address";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
@@ -36,6 +42,11 @@ import { safeReturnPath } from "../../lib/return-path";
  * dashboard there would send them looking for a bug in the data instead of an
  * administrator.
  */
+
+/** The host an address is written under, as the browser is showing it. */
+export function addressHost(): string {
+  return typeof window === "undefined" ? "cloveerp.com" : window.location.host;
+}
 
 export function Centred({ children }: { children: ReactNode }) {
   return (
@@ -98,6 +109,12 @@ export type SignInProps = {
    * the Site URL instead.
    */
   returnPath?: string;
+  /**
+   * The organisation whose address the person opened, named in the heading.
+   * A label only: the organisation a session works in is still derived from
+   * the account that signs in.
+   */
+  organisation?: string;
 };
 
 /**
@@ -107,7 +124,7 @@ export type SignInProps = {
  * re-renders, and the route the person asked for is behind it. On its own
  * route there is nothing watching, so the caller says where to go next.
  */
-export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
+export function SignIn({ onSignedIn, notice, returnPath, organisation }: SignInProps = {}) {
   // Where to come back to. Inside the gate that is the page the person asked
   // for, which is the one showing; an emailed link and Google both used to
   // return to the bare site and lose it.
@@ -185,7 +202,7 @@ export function SignIn({ onSignedIn, notice, returnPath }: SignInProps = {}) {
       {notice}
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
         <Wordmark size={30} />
-        <h1 className="mt-4 text-lg font-semibold">Sign in to Clove ERP</h1>
+        <h1 className="mt-4 text-lg font-semibold">Sign in to {organisation ?? "Clove ERP"}</h1>
 
         <p className="mt-1 text-sm text-muted-foreground">
           Your organisation is derived from your account. It is never chosen here.
@@ -334,6 +351,8 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
   const platform = usePlatformMe();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  // The address follows the name until the person types one of their own.
+  const [codeTouched, setCodeTouched] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<"create" | "demo" | "join" | null>(null);
 
@@ -571,21 +590,39 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
           <input
             required
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (!codeTouched) setCode(suggestAddress(e.target.value));
+            }}
             placeholder="Acme Manufacturing"
             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
         </label>
 
         <label className="mt-3 block text-sm font-medium">
-          Short code
-          <input
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="acme"
-            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
-          />
+          Your address
+          <span className="mt-1 flex items-center rounded-md border border-input bg-background text-sm">
+            <span className="pl-3 font-mono text-muted-foreground">{addressHost()}/</span>
+            <input
+              required
+              value={code}
+              onChange={(e) => {
+                setCodeTouched(true);
+                setCode(typedAddress(e.target.value));
+              }}
+              minLength={3}
+              maxLength={ADDRESS_MAX}
+              pattern={ADDRESS_PATTERN.source.slice(1, -1)}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="acme"
+              className="w-full min-w-0 rounded-md bg-transparent py-2 pr-3 font-mono text-sm"
+            />
+          </span>
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
+            Where your people sign in. Letters, digits and hyphens; you can change it later in
+            Settings.
+          </span>
         </label>
 
         {refused ? (

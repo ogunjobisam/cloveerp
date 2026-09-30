@@ -16,6 +16,7 @@ import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
+import { TenantAddressCard } from "../../components/erp/tenant-address-card";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { companyInvoiceDetailsArgs } from "../../lib/invoice-details";
@@ -387,6 +388,8 @@ function Organisation() {
       >
         {ui("A department is one object: it routes an approval and it carries the posting.")}
       </PageHeader>
+
+      <TenantAddressCard />
 
       <ActionBar
         title="Departments and membership"

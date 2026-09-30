@@ -942,6 +942,17 @@ jobs:
         # names and no row in erp_meta.api_only_door accounts for.
         run: supabase/ci/app_doors.sh
 
+      - name: No organisation's address is a page
+        # An organisation is found at /<its code>, and every static route at
+        # the top level wins over that: an organisation holding "help" would
+        # own an address that only ever opens the help page, and a route added
+        # at /acme would silently take the address of an organisation that has
+        # held it for a year. The database refuses a reserved code on the way
+        # in, but cannot see the routes. This hands it every top-level route
+        # name, and erp.assert_route_names_reserved() refuses one that is not
+        # reserved or that an organisation already holds.
+        run: supabase/ci/app_addresses.sh
+
       - name: Every permission code the screens name exists
         # The other bare string the application calls the database with. The
         # gate is hasPermission(session, "module.action"), and a code the
