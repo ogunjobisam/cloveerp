@@ -1,0 +1,3 @@
+Supplier Code,Supplier Name,Currency Code,Payment Terms,Email,Postal Address Line 1,Postal City,Postal Post Code,Postal Country,Obsolete
+POWER,PowerDirect,GBP,End of Month,orders@power.example,1 Grid Road,Birmingham,B1 1AA,England,No
+FIXINGS,Fixings GmbH,EUR,Prepaid,,Hauptstrasse 1,Berlin,10115,Germany,No

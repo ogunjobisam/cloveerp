@@ -8,6 +8,10 @@ import { PageHeader } from "../../components/erp/page";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { useT } from "../../lib/i18n";
 import { unleashedProducts } from "../../lib/import/profiles/unleashed-products";
+import {
+  unleashedCustomers,
+  unleashedSuppliers,
+} from "../../lib/import/profiles/unleashed-parties";
 import { xeroChart } from "../../lib/import/profiles/xero-chart";
 import { xeroContacts } from "../../lib/import/profiles/xero-contacts";
 
@@ -36,7 +40,13 @@ export const Route = createFileRoute("/master-data/imports")({
   ),
 });
 
-const MASTER_PROFILES = [xeroChart, xeroContacts, unleashedProducts];
+const MASTER_PROFILES = [
+  xeroChart,
+  xeroContacts,
+  unleashedCustomers,
+  unleashedSuppliers,
+  unleashedProducts,
+];
 
 function Imports() {
   const { t } = useT();
