@@ -13,6 +13,13 @@ import { RpcButton } from "../../components/erp/rpc-button";
 import { callErp, hasPermission } from "../../lib/erp";
 import { atLeast, usePlatformMe } from "../../lib/platform";
 import { useT } from "../../lib/i18n";
+import {
+  newExportState,
+  runExport,
+  sectionWords,
+  type ExportProgress,
+  type ExportState,
+} from "../../lib/tenant-export";
 
 export const Route = createFileRoute("/administration/tenant")({
   head: () => ({
@@ -411,55 +418,110 @@ function DemoHistoryPanel() {
   );
 }
 
-/** Export is a read that produces a file, so it does not fit the button pattern. */
+/**
+ * Export is a read that produces a file, so it does not fit the button pattern.
+ *
+ * It is read a page at a time (src/lib/tenant-export.ts): one call built the
+ * whole organisation as one value, and on 30 September four of those at once
+ * stopped the live database. One export runs at a time, and a page that fails
+ * is asked for again from where it stopped.
+ */
 function ExportPanel() {
-  const [preview, setPreview] = useState<unknown>(null);
-  const exporting = useErpAction({ fn: "erp_export_tenant", invalidates: [] });
+  const { session } = useErpSession();
+  const allowed = hasPermission(session, "administration.configure");
+  const job = useRef<ExportState | null>(null);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<ExportProgress | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [finished, setFinished] = useState<number | null>(null);
+
+  const run = async (fresh: boolean) => {
+    if (running) return;
+    if (fresh || !job.current) job.current = newExportState();
+    const state = job.current;
+    setRunning(true);
+    setError(null);
+    setFinished(null);
+    try {
+      const parts = await runExport(
+        {
+          manifest: () => callErp<unknown>("erp_export_tenant_manifest"),
+          page: (section, after) =>
+            callErp<unknown>("erp_export_tenant_section", { p_section: section, p_after: after }),
+        },
+        state,
+        setProgress,
+      );
+      const url = URL.createObjectURL(new Blob(parts, { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "clove-erp-tenant-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      setFinished(state.rows);
+      job.current = null;
+    } catch (e) {
+      setError(e);
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
-    <section className="rounded-xl border border-border bg-card">
+    <section className="rounded-xl border border-border bg-card" data-export>
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">Export and portability</h2>
         <Prose className="mt-0.5 text-xs text-muted-foreground">
           A structured export of this organisation's own data — configuration, master data,
-          documents and balances — in a form that can be read without this application.
+          documents and balances — in a form that can be read without this application. It is read a
+          section at a time, so if people keep working while it runs, the file is not a copy of one
+          single moment.
         </Prose>
       </header>
       <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap gap-2">
-          <RpcButton
-            label="Build export"
-            fn="erp_export_tenant"
-            permission="administration.configure"
-            variant="primary"
-            invalidates={[]}
-          />
-          <button
-            type="button"
-            className="min-h-11 rounded-md border border-input px-4 text-sm font-medium"
-            onClick={() =>
-              exporting.mutateAsync({}).then((result) => {
-                setPreview(result);
-                const blob = new Blob([JSON.stringify(result, null, 2)], {
-                  type: "application/json",
-                });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "clove-erp-tenant-export.json";
-                a.click();
-                URL.revokeObjectURL(url);
-              })
-            }
-          >
-            Download as JSON
-          </button>
-        </div>
-        {exporting.error ? <ErrorNote error={exporting.error} /> : null}
-        {preview ? (
-          <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">
-            {JSON.stringify(preview, null, 2).slice(0, 4000)}
-          </pre>
+        {allowed ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="min-h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              disabled={running}
+              onClick={() => void run(true)}
+            >
+              {running ? "Exporting…" : "Download as JSON"}
+            </button>
+            {error && !running && job.current ? (
+              <button
+                type="button"
+                className="min-h-11 rounded-md border border-input px-4 text-sm font-medium"
+                onClick={() => void run(false)}
+              >
+                Try again from where it stopped
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <PermissionNote code="administration.configure" />
+        )}
+        {running && progress ? (
+          <p className="text-sm text-muted-foreground" role="status" data-export-progress>
+            Reading {sectionWords(progress.section)} ({progress.position} of {progress.sections}) —{" "}
+            {progress.rows.toLocaleString()} rows so far
+          </p>
+        ) : null}
+        {error && !running ? (
+          <div className="flex flex-col gap-1">
+            {progress ? (
+              <p className="text-sm text-muted-foreground">
+                Stopped while reading {sectionWords(progress.section)}.
+              </p>
+            ) : null}
+            <ErrorNote error={error} />
+          </div>
+        ) : null}
+        {finished !== null ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            Exported {finished.toLocaleString()} rows.
+          </p>
         ) : null}
       </div>
     </section>

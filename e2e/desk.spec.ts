@@ -1795,3 +1795,75 @@ test.describe("despatch offers only what its doors take", () => {
     await expect(page.getByRole("button", { name: "Ship these deliveries" }).first()).toBeVisible();
   });
 });
+
+test.describe("the export", () => {
+  const MANIFEST = {
+    exported_at: "2026-09-30T10:00:00Z",
+    format: "erpware.tenant-export.v1",
+    tenant: { id: "t1", code: "demo" },
+    sections: ["entities"],
+  };
+  const PAGE = {
+    section: "entities",
+    rows: [
+      { id: "e1", code: "MAIN" },
+      { id: "e2", code: "NORTH" },
+    ],
+    next: null,
+  };
+  const panel = (page: Page) => page.locator("[data-export]");
+
+  test("is one press that reads the manifest and each section, and saves the document", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_export_tenant_manifest", MANIFEST);
+    backend.rpc("erp_export_tenant_section", PAGE);
+    await page.goto("/administration/tenant");
+
+    const press = panel(page).getByRole("button", { name: "Download as JSON" });
+    await expect(press).toBeVisible({ timeout: 20_000 });
+    await expect(panel(page).getByRole("button", { name: "Build export" })).toHaveCount(0);
+
+    const saved = page.waitForEvent("download");
+    await press.click();
+    const download = await saved;
+    expect(download.suggestedFilename()).toBe("clove-erp-tenant-export.json");
+    const file = JSON.parse(
+      await (
+        await download.createReadStream()
+      )
+        .toArray()
+        .then((c) => Buffer.concat(c).toString("utf8")),
+    ) as Record<string, unknown>;
+
+    expect(Object.keys(file)).toEqual(["exported_at", "format", "tenant", "entities"]);
+    expect(file["entities"]).toEqual(PAGE.rows);
+    await expect(panel(page).getByText("Exported 2 rows.")).toBeVisible();
+    expect(backend.called.filter((fn) => fn.startsWith("erp_export_tenant"))).toEqual([
+      "erp_export_tenant_manifest",
+      "erp_export_tenant_section",
+    ]);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a page that fails says where it stopped and offers to carry on from there", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_export_tenant_manifest", MANIFEST);
+    backend.fail("erp_export_tenant_section", {
+      status: 500,
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+    await page.goto("/administration/tenant");
+
+    await panel(page).getByRole("button", { name: "Download as JSON" }).click({ timeout: 20_000 });
+    await expect(panel(page).getByText("Stopped while reading entities.")).toBeVisible();
+    await expect(
+      panel(page).getByRole("button", { name: "Try again from where it stopped" }),
+    ).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+});
