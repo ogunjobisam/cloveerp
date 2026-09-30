@@ -1,3 +1,4 @@
+import type { SessionRole } from "./roles-label";
 import {
   createClient,
   FunctionsFetchError,
@@ -119,6 +120,8 @@ export type ErpSession = {
     timezone: string | null;
   };
   tenant?: { code: string; name: string; status: string };
+  /** The roles held here, administrator first; `support` when a support window granted it. */
+  roles?: SessionRole[];
   entities: ErpEntity[];
   sites: ErpSite[];
   permissions: string[];
