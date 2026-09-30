@@ -218,7 +218,7 @@ comment on function erp.resolve_price(uuid, uuid, numeric, date, uuid) is
   'because a contract is a promise and a promotion is an offer. Among list prices '
   'the customer''s own list (their terms in force) beats the price on no list, '
   'which beats the one other list an item is on; several other lists refuse '
-  '(20261003700000). The amount is per one unit: a price per N divides when it '
+  '(20261003720000). The amount is per one unit: a price per N divides when it '
   'comes to whole minor units and refuses when it does not.';
 
 create or replace function erp.resolve_purchase_price(p_item_id uuid,
@@ -351,7 +351,7 @@ comment on function erp.resolve_purchase_price is
   'date, at this quantity, for this site. A contract beats a purchase list, '
   'which beats the last cost paid; among purchase lists the supplier''s own '
   '(their terms in force) beats the list on no list, which beats the one other '
-  'list an item is on, and several other lists refuse (20261003700000). A price '
+  'list an item is on, and several other lists refuse (20261003720000). A price '
   'for the supplier beats a general one; a price for the site beats a general '
   'one; the biggest quantity break the line satisfies wins. The amount is per '
   'one unit: a price per N divides when it comes to whole minor units and '
@@ -668,7 +668,7 @@ comment on function erp_test.price_list_and_per_quantity_suite() is
   'A customer or supplier is priced from the list their terms name, then the price on no list, then '
   'the one other list an item is on; several other lists refuse, and a contract still comes first. '
   'A price per N is divided when it comes to whole minor units and refused when it does not '
-  '(20261003700000).';
+  '(20261003720000).';
 
 create or replace function erp_test.assert_price_list_and_per_quantity_suite()
 returns text
@@ -701,7 +701,7 @@ $$;
 revoke all on function erp_test.assert_price_list_and_per_quantity_suite() from public, anon;
 
 comment on function erp_test.assert_price_list_and_per_quantity_suite() is
-  'A line is priced from the list its party is on and per one unit (20261003700000).';
+  'A line is priced from the list its party is on and per one unit (20261003720000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- D. The generators, which are idempotent and run at the end of every migration

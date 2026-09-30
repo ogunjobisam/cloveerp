@@ -10,6 +10,7 @@ import type {
   ChartAction,
   ChartChoice,
   Finding,
+  PartyRole,
   Profile,
 } from "../../lib/import/types";
 import { parseMinor } from "../../lib/import/values";
@@ -59,6 +60,9 @@ export function FileImport({
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [mapping, setMapping] = useState<Mapping | null>(null);
   const [chartChoices, setChartChoices] = useState<Record<string, ChartChoice>>({});
+  const [partyRoles, setPartyRoles] = useState<Record<string, PartyRole[]>>({});
+  const [defaultPartyRole, setDefaultPartyRole] = useState<PartyRole | "none">("none");
+  const [termsFromXero, setTermsFromXero] = useState(false);
   const [defaultLocation, setDefaultLocation] = useState("");
   const [asAt, setAsAt] = useState("");
   const [printed, setPrinted] = useState("");
@@ -68,6 +72,8 @@ export function FileImport({
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
   const opening = profile?.target.kind === "opening";
   const chart = profile?.target.kind === "master" && profile.target.objectType === "account";
+  const partyProfile =
+    profile?.target.kind === "master" && profile.target.objectType === "party_profile";
   const readsAccounts = chart || profile?.id === "xero-trial-balance";
 
   const mappings = useQuery({
@@ -81,7 +87,9 @@ export function FileImport({
         p_source_system: "xero",
         p_object_type: "party",
       }),
-    enabled: profile?.target.kind === "opening",
+    // The ledgers name parties by their Xero names; Unleashed's lists find the
+    // party Xero's contacts already loaded the same way.
+    enabled: profile?.target.kind === "opening" || partyProfile,
   });
   const accountEntries = useQuery({
     queryKey: ["erp_import_crosswalk", { p_source_system: "xero", p_object_type: "account" }],
@@ -115,10 +123,16 @@ export function FileImport({
         defaultLocation,
         accounts: chartAccounts,
         chartChoices,
+        partyRoles,
+        defaultPartyRole,
+        termsFromXero,
       },
       { mapping, saved },
     );
   }, [
+    partyRoles,
+    defaultPartyRole,
+    termsFromXero,
     profile,
     file,
     parties,
@@ -140,27 +154,6 @@ export function FileImport({
         profile.target.kind === "opening" ? "erp_stage_opening_balances" : "erp_stage_import";
       const batch = await callErp<string>(fn, args);
       const problems: string[] = [];
-      const entries = Object.entries(read.result?.partyKeys ?? {}).map(
-        ([legacy_key, clove_code]) => ({ legacy_key, clove_code }),
-      );
-      if (
-        profile.target.kind === "master" &&
-        profile.target.objectType === "party" &&
-        entries.length > 0
-      ) {
-        try {
-          await callErp("erp_stage_import_crosswalk", {
-            p_batch_id: batch,
-            p_source_system: "xero",
-            p_object_type: "party",
-            p_entries: entries,
-          });
-        } catch (e) {
-          problems.push(
-            `its contact names were not recorded (${e instanceof Error ? e.message : String(e)}), so the ledgers will not find them: roll the batch back and stage the file again`,
-          );
-        }
-      }
       try {
         await callErp("erp_save_import_mapping", {
           p_profile_id: profile.id,
@@ -189,6 +182,7 @@ export function FileImport({
       setFile(null);
       setMapping(null);
       setChartChoices({});
+      setPartyRoles({});
     },
   });
 
@@ -199,6 +193,7 @@ export function FileImport({
     setFile(null);
     setMapping(null);
     setChartChoices({});
+    setPartyRoles({});
     setStaged(null);
   };
 
@@ -207,6 +202,7 @@ export function FileImport({
     const text = await f.text();
     setMapping(null);
     setChartChoices({});
+    setPartyRoles({});
     setStaged(null);
     setFile({ name: f.name, text });
   };
@@ -420,6 +416,77 @@ export function FileImport({
                     </tr>
                   ))}
                 </Table>
+              </Block>
+            ) : null}
+
+            {partyProfile && result ? (
+              <Block title="Roles">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Label text="A contact with no role becomes">
+                    <select
+                      aria-label="A contact with no role becomes"
+                      className={INPUT}
+                      value={defaultPartyRole}
+                      onChange={(e) => setDefaultPartyRole(e.target.value as PartyRole | "none")}
+                    >
+                      <option value="none">Nothing yet — the Unleashed lists will say</option>
+                      <option value="customer">A customer</option>
+                      <option value="supplier">A supplier</option>
+                    </select>
+                  </Label>
+                  {profile.id === "xero-contacts" ? (
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={termsFromXero}
+                        onChange={(e) => setTermsFromXero(e.target.checked)}
+                      />
+                      <span>
+                        <span className="font-medium">Terms from Xero</span>
+                        <span className="block text-xs text-muted-foreground">
+                          Only when there is no Unleashed. The first terms loaded are the ones that
+                          stand.
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
+                </div>
+                {result.parties.length > 0 ? (
+                  <Table columns={["Contact", "Roles"]}>
+                    {result.parties.slice(0, 300).map((p) => (
+                      <tr key={p.key} className="border-b border-border/60">
+                        <td className="py-1 pr-4">{p.name}</td>
+                        <td className="py-1">
+                          <select
+                            aria-label={`Roles for ${p.name}`}
+                            className={INPUT}
+                            value={p.roles.join(",")}
+                            onChange={(e) =>
+                              setPartyRoles((prev) => ({
+                                ...prev,
+                                [p.key]:
+                                  e.target.value === ""
+                                    ? []
+                                    : (e.target.value.split(",") as PartyRole[]),
+                              }))
+                            }
+                          >
+                            <option value="">No role</option>
+                            <option value="customer">Customer</option>
+                            <option value="supplier">Supplier</option>
+                            <option value="customer,supplier">Customer and supplier</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </Table>
+                ) : null}
+                {result.parties.length > 300 ? (
+                  <p className="text-xs text-muted-foreground">
+                    The first 300 are listed; the default applies to the rest.
+                  </p>
+                ) : null}
               </Block>
             ) : null}
 
