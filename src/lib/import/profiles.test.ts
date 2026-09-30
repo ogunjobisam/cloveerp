@@ -36,6 +36,8 @@ const ctx = (
       | "partyRoles"
       | "defaultPartyRole"
       | "termsFromXero"
+      | "weightUnit"
+      | "reorderSite"
     >
   > = {},
 ): ProfileContext => ({
@@ -48,6 +50,8 @@ const ctx = (
   partyRoles: {},
   defaultPartyRole: "none",
   termsFromXero: false,
+  weightUnit: "kg",
+  reorderSite: "",
   ...more,
 });
 
@@ -265,19 +269,65 @@ describe("payment terms", () => {
 });
 
 describe("Unleashed products", () => {
-  const r = run(unleashedProducts, "unleashed-products.csv");
+  const suppliers = { PowerDirect: "POWERDIRECT", POWERDIRECT: "POWERDIRECT" };
+  const r = run(
+    unleashedProducts,
+    "unleashed-products.csv",
+    ctx(suppliers, "", { reorderSite: "main" }),
+  );
+  const row = (i: number) => r.rows[i] as Record<string, unknown>;
 
-  test("code, name, description and group", () => {
-    expect(r.rows[0]).toEqual({
+  test("a product is one whole profile in its own unit", () => {
+    expect(row(0)).toMatchObject({
+      source: "unleashed",
       code: "FIX-M6",
       name: "M6 fixings, zinc",
       description: "M6 fixings, zinc",
       item_group: "Fixings",
+      stock_uom: "EA",
+      purchase_uom: "BOX",
+      barcode: "5012345678900",
     });
   });
 
+  test("weights become grams, from the unit the account uses", () => {
+    expect(row(0)["gross_weight_g"]).toBe("4");
+    expect(row(1)["gross_weight_g"]).toBe("5200");
+    const inGrams = run(
+      unleashedProducts,
+      "unleashed-products.csv",
+      ctx({}, "", { weightUnit: "g" }),
+    );
+    expect((inGrams.rows[1] as Record<string, unknown>)["gross_weight_g"]).toBe("5.2");
+  });
+
+  test("tracking comes from the flags", () => {
+    expect(row(0)["is_batch_controlled"]).toBeUndefined();
+    expect(row(1)["is_batch_controlled"]).toBe(true);
+  });
+
+  test("a sub-penny price loads in whole pence and says what it was", () => {
+    expect(row(0)["purchase_price"]).toEqual({ amount_minor: 4 });
+    expect(row(0)["sales_price"]).toEqual({ amount_minor: 9 });
+    expect(row(1)["sales_price"]).toEqual({ amount_minor: 2499 });
+    expect(
+      r.findings.some(
+        (f) =>
+          f.message ===
+          "purchase price 0.043 loads as £0.04 a unit: prices are per unit in whole pence",
+      ),
+    ).toBe(true);
+  });
+
+  test("the supplier resolves through the loaded suppliers, and levels go to the chosen warehouse", () => {
+    expect(row(0)["supplier"]).toEqual({ party: "POWERDIRECT", min_order_quantity: "1000" });
+    expect(row(0)["sites"]).toEqual([
+      { site: "MAIN", reorder_point: "5000", order_up_to: "50000", min_order_quantity: "1000" },
+    ]);
+  });
+
   test("an obsolete product is discontinued", () => {
-    expect(r.rows[2]).toMatchObject({ code: "OLD-01", lifecycle: "discontinued" });
+    expect(row(2)).toMatchObject({ code: "OLD-01", lifecycle: "discontinued" });
   });
 
   test("a duplicate code and a missing code are refused", () => {
@@ -290,16 +340,16 @@ describe("Unleashed products", () => {
     expect(r.findings.filter((f) => f.message.includes("VAT class"))).toHaveLength(1);
   });
 
-  test("units, tracking, prices and supply wait for the item extras", () => {
-    for (const name of [
-      "Unit Of Measure",
-      "Is Batch Tracked",
-      "Barcode",
-      "Default Sell Price",
-      "Supplier",
-    ]) {
-      expect(r.deferred.some((d) => d.startsWith(name))).toBe(true);
-    }
+  test("an unknown supplier and levels with no warehouse are said, and the product still stages", () => {
+    const bare = run(unleashedProducts, "unleashed-products.csv");
+    expect((bare.rows[0] as Record<string, unknown>)["supplier"]).toBeUndefined();
+    expect((bare.rows[0] as Record<string, unknown>)["sites"]).toBeUndefined();
+    expect(
+      bare.findings.some((f) => f.message.startsWith("supplier POWERDIRECT is not in a loaded")),
+    ).toBe(true);
+    expect(
+      bare.findings.some((f) => f.message.startsWith("2 products have stock alert levels")),
+    ).toBe(true);
   });
 });
 
