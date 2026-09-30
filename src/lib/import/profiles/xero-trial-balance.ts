@@ -7,8 +7,9 @@ import { gbp, isTotalLabel, readMinorOrZero } from "./common";
  * The year-to-date columns, never the period ones (decision D3, option A:
  * profit and loss comes across year to date). The account is printed
  * "200 - Sales" or "Sales (200)". Each resolves through the chart the Xero
- * chart import loaded — by code, or by name where the line has no code — and
- * falls back to the printed code where no chart has been loaded.
+ * chart import loaded — by code, or by name where the line has no code. Once a
+ * chart is loaded, a line it does not name is refused; the printed code is
+ * used as it stands only where no chart has been loaded at all.
  *
  * Accounts Receivable, Accounts Payable and Inventory are the three control
  * accounts the other domains load; they are listed as exclusions with the
@@ -86,6 +87,14 @@ export const xeroTrialBalance: Profile = {
           reason: `control account, explained by ${byName?.domain ?? "its subledger domain"}; Xero shows debit ${gbp(debit)}, credit ${gbp(credit)}`,
           amountMinor: debit,
           quantity: null,
+        });
+        continue;
+      }
+      if (!resolved && ctx.chartLoaded) {
+        out.findings.push({
+          line: r.line,
+          severity: "error",
+          message: `${accountText} is not in the loaded Xero chart; load or map it there, so its balance does not land on an unrelated account that shares the code`,
         });
         continue;
       }

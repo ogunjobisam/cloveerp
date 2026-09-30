@@ -95,6 +95,12 @@ export type ProfileContext = {
    * by its code or, where it has none, its name. Null where no chart named it.
    */
   account: (legacyCode: string | null, name: string) => AccountResolution | null;
+  /**
+   * Whether a chart has been loaded. Once one has, a legacy account it does
+   * not name is refused rather than resolved by its printed code, which could
+   * be an unrelated Clove account that happens to share it.
+   */
+  chartLoaded: boolean;
   /** Stock: the location a row takes when the file names no bin. */
   defaultLocation: string;
   /** Chart: the Clove chart the legacy accounts are mapped onto. */

@@ -111,6 +111,7 @@ export function FileImport({
       {
         partyCode: partyResolver(partyKeysFrom(parties)),
         account: accountResolver(accountMap),
+        chartLoaded: accountMap.length > 0,
         defaultLocation,
         accounts: chartAccounts,
         chartChoices,
@@ -130,32 +131,45 @@ export function FileImport({
   ]);
 
   const action = useMutation({
-    mutationFn: async (args: Record<string, unknown>) => {
-      if (!profile || !read) return;
+    // The batch is the write that matters. Once it is staged, what follows is
+    // bookkeeping beside it: a failure there is reported with the batch, never
+    // left looking like a failed stage that invites a second, duplicate batch.
+    mutationFn: async (args: Record<string, unknown>): Promise<string | null> => {
+      if (!profile || !read) return null;
       const fn =
         profile.target.kind === "opening" ? "erp_stage_opening_balances" : "erp_stage_import";
       const batch = await callErp<string>(fn, args);
-      const keys = read.result?.partyKeys ?? {};
-      const entries = Object.entries(keys).map(([legacy_key, clove_code]) => ({
-        legacy_key,
-        clove_code,
-      }));
+      const problems: string[] = [];
+      const entries = Object.entries(read.result?.partyKeys ?? {}).map(
+        ([legacy_key, clove_code]) => ({ legacy_key, clove_code }),
+      );
       if (
         profile.target.kind === "master" &&
         profile.target.objectType === "party" &&
         entries.length > 0
       ) {
-        await callErp("erp_stage_import_crosswalk", {
-          p_batch_id: batch,
-          p_source_system: "xero",
-          p_object_type: "party",
-          p_entries: entries,
-        });
+        try {
+          await callErp("erp_stage_import_crosswalk", {
+            p_batch_id: batch,
+            p_source_system: "xero",
+            p_object_type: "party",
+            p_entries: entries,
+          });
+        } catch (e) {
+          problems.push(
+            `its contact names were not recorded (${e instanceof Error ? e.message : String(e)}), so the ledgers will not find them: roll the batch back and stage the file again`,
+          );
+        }
       }
-      await callErp("erp_save_import_mapping", {
-        p_profile_id: profile.id,
-        p_mapping: toSaved(read.mapping, read.headings),
-      });
+      try {
+        await callErp("erp_save_import_mapping", {
+          p_profile_id: profile.id,
+          p_mapping: toSaved(read.mapping, read.headings),
+        });
+      } catch {
+        problems.push("the column headings were not remembered for next time");
+      }
+      return problems.length > 0 ? problems.join("; ") : null;
     },
     onSettled: () => {
       for (const key of [
@@ -167,9 +181,10 @@ export function FileImport({
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    onSuccess: () => {
+    onSuccess: (problem) => {
       setStaged(
-        `${file?.name ?? "The file"} is staged. Validate, preview and load it from the batch below.`,
+        `${file?.name ?? "The file"} is staged. Validate, preview and load it from the batch below.` +
+          (problem ? ` But ${problem}.` : ""),
       );
       setFile(null);
       setMapping(null);

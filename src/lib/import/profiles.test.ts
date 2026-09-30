@@ -24,10 +24,11 @@ const fixture = (name: string) =>
 const ctx = (
   keys: Record<string, string> = {},
   defaultLocation = "",
-  more: Partial<Pick<ProfileContext, "account" | "accounts" | "chartChoices">> = {},
+  more: Partial<Pick<ProfileContext, "account" | "chartLoaded" | "accounts" | "chartChoices">> = {},
 ): ProfileContext => ({
   partyCode: partyResolver(keys),
   account: () => null,
+  chartLoaded: false,
   defaultLocation,
   accounts: [],
   chartChoices: {},
@@ -327,6 +328,20 @@ describe("Xero trial balance", () => {
       "630 - Inventory",
       "800 - Accounts Payable",
     ]);
+  });
+
+  test("once a chart is loaded, a code it does not name is refused, not posted to whatever shares it", () => {
+    const account = accountResolver([
+      { legacy_key: "200", legacy_name: "Sales", clove_code: "4000", resolution: "map" },
+    ]);
+    const strict = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { account, chartLoaded: true }),
+    );
+    expect(strict.rows).toEqual([{ account: "4000", credit_minor: 4800000 }]);
+    expect(strict.findings.map((f) => f.line)).toEqual([8, 12, 15]);
+    expect(strict.findings[0]?.message).toContain("is not in the loaded Xero chart");
   });
 
   test("debits staged against the printed debits less the control accounts", () => {
