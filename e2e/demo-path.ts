@@ -393,6 +393,8 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/product": "The marketing page. Signed out, and no part of either flow.",
   "/contact": "The enquiry form on the marketing site. Signed out, and no part of either flow.",
   "/platform": "The vendor's own console. A separate role model, and not a tenant's screen.",
+  "/nobody-holds-this-address":
+    "An organisation's address. Signed out it is the sign-in form under the organisation's name, and signed in it goes straight to the desk, so neither flow stops on it.",
   "/help": "Guidance about the screens, not one of them.",
   "/join":
     "Where an invitation is accepted. The demonstration organisation already has its people.",
