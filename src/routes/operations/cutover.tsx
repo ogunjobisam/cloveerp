@@ -192,7 +192,7 @@ function Cutover() {
         note="Stage a batch from a legacy extract, record the legacy figure against ours, then cut the domain over. A load is reversed from the batch itself, below."
         actions={[
           {
-            label: "Stage opening balances as JSON (advanced)",
+            label: "Stage opening balances",
             permission: "master_data.import",
             fn: "erp_stage_opening_balances",
             fields: [
