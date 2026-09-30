@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Archive, LogIn, LogOut, Pause, Play, Trash2, Undo2, UserPlus } from "lucide-react";
+import { Archive, Link2, LogIn, LogOut, Pause, Play, Trash2, Undo2, UserPlus } from "lucide-react";
 
 import {
   Dialog,
@@ -23,7 +23,15 @@ import { OfferOwnership } from "../erp/ownership";
 import { TOUCH } from "../erp/page";
 import { callErp, InviteOutcomeUnknown } from "../../lib/erp";
 import { atLeast, type PlatformRole, type PlatformTenant } from "../../lib/platform";
-import { ConfirmCodeDialog, DIALOG_PRIMARY, DIALOG_SECONDARY, ReasonDialog } from "./dialogs";
+import { addressShaped, displayAddress, typedAddress } from "../../lib/tenant-address";
+import { addressHost } from "../erp/gate";
+import {
+  ConfirmCodeDialog,
+  DIALOG_PRIMARY,
+  DIALOG_SECONDARY,
+  FormDialog,
+  ReasonDialog,
+} from "./dialogs";
 import { Fail, INPUT } from "./kit";
 
 /**
@@ -147,6 +155,7 @@ export function OrganisationActions({
       {mayOperate ? (
         <>
           <InviteAdminDialog tenant={t} className={button} icon={icon} />
+          <ChangeAddressDialog tenant={t} className={button} icon={icon} onDone={refresh} />
 
           {t.status === "suspended" ? (
             <button
@@ -437,5 +446,88 @@ function InviteAdminDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * An organisation's address — cloveerp.com/<code> — changed from the console.
+ *
+ * erp_platform_set_tenant_address holds it to the rule the organisation's own
+ * administrator meets (shape, reserved words, taken addresses) and asks for a
+ * reason, which the activity log keeps. The old address keeps opening the new
+ * one. Only the platform's own organisation may take the product's own words.
+ */
+function ChangeAddressDialog({
+  tenant: t,
+  className,
+  icon,
+  onDone,
+}: {
+  tenant: PlatformTenant;
+  className: string;
+  icon: string;
+  onDone: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [reason, setReason] = useState("");
+  const ready = addressShaped(code) && code !== t.code && reason.trim().length >= 20;
+
+  return (
+    <FormDialog
+      trigger={
+        <button type="button" className={className}>
+          <Link2 className={icon} />
+          Change address
+        </button>
+      }
+      title={`Change ${t.name}'s address`}
+      description={`It is ${displayAddress(addressHost(), t.code)} now. The address changes at once; the old one keeps working and opens the new one, and no other organisation can take it.`}
+      submitLabel="Change the address"
+      busyLabel="Changing…"
+      ready={ready}
+      run={() =>
+        callErp("erp_platform_set_tenant_address", {
+          p_tenant_id: t.id,
+          p_code: code,
+          p_reason: reason.trim(),
+        })
+      }
+      onDone={onDone}
+      onClosed={() => {
+        setCode("");
+        setReason("");
+      }}
+    >
+      <label className="flex flex-col gap-1 text-sm font-medium">
+        New address
+        <span className="flex items-center rounded-md border border-input bg-background text-sm">
+          <span className="pl-3 font-mono text-muted-foreground">{addressHost()}/</span>
+          <input
+            value={code}
+            onChange={(e) => setCode(typedAddress(e.target.value))}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder={t.code}
+            className="w-full min-w-0 rounded-md bg-transparent py-2 pr-3 font-mono text-sm"
+          />
+        </span>
+        <span className="text-xs font-normal text-muted-foreground">
+          Letters, digits and hyphens, three to 63 characters.
+        </span>
+      </label>
+      <label className="flex flex-col gap-1 text-sm font-medium">
+        Why is it changing?
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          placeholder="For example: their administrator asked for the company's name, ticket 1042"
+          className={INPUT}
+        />
+        <span className="text-xs font-normal text-muted-foreground">
+          Kept in the platform's activity log. At least twenty characters.
+        </span>
+      </label>
+    </FormDialog>
   );
 }
