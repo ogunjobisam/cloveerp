@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { accountResolver, partyKeysFrom } from "./crosswalk";
 import { controlFigure, controlQuantity, partyResolver, readFile } from "./pipeline";
 import { unleashedProducts } from "./profiles/unleashed-products";
+import { chartKey, controlKindOf, xeroChart } from "./profiles/xero-chart";
 import { unleashedStock } from "./profiles/unleashed-stock";
 import { xeroAgedPayables, xeroAgedReceivables } from "./profiles/xero-aged";
 import { xeroContacts } from "./profiles/xero-contacts";
 import { splitAccount, xeroTrialBalance } from "./profiles/xero-trial-balance";
-import type { Profile, ProfileContext, ProfileResult } from "./types";
+import type { ChartAccount, Profile, ProfileContext, ProfileResult } from "./types";
 
 /**
  * Each profile against a fixture built from the documented export headings,
@@ -19,9 +21,18 @@ import type { Profile, ProfileContext, ProfileResult } from "./types";
 const fixture = (name: string) =>
   readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
-const ctx = (keys: Record<string, string> = {}, defaultLocation = ""): ProfileContext => ({
+const ctx = (
+  keys: Record<string, string> = {},
+  defaultLocation = "",
+  more: Partial<Pick<ProfileContext, "account" | "chartLoaded" | "accounts" | "chartChoices">> = {},
+): ProfileContext => ({
   partyCode: partyResolver(keys),
+  account: () => null,
+  chartLoaded: false,
   defaultLocation,
+  accounts: [],
+  chartChoices: {},
+  ...more,
 });
 
 function run(profile: Profile, file: string, context = ctx()): ProfileResult {
@@ -287,10 +298,50 @@ describe("Xero trial balance", () => {
     );
   });
 
-  test("a name with no code waits for the chart mapping", () => {
+  test("a name with no code, and no chart loaded, is refused with what to do", () => {
     expect(r.findings.map((f) => f.message)).toEqual([
-      "Suspense carries no account code; map it to a Clove account (chart mapping arrives in PR 2)",
+      "Suspense carries no account code and no loaded chart names it; load the Xero chart first, or map it there",
     ]);
+  });
+
+  test("with the chart loaded, codes and names resolve through the crosswalk", () => {
+    const account = accountResolver([
+      { legacy_key: "200", legacy_name: "Sales", clove_code: "4000", resolution: "map" },
+      { legacy_key: "Suspense", legacy_name: "Suspense", clove_code: "XSUS", resolution: "create" },
+      {
+        legacy_key: "610",
+        legacy_name: "Accounts Receivable",
+        clove_code: "1100",
+        resolution: "control",
+      },
+    ]);
+    const mapped = run(xeroTrialBalance, "xero-trial-balance.csv", ctx({}, "", { account }));
+    expect(mapped.rows).toEqual([
+      { account: "4000", credit_minor: 4800000 },
+      { account: "400", debit_minor: 300000 },
+      { account: "090", debit_minor: 4500000 },
+      { account: "XSUS", debit_minor: 1000 },
+    ]);
+    expect(mapped.findings).toEqual([]);
+    expect(mapped.exclusions.map((e) => e.label)).toEqual([
+      "610 - Accounts Receivable",
+      "630 - Inventory",
+      "800 - Accounts Payable",
+    ]);
+  });
+
+  test("once a chart is loaded, a code it does not name is refused, not posted to whatever shares it", () => {
+    const account = accountResolver([
+      { legacy_key: "200", legacy_name: "Sales", clove_code: "4000", resolution: "map" },
+    ]);
+    const strict = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { account, chartLoaded: true }),
+    );
+    expect(strict.rows).toEqual([{ account: "4000", credit_minor: 4800000 }]);
+    expect(strict.findings.map((f) => f.line)).toEqual([8, 12, 15]);
+    expect(strict.findings[0]?.message).toContain("is not in the loaded Xero chart");
   });
 
   test("debits staged against the printed debits less the control accounts", () => {
@@ -310,5 +361,123 @@ describe("a file that cannot be read says why", () => {
     const read = readFile('*ContactName\n"Never closed\n', xeroContacts, ctx());
     expect(read.result).toBeNull();
     expect(read.findings[0]?.severity).toBe("error");
+  });
+});
+
+describe("Xero chart of accounts", () => {
+  const clove: ChartAccount[] = [
+    { code: "200", name: "Sales", control_kind: null, is_postable: true },
+    { code: "1100", name: "Trade debtors", control_kind: "receivable", is_postable: true },
+    { code: "2100", name: "Trade creditors", control_kind: "payable", is_postable: true },
+    { code: "1200", name: "Stock", control_kind: "inventory", is_postable: true },
+    { code: "400", name: "Heading", control_kind: null, is_postable: false },
+  ];
+  const r = run(xeroChart, "xero-chart.csv", ctx({}, "", { accounts: clove }));
+  const byKey = (key: string) => r.rows.find((x) => (x["legacy_code"] ?? x["legacy_name"]) === key);
+
+  test("the same code in both charts is mapped, never merged", () => {
+    expect(byKey("200")).toEqual({
+      source: "xero",
+      legacy_code: "200",
+      legacy_name: "Sales",
+      action: "map",
+      code: "200",
+    });
+  });
+
+  test("Accounts Receivable, Accounts Payable and Inventory are marked as the control accounts", () => {
+    expect(byKey("610")).toMatchObject({ action: "control", code: "1100" });
+    expect(byKey("800")).toMatchObject({ action: "control", code: "2100" });
+    expect(byKey("630")).toMatchObject({ action: "control", code: "1200" });
+  });
+
+  test("an account Clove has no code for is created, with its type", () => {
+    expect(byKey("090")).toEqual({
+      source: "xero",
+      legacy_code: "090",
+      legacy_name: "Business Bank Account",
+      action: "create",
+      code: "090",
+      name: "Business Bank Account",
+      account_type: "asset",
+    });
+  });
+
+  test("a code Clove holds as a heading is created under another code, not merged", () => {
+    expect(byKey("400")).toMatchObject({
+      action: "create",
+      name: "Advertising",
+      account_type: "expense",
+    });
+    expect(byKey("400")?.["code"]).not.toBe("400");
+  });
+
+  test("an account with no code is known by its name", () => {
+    expect(byKey("Suspense")).toMatchObject({
+      action: "create",
+      code: "SUSPENSE",
+      account_type: "liability",
+    });
+    expect(chartKey("", "Suspense")).toBe("Suspense");
+  });
+
+  test("a person's choice wins over the default", () => {
+    const chosen = run(
+      xeroChart,
+      "xero-chart.csv",
+      ctx({}, "", { accounts: clove, chartChoices: { "090": { action: "map", code: "200" } } }),
+    );
+    expect(chosen.rows.find((x) => x["legacy_code"] === "090")).toEqual({
+      source: "xero",
+      legacy_code: "090",
+      legacy_name: "Business Bank Account",
+      action: "map",
+      code: "200",
+    });
+  });
+
+  test("an unknown type cannot be created, and a repeated account is refused", () => {
+    expect(r.findings.map((f) => f.message)).toContain(
+      "Mystery is not a Xero account type Clove can create; map this account instead",
+    );
+    expect(r.findings.some((f) => f.message.startsWith("200 is also on line"))).toBe(true);
+  });
+
+  test("a control account with no Clove control account to mark is refused until one is chosen", () => {
+    const bare = run(xeroChart, "xero-chart.csv", ctx({}, "", { accounts: [] }));
+    expect(
+      bare.findings.some((f) =>
+        f.message.startsWith("610 Accounts Receivable: choose a Clove account"),
+      ),
+    ).toBe(true);
+  });
+
+  test("control kinds from the name or the Xero type", () => {
+    expect(controlKindOf("Accounts Receivable", "Current Asset")).toBe("receivable");
+    expect(controlKindOf("Finished goods", "Inventory")).toBe("inventory");
+    expect(controlKindOf("Sales", "Revenue")).toBeNull();
+  });
+});
+
+describe("the crosswalk", () => {
+  test("party names resolve to the codes their loaded batch gave them", () => {
+    const keys = partyKeysFrom([
+      {
+        legacy_key: "Bayside Club",
+        legacy_name: "Bayside Club",
+        clove_code: "BAY001",
+        resolution: "map",
+      },
+    ]);
+    expect(partyResolver(keys)("bayside club ")).toEqual({ code: "BAY001", known: true });
+  });
+
+  test("an account resolves by code first, then by name", () => {
+    const account = accountResolver([
+      { legacy_key: "200", legacy_name: "Sales", clove_code: "4000", resolution: "map" },
+    ]);
+    expect(account("200", "Anything")).toEqual({ code: "4000", control: false });
+    expect(account(null, "sales")).toEqual({ code: "4000", control: false });
+    expect(account("999", "Nothing")).toBeNull();
   });
 });

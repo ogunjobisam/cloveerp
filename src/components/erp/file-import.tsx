@@ -1,15 +1,22 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
 
-import { hasPermission } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
+import { accountResolver, partyKeysFrom, type CrosswalkEntry } from "../../lib/import/crosswalk";
 import { toSaved, type Mapping, type SavedMapping } from "../../lib/import/headers";
 import { controlFigure, controlQuantity, partyResolver, readFile } from "../../lib/import/pipeline";
-import type { Finding, Profile } from "../../lib/import/types";
+import type {
+  ChartAccount,
+  ChartAction,
+  ChartChoice,
+  Finding,
+  Profile,
+} from "../../lib/import/types";
 import { parseMinor } from "../../lib/import/values";
 import { formatMinor } from "../../lib/money";
-import { tenantStorageKey } from "../../lib/tenant-storage";
-import { ActionButton, ErrorNote, useErpAction } from "./action";
+import { ActionButton, ErrorNote } from "./action";
 import { TOUCH } from "./page";
-import { Pill } from "./panel";
+import { Pill, Table } from "./panel";
 import { useErpSession } from "./session-context";
 
 /**
@@ -18,8 +25,13 @@ import { useErpSession } from "./session-context";
  * Nothing here writes anything but a staged batch: validate, preview, load and
  * roll back stay where they were, on the batch. The file is parsed against a
  * profile, its headings matched to the profile's columns (a person can change
- * any match, and the confirmed choice is remembered for this organisation),
- * and every line the batch will not carry is listed with the reason.
+ * any match, and the confirmed choice is kept for the organisation), and every
+ * line the batch will not carry is listed with the reason.
+ *
+ * Legacy keys resolve through the crosswalk: a contacts file stages its names
+ * beside its party batch, the chart loads its own, and the ledgers and trial
+ * balance read both — from loaded batches only, so a rolled-back import leaves
+ * nothing behind.
  *
  * For an opening balance the control total is typed from the printed report —
  * never taken from the file — and the lines held back are listed beside it:
@@ -27,31 +39,12 @@ import { useErpSession } from "./session-context";
  * figure D31 compares the load against.
  */
 
-const MAPPING_KEY = "clove.import.mapping";
-const PARTY_KEY = "clove.import.parties";
-
-function readStored<T>(key: string | null): T | null {
-  if (!key) return null;
-  try {
-    const text = window.localStorage.getItem(key);
-    return text ? (JSON.parse(text) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(key: string | null, value: unknown) {
-  if (!key) return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Site data blocked: the next file maps itself again, which is all this saves.
-  }
-}
-
 const INPUT = `${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`;
 
 const TONE = { error: "bad", warning: "warn", info: "muted" } as const;
+
+const NO_ENTRIES: CrosswalkEntry[] = [];
+const NO_ACCOUNTS: ChartAccount[] = [];
 
 export function FileImport({
   profiles,
@@ -61,12 +54,11 @@ export function FileImport({
   currency: string;
 }) {
   const { session } = useErpSession();
-  const tenant = session.tenant_id;
+  const queryClient = useQueryClient();
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? "");
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [mapping, setMapping] = useState<Mapping | null>(null);
-  const [saved, setSaved] = useState<SavedMapping | null>(null);
-  const [parties, setParties] = useState<Record<string, string>>({});
+  const [chartChoices, setChartChoices] = useState<Record<string, ChartChoice>>({});
   const [defaultLocation, setDefaultLocation] = useState("");
   const [asAt, setAsAt] = useState("");
   const [printed, setPrinted] = useState("");
@@ -75,37 +67,128 @@ export function FileImport({
 
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0];
   const opening = profile?.target.kind === "opening";
+  const chart = profile?.target.kind === "master" && profile.target.objectType === "account";
+  const readsAccounts = chart || profile?.id === "xero-trial-balance";
+
+  const mappings = useQuery({
+    queryKey: ["erp_import_mappings", {}],
+    queryFn: () => callErp<Record<string, SavedMapping>>("erp_import_mappings"),
+  });
+  const partyEntries = useQuery({
+    queryKey: ["erp_import_crosswalk", { p_source_system: "xero", p_object_type: "party" }],
+    queryFn: () =>
+      callErp<CrosswalkEntry[]>("erp_import_crosswalk", {
+        p_source_system: "xero",
+        p_object_type: "party",
+      }),
+    enabled: profile?.target.kind === "opening",
+  });
+  const accountEntries = useQuery({
+    queryKey: ["erp_import_crosswalk", { p_source_system: "xero", p_object_type: "account" }],
+    queryFn: () =>
+      callErp<CrosswalkEntry[]>("erp_import_crosswalk", {
+        p_source_system: "xero",
+        p_object_type: "account",
+      }),
+    enabled: readsAccounts,
+  });
+  const accounts = useQuery({
+    queryKey: ["erp_accounts", { p_postable_only: false }],
+    queryFn: () => callErp<ChartAccount[]>("erp_accounts", { p_postable_only: false }),
+    enabled: chart,
+  });
+
+  const saved = profile ? (mappings.data?.[profile.id] ?? null) : null;
+  const parties = partyEntries.data ?? NO_ENTRIES;
+  const accountMap = accountEntries.data ?? NO_ENTRIES;
+  const chartAccounts = accounts.data ?? NO_ACCOUNTS;
 
   const read = useMemo(() => {
     if (!profile || !file) return null;
     return readFile(
       file.text,
       profile,
-      { partyCode: partyResolver(parties), defaultLocation },
+      {
+        partyCode: partyResolver(partyKeysFrom(parties)),
+        account: accountResolver(accountMap),
+        chartLoaded: accountMap.length > 0,
+        defaultLocation,
+        accounts: chartAccounts,
+        chartChoices,
+      },
       { mapping, saved },
     );
-  }, [profile, file, parties, defaultLocation, mapping, saved]);
+  }, [
+    profile,
+    file,
+    parties,
+    accountMap,
+    chartAccounts,
+    chartChoices,
+    defaultLocation,
+    mapping,
+    saved,
+  ]);
 
-  const action = useErpAction({
-    fn: opening ? "erp_stage_opening_balances" : "erp_stage_import",
-    invalidates: opening
-      ? ["erp_opening_batches", "erp_migration_domains"]
-      : ["erp_import_batches"],
-    onDone: () => {
-      if (!profile || !read) return;
-      writeStored(
-        tenantStorageKey(`${MAPPING_KEY}.${profile.id}`, tenant),
-        toSaved(read.mapping, read.headings),
+  const action = useMutation({
+    // The batch is the write that matters. Once it is staged, what follows is
+    // bookkeeping beside it: a failure there is reported with the batch, never
+    // left looking like a failed stage that invites a second, duplicate batch.
+    mutationFn: async (args: Record<string, unknown>): Promise<string | null> => {
+      if (!profile || !read) return null;
+      const fn =
+        profile.target.kind === "opening" ? "erp_stage_opening_balances" : "erp_stage_import";
+      const batch = await callErp<string>(fn, args);
+      const problems: string[] = [];
+      const entries = Object.entries(read.result?.partyKeys ?? {}).map(
+        ([legacy_key, clove_code]) => ({ legacy_key, clove_code }),
       );
-      const keys = read.result?.partyKeys ?? {};
-      if (Object.keys(keys).length > 0) {
-        writeStored(tenantStorageKey(PARTY_KEY, tenant), { ...parties, ...keys });
+      if (
+        profile.target.kind === "master" &&
+        profile.target.objectType === "party" &&
+        entries.length > 0
+      ) {
+        try {
+          await callErp("erp_stage_import_crosswalk", {
+            p_batch_id: batch,
+            p_source_system: "xero",
+            p_object_type: "party",
+            p_entries: entries,
+          });
+        } catch (e) {
+          problems.push(
+            `its contact names were not recorded (${e instanceof Error ? e.message : String(e)}), so the ledgers will not find them: roll the batch back and stage the file again`,
+          );
+        }
       }
+      try {
+        await callErp("erp_save_import_mapping", {
+          p_profile_id: profile.id,
+          p_mapping: toSaved(read.mapping, read.headings),
+        });
+      } catch {
+        problems.push("the column headings were not remembered for next time");
+      }
+      return problems.length > 0 ? problems.join("; ") : null;
+    },
+    onSettled: () => {
+      for (const key of [
+        "erp_opening_batches",
+        "erp_migration_domains",
+        "erp_import_batches",
+        "erp_import_mappings",
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+    onSuccess: (problem) => {
       setStaged(
-        `${file?.name ?? "The file"} is staged. Validate, preview and load it from the batch below.`,
+        `${file?.name ?? "The file"} is staged. Validate, preview and load it from the batch below.` +
+          (problem ? ` But ${problem}.` : ""),
       );
       setFile(null);
       setMapping(null);
+      setChartChoices({});
     },
   });
 
@@ -115,16 +198,15 @@ export function FileImport({
     setProfileId(id);
     setFile(null);
     setMapping(null);
+    setChartChoices({});
     setStaged(null);
   };
 
   const load = async (f: File | undefined) => {
     if (!f) return;
     const text = await f.text();
-    // Read in the handler rather than an effect: browser storage exists only here.
-    setSaved(readStored<SavedMapping>(tenantStorageKey(`${MAPPING_KEY}.${profile.id}`, tenant)));
-    setParties(readStored<Record<string, string>>(tenantStorageKey(PARTY_KEY, tenant)) ?? {});
     setMapping(null);
+    setChartChoices({});
     setStaged(null);
     setFile({ name: f.name, text });
   };
@@ -133,6 +215,9 @@ export function FileImport({
     if (!read) return;
     setMapping({ ...read.mapping, [key]: at === "" ? null : Number(at) });
   };
+
+  const chooseAccount = (key: string, choice: ChartChoice) =>
+    setChartChoices((prev) => ({ ...prev, [key]: choice }));
 
   const result = read?.result ?? null;
   const findings: Finding[] = [...(read?.findings ?? []), ...(result?.findings ?? [])];
@@ -153,6 +238,8 @@ export function FileImport({
   if (!result || result.rows.length === 0) blockers.push("There are no rows to stage.");
   if (opening && errors > 0)
     blockers.push("Opening balances are staged whole: fix the refused lines in the file first.");
+  if (chart && errors > 0)
+    blockers.push("A chart is staged whole: choose an account for every refused line first.");
   if (opening && asAt === "") blockers.push("Give the as-at date.");
   if (opening && control === null) blockers.push("Type the printed total from the report.");
 
@@ -258,6 +345,83 @@ export function FileImport({
                 <p className="text-xs text-muted-foreground">Not read: {read.unused.join(", ")}.</p>
               ) : null}
             </Block>
+
+            {chart && result && result.chart.length > 0 ? (
+              <Block title="Map each Xero account">
+                <p className="text-xs text-muted-foreground">
+                  Map to an account that exists, mark one of the three control accounts, or create a
+                  new account. An existing account is never changed.
+                </p>
+                <Table columns={["Xero account", "Action", "Clove account"]}>
+                  {result.chart.map((l) => (
+                    <tr key={l.key} className="border-b border-border/60">
+                      <td className="py-1 pr-4">
+                        {l.key === l.name ? l.name : `${l.key} ${l.name}`}
+                        <span className="block text-xs text-muted-foreground">{l.type}</span>
+                      </td>
+                      <td className="py-1 pr-4">
+                        <select
+                          aria-label={`Action for ${l.name}`}
+                          className={INPUT}
+                          value={l.choice.action}
+                          onChange={(e) =>
+                            chooseAccount(l.key, {
+                              action: e.target.value as ChartAction,
+                              code: e.target.value === "create" ? l.key : "",
+                            })
+                          }
+                        >
+                          <option value="map">Map</option>
+                          <option value="control">Control account</option>
+                          <option value="create">Create</option>
+                        </select>
+                      </td>
+                      <td className="py-1">
+                        {l.choice.action === "create" ? (
+                          <input
+                            aria-label={`New code for ${l.name}`}
+                            className={INPUT}
+                            value={l.choice.code}
+                            onChange={(e) =>
+                              chooseAccount(l.key, { action: "create", code: e.target.value })
+                            }
+                          />
+                        ) : (
+                          <select
+                            aria-label={`Clove account for ${l.name}`}
+                            className={INPUT}
+                            value={l.choice.code}
+                            onChange={(e) =>
+                              chooseAccount(l.key, {
+                                action: l.choice.action,
+                                code: e.target.value,
+                              })
+                            }
+                          >
+                            <option value="">— choose —</option>
+                            {chartAccounts
+                              .filter((a) =>
+                                l.choice.action === "control"
+                                  ? a.control_kind !== null &&
+                                    ["receivable", "payable", "inventory"].includes(a.control_kind)
+                                  : a.is_postable &&
+                                    !["receivable", "payable", "inventory"].includes(
+                                      a.control_kind ?? "",
+                                    ),
+                              )
+                              .map((a) => (
+                                <option key={a.code} value={a.code}>
+                                  {a.code} {a.name}
+                                </option>
+                              ))}
+                          </select>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
+              </Block>
+            ) : null}
 
             {profile.id === "unleashed-stock" ? (
               <Label text="Location for lines with no bin">

@@ -6,8 +6,10 @@ import { gbp, isTotalLabel, readMinorOrZero } from "./common";
  *
  * The year-to-date columns, never the period ones (decision D3, option A:
  * profit and loss comes across year to date). The account is printed
- * "200 - Sales" or "Sales (200)"; the code is what resolves, and a line with
- * a name only waits for the chart mapping (PR 2).
+ * "200 - Sales" or "Sales (200)". Each resolves through the chart the Xero
+ * chart import loaded — by code, or by name where the line has no code. Once a
+ * chart is loaded, a line it does not name is refused; the printed code is
+ * used as it stands only where no chart has been loaded at all.
  *
  * Accounts Receivable, Accounts Payable and Inventory are the three control
  * accounts the other domains load; they are listed as exclusions with the
@@ -58,7 +60,7 @@ export const xeroTrialBalance: Profile = {
   target: { kind: "opening", domain: "nominal" },
   columns: COLUMNS,
   findsHeaderRow: true,
-  transform(records) {
+  transform(records, ctx) {
     const out = emptyResult();
 
     for (const r of records) {
@@ -76,27 +78,37 @@ export const xeroTrialBalance: Profile = {
       if (debit === 0 && credit === 0) continue;
 
       const { code, name } = splitAccount(accountText);
-      const control = CONTROL.find((c) => c.pattern.test(name));
-      if (control) {
+      const resolved = ctx.account(code, name);
+      const byName = CONTROL.find((c) => c.pattern.test(name));
+      if (resolved?.control || (!resolved && byName)) {
         out.exclusions.push({
           line: r.line,
           label: accountText,
-          reason: `control account, explained by ${control.domain}; Xero shows debit ${gbp(debit)}, credit ${gbp(credit)}`,
+          reason: `control account, explained by ${byName?.domain ?? "its subledger domain"}; Xero shows debit ${gbp(debit)}, credit ${gbp(credit)}`,
           amountMinor: debit,
           quantity: null,
         });
         continue;
       }
-      if (code === null) {
+      if (!resolved && ctx.chartLoaded) {
         out.findings.push({
           line: r.line,
           severity: "error",
-          message: `${accountText} carries no account code; map it to a Clove account (chart mapping arrives in PR 2)`,
+          message: `${accountText} is not in the loaded Xero chart; load or map it there, so its balance does not land on an unrelated account that shares the code`,
+        });
+        continue;
+      }
+      const account = resolved?.code ?? code;
+      if (account === null) {
+        out.findings.push({
+          line: r.line,
+          severity: "error",
+          message: `${accountText} carries no account code and no loaded chart names it; load the Xero chart first, or map it there`,
         });
         continue;
       }
 
-      const row: Record<string, string | number> = { account: code };
+      const row: Record<string, string | number> = { account };
       if (debit !== 0) row["debit_minor"] = debit;
       if (credit !== 0) row["credit_minor"] = credit;
       out.rows.push(row);

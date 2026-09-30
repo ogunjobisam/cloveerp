@@ -8,6 +8,7 @@ import { PageHeader } from "../../components/erp/page";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { useT } from "../../lib/i18n";
 import { unleashedProducts } from "../../lib/import/profiles/unleashed-products";
+import { xeroChart } from "../../lib/import/profiles/xero-chart";
 import { xeroContacts } from "../../lib/import/profiles/xero-contacts";
 
 export const Route = createFileRoute("/master-data/imports")({
@@ -35,7 +36,7 @@ export const Route = createFileRoute("/master-data/imports")({
   ),
 });
 
-const MASTER_PROFILES = [xeroContacts, unleashedProducts];
+const MASTER_PROFILES = [xeroChart, xeroContacts, unleashedProducts];
 
 function Imports() {
   const { t } = useT();
@@ -133,11 +134,24 @@ function Imports() {
                   invalidates={["erp_import_batches"]}
                 />
                 <RpcButton
+                  label="Preview"
+                  fn="erp_preview_import"
+                  args={{ p_batch_id: r["batch_id"] }}
+                  permission="master_data.import"
+                  invalidates={["erp_import_batches"]}
+                />
+                <RpcButton
                   label="Load"
                   fn="erp_load_import"
                   args={{ p_batch_id: r["batch_id"] }}
                   permission="master_data.import"
-                  invalidates={["erp_import_batches", "erp_items", "erp_parties"]}
+                  invalidates={[
+                    "erp_import_batches",
+                    "erp_items",
+                    "erp_parties",
+                    "erp_accounts",
+                    "erp_import_crosswalk",
+                  ]}
                 />
                 <RpcButton
                   label="Roll back"
@@ -145,7 +159,13 @@ function Imports() {
                   args={{ p_batch_id: r["batch_id"] }}
                   permission="master_data.import"
                   confirm="Roll this batch back? Every record it loaded is reversed."
-                  invalidates={["erp_import_batches", "erp_items", "erp_parties"]}
+                  invalidates={[
+                    "erp_import_batches",
+                    "erp_items",
+                    "erp_parties",
+                    "erp_accounts",
+                    "erp_import_crosswalk",
+                  ]}
                 />
               </span>
             ),
