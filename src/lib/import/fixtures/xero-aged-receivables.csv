@@ -1,0 +1,17 @@
+Aged Receivables Detail
+Demo Company (UK)
+As at 30 September 2026
+Invoice Date,Invoice Number,Invoice Reference,Due Date,Current,< 1 Month,1 Month,2 Months,Older,Total,Currency
+Bayside Club,,,,,,,,,,
+03/09/2026,INV-0101,,03/10/2026,"1,234.50",,,,,"1,234.50",GBP
+15 Aug 2026,CN-0007,,15 Aug 2026,,(120.00),,,,(120.00),GBP
+Total Bayside Club,,,,,,,,,"1,114.50",
+Hamilton Smith Ltd,,,,,,,,,,
+01/07/2026,INV-0088,,31/07/2026,,,,"£2,000.00",,"£2,000.00",GBP
+10/09/2026,INV-0110,,10/10/2026,500.00,,,,,500.00,EUR
+12/09/2026,INV-0111,,12/10/2026,0.00,,,,,0.00,GBP
+Total Hamilton Smith Ltd,,,,,,,,,"2,500.00",
+Unknown Customer Ltd,,,,,,,,,,
+31/02/2026,INV-0200,,,,,,,,99.99,GBP
+02/09/2026,INV-0201,,,,,,,,10.005,GBP
+Total Aged Receivables,,,,,,,,,"3,714.49",

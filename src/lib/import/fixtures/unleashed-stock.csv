@@ -1,0 +1,8 @@
+Stock on Hand
+As at 30/09/2026
+Product Code,Product Description,Warehouse,Bin,Batch,Expiry Date,Qty On Hand,Avg Cost,Total Cost
+FIX-M6,M6 fixings,MAIN,A-01,,,50000,0.043,2150.00
+PAINT-5L,Trade emulsion 5L,MAIN,,B123,31/03/2027,40,11.50,460.00
+OLD-01,Discontinued widget,MAIN,,,,0,1.00,0.00
+WID-02,Widget,NORTH,C-02,,,-3,2.00,-6.00
+Total,,,,,,50037,,2604.00

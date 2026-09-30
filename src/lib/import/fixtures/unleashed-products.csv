@@ -1,0 +1,6 @@
+Product Code,Product Description,Product Group,Product Sub Group,Unit Of Measure,Default Purchases Unit Of Measure,Is Batch Tracked,Is Serialized,Barcode,Weight,Default Purchase Price,Default Sell Price,Supplier,Min Stock Alert Level,Max Stock Alert Level,Minimum Order Quantity,Obsolete
+FIX-M6,"M6 fixings, zinc",Fixings,Bolts,EA,BOX,No,No,5012345678900,0.004,0.043,0.09,POWERDIRECT,5000,50000,1000,No
+PAINT-5L,"Trade emulsion ""white"" 5L",Paint,,EA,EA,Yes,No,,5.2,11.5,24.99,,20,200,,No
+OLD-01,Discontinued widget,Widgets,,EA,EA,No,No,,,,,,,,,Yes
+FIX-M6,Duplicate row,Fixings,,EA,,,,,,,,,,,,No
+,No code here,,,,,,,,,,,,,,,No

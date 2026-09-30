@@ -1,0 +1,10 @@
+﻿*ContactName,AccountNumber,EmailAddress,FirstName,LastName,POAddressLine1,POAddressLine2,POCity,PORegion,POPostalCode,POCountry,SAAddressLine1,SACity,SAPostalCode,SACountry,PhoneNumber,TaxNumber,DueDateSalesDay,DueDateSalesTerm,DueDateBillDay,DueDateBillTerm
+Bayside Club,BAY001,secretary@bayside.example,Bob,Partridge,148 Bay Harbour Road,,Ridge Heights,Madeupville,VIC 3999,Australia,,,,,+61 3 5555 0123,,20,OFFOLLOWINGMONTH,,
+"Hamilton Smith Ltd",,info@hamilton.example,Hannah,Smith,"Unit 4, Mill Lane","Line two
+with a break",Leeds,,LS1 4AB,United Kingdom,,,,,0113 496 0000,GB 123 4567 89,30,DAYSAFTERBILLDATE,,
+"Hamilton-Smith Limited",,,,,,,London,,EC1A 1BB,UK,,,,,,123456789,,,,
+PowerDirect,,,,,,,Birmingham,,B1 1AA,England,,,,,,GB12345,,,30,DAYSAFTERBILLDATE
+"Ridgeway ""Old"" Bank",,,,,,,Glasgow,,G1 1AA,Scotland,,,,,,,,,,
+Nowhere Trading,,,,,,,Atlantis,,,Atlantis,,,,,,,,,,
+,NONAME,,,,,,,,,,,,,,,,,,,
+

@@ -1,0 +1,16 @@
+Trial Balance
+Demo Company (UK)
+As at 30 September 2026
+Account,Debit,Credit,YTD Debit,YTD Credit
+Revenue,,,,
+200 - Sales,,"1,000.00",,"48,000.00"
+Expenses,,,,
+Advertising (400),250.00,,"3,000.00",
+Assets,,,,
+610 - Accounts Receivable,,,"3,714.49",
+630 - Inventory,,,"2,604.00",
+090 - Business Bank Account,,,"45,000.00",
+Liabilities,,,,
+800 - Accounts Payable,,,,"1,200.00"
+Suspense,,,10.00,
+Total,"1,250.00","1,000.00","54,328.49","49,200.00"

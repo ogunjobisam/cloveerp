@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { FileImport } from "../../components/erp/file-import";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
@@ -9,6 +10,11 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { formatMinor } from "../../lib/money";
 import { callErp } from "../../lib/erp";
+import { unleashedStock } from "../../lib/import/profiles/unleashed-stock";
+import { xeroAgedPayables, xeroAgedReceivables } from "../../lib/import/profiles/xero-aged";
+import { xeroTrialBalance } from "../../lib/import/profiles/xero-trial-balance";
+
+const OPENING_PROFILES = [unleashedStock, xeroAgedReceivables, xeroAgedPayables, xeroTrialBalance];
 
 export const Route = createFileRoute("/operations/cutover")({
   head: () => ({
@@ -179,12 +185,14 @@ function Cutover() {
         cut over only on that evidence, by somebody other than the person who loaded it.
       </PageHeader>
 
+      <FileImport profiles={OPENING_PROFILES} currency={base} />
+
       <ActionBar
         title="Migration batches and cutover"
         note="Stage a batch from a legacy extract, record the legacy figure against ours, then cut the domain over. A load is reversed from the batch itself, below."
         actions={[
           {
-            label: "Stage opening balances",
+            label: "Stage opening balances as JSON (advanced)",
             permission: "master_data.import",
             fn: "erp_stage_opening_balances",
             fields: [
