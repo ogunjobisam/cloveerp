@@ -1,0 +1,30 @@
+# Suite calls a from-empty replay does not make, and the migration that
+# answers for each.
+#
+# A migration that ends by running a suite runs it against the schema as it
+# stands at that point in the replay — not as it stands today. When the thing
+# the suite reads was wrong then and fixed later, the call keeps running the
+# wrong version on every replay, forever, because the migration cannot be
+# edited. Production never sees it (it ran these files once, long ago); only a
+# build from an empty cluster does.
+#
+# erp.tax_outside_the_ledger_report() read input VAT with the sale's sign until
+# 20260922180000_input_tax_is_debited_not_credited.sql. The four calls below
+# ran it before that, over seeded demonstration trading, and failed whenever
+# the slice held a supplier bill carrying tax — the nightly of 25 and 30
+# September among them (ogunjobisam/cloveerp#246).
+#
+# The suite itself is not skipped. erp.ci_check_catalogue() reads pg_proc, so
+# run_checks.sh walks it after every build, against the report as it is now.
+#
+# One line per call: <migration> <line> <superseded by> <routine>
+#
+# supabase/ci/replay_migrations.sh refuses an entry whose line is not exactly
+# `select <routine>();`, whose superseding migration does not exist, or which
+# does not sort before it — so an entry cannot drift, and cannot be a way of
+# turning off a check that is still telling the truth.
+
+20260916030000_an_invoice_says_its_tax.sql                   901  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
+20260916090000_tax_reaches_the_ledger.sql                    799  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
+20260919845000_two_suites_pinned_the_name_of_the_defect.sql  256  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
+20260919910000_the_tax_point_is_the_issue.sql                405  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
