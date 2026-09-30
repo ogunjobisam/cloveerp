@@ -33,6 +33,10 @@ export const ROUTES: readonly RouteUnderTest[] = [
   { path: "/contact", kind: "public", file: "contact.tsx" },
   { path: "/platform", kind: "public", file: "platform.tsx" },
   { path: "/signin", kind: "public", file: "signin.tsx" },
+  // An organisation's address. The organisation is looked up by a server
+  // function this suite's backend cannot answer, so it is rendered at an
+  // address nobody holds: the route resolves and says 404 rather than throwing.
+  { path: "/nobody-holds-this-address", kind: "public", file: "$address.tsx" },
 
   { path: "/help", kind: "desk", file: "help.tsx" },
   // An invitation's landing page: its own way in signed out, and straight on

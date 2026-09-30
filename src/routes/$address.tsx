@@ -48,6 +48,8 @@ function AddressPage() {
     queryFn: () => tenantByAddress({ data: { code } }),
     enabled: isConfigured && shaped,
     staleTime: 5 * 60_000,
+    // An address nobody holds is the ordinary miss, not a fault to retry.
+    retry: false,
   });
 
   if (!isConfigured || !shaped) return <NotFoundComponent />;

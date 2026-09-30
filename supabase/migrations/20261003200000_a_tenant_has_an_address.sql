@@ -134,7 +134,7 @@ $$;
 revoke all on function erp.tenant_code_refusal(text, uuid) from public, anon;
 
 comment on function erp.tenant_code_refusal(text, uuid) is
-  'Why a code may not be an organisation''s address, or null when it may (20261003100000).';
+  'Why a code may not be an organisation''s address, or null when it may (20261003200000).';
 
 -- Holds every code set on erp.tenant to the rule, and keeps the code a rename
 -- leaves behind. A code the organisation takes back is its own again.
@@ -206,7 +206,7 @@ $$;
 revoke all on function erp.refuse_unchosen_address(text, uuid) from public, anon;
 
 comment on function erp.refuse_unchosen_address(text, uuid) is
-  'Refuses an address a person chose that the trigger would refuse, or that starts with demo- (20261003100000).';
+  'Refuses an address a person chose that the trigger would refuse, or that starts with demo- (20261003200000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. The doors
@@ -240,7 +240,7 @@ grant execute on function public.erp_tenant_by_address(text) to service_role;
 comment on function public.erp_tenant_by_address(text) is
   'The organisation an address names: its current code and name, or null. '
   'Executed by service_role only, from the server function behind the sign-in form at /<code>; '
-  'answers nothing else (20261003100000).';
+  'answers nothing else (20261003200000).';
 
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('public', 'erp_tenant_by_address',
@@ -294,7 +294,7 @@ $$;
 revoke all on function erp.set_tenant_address(text) from public, anon;
 
 comment on function erp.set_tenant_address(text) is
-  'Changes the caller''s organisation''s address; the old one keeps opening the new (20261003100000).';
+  'Changes the caller''s organisation''s address; the old one keeps opening the new (20261003200000).';
 
 create or replace function public.erp_set_tenant_address(p_code text)
 returns jsonb
@@ -307,7 +307,7 @@ revoke all on function public.erp_set_tenant_address(text) from public, anon;
 grant execute on function public.erp_set_tenant_address(text) to authenticated, service_role;
 
 comment on function public.erp_set_tenant_address(text) is
-  'Changes this organisation''s address — cloveerp.com/<code> — from the Organisation screen (20261003100000).';
+  'Changes this organisation''s address — cloveerp.com/<code> — from the Organisation screen (20261003200000).';
 
 insert into erp_meta.security_definer_allowance (schema_name, function_name, rationale) values
   ('erp', 'set_tenant_address',
@@ -652,7 +652,7 @@ $$;
 revoke all on function erp_test.assert_tenant_address_suite() from public, anon;
 
 comment on function erp_test.assert_tenant_address_suite() is
-  'An organisation has an address, and only its administrator changes it (20261003100000).';
+  'An organisation has an address, and only its administrator changes it (20261003200000).';
 
 -- The generators, which are idempotent and run at the end of every migration.
 select erp.apply_row_security();
