@@ -269,6 +269,11 @@ export type MyTenancy = {
   status: string;
   principal_status: string;
   is_active: boolean;
+  /**
+   * Holds a grant support access did not give: the organisation's own member,
+   * not a visitor. Entering is a switch for a member, and Leave ends nothing.
+   */
+  is_member?: boolean;
   holds_administrator: boolean;
   is_current: boolean;
 };
