@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import * as ts from "typescript";
 
 import { FLOWS, OFF_THE_PATH, pathsOnTheDemoPath } from "../../e2e/demo-path";
 import { ROUTES } from "../../e2e/routes";
@@ -52,49 +53,96 @@ const SOURCE = applicationSource();
  *
  * `/finance`, `/logistics` and `/inventory` declare theirs as `ModuleDef.flow`,
  * so those are read from the declaration itself. `/procurement` and `/sales`
- * draw theirs in the route file, so those are read out of the route.
+ * draw theirs in the route file, so those are read from what the route hands
+ * `<ProcessFlow flow={…}>`: an object written in place, or a constant declared
+ * at the top of the same file and named there.
  *
- * The flow used to sit inline inside the `<ProcessFlow>` element and this read
- * everything between that and the actions it is given. 20260918 hoisted both
- * into named constants — `flow={PURCHASE_TO_PAY}` — so the slice between the
- * two became empty, this found no labels at all, and a test whose whole job is
- * to notice that a screen stopped drawing a step reported that /procurement
- * draws none of them. A screen's stages are where the screen says they are, so
- * a named flow is followed to its declaration.
+ * The file is parsed, not searched. This read was once the text between
+ * `<ProcessFlow` and `actions={`, which held the stages while they were written
+ * in place. When both screens moved theirs into a named constant, that text
+ * held `flow={PURCHASE_TO_PAY}` and nothing else, every step on both screens
+ * read as missing, and the failure blamed the demo path for a screen the read
+ * could no longer see. 7376401 followed the name by searching for
+ * `const NAME: FlowSpec = {` and the next `\n};`, which a different annotation,
+ * a `satisfies` or a reformat would lose again. So a flow this cannot read
+ * fails as that.
  */
 const INLINE_FLOWS: Readonly<Record<string, string>> = {
   "/procurement": join("routes", "procurement", "index.tsx"),
   "/sales": join("routes", "sales", "index.tsx"),
 };
 
-/** The labels declared between two offsets of a source file. */
-function labelsIn(src: string, from: number, to: number): string[] {
-  return [...src.slice(from, to).matchAll(/(?<![A-Za-z])label: "([^"]+)"/g)].map((m) => m[1] ?? "");
-}
-
 function inlineStages(file: string): string[] {
-  const src = readFileSync(join(ROOT, "src", file), "utf8");
-  const opens = src.indexOf("<ProcessFlow");
-  const closes = src.indexOf("actions={", opens);
-  expect(opens, `${file} draws no <ProcessFlow>`).toBeGreaterThan(-1);
-  expect(closes, `${file}'s <ProcessFlow> is not given its actions`).toBeGreaterThan(opens);
+  const path = join(ROOT, "src", file);
+  const tree = ts.createSourceFile(
+    path,
+    readFileSync(path, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const said = (node: ts.Node) => node.getText(tree);
 
-  const element = src.slice(opens, closes);
-  const named = /flow=\{([A-Z][A-Za-z0-9_]*)\}/.exec(element);
-  if (named) {
-    const declaration = src.indexOf(`const ${named[1]}: FlowSpec = {`);
-    expect(
-      declaration,
-      `${file} draws flow={${named[1]}} and declares no such FlowSpec`,
-    ).toBeGreaterThan(-1);
-    // To the next top-level declaration, which is where the flow's own object
-    // ends. A label after that belongs to something else.
-    const ends = src.indexOf("\n};", declaration);
-    expect(ends, `${file}'s ${named[1]} is never closed`).toBeGreaterThan(declaration);
-    return labelsIn(src, declaration, ends);
+  const named = new Map<string, ts.Expression>();
+  for (const statement of tree.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const d of statement.declarationList.declarations) {
+      if (ts.isIdentifier(d.name) && d.initializer) named.set(d.name.text, d.initializer);
+    }
   }
 
-  return labelsIn(src, opens, closes);
+  const given: ts.Expression[] = [];
+  const visit = (node: ts.Node) => {
+    if (
+      (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+      said(node.tagName) === "ProcessFlow"
+    ) {
+      for (const attr of node.attributes.properties) {
+        if (!ts.isJsxAttribute(attr) || said(attr.name) !== "flow") continue;
+        const value = attr.initializer;
+        if (value && ts.isJsxExpression(value) && value.expression) given.push(value.expression);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  expect(given.length, `${file} draws no <ProcessFlow flow={…}>`).toBeGreaterThan(0);
+
+  const property = (of: ts.ObjectLiteralExpression, name: string) =>
+    of.properties.find(
+      (p): p is ts.PropertyAssignment =>
+        ts.isPropertyAssignment(p) &&
+        (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) &&
+        p.name.text === name,
+    )?.initializer;
+
+  return given.flatMap((flow) => {
+    let spec: ts.Expression | undefined = ts.isIdentifier(flow) ? named.get(flow.text) : flow;
+    while (
+      spec &&
+      (ts.isParenthesizedExpression(spec) ||
+        ts.isAsExpression(spec) ||
+        ts.isSatisfiesExpression(spec))
+    ) {
+      spec = spec.expression;
+    }
+    const cannot = `the demo path's check cannot read the flow ${file} gives <ProcessFlow> (flow={${said(flow)}}): it reads an object written in place or a constant declared at the top of the same file`;
+    if (!spec || !ts.isObjectLiteralExpression(spec)) throw new Error(cannot);
+    const stages = property(spec, "stages");
+    if (!stages || !ts.isArrayLiteralExpression(stages)) throw new Error(cannot);
+
+    const labels = stages.elements.map((stage) => {
+      const label = ts.isObjectLiteralExpression(stage) ? property(stage, "label") : undefined;
+      if (!label || !ts.isStringLiteralLike(label)) {
+        throw new Error(
+          `${file} draws a step whose label is not written down: ${said(stage).slice(0, 80)}`,
+        );
+      }
+      return label.text;
+    });
+    expect(labels.length, `${file} draws a <ProcessFlow> with no steps`).toBeGreaterThan(0);
+    return labels;
+  });
 }
 
 function stagesDrawnOn(path: string): string[] | null {
@@ -130,6 +178,14 @@ describe("the demo path", () => {
           `${flow.key} walks ${step.path}, which is not a route in e2e/routes.ts`,
         ).toBe(true);
       }
+    }
+  });
+
+  // Separately from the demo path naming anything there: a screen this reads
+  // nothing from is a read that has stopped working, not a screen without steps.
+  test("can read the steps of every screen that draws its own", () => {
+    for (const [path, file] of Object.entries(INLINE_FLOWS)) {
+      expect(inlineStages(file).length, `no step read from ${path}`).toBeGreaterThan(0);
     }
   });
 
