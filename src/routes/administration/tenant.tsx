@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import { ErrorNote, PermissionNote, useErpAction } from "../../components/erp/action";
@@ -76,13 +76,14 @@ function TenantLifecycle() {
             sense against real data. It reports what is still missing rather than refusing silently.
           </Prose>
         </header>
-        <div className="px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
+          <CloseChecklistNote />
           <RpcButton
             label="Run go-live checks"
             fn="erp_go_live"
             permission="administration.configure"
             variant="primary"
-            invalidates={["erp_session", "erp_platform_assurance"]}
+            invalidates={["erp_session", "erp_platform_assurance", "erp_tenant_state"]}
           />
         </div>
       </section>
@@ -142,6 +143,31 @@ function TenantLifecycle() {
         ]}
       />
     </div>
+  );
+}
+
+/**
+ * Go-live refuses books whose close checklist lacks the ties every close must
+ * pass (20261003800000). Said here first, as the database would say it after
+ * the press.
+ */
+function CloseChecklistNote() {
+  const state = useQuery({
+    queryKey: ["erp_tenant_state", {}],
+    queryFn: () =>
+      callErp<{ is_live?: boolean; close_ties_missing?: string[] }>("erp_tenant_state"),
+  });
+  const missing = state.data?.close_ties_missing ?? [];
+  if (state.data?.is_live || missing.length === 0) return null;
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      Going live needs Period close, so that every month is closed against the trial balance, the
+      stock and the ledgers it checks. Install it on{" "}
+      <Link to="/administration/configuration" className="underline underline-offset-2">
+        Configuration
+      </Link>{" "}
+      first.
+    </p>
   );
 }
 

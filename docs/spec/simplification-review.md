@@ -508,6 +508,13 @@ nodes:
     pr: PR13
     proves: erp_test.cash_receipt_suite
 
+  - id: F6
+    title: Going live requires a close checklist
+    kind: correctness
+    needs: [R0]
+    pr: PR12
+    proves: erp_test.close_checklist_required_suite
+
   - id: V1
     title: Compute all nine VAT 100 boxes
     kind: build
@@ -837,6 +844,35 @@ indistinguishable from an untouched one.
 **F5** Cash arrives as a bare subledger write through `erp.apply_cash()`
 (`20260919200000_cash_settles_what_it_pays.sql:330`) with no document. Add a cash
 receipt and a remittance advice.
+**F6** The four unwaivable ties are the v1 master gate, and for a real
+organisation they gated nothing. The ties run only as tasks of a period's close
+checklist, which `erp.open_period_close()` raises from `erp.close_task_template`,
+and only `erp.configure_period_close()` writes that template. Neither route by
+which an organisation is built installed it: `erp.ensure_demo_configuration()`
+installs finance, master data, procurement, sales, inventory, receivables and
+tax, and the onboarding interview's books step (`erp_ai.accept_interview()`)
+installs finance alone. `erp.go_live()` asked about dead configuration and a
+second administrator and not about a checklist, so an organisation went live and
+first learned it had no close when a close was refused
+(`CLOVEERP_NO_CLOSE_TEMPLATE`). The build could not see it: `close_month.sh`
+installs the module before closing ci-demo, and `erp.demonstration_catch_up()`
+installs it retroactively. A customer got neither.
+Built in `20261003800000_going_live_needs_a_close_checklist.sql`, as a go-live
+refusal rather than the finding of `erp.dead_configuration_report()` this node
+first proposed. That report is asserted across every organisation on every
+deploy (`erp.platform_assurance()`, check `dead_configuration`, platform scope),
+so a finding would have turned the deploy red over any organisation already
+building its books without a checklist. `erp.close_ties_missing(tenant)` names
+the ties an organisation with an active ledger has no active template task for;
+`erp.go_live()` refuses while any is missing (`CLOVEERP_NO_CLOSE_CHECKLIST`),
+after the single-administrator check; `erp_tenant_state()` carries
+`close_ties_missing` so the go-live panel says so before the press; and both
+installers install the checklist, each asking first. An organisation already
+live is untouched: nothing refuses a posting, a close or a change.
+Proves: go-live refuses books with no checklist and names every tie; one press of
+Period close answers it; a checklist that lost a tie is refused for that tie
+alone; an organisation with no ledger is not refused; the interview's books and a
+fresh demonstration both carry every tie.
 
 ### VAT
 
@@ -867,7 +903,7 @@ Fourteen PRs. One branch each, short-lived, into main.
 - PR9 — Dead configuration gate. W5, and flip X2 and X3 to blocking.
 - PR10 — Counts. I1, I2, I3, I4.
 - PR11 — Transfers and the inventory surface. I5, I6, I7, I8.
-- PR12 — Finance. F1, F2, F3, F4, and the C8 spike note.
+- PR12 — Finance. F1, F2, F3, F4, F6, and the C8 spike note.
 - PR13 — Cash documents. F5.
 - PR14 — VAT. V1, V2.
 
