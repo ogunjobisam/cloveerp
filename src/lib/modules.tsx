@@ -79,15 +79,14 @@ const SHIPMENT_LIST: StageList = {
   fn: "erp_shipments",
   args: { p_limit: 200 },
   id: "shipment_id",
-  title: ["reference"],
+  // The document's SHP- number, or the reference of one raised before
+  // shipments were documents (20261002500000).
+  title: ["number"],
   subtitle: ["destination", "carrier"],
   status: "status",
   noun: "shipment",
   nounPlural: "shipments",
 };
-
-/** A shipment planned and not yet booked with a carrier: what choosing and booking act on. */
-const SHIPMENT_UNBOOKED = ["planning", "planned", "tendered"];
 
 /**
  * One description of every module, used by every surface that talks about it.
@@ -4134,7 +4133,7 @@ export const LOGISTICS: ModuleDef = {
   flow: {
     code: "despatch",
     title: "Despatch, step by step",
-    note: "Create the delivery from its sales order, confirm it when the goods leave, then plan the shipment, book the carrier and record proof of delivery.",
+    note: "Ship the posted deliveries, then record proof of delivery when they arrive.",
     stages: [
       {
         label: "Delivery",
@@ -4142,9 +4141,10 @@ export const LOGISTICS: ModuleDef = {
         fedBy:
           "Deliveries appear here once they are posted, that is once the goods have left stock.",
 
-        // What Plan a shipment takes, read from the door its picker reads: a
-        // posted delivery that no shipment still standing carries. The step
-        // listed drafts, which that door refuses (20261002000000).
+        // What Ship these deliveries takes, read from the door its picker
+        // reads: a posted delivery that no shipment still standing carries
+        // (20261002000000). One press opens the shipment and books the carrier
+        // the rate card recommends (20261002500000).
         list: {
           fn: "erp_deliveries_to_ship",
           args: { p_site_id: null },
@@ -4155,34 +4155,15 @@ export const LOGISTICS: ModuleDef = {
           noun: "delivery",
           nounPlural: "deliveries",
         },
-        createFn: "erp_plan_shipment",
-      },
-      {
-        label: "Carrier",
-        hint: "Who is taking it, at what rate, against which service.",
-        fedBy: "Shipments appear here once deliveries are gathered into one at the delivery step.",
-
-        list: SHIPMENT_LIST,
-        states: SHIPMENT_UNBOOKED,
-        recordArg: "p_shipment_id",
-        actionFn: "erp_select_carrier",
-      },
-      {
-        label: "Book carrier",
-        hint: "Booking a shipment is the commitment the carrier sees.",
-        fedBy: "Shipments appear here once a carrier has been chosen.",
-
-        list: SHIPMENT_LIST,
-        states: SHIPMENT_UNBOOKED,
-        recordArg: "p_shipment_id",
-        actionFn: "erp_book_shipment",
+        createFn: "erp_ship_deliveries",
       },
       {
         label: "Proof of delivery",
         hint: "The signature or the photograph, attached to the shipment.",
+        fedBy: "Shipments appear here once they are booked with a carrier.",
         list: SHIPMENT_LIST,
-        // Booked or on its way, and not yet signed for.
-        states: ["booked", "despatched", "exception"],
+        // Booked, and not yet signed for.
+        states: ["booked"],
         recordArg: "p_shipment_id",
         actionFn: "erp_record_proof_of_delivery",
       },
@@ -4201,68 +4182,74 @@ export const LOGISTICS: ModuleDef = {
   actions: [
     DELIVER_AN_ORDER,
     {
-      label: "Plan a shipment",
-      description: "Group deliveries leaving one site on one day.",
+      label: "Ship these deliveries",
+      description:
+        "Ship posted deliveries of one site to one customer. The carrier the rate card recommends is booked unless you name another.",
       permission: "logistics.plan",
-      fn: "erp_plan_shipment",
+      fn: "erp_ship_deliveries",
       fields: [
-        pickSite(),
         {
-          // Nothing that names an existing record is typed. Deliveries are
-          // ticked from the list of deliveries, not copied in as identifiers.
-          // Only posted ones from the site chosen above, from the last thirty
-          // days, that no shipment carries yet: the list offered two hundred
-          // deliveries, most of them sent months before
-          // (public.erp_deliveries_to_ship, 20260914075500).
+          // Ticked from the deliveries no shipment carries, from every site;
+          // the door refuses two sites or two customers by name
+          // (20261002500000).
           kind: "multi",
           name: "p_delivery_ids",
           label: "Deliveries",
           required: true,
-          hint: "Confirmed deliveries from the site above, from the last 30 days, that are not on a shipment yet. Tick every one travelling on this shipment.",
+          hint: "Posted deliveries of one site and one customer, not on a shipment yet. Tick every one travelling together.",
           options: {
             fn: "erp_deliveries_to_ship",
-            argsFrom: { p_site_id: "p_site_id" },
+            args: { p_site_id: null },
             value: "document_id",
-            label: ["document_number", "document_date", "party"],
+            label: ["document_number", "site", "party"],
           },
         },
-        { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: true },
+        { kind: "date", name: "p_planned_despatch", label: "Planned despatch", required: false },
+        {
+          kind: "select",
+          name: "p_carrier_code",
+          label: "Carrier",
+          required: false,
+          hint: "Leave empty to take the carrier the rate card recommends.",
+          options: {
+            fn: "erp_carriers",
+            value: "code",
+            label: ["code", "name"],
+          },
+        },
+        {
+          kind: "text",
+          name: "p_service_code",
+          label: "Service",
+          required: false,
+          placeholder: "NEXT_DAY",
+          hint: "Leave empty to take the carrier's recommended service.",
+        },
+        {
+          kind: "money",
+          name: "p_cost_minor",
+          label: "Cost",
+          currency: "GBP",
+          required: false,
+          placeholder: "12.50",
+          hint: "Leave empty to take the rate card's price.",
+        },
       ],
-      invalidates: ["erp_shipments"],
+      invalidates: ["erp_shipments", "erp_deliveries_to_ship", "erp_delivery_performance"],
       mapArgs: (v, picked) => ({
-        p_site_id: v["p_site_id"],
-        p_planned_despatch: v["p_planned_despatch"],
         p_delivery_ids: picked?.lists["p_delivery_ids"] ?? [],
+        p_planned_despatch: v["p_planned_despatch"] ?? null,
+        p_carrier_code: v["p_carrier_code"] ?? null,
+        p_service_code: v["p_service_code"] ?? null,
+        p_cost_minor: v["p_cost_minor"] ?? null,
       }),
-    },
-    {
-      label: "Select a carrier",
-      permission: "logistics.plan",
-      fn: "erp_select_carrier",
-      fields: [
-        pickFrom(
-          "erp_shipments",
-          "shipment_id",
-          ["reference", "status"],
-          "p_shipment_id",
-          "Shipment",
-        ),
-        { kind: "date", name: "p_required_by", label: "Required by", required: false },
-      ],
-      invalidates: ["erp_shipments"],
     },
     {
       label: "Book a shipment",
       permission: "logistics.plan",
       fn: "erp_book_shipment",
       fields: [
-        pickFrom(
-          "erp_shipments",
-          "shipment_id",
-          ["reference", "status"],
-          "p_shipment_id",
-          "Shipment",
-        ),
+        pickFrom("erp_shipments", "shipment_id", ["number", "status"], "p_shipment_id", "Shipment"),
         {
           kind: "select",
           name: "p_carrier_code",
@@ -4302,13 +4289,7 @@ export const LOGISTICS: ModuleDef = {
       permission: "logistics.despatch",
       fn: "erp_record_proof_of_delivery",
       fields: [
-        pickFrom(
-          "erp_shipments",
-          "shipment_id",
-          ["reference", "status"],
-          "p_shipment_id",
-          "Shipment",
-        ),
+        pickFrom("erp_shipments", "shipment_id", ["number", "status"], "p_shipment_id", "Shipment"),
         { kind: "date", name: "p_arrived_at", label: "Arrived on", required: true },
         {
           kind: "text",
@@ -4330,6 +4311,24 @@ export const LOGISTICS: ModuleDef = {
 
       invalidates: ["erp_shipments", "erp_delivery_performance"],
     },
+    {
+      label: "Cancel a shipment",
+      description: "A planned or booked shipment. Its deliveries can be shipped again.",
+      permission: "logistics.plan",
+      fn: "erp_cancel_shipment",
+      fields: [
+        pickFrom("erp_shipments", "shipment_id", ["number", "status"], "p_shipment_id", "Shipment"),
+        {
+          kind: "text",
+          name: "p_reason",
+          label: "Reason",
+          required: false,
+          placeholder: "The customer will collect",
+          hint: "Why it is not going, for whoever reads the shipment next.",
+        },
+      ],
+      invalidates: ["erp_shipments", "erp_deliveries_to_ship"],
+    },
   ],
 
   kpis: [
@@ -4337,7 +4336,7 @@ export const LOGISTICS: ModuleDef = {
       label: "Open shipments",
       fn: "erp_shipments",
       compute: (rows) => ({
-        value: String(count(rows, (r) => !isOneOf(r["status"], ["delivered", "closed"]))),
+        value: String(count(rows, (r) => !isOneOf(r["status"], ["delivered", "cancelled"]))),
         hint: `of ${rows.length} planned`,
       }),
     },
