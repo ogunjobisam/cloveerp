@@ -2,10 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar } from "../../components/erp/actions-bar";
 import { AutoPanel, StatusPill, shortDate } from "../../components/erp/auto";
+import { FileImport } from "../../components/erp/file-import";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { useT } from "../../lib/i18n";
+import { unleashedProducts } from "../../lib/import/profiles/unleashed-products";
+import { xeroContacts } from "../../lib/import/profiles/xero-contacts";
 
 export const Route = createFileRoute("/master-data/imports")({
   head: () => ({
@@ -32,6 +35,8 @@ export const Route = createFileRoute("/master-data/imports")({
   ),
 });
 
+const MASTER_PROFILES = [xeroContacts, unleashedProducts];
+
 function Imports() {
   const { t } = useT();
 
@@ -43,56 +48,65 @@ function Imports() {
         one.
       </PageHeader>
 
-      <ActionBar
-        title="Staging a batch"
-        note="Rows are staged as they were received and validated before anything is written. Master data rows name the record by code; a settlement statement is one statement per batch, a row per payout line."
-        actions={[
-          {
-            label: "Stage an import",
-            permission: "master_data.import",
-            fn: "erp_stage_import",
-            fields: [
+      <FileImport profiles={MASTER_PROFILES} currency="GBP" />
+
+      <details className="rounded-xl border border-border bg-card px-4 py-3 sm:px-5">
+        <summary className="cursor-pointer text-sm font-medium">
+          Advanced: stage rows as JSON
+        </summary>
+        <div className="mt-4">
+          <ActionBar
+            title="Staging a batch"
+            note="Rows are staged as they were received and validated before anything is written. Master data rows name the record by code; a settlement statement is one statement per batch, a row per payout line."
+            actions={[
               {
-                kind: "choice",
-                name: "p_object_type",
-                label: "What the rows are",
-                required: true,
-                choices: [
-                  { value: "party", label: "Business partners" },
-                  { value: "item", label: "Products" },
-                  { value: "settlement_statement", label: "Settlement statement" },
+                label: "Stage an import",
+                permission: "master_data.import",
+                fn: "erp_stage_import",
+                fields: [
+                  {
+                    kind: "choice",
+                    name: "p_object_type",
+                    label: "What the rows are",
+                    required: true,
+                    choices: [
+                      { value: "party", label: "Business partners" },
+                      { value: "item", label: "Products" },
+                      { value: "settlement_statement", label: "Settlement statement" },
+                    ],
+                  },
+                  {
+                    kind: "text",
+                    name: "p_rows",
+                    label: "Rows",
+                    required: true,
+                    hint: 'JSON array of objects, for example [{"code": "ACME", "name": "Acme Ltd"}].',
+                  },
+                  {
+                    kind: "text",
+                    name: "p_code",
+                    label: "Batch code",
+                    hint: "Left empty, one is generated.",
+                  },
+                  {
+                    kind: "text",
+                    name: "p_source",
+                    label: "Source",
+                    hint: "Where the file came from. Default manual.",
+                  },
                 ],
+                mapArgs: (v) => ({
+                  p_object_type: v["p_object_type"],
+                  p_rows: JSON.parse(v["p_rows"] ?? "[]"),
+                  p_code: v["p_code"] || null,
+                  p_source: v["p_source"] || "manual",
+                }),
+                invalidates: ["erp_import_batches"],
               },
-              {
-                kind: "text",
-                name: "p_rows",
-                label: "Rows",
-                required: true,
-                hint: 'JSON array of objects, for example [{"code": "ACME", "name": "Acme Ltd"}].',
-              },
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Batch code",
-                hint: "Left empty, one is generated.",
-              },
-              {
-                kind: "text",
-                name: "p_source",
-                label: "Source",
-                hint: "Where the file came from. Default manual.",
-              },
-            ],
-            mapArgs: (v) => ({
-              p_object_type: v["p_object_type"],
-              p_rows: JSON.parse(v["p_rows"] ?? "[]"),
-              p_code: v["p_code"] || null,
-              p_source: v["p_source"] || "manual",
-            }),
-            invalidates: ["erp_import_batches"],
-          },
-        ]}
-      />
+            ]}
+          />
+        </div>
+      </details>
 
       <AutoPanel
         title="Import batches"
