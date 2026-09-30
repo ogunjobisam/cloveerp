@@ -224,8 +224,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The replay register and its script are in the key: which suite
+          # calls a replay makes is part of what it builds.
+          replay_inputs="supabase/ci/replay_superseded_calls.txt supabase/ci/replay_migrations.sh"
           tree_key() {
-            git ls-tree -r "$1" -- supabase/migrations supabase/ci/00_host_bootstrap.sql \
+            # shellcheck disable=SC2086
+            git ls-tree -r "$1" -- supabase/migrations supabase/ci/00_host_bootstrap.sql $replay_inputs \
               | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40
           }
 
@@ -242,8 +246,9 @@ jobs:
           # day and never longer. Nothing under src/ is in it: the steps that
           # read src/ run every time regardless.
           catalogue_tree() {
+            # shellcheck disable=SC2086
             git ls-tree -r "$1" -- supabase/migrations supabase/ci/00_host_bootstrap.sql \
-                                  supabase/ci/seed_demo.sql supabase/ci/run_checks.sh \
+                                  supabase/ci/seed_demo.sql supabase/ci/run_checks.sh $replay_inputs \
               | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40
           }
           catalogue_head="$(catalogue_tree HEAD)"
@@ -315,15 +320,25 @@ jobs:
             if [[ "$(basename "$f")" < "$newest_base" ]]; then out_of_order=yes; fi
           done < "$RUNNER_TEMP/added_migrations.txt"
 
+          # A change to which suite calls the replay skips is a change in the
+          # middle of the sequence too: the base was built under the register
+          # as it was, and nothing applied on top of it would say what the new
+          # one builds.
+          # shellcheck disable=SC2086
+          replay_changed="$(git diff --name-only "$merge_base..HEAD" -- $replay_inputs)"
+
           if [[ "$out_of_order" == yes ]]; then
             echo "::warning::a migration sorts before one already in the base; building in full"
+            echo "incremental=no" >> "$GITHUB_OUTPUT"
+          elif [[ -n "$replay_changed" ]]; then
+            echo "::notice::this branch changes what a replay skips ($(echo $replay_changed)); building in full"
             echo "incremental=no" >> "$GITHUB_OUTPUT"
           else
             echo "incremental=yes" >> "$GITHUB_OUTPUT"
           fi
 
           # Whether the catalogue has anything new to say. Its verdict is a
-          # function of the four inputs catalogue_tree() names (the day aside,
+          # function of the inputs catalogue_tree() names (the day aside,
           # which the nightly covers), and a branch that changes none of them
           # asks the question the base already answered. On 24 September a
           # pull request that touched only src/ restored main's database in
@@ -416,7 +431,14 @@ jobs:
 
           replay() {
             set -euo pipefail
-            for f in supabase/migrations/*.sql; do
+            # Less the suite calls the migrations they ran against have since
+            # corrected — supabase/ci/replay_superseded_calls.txt says which,
+            # and why. Only here: the incremental path below applies what a
+            # branch adds, and the register refuses to name anything that
+            # sorts after the migration answering for it.
+            migrations="$RUNNER_TEMP/replay_migrations"
+            supabase/ci/replay_migrations.sh "$migrations"
+            for f in "$migrations"/*.sql; do
               echo "── $(basename "$f")"
               $PSQL --single-transaction -f "$f"
             done
@@ -1316,6 +1338,14 @@ jobs:
           supabase start
           restore
 
+          # The CLI replays whatever is in supabase/migrations, so what it
+          # finds there is the replay's copy: the same files, less the suite
+          # calls supabase/ci/replay_superseded_calls.txt names. This checkout
+          # is thrown away with the job.
+          supabase/ci/replay_migrations.sh "$RUNNER_TEMP/replay_migrations"
+          rm -rf supabase/migrations
+          mv "$RUNNER_TEMP/replay_migrations" supabase/migrations
+
           # A deadlock is a coincidence, not a verdict — deploy.yml says why,
           # and this stack has the same minutely job: the migrations schedule
           # clove-jobs on pg_cron, the stack runs pg_cron, and the generators
@@ -1652,7 +1682,14 @@ jobs:
             local db="$1" root="$2"
             psql -v ON_ERROR_STOP=1 -d postgres -c "create database $db" >/dev/null
             $PSQL -d "$db" -f "$root/supabase/ci/00_host_bootstrap.sql"
-            for f in "$root"/supabase/migrations/*.sql; do
+            # Less the superseded suite calls, as the schema job's replay,
+            # where that side's tree has the register to say which.
+            local migrations="$root/supabase/migrations"
+            if [[ -x "$root/supabase/ci/replay_migrations.sh" ]]; then
+              migrations="$RUNNER_TEMP/replay_migrations_$db"
+              "$root/supabase/ci/replay_migrations.sh" "$migrations" >&2
+            fi
+            for f in "$migrations"/*.sql; do
               $PSQL -d "$db" --single-transaction -f "$f" >/dev/null
             done
             psql -v ON_ERROR_STOP=1 -d "$db" -tAc "select door from erp.door_manifest()" | sort -u
