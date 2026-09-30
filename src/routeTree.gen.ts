@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AddressRouteImport } from './routes/$address'
 import { Route as ActRouteImport } from './routes/act'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DeviceRouteImport } from './routes/device'
@@ -79,6 +80,11 @@ import { Route as ApiPublicV1OpenapiDotjsonRouteImport } from './routes/api/publ
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddressRoute = AddressRouteImport.update({
+  id: '/$address',
+  path: '/$address',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ActRoute = ActRouteImport.update({
@@ -420,6 +426,7 @@ const ApiPublicV1OpenapiDotjsonRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$address': typeof AddressRoute
   '/act': typeof ActRoute
   '/contact': typeof ContactRoute
   '/device': typeof DeviceRoute
@@ -488,6 +495,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$address': typeof AddressRoute
   '/act': typeof ActRoute
   '/contact': typeof ContactRoute
   '/device': typeof DeviceRoute
@@ -557,6 +565,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/$address': typeof AddressRoute
   '/act': typeof ActRoute
   '/contact': typeof ContactRoute
   '/device': typeof DeviceRoute
@@ -627,6 +636,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/$address'
     | '/act'
     | '/contact'
     | '/device'
@@ -695,6 +705,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/$address'
     | '/act'
     | '/contact'
     | '/device'
@@ -763,6 +774,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/$address'
     | '/act'
     | '/contact'
     | '/device'
@@ -832,6 +844,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AddressRoute: typeof AddressRoute
   ActRoute: typeof ActRoute
   ContactRoute: typeof ContactRoute
   DeviceRoute: typeof DeviceRoute
@@ -906,6 +919,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$address': {
+      id: '/$address'
+      path: '/$address'
+      fullPath: '/$address'
+      preLoaderRoute: typeof AddressRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/act': {
@@ -1368,6 +1388,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AddressRoute: AddressRoute,
   ActRoute: ActRoute,
   ContactRoute: ContactRoute,
   DeviceRoute: DeviceRoute,
