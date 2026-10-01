@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { Field } from "../components/erp/action";
 import { AllocateOnAccount } from "../components/erp/allocate-on-account";
+import { AllocatePrepayment } from "../components/erp/allocate-prepayment";
 import type { Column } from "../components/erp/auto";
 import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
@@ -2225,6 +2226,34 @@ export const FINANCE: ModuleDef = {
         { header: "Receipt", cell: (r) => String(r["receipt_number"] ?? "—") },
         { header: "Left", cell: moneyCell("left_minor", "currency"), numeric: true },
         { header: "Allocate", cell: (r) => <AllocateOnAccount row={r} /> },
+      ],
+    },
+    {
+      // Money paid to a supplier against an order before the goods
+      // (20261004900000), held on their account until a bill takes it. A bill
+      // registered against the order takes it by itself; Allocate is for a bill
+      // that names another order, or none, and is drawn only where the read
+      // says the reader may and names a bill to take it.
+      title: "Supplier prepayments",
+      description:
+        "Money paid to suppliers in advance of their bills, kept on their account until a bill takes it.",
+      fn: "erp_supplier_prepayments",
+      empty:
+        "No supplier holds a prepayment. Money paid in advance of a bill lands here until the bill takes it.",
+      rowKey: (r, i) => String(r["order_id"] ?? i),
+      columns: [
+        { header: "Supplier", cell: "party_name" },
+        {
+          header: "Order",
+          cell: (r) =>
+            r["order_cancelled"] === true
+              ? `${String(r["order_number"] ?? "—")} (cancelled)`
+              : String(r["order_number"] ?? "—"),
+        },
+        { header: "Company", cell: "company" },
+        { header: "Paid", cell: moneyCell("paid_minor", "currency"), numeric: true },
+        { header: "Left", cell: moneyCell("left_minor", "currency"), numeric: true },
+        { header: "Allocate", cell: (r) => <AllocatePrepayment row={r} /> },
       ],
     },
     {
