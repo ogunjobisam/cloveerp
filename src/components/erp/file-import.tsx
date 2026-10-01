@@ -182,7 +182,9 @@ export function FileImport({
       if (!profile || !read) return null;
       const fn =
         profile.target.kind === "opening" ? "erp_stage_opening_balances" : "erp_stage_import";
-      const batch = await callErp<string>(fn, args);
+      // The opening door answers {batch_id}; the master-data door, the id itself.
+      const answer = await callErp<string | { batch_id: string }>(fn, args);
+      const batch = typeof answer === "string" ? answer : answer.batch_id;
       const problems: string[] = [];
       if (evidence) {
         try {
