@@ -1,0 +1,7 @@
+﻿*ContactName,AccountNumber,EmailAddress,FirstName,LastName,POAddressLine1,POAddressLine2,POCity,PORegion,POPostalCode,POCountry,SAAddressLine1,SACity,SAPostalCode,SACountry,PhoneNumber,TaxNumber,DueDateSalesDay,DueDateSalesTerm,DueDateBillDay,DueDateBillTerm
+Bayside Builders Ltd,BAY001,accounts@bayside-builders.example,Bob,Partridge,12 Quay Street,,Bristol,,BS1 4DJ,United Kingdom,Yard 3 Avon Road,Bristol,BS2 0PS,United Kingdom,0117 496 0101,GB123456789,30,DAYSAFTERBILLDATE,,
+Carter & Sons,,office@carter-sons.example,Claire,Carter,"Unit 7, Brook Park",,Leeds,West Yorkshire,LS11 5QP,United Kingdom,,,,,0113 496 0202,,14,DAYSAFTERBILLDATE,,
+Dunmore Hardware Ltd,DUN001,ledger@dunmore.example,Dev,Patel,40 Market Place,,York,,YO1 8RS,United Kingdom,,,,,,GB 987 6543 21,30,DAYSAFTERBILLDATE,,
+Eastgate Supplies Ltd,EAS001,sales@eastgate.example,Ellen,Hughes,Eastgate Industrial Estate,Building 2,Sheffield,,S9 2RX,United Kingdom,,,,,0114 496 0303,GB111222333,,,30,DAYSAFTERBILLDATE
+Fernley Metals Ltd,FER001,orders@fernley.example,Frank,Moss,1 Foundry Lane,,Walsall,West Midlands,WS1 1AA,United Kingdom,,,,,,,,,20,OFFOLLOWINGMONTH
+Greenway Office Services,GRE001,billing@greenway.example,,,9 Station Road,,Harrogate,,HG1 1TT,United Kingdom,,,,,,,,,14,DAYSAFTERBILLDATE

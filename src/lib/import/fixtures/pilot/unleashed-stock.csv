@@ -1,0 +1,12 @@
+Stock on Hand
+Harbour Fixings Ltd
+As at cutover
+Product Code,Product Description,Warehouse,Bin,Batch,Expiry Date,Qty On Hand,Avg Cost,Total Cost
+FIX-M6,"M6 fixings, zinc",MAIN,A-01,,,50000,0.043,"2,150.00"
+FIX-M8,"M8 fixings, zinc",MAIN,A-01,,,20000,0.061,"1,220.00"
+PAINT-5L,"Trade emulsion ""white"" 5L",MAIN,,B123,31/12/2035,40,11.50,460.00
+WID-01,Shelf bracket,NORTH,,,,120,2.335,280.20
+GLUE-1,Contact adhesive 1L,MAIN,A-01,,,15,4.20,63.00
+BOLT-10,M10 coach bolt,NORTH,,,,-3,2.00,-6.00
+OLD-01,Discontinued widget,MAIN,,,,0,1.00,0.00
+Total,,,,,,70172,,"4,167.20"

@@ -1,0 +1,10 @@
+*Code,*Name,*Type,*Tax Code,Description,Dashboard,Expense Claims,Enable Payments,Balance
+090,Business Bank Account,Bank,No VAT,,Yes,No,No,"25,000.00"
+200,Sales,Revenue,20% (VAT on Income),,No,No,No,"(48,000.00)"
+310,Cost of Goods Sold,Direct Costs,20% (VAT on Expenses),,No,No,No,"30,000.00"
+400,Advertising,Overhead,20% (VAT on Expenses),,No,Yes,No,"1,500.00"
+610,Accounts Receivable,Current Asset,No VAT,,No,No,No,"4,225.50"
+630,Inventory,Inventory,No VAT,,No,No,No,"4,200.00"
+800,Accounts Payable,Current Liability,No VAT,,No,No,No,"(1,939.25)"
+820,VAT,Current Liability,No VAT,,No,No,No,"(2,400.00)"
+960,Retained Earnings,Equity,No VAT,,No,No,No,"(12,586.25)"

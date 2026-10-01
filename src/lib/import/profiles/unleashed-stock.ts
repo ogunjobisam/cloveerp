@@ -14,11 +14,13 @@ import { gbp, isTotalLabel } from "./common";
 /**
  * Unleashed: Stock on Hand enquiry, as at the cutover, exported as CSV.
  *
- * The stock door takes a whole-penny unit cost and values each row at
- * round(quantity × unit cost). Unleashed averages to fractions of a penny, so
- * where the rounded cost moves the value the line says by how much; the exact
- * value arrives with M5 (PR 5). Zero and negative lines are held back and
- * listed: a negative is a clean-up for the customer before cutover.
+ * The stock door takes a whole-penny unit cost and, where it differs from
+ * round(quantity × unit cost), the value itself. Unleashed averages to
+ * fractions of a penny, so each line loads at the value Unleashed states and
+ * the unit cost is the display figure. A value further from quantity × unit
+ * cost than a penny a unit is a different number, not a rounding, and is
+ * refused. Zero and negative lines are held back and listed: a negative is a
+ * clean-up for the customer before cutover.
  * Serialised stock does not come through here at all; it is received.
  */
 
@@ -134,12 +136,25 @@ export const unleashedStock: Profile = {
         out.findings.push({ line: r.line, severity: "error", message: "negative average cost" });
         continue;
       }
-      const loads = roundTo(multiply(qty, { units: unitCost, scale: 0 }), 0);
-      if (loads !== printedMinor) {
+      const rounded = roundTo(multiply(qty, { units: unitCost, scale: 0 }), 0);
+      const drift = printedMinor > rounded ? printedMinor - rounded : rounded - printedMinor;
+      const perUnit = roundTo(
+        { units: qty.units < 0n ? -qty.units : qty.units, scale: qty.scale },
+        0,
+      );
+      if (drift > (perUnit > 1n ? perUnit : 1n)) {
         out.findings.push({
           line: r.line,
-          severity: "warning",
-          message: `loads at ${gbp(loads)} (${gbp(unitCost)} a unit); Unleashed says ${gbp(printedMinor)}. The exact value arrives with M5`,
+          severity: "error",
+          message: `Total Cost ${gbp(printedMinor)} is not Qty On Hand × Avg Cost (${gbp(rounded)}); check the line in Unleashed`,
+        });
+        continue;
+      }
+      if (rounded !== printedMinor) {
+        out.findings.push({
+          line: r.line,
+          severity: "info",
+          message: `loads at ${gbp(printedMinor)}, the value Unleashed states; ${gbp(unitCost)} a unit is the rounded cost shown`,
         });
       }
 
@@ -150,6 +165,7 @@ export const unleashedStock: Profile = {
         quantity: decimalText(qty),
         unit_cost_minor: Number(unitCost),
       };
+      if (rounded !== printedMinor) row["value_minor"] = Number(printedMinor);
       const batch = cell(r, "batch");
       if (batch !== "") row["batch"] = batch;
       const expiryText = cell(r, "expires_on");
@@ -169,7 +185,7 @@ export const unleashedStock: Profile = {
       out.rows.push(row);
       out.lines.push(r.line);
       quantities.push(qty);
-      staged += loads;
+      staged += printedMinor;
     }
 
     out.stagedTotalMinor = Number(staged);
