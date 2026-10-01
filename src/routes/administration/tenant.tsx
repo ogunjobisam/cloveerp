@@ -148,7 +148,7 @@ function TenantLifecycle() {
 
 /**
  * Go-live refuses books whose close checklist lacks the ties every close must
- * pass (20261003800000). Said here first, as the database would say it after
+ * pass (20261004500000). Said here first, as the database would say it after
  * the press.
  */
 function CloseChecklistNote() {

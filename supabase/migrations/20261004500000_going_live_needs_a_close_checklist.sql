@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261003800000  Going live needs a close checklist
+-- 20261004500000  Going live needs a close checklist
 -- -----------------------------------------------------------------------------
 -- F6 (docs/spec/simplification-review.md §7 Finance, PR12).
 --
@@ -81,7 +81,7 @@ revoke all on function erp.close_ties_missing(uuid) from public, anon;
 
 comment on function erp.close_ties_missing(uuid) is
   'The unwaivable close ties an organisation with an active ledger has no active checklist task for '
-  '(20261003800000). erp.go_live() refuses while any is missing; erp.configure_period_close() installs them.';
+  '(20261004500000). erp.go_live() refuses while any is missing; erp.configure_period_close() installs them.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- B1. Going live asks for them
@@ -150,7 +150,7 @@ begin
   end if;
 
   -- An organisation with books goes live with the close that checks them
-  -- (20261003800000). Without the ties its first close would be refused, or
+  -- (20261004500000). Without the ties its first close would be refused, or
   -- would run without them, and a live organisation's checklist is a change set.
   v_ties := erp.close_ties_missing(v_tenant);
   if cardinality(v_ties) > 0 then
@@ -176,7 +176,7 @@ comment on function erp.go_live is
   'through a promoted change set, and the author of one may not approve it. '
   'Refuses over dead configuration, a tenant with a single administrator, '
   'because that tenant would be live and unable to change, and books without '
-  'the close checklist''s ties (20261003800000).';
+  'the close checklist''s ties (20261004500000).';
 
 select erp.register_refusal('CLOVEERP_NO_CLOSE_CHECKLIST',
   'Going live with books whose close checklist does not carry the checks every close must pass.',
@@ -205,7 +205,7 @@ as $$
                          join erp.role r on r.tenant_id = ur.tenant_id and r.id = ur.role_id
                         where ur.tenant_id = erp.current_tenant_id()
                           and r.code = 'administrator'),
-    -- And refuses books without the close's ties (20261003800000).
+    -- And refuses books without the close's ties (20261004500000).
     'close_ties_missing', to_jsonb(erp.close_ties_missing(erp.current_tenant_id())),
     'dead_configuration', coalesce((
       select jsonb_agg(jsonb_build_object('finding', d.finding, 'detail', d.detail))
@@ -233,7 +233,7 @@ $o$,
 
   -- The close checklist, so the demonstration closes with the ties from the
   -- day it is built rather than from the day the catch-up first closes it
-  -- (20261003800000).
+  -- (20261004500000).
   if not exists (select 1 from erp.change_set c where c.tenant_id = p_tenant_id and c.code = 'period-close') then
     perform erp.configure_period_close();
     v_did := v_did || '"period-close"'::jsonb;
@@ -246,7 +246,7 @@ $o$,
     $n$              perform erp.configure_finance(null::integer, null::character, v_first);
             end if;
 
-            -- Books go live with the close that checks them (20261003800000).
+            -- Books go live with the close that checks them (20261004500000).
             if not exists (select 1 from erp.change_set c
                             where c.tenant_id = v_tenant and c.code = 'period-close') then
               perform erp.configure_period_close();
@@ -586,7 +586,7 @@ $$;
 revoke all on function erp_test.assert_close_checklist_required_suite() from public, anon;
 
 comment on function erp_test.assert_close_checklist_required_suite() is
-  'Books go live only with the close checklist''s ties, and both installers install it (20261003800000).';
+  'Books go live only with the close checklist''s ties, and both installers install it (20261004500000).';
 
 -- The generators, which are idempotent and run at the end of every migration.
 select erp.apply_row_security();
