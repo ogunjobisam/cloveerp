@@ -4350,38 +4350,53 @@ export const LOGISTICS: ModuleDef = {
         ),
     },
     {
-      label: "OTIF",
+      // Booked and past their arrival with no proof: read, not a state
+      // (20261004600000).
+      label: "Late",
+      fn: "erp_shipments",
+      compute: (rows) =>
+        zeroIsGood(
+          count(rows, (r) => r["late"] === true),
+          "booked and past their arrival",
+        ),
+    },
+    {
+      // erp_delivery_performance answers by carrier, on time against the
+      // planned arrival; the tile read otif_pct and deliveries, which it has
+      // never returned (20261004600000).
+      label: "On time",
       fn: "erp_delivery_performance",
       args: { p_days: 90 },
       compute: (rows) => {
-        if (rows.length === 0) return null;
-        const pct = Math.round(avg(rows, "otif_pct"));
+        const shipments = sum(rows, "shipments");
+        if (shipments === 0) return null;
+        const pct = Math.round((sum(rows, "on_time") / shipments) * 100);
         return {
           value: `${pct}%`,
-          hint: "on time in full, ninety days",
+          hint: "on time, ninety days",
           tone: pct >= 95 ? "ok" : pct >= 85 ? "warn" : "bad",
         };
       },
     },
     {
-      label: "Deliveries",
+      label: "Shipments",
       fn: "erp_delivery_performance",
       args: { p_days: 90 },
       compute: (rows) =>
         rows.length === 0
           ? null
-          : { value: String(sum(rows, "deliveries")), hint: "in the last ninety days" },
+          : { value: String(sum(rows, "shipments")), hint: "shipments delivered, ninety days" },
     },
   ],
   chart: {
-    title: "OTIF by customer",
-    description: "On time in full, last ninety days.",
+    title: "On time by carrier",
+    description: "Delivered on or before the planned arrival, last ninety days.",
     fn: "erp_delivery_performance",
     args: { p_days: 90 },
     empty:
-      "No deliveries in the window. On-time-in-full is measured from confirmed deliveries, so this fills once goods start leaving.",
-    label: (r) => String(r["party"] ?? r["site"] ?? "—"),
-    value: (r) => num(r["otif_pct"]),
+      "No shipment delivered in the window. On time is measured from proof of delivery against the planned arrival, so this fills once shipments are signed for.",
+    label: (r) => String(r["carrier_name"] ?? r["carrier_code"] ?? "—"),
+    value: (r) => num(r["on_time_pct"]),
     unit: "%",
   },
   // A Shipments table stood here reading erp_shipments — the same door three of
@@ -4390,22 +4405,43 @@ export const LOGISTICS: ModuleDef = {
   // search, paging and Show finished, and the panel beside them shows the
   // chosen shipment's every field, the two arrival dates and the freight cost
   // included, which the table left out.
-  worklists: [],
+  worklists: [
+    {
+      // What needs a person, and nothing else: left planned, late, or booked
+      // over tolerance (20261004600000). Book a shipment and Cancel a
+      // shipment, above, are what a person does about one.
+      title: "Needs a person",
+      description:
+        "Shipments left planned, late, or booked above the rate card by more than the shipping policy allows. A shipment on the clean path is never here.",
+      fn: "erp_shipment_exceptions",
+      empty:
+        "Nothing needs a person. A shipment appears here when no carrier quotes it, when it is past its arrival with no proof, or when it was booked well above the rate card.",
+      rowKey: (r, i) => `${String(r["shipment_id"] ?? i)}-${String(r["kind"] ?? i)}`,
+      columns: [
+        { header: "Shipment", cell: "number" },
+        { header: "Why", cell: "reason" },
+        { header: "Customer", cell: "destination" },
+        { header: "Carrier", cell: "carrier" },
+        date("Due", "planned_arrival"),
+      ],
+    },
+  ],
   reports: [
     {
       title: "Delivery performance",
-      description: "On time, in full, over the last ninety days.",
+      description:
+        "Delivered on or before the planned arrival, over the last ninety days, by carrier.",
       fn: "erp_delivery_performance",
       args: { p_days: 90 },
       empty:
-        "No deliveries in the window. On-time-in-full is measured from confirmed deliveries, so this fills once goods start leaving.",
-      rowKey: (r, i) => `${String(r["party"] ?? r["site"] ?? i)}-${i}`,
+        "No shipment delivered in the window. On time is measured from proof of delivery against the planned arrival, so this fills once shipments are signed for.",
+      rowKey: (r, i) => `${String(r["carrier_code"] ?? i)}-${i}`,
       columns: [
-        { header: "Customer", cell: "party" },
-        { header: "Deliveries", cell: "deliveries", numeric: true },
+        { header: "Carrier", cell: "carrier_name" },
+        { header: "Shipments", cell: "shipments", numeric: true },
         { header: "On time", cell: "on_time", numeric: true },
-        { header: "In full", cell: "in_full", numeric: true },
-        { header: "OTIF %", cell: "otif_pct", numeric: true },
+        { header: "On time %", cell: "on_time_pct", numeric: true },
+        { header: "Freight", cell: "freight_minor", numeric: true },
       ],
     },
   ],

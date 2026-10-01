@@ -92,9 +92,12 @@ describe("the two screens this pass cut", () => {
     expect(stageDoors(stock)).toContain("erp_warehouse_tasks");
   });
 
-  test("/logistics has no worklist, because its only door is its steps' own", () => {
+  // Its one worklist is what needs a person (20261004600000), a door no step
+  // lists; the shipments themselves stay the steps' own.
+  test("/logistics lists only what needs a person, never its steps' own shipments", () => {
     const despatch = moduleAt("/logistics");
-    expect(despatch.worklists).toEqual([]);
+    expect(despatch.worklists.map((w) => w.fn)).toEqual(["erp_shipment_exceptions"]);
     expect(stageDoors(despatch)).toContain("erp_shipments");
+    expect(stageDoors(despatch)).not.toContain("erp_shipment_exceptions");
   });
 });
