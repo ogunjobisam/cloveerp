@@ -4351,7 +4351,7 @@ export const LOGISTICS: ModuleDef = {
     },
     {
       // Booked and past their arrival with no proof: read, not a state
-      // (20261003900000).
+      // (20261004600000).
       label: "Late",
       fn: "erp_shipments",
       compute: (rows) =>
@@ -4363,7 +4363,7 @@ export const LOGISTICS: ModuleDef = {
     {
       // erp_delivery_performance answers by carrier, on time against the
       // planned arrival; the tile read otif_pct and deliveries, which it has
-      // never returned (20261003900000).
+      // never returned (20261004600000).
       label: "On time",
       fn: "erp_delivery_performance",
       args: { p_days: 90 },
@@ -4408,7 +4408,7 @@ export const LOGISTICS: ModuleDef = {
   worklists: [
     {
       // What needs a person, and nothing else: left planned, late, or booked
-      // over tolerance (20261003900000). Book a shipment and Cancel a
+      // over tolerance (20261004600000). Book a shipment and Cancel a
       // shipment, above, are what a person does about one.
       title: "Needs a person",
       description:

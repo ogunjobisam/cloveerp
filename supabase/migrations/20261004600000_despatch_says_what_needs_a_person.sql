@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261003900000  Despatch says what needs a person
+-- 20261004600000  Despatch says what needs a person
 -- -----------------------------------------------------------------------------
 -- LPR3 of docs/spec/logistics-target-flow.md: nodes L5, L6, L7 and L8.
 --
@@ -67,7 +67,7 @@ insert into erp_ref.resource (key, locale, value, module_code, description) valu
   ('config.logistics.shipping_policy', 'de', 'Versandrichtlinie', 'logistics',
    'Der Name des Konfigurationstyps logistics.shipping_policy.'),
   ('job_handler.deliver_unproved.name', 'en', 'Deliver shipments that need no proof', 'logistics',
-   'Job handler name (20261003900000).'),
+   'Job handler name (20261004600000).'),
   ('job_handler.deliver_unproved.name', 'de', 'Sendungen ohne Zustellnachweis zustellen', 'logistics', null)
 on conflict (key, locale) do update set value = excluded.value, description = excluded.description;
 
@@ -106,7 +106,7 @@ begin
   if (select ct.default_value from erp_ref.config_type ct where ct.code = 'logistics.shipping_policy')
      is distinct from '{"auto_select_carrier": true, "cost_override_tolerance_pct": 10, "late_after_days": 0, "proof_required": true, "consolidate": "customer_day"}'::jsonb
      or (select ct.cycle_code from erp_ref.config_type ct where ct.code = 'logistics.shipping_policy') is distinct from 'despatch' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: logistics.shipping_policy is declared already, and not as 20261003900000 declares it';
+    raise exception 'CLOVEERP_ANCHOR_MOVED: logistics.shipping_policy is declared already, and not as 20261004600000 declares it';
   end if;
 end
 $config_type$;
@@ -117,7 +117,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- The shipping policy in force at a company and site (20261003900000),
+  -- The shipping policy in force at a company and site (20261004600000),
   -- layered key by key as the procurement policy is: the product's defaults,
   -- then what the organisation set, then its company, then its site.
   select coalesce(ct.default_value, '{}'::jsonb)
@@ -133,7 +133,7 @@ $$;
 revoke all on function erp.shipping_policy(uuid, uuid) from public, anon;
 
 comment on function erp.shipping_policy(uuid, uuid) is
-  'logistics.shipping_policy at a company and site, over its defaults (20261003900000). Read by '
+  'logistics.shipping_policy at a company and site, over its defaults (20261004600000). Read by '
   'erp.ship_deliveries(), erp.shipment_reading(), erp.shipment_needs_no_proof() and erp_deliveries_to_ship().';
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ alter table erp.shipment add column if not exists quoted_cost_minor bigint;
 
 comment on column erp.shipment.quoted_cost_minor is
   'What the rate card priced the booked carrier and service at when the shipment was booked, or null when '
-  'it quoted nothing and the planner gave the cost (20261003900000). A typed cost is judged against this, '
+  'it quoted nothing and the planner gave the cost (20261004600000). A typed cost is judged against this, '
   'not against a rate card changed since.';
 
 do $book$
@@ -154,7 +154,7 @@ declare
   v_old  constant text := $o$         freight_cost_minor = coalesce(p_cost_minor, v_cost),
 $o$;
   v_new  constant text := $n$         freight_cost_minor = coalesce(p_cost_minor, v_cost),
-         -- What the rate card quoted, whatever was typed (20261003900000).
+         -- What the rate card quoted, whatever was typed (20261004600000).
          quoted_cost_minor = v_cost,
 $n$;
   v_hits integer := (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old);
@@ -177,7 +177,7 @@ declare
   v_old  constant text := $o$  if v_service is null then
     select c.carrier_code, c.service_code, c.cost_minor into o
 $o$;
-  v_new  constant text := $n$  -- Unless the shipping policy says the planner chooses (20261003900000):
+  v_new  constant text := $n$  -- Unless the shipping policy says the planner chooses (20261004600000):
   -- then a shipment nobody names a carrier for is left planned, on the
   -- exceptions list, rather than booked with one nobody chose.
   if v_service is null
@@ -207,7 +207,7 @@ stable
 set search_path = ''
 as $$
   -- What a shipment is doing, read from its dates, its costs and the shipping
-  -- policy at its site (20261003900000). None of it is a state: a shipment
+  -- policy at its site (20261004600000). None of it is a state: a shipment
   -- is planned, booked, delivered or cancelled, and these are facts about a
   -- booked one.
   --
@@ -237,7 +237,7 @@ revoke all on function erp.shipment_reading(uuid) from public, anon;
 
 comment on function erp.shipment_reading(uuid) is
   'On its way, late and over tolerance, read from a shipment''s dates and costs and the shipping policy '
-  'at its site (20261003900000). Facts about a booked shipment, never states.';
+  'at its site (20261004600000). Facts about a booked shipment, never states.';
 
 create or replace function public.erp_shipments(p_limit integer default 100)
 returns jsonb
@@ -253,7 +253,7 @@ as $$
       'planned_despatch', sh.planned_despatch, 'planned_arrival', sh.planned_arrival,
       'actual_despatch', sh.actual_despatch, 'actual_arrival', sh.actual_arrival,
       'destination', p.name, 'freight_cost_minor', sh.freight_cost_minor,
-      -- What the rate card quoted, and what the shipment is doing (20261003900000).
+      -- What the rate card quoted, and what the shipment is doing (20261004600000).
       'quoted_cost_minor', sh.quoted_cost_minor,
       'on_its_way', coalesce((rd.r ->> 'on_its_way')::boolean, false),
       'late', coalesce((rd.r ->> 'late')::boolean, false),
@@ -273,7 +273,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- What needs a person, and nothing else (20261003900000): a shipment left
+  -- What needs a person, and nothing else (20261004600000): a shipment left
   -- planned because no carrier quoted it and nobody gave a cost; one past its
   -- arrival with no proof of delivery; one booked above the rate card by more
   -- than the tolerance. A shipment on the clean path is never here.
@@ -306,7 +306,7 @@ revoke all on function public.erp_shipment_exceptions() from public, anon;
 grant execute on function public.erp_shipment_exceptions() to authenticated;
 
 comment on function public.erp_shipment_exceptions() is
-  'The shipments that need a person: left planned, late, or booked over tolerance (20261003900000). '
+  'The shipments that need a person: left planned, late, or booked over tolerance (20261004600000). '
   'Read by the Despatch screen''s Needs a person list.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -328,7 +328,7 @@ as $$
                'state', s.code, 'state_name', s.name,
                'site_id', d.site_id, 'site', st.code,
                -- Deliveries that travel together under the shipping policy
-               -- (20261003900000): one customer's from one site and day, or
+               -- (20261004600000): one customer's from one site and day, or
                -- each on its own. The picker lists them side by side.
                'travels_with', case coalesce(erp.shipping_policy(d.entity_id, d.site_id) ->> 'consolidate', 'customer_day')
                                  when 'customer_day'
@@ -372,7 +372,7 @@ stable
 set search_path = ''
 as $$
   -- A booked shipment, at a site whose shipping policy records no proof of
-  -- delivery, past its planned arrival and the grace (20261003900000). The
+  -- delivery, past its planned arrival and the grace (20261004600000). The
   -- fact erp.derived_move_fact() reads, with the shipment's state locked.
   select coalesce(bool_or(
            sh.status = 'booked'
@@ -398,7 +398,7 @@ $o$;
   v_new  constant text := $n$            and erp.transfer_is_received_in_full(p_object_id)
              then 'erp.transfer_is_received_in_full'
            -- A shipment's delivery where its site records no proof, once its
-           -- arrival and the grace have passed (20261003900000), asked for by
+           -- arrival and the grace have passed (20261004600000), asked for by
            -- erp.deliver_unproved_shipments().
            when dt.base_type_code = 'shipment' and p_transition_code = 'deliver'
             and erp.object_current_state('document', p_object_id) = 'booked'
@@ -427,7 +427,7 @@ declare
 begin
   -- Where the shipping policy records no proof of delivery, a booked shipment
   -- is delivered once its planned arrival and the grace have passed
-  -- (20261003900000): the system's move, not anybody's, so the document's
+  -- (20261004600000): the system's move, not anybody's, so the document's
   -- state and its history agree with what the policy says happened. With
   -- proof recorded, the default, nothing qualifies and nothing moves.
   for r in
@@ -468,7 +468,7 @@ revoke all on function erp.deliver_unproved_shipments(jsonb) from public, anon;
 
 comment on function erp.deliver_unproved_shipments(jsonb) is
   'Delivers, as the system, each booked shipment at a site whose shipping policy records no proof, once '
-  'its arrival and the grace have passed (20261003900000). The logistics.deliver_unproved job.';
+  'its arrival and the grace have passed (20261004600000). The logistics.deliver_unproved job.';
 
 insert into erp_ref.job_handler
   (code, name_key, description, module_code, sql_function, default_timeout_seconds, parameter_schema, forbids_overlap, is_current)
@@ -492,7 +492,7 @@ language sql
 immutable
 set search_path = ''
 as $$
-  -- What logistics version 3 adds (20261003900000), read by
+  -- What logistics version 3 adds (20261004600000), read by
   -- erp.configure_logistics() for a new install and by the upgrade register
   -- for an organisation on version 2. Shipped switched on, unlike the packs'
   -- other jobs: it does nothing until a site records no proof, and a site
@@ -516,7 +516,7 @@ declare
   v_def  text := pg_get_functiondef(v_sig::regprocedure);
   v_old  constant text := $o$      || erp.shipment_pack_items());$o$;
   v_new  constant text := $n$      || erp.shipment_pack_items()
-      -- The sweep that delivers where no proof is recorded (20261003900000).
+      -- The sweep that delivers where no proof is recorded (20261004600000).
       || erp.despatch_pack_items());$n$;
   v_hits integer := (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old);
 begin
@@ -530,7 +530,7 @@ $configure$;
 update erp_ref.module_installer
    set current_version = 3,
        description = description
-         || ' Version 3 (20261003900000): the job that delivers shipments where no proof of delivery is recorded.'
+         || ' Version 3 (20261004600000): the job that delivers shipments where no proof of delivery is recorded.'
  where install_code = 'logistics' and current_version = 2;
 
 insert into erp_ref.module_upgrade_item (install_code, to_version, object_kind, object_key, payload, seq)
@@ -576,7 +576,7 @@ $o$,
   end if;
 
   -- Logistics, so the demonstration's deliveries leave on shipments and the
-  -- Despatch screen has something to show (20261003900000).
+  -- Despatch screen has something to show (20261004600000).
   if not exists (select 1 from erp.module_installation i
                   where i.tenant_id = p_tenant_id and i.install_code = 'logistics') then
     perform erp.configure_logistics();
@@ -586,7 +586,7 @@ $n$,
     -- demonstration_catch_up: before logistics' newer version.
     $o$  -- ── Logistics' newer version (20261002500000) ─────────────────────────────
 $o$,
-    $n$  -- ── Logistics, for a demonstration built before it shipped (20261003900000)
+    $n$  -- ── Logistics, for a demonstration built before it shipped (20261004600000)
   -- Only one that sells: a demonstration with nothing installed has nothing to
   -- ship, and its catch-up has its own answer for that.
   begin
@@ -610,7 +610,7 @@ $o$,
     $n$  -- ── The week's shipments ─────────────────────────────────────────────────
   -- Every Tuesday the week's posted deliveries that no shipment carries leave
   -- on shipments, one for each customer and site, through Ship these
-  -- deliveries with the rate card's recommendation (20261003900000). Each is
+  -- deliveries with the rate card's recommendation (20261004600000). Each is
   -- signed for on the day it was due, except the first shipment of each
   -- month's first Tuesday, which arrives two days late; one still due when
   -- the history ends is on its way. Shipping moves no stock, which the
@@ -821,7 +821,7 @@ declare
   v_block  text;
   v_out    jsonb;
 begin
-  -- Despatch walked by pressing (20261003900000): an organisation configured
+  -- Despatch walked by pressing (20261004600000): an organisation configured
   -- as the demonstration is, which installs logistics; a planner who ships and
   -- a driver who proves delivery, neither an administrator, each holding only
   -- what their press needs. Two presses, from posted deliveries to delivered.
@@ -927,7 +927,7 @@ $n$,
 $o$,
     $n$  -- ── 15. Despatch, walked ───────────────────────────────────────────────
   --
-  -- The budget is two (20261002500000), walked here (20261003900000): a
+  -- The budget is two (20261002500000), walked here (20261004600000): a
   -- planner ships two posted deliveries, which books the carrier the rate card
   -- recommends in the same press, and a driver records proof. Neither is an
   -- administrator, and nothing lands on the exceptions list.
@@ -978,7 +978,7 @@ declare
   v_old  constant text := $o$  -- (20261001300000).
   c_expected constant integer := 14;
 $o$;
-  v_new  constant text := $n$  -- (20261001300000); despatch, walked, is case 15 (20261003900000).
+  v_new  constant text := $n$  -- (20261001300000); despatch, walked, is case 15 (20261004600000).
   c_expected constant integer := 15;
 $n$;
   v_hits integer := (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old);
@@ -991,7 +991,7 @@ end
 $walk_count$;
 
 update erp_meta.flow_budget
-   set rationale = rationale || ' Walked by erp_test.despatch_walk() (20261003900000).'
+   set rationale = rationale || ' Walked by erp_test.despatch_walk() (20261004600000).'
  where flow_code = 'despatch' and rationale not like '%despatch_walk%';
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -1273,7 +1273,7 @@ revoke all on function erp_test.assert_despatch_exceptions_suite() from public, 
 
 comment on function erp_test.assert_despatch_exceptions_suite() is
   'The shipping policy''s five parameters are each read, the exceptions list holds only what needs a person, '
-  'the sweep delivers as the system where no proof is recorded, and the demonstration ships (20261003900000).';
+  'the sweep delivers as the system where no proof is recorded, and the demonstration ships (20261004600000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- M. The words the Despatch screen adds
@@ -1281,7 +1281,7 @@ comment on function erp_test.assert_despatch_exceptions_suite() is
 
 insert into erp_ref.resource (key, locale, value, module_code, description)
 select erp_ref.ui_key(v.text), 'en', v.text, 'logistics',
-       'A screen string of the Despatch screen (20261003900000).'
+       'A screen string of the Despatch screen (20261004600000).'
   from (values
     ('Needs a person'),
     ('Shipments left planned, late, or booked above the rate card by more than the shipping policy allows. A shipment on the clean path is never here.'),
