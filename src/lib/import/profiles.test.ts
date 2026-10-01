@@ -38,6 +38,7 @@ const ctx = (
       | "termsFromXero"
       | "weightUnit"
       | "reorderSite"
+      | "stock"
     >
   > = {},
 ): ProfileContext => ({
@@ -52,6 +53,7 @@ const ctx = (
   termsFromXero: false,
   weightUnit: "kg",
   reorderSite: "",
+  stock: null,
   ...more,
 });
 
@@ -525,6 +527,7 @@ describe("Xero trial balance", () => {
 
   test("a name with no code, and no chart loaded, is refused with what to do", () => {
     expect(r.findings.map((f) => f.message)).toEqual([
+      "no opening stock is loaded yet, so a difference between it and Xero's Inventory cannot be written off; load the Unleashed stock first",
       "Suspense carries no account code and no loaded chart names it; load the Xero chart first, or map it there",
     ]);
   });
@@ -547,7 +550,9 @@ describe("Xero trial balance", () => {
       { account: "090", debit_minor: 4500000 },
       { account: "XSUS", debit_minor: 1000 },
     ]);
-    expect(mapped.findings).toEqual([]);
+    expect(mapped.findings.map((f) => f.message)).toEqual([
+      "no opening stock is loaded yet, so a difference between it and Xero's Inventory cannot be written off; load the Unleashed stock first",
+    ]);
     expect(mapped.exclusions.map((e) => e.label)).toEqual([
       "610 - Accounts Receivable",
       "630 - Inventory",
@@ -565,13 +570,50 @@ describe("Xero trial balance", () => {
       ctx({}, "", { account, chartLoaded: true }),
     );
     expect(strict.rows).toEqual([{ account: "4000", credit_minor: 4800000 }]);
-    expect(strict.findings.map((f) => f.line)).toEqual([8, 12, 15]);
+    expect(strict.findings.map((f) => f.line)).toEqual([8, 11, 12, 15]);
     expect(strict.findings[0]?.message).toContain("is not in the loaded Xero chart");
   });
 
   test("debits staged against the printed debits less the control accounts", () => {
     expect(r.stagedTotalMinor).toBe(4800000);
     expect(controlFigure(5432849, r.exclusions)).toBe(4801000);
+  });
+
+  test("Xero's Inventory above the stock loaded is a debit to stock adjustment, and the control explains it (D7)", () => {
+    const d7 = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { stock: { valueMinor: 250000, adjustmentAccount: "5900" } }),
+    );
+    expect(d7.rows).toContainEqual({ account: "5900", debit_minor: 10400 });
+    expect(d7.stagedTotalMinor).toBe(4800000 + 10400);
+    expect(controlFigure(5432849, d7.exclusions)).toBe(4801000 + 10400);
+    expect(d7.exclusions.find((e) => e.label === "Stock adjustment 5900")?.amountMinor).toBe(
+      -10400,
+    );
+  });
+
+  test("stock above Xero's Inventory is a credit, which leaves the debit column as printed", () => {
+    const d7 = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { stock: { valueMinor: 261000, adjustmentAccount: "5900" } }),
+    );
+    expect(d7.rows).toContainEqual({ account: "5900", credit_minor: 600 });
+    expect(controlFigure(5432849, d7.exclusions)).toBe(4801000);
+    expect(d7.findings.map((f) => f.message)).toContain(
+      "£6.00 between Xero's Inventory and the stock loaded goes to stock adjustment 5900",
+    );
+  });
+
+  test("stock that agrees with Xero adds nothing", () => {
+    const same = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { stock: { valueMinor: 260400, adjustmentAccount: "5900" } }),
+    );
+    expect(same.rows).toEqual(r.rows);
+    expect(same.exclusions).toHaveLength(3);
   });
 });
 
