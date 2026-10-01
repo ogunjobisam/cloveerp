@@ -125,6 +125,34 @@ insert into erp_meta.table_policy (schema_name, table_name, table_class, note) v
    'A document sent outside the organisation, one row per send; its state moves as it is claimed, sent and delivered, so not append-only.')
 on conflict (schema_name, table_name) do nothing;
 
+-- Not a second gateway. erp.command is the route to another system: an
+-- integration's endpoint, its credential, its retry and dead-letter policy.
+-- This is the email channel, beside erp.notification and
+-- erp_meta.commercial_email: one message to one address through the one
+-- email provider, under the organisation's email kill switch and
+-- suppression list. The key is the provider's idempotency key, so a send
+-- whose settle was lost is not delivered twice.
+insert into erp_meta.gateway_exemption (schema_name, table_name, rationale) values
+  ('erp', 'document_email',
+   'The email channel, not an integration gateway: a document an organisation sends to one address through the email provider, as erp.notification and erp_meta.commercial_email are, under the organisation''s email kill switch and suppression list (20261004920000). Its idempotency_key is the provider''s Idempotency-Key header, so a send whose settle was lost after the provider took it is not delivered twice when its lease runs out. Integrations with another system''s endpoint go through erp.command.')
+on conflict do nothing;
+
+-- Who a document went to is part of the document's record. The addresses are
+-- a business partner's, as the address a document was issued to is
+-- (erp.document.address_snapshot), and kept for the document's legal life.
+insert into erp_ref.personal_data_exemption (schema_name, table_name, column_name, rationale) values
+  ('erp', 'document_email', 'to_address',
+   'The address a purchase order or other business document was sent to: a business partner''s, kept as the record that the document was sent, for the document''s legal life, as erp_meta.commercial_email.to_address is (20261004920000).'),
+  ('erp', 'document_email', 'cc_addresses',
+   'The addresses a business document was copied to at the sender''s request, kept with the record of the send for the document''s legal life (20261004920000).'),
+  ('erp', 'document_email', 'to_name',
+   'The name of the business partner''s contact the document was addressed to, as it read when it was sent; part of the record of the send (20261004920000).'),
+  ('erp', 'document_email', 'from_address',
+   'The organisation''s own sending address or the platform''s, not a person''s (20261004920000).'),
+  ('erp', 'document_email', 'reply_to',
+   'The address replies to a business document went to, the buyer''s work address at the time of sending; part of the record of the send (20261004920000).')
+on conflict do nothing;
+
 -- ═════════════════════════════════════════════════════════════════════════════
 -- B. The registers
 -- ═════════════════════════════════════════════════════════════════════════════
