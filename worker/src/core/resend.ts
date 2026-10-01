@@ -93,12 +93,21 @@ export type EmailRow = {
    * a PDF (src/lib/pdf/commercial-document.ts); nothing else attaches anything.
    */
   attachments?: EmailAttachment[] | null;
+  /**
+   * Copies, when the caller has any. Optional. A purchase order goes to the
+   * supplier with copies the buyer asked for (20261004920000); nothing else
+   * copies anybody.
+   */
+  cc?: string[] | null;
 };
 
 export type EmailAttachment = { filename: string; content: string };
 
 /** The request's headers: the key, the content type, and the idempotency key when there is one. */
-export function resendHeaders(apiKey: string, row: Pick<EmailRow, "idempotency_key">): Record<string, string> {
+export function resendHeaders(
+  apiKey: string,
+  row: Pick<EmailRow, "idempotency_key">,
+): Record<string, string> {
   const key = row.idempotency_key?.trim();
   return {
     "content-type": "application/json",
@@ -194,6 +203,7 @@ export async function sendViaResend(apiKey: string, row: EmailRow): Promise<stri
     body: JSON.stringify({
       from,
       to: [row.to_address],
+      ...(row.cc && row.cc.length > 0 ? { cc: row.cc } : {}),
       subject: row.subject ?? "(no subject)",
       text: row.body ?? "",
       ...(row.html ? { html: row.html } : {}),
