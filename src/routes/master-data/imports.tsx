@@ -133,6 +133,10 @@ function Imports() {
           { header: "Staged", cell: (r) => shortDate(r["created_at"]) },
           { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
           {
+            header: "Live",
+            cell: (r) => (r["activated_at"] ? shortDate(r["activated_at"]) : "—"),
+          },
+          {
             header: "Actions",
             cell: (r) => (
               <span className="flex flex-wrap gap-2">
@@ -163,6 +167,18 @@ function Imports() {
                     "erp_import_crosswalk",
                   ]}
                 />
+                {r["status"] === "loaded" &&
+                !r["activated_at"] &&
+                (r["object_type"] === "party_profile" || r["object_type"] === "item_profile") ? (
+                  <RpcButton
+                    label="Activate"
+                    fn="erp_activate_import_batch"
+                    args={{ p_batch_id: r["batch_id"] }}
+                    permission="master_data.write"
+                    confirm="Set every draft this batch created active? After this the batch no longer rolls back."
+                    invalidates={["erp_import_batches", "erp_items", "erp_parties"]}
+                  />
+                ) : null}
                 <RpcButton
                   label="Roll back"
                   fn="erp_rollback_import"

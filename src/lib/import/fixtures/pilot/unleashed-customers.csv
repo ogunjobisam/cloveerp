@@ -1,0 +1,6 @@
+Customer Code,Customer Name,Currency Code,Payment Terms,Credit Limit,GST/VAT Number,Email,Phone,Contact First Name,Contact Last Name,Postal Address Line 1,Postal Address Line 2,Postal City,Postal Region,Postal Post Code,Postal Country,Delivery Address Line 1,Delivery Address Line 2,Delivery City,Delivery Region,Delivery Post Code,Delivery Country,Obsolete
+BAYSIDE,Bayside Builders Ltd,GBP,30 Days,"5,000.00",,accounts@bayside-builders.example,,Bob,Partridge,12 Quay Street,,Bristol,,BS1 4DJ,United Kingdom,,,,,,,No
+CARTER,Carter & Sons,GBP,Net 20,2500,,,0113 496 0202,,,"Unit 7, Brook Park",,Leeds,West Yorkshire,LS11 5QP,United Kingdom,,,,,,,No
+DUNMORE,Dunmore Hardware Ltd,GBP,30 Days,"10,000.00",,,,,,40 Market Place,,York,,YO1 8RS,United Kingdom,,,,,,,No
+HOLLIS,Hollis Trade Counter,GBP,COD,,,counter@hollis.example,,Harry,Hollis,2 Canal Wharf,,Nottingham,,NG1 7EH,United Kingdom,2 Canal Wharf,,Nottingham,,NG1 7EH,United Kingdom,No
+OLDCO,Old Company Ltd,GBP,30 Days,,,,,,,,,,,,,,,,,,,Yes

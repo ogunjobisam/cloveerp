@@ -954,6 +954,21 @@ jobs:
         # time the call itself was fine and this step could not say so.
         run: supabase/ci/demonstration_catch_up.sh
 
+      - name: The Xero + Unleashed pilot loads, reconciles and cuts over
+        # Every importer has a suite, and each suite builds by hand the records
+        # the importer before it would have made. This loads one organisation's
+        # nine exports (src/lib/import/fixtures/pilot) through the browser's own
+        # import profiles and the doors, in the runbook's order, into an
+        # organisation of its own (ci-pilot). Then it proves migration clearing
+        # is zero, every reconciliation check passes, each party Xero and
+        # Unleashed share is one party, contacts and products are live, and a
+        # second administrator cuts all four domains over. Building it found
+        # that the stock difference decision D7 had never been built.
+        #
+        # After the demonstration's catch-up for the reason that step gives: it
+        # brings its own organisation and touches no other.
+        run: supabase/ci/pilot_rehearsal.sh
+
       - name: Every door has a home
         # The application calls the database by bare string, and nothing
         # compared those strings with the schema: the generated types file is

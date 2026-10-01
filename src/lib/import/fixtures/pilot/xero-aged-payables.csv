@@ -1,0 +1,14 @@
+Aged Payables Detail
+Harbour Fixings Ltd
+As at cutover
+Invoice Date,Invoice Number,Invoice Reference,Due Date,Current,< 1 Month,1 Month,2 Months,Older,Total,Currency
+Eastgate Supplies Ltd,,,,,,,,,,
+10/09/2026,BILL-501,,10/10/2026,"1,200.00",,,,,"1,200.00",GBP
+Total Eastgate Supplies Ltd,,,,,,,,,"1,200.00",
+Fernley Metals Ltd,,,,,,,,,,
+28/08/2026,BILL-777,,20/09/2026,,640.25,,,,640.25,GBP
+Total Fernley Metals Ltd,,,,,,,,,640.25,
+Greenway Office Services,,,,,,,,,,
+01/09/2026,GOS-12,,15/09/2026,99.00,,,,,99.00,GBP
+Total Greenway Office Services,,,,,,,,,99.00,
+Total Aged Payables,,,,,,,,,"1,939.25",

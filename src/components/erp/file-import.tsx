@@ -45,6 +45,13 @@ const INPUT = `${TOUCH} w-full rounded-md border border-input bg-background px-2
 const TONE = { error: "bad", warning: "warn", info: "muted" } as const;
 
 const NO_ENTRIES: CrosswalkEntry[] = [];
+
+/** The stock domain as erp_migration_domains answers it, for decision D7. */
+type StockDomain = {
+  domain_code: string;
+  loaded_total_minor: number | null;
+  adjustment_account: string | null;
+};
 const NO_ACCOUNTS: ChartAccount[] = [];
 
 export function FileImport({
@@ -63,6 +70,8 @@ export function FileImport({
   const [partyRoles, setPartyRoles] = useState<Record<string, PartyRole[]>>({});
   const [defaultPartyRole, setDefaultPartyRole] = useState<PartyRole | "none">("none");
   const [termsFromXero, setTermsFromXero] = useState(false);
+  const [weightUnit, setWeightUnit] = useState<"kg" | "g">("kg");
+  const [reorderSite, setReorderSite] = useState("");
   const [defaultLocation, setDefaultLocation] = useState("");
   const [asAt, setAsAt] = useState("");
   const [printed, setPrinted] = useState("");
@@ -74,6 +83,10 @@ export function FileImport({
   const chart = profile?.target.kind === "master" && profile.target.objectType === "account";
   const partyProfile =
     profile?.target.kind === "master" && profile.target.objectType === "party_profile";
+  // A product names its supplier by the Unleashed code or name its supplier
+  // list loaded under, or by the Xero contact it matched.
+  const products =
+    profile?.target.kind === "master" && profile.target.objectType === "item_profile";
   const readsAccounts = chart || profile?.id === "xero-trial-balance";
 
   const mappings = useQuery({
@@ -89,7 +102,16 @@ export function FileImport({
       }),
     // The ledgers name parties by their Xero names; Unleashed's lists find the
     // party Xero's contacts already loaded the same way.
-    enabled: profile?.target.kind === "opening" || partyProfile,
+    enabled: profile?.target.kind === "opening" || partyProfile || products,
+  });
+  const unleashedParties = useQuery({
+    queryKey: ["erp_import_crosswalk", { p_source_system: "unleashed", p_object_type: "party" }],
+    queryFn: () =>
+      callErp<CrosswalkEntry[]>("erp_import_crosswalk", {
+        p_source_system: "unleashed",
+        p_object_type: "party",
+      }),
+    enabled: products,
   });
   const accountEntries = useQuery({
     queryKey: ["erp_import_crosswalk", { p_source_system: "xero", p_object_type: "account" }],
@@ -100,6 +122,13 @@ export function FileImport({
       }),
     enabled: readsAccounts,
   });
+  // The trial balance writes off the difference between Xero's Inventory and
+  // the stock loaded (D7), so it reads what the stock domain loaded.
+  const domains = useQuery({
+    queryKey: ["erp_migration_domains", {}],
+    queryFn: () => callErp<StockDomain[]>("erp_migration_domains"),
+    enabled: profile?.id === "xero-trial-balance",
+  });
   const accounts = useQuery({
     queryKey: ["erp_accounts", { p_postable_only: false }],
     queryFn: () => callErp<ChartAccount[]>("erp_accounts", { p_postable_only: false }),
@@ -107,9 +136,20 @@ export function FileImport({
   });
 
   const saved = profile ? (mappings.data?.[profile.id] ?? null) : null;
-  const parties = partyEntries.data ?? NO_ENTRIES;
+  const xeroParties = partyEntries.data ?? NO_ENTRIES;
+  const fromUnleashed = unleashedParties.data ?? NO_ENTRIES;
+  const parties = useMemo(
+    () => (products ? [...xeroParties, ...fromUnleashed] : xeroParties),
+    [products, xeroParties, fromUnleashed],
+  );
   const accountMap = accountEntries.data ?? NO_ENTRIES;
   const chartAccounts = accounts.data ?? NO_ACCOUNTS;
+  const stock = useMemo(() => {
+    const d = domains.data?.find((x) => x.domain_code === "stock");
+    return d?.adjustment_account && d.loaded_total_minor
+      ? { valueMinor: d.loaded_total_minor, adjustmentAccount: d.adjustment_account }
+      : null;
+  }, [domains.data]);
 
   const read = useMemo(() => {
     if (!profile || !file) return null;
@@ -126,10 +166,16 @@ export function FileImport({
         partyRoles,
         defaultPartyRole,
         termsFromXero,
+        weightUnit,
+        reorderSite,
+        stock,
       },
       { mapping, saved },
     );
   }, [
+    stock,
+    weightUnit,
+    reorderSite,
     partyRoles,
     defaultPartyRole,
     termsFromXero,
@@ -148,12 +194,27 @@ export function FileImport({
     // The batch is the write that matters. Once it is staged, what follows is
     // bookkeeping beside it: a failure there is reported with the batch, never
     // left looking like a failed stage that invites a second, duplicate batch.
-    mutationFn: async (args: Record<string, unknown>): Promise<string | null> => {
+    mutationFn: async ({
+      args,
+      evidence,
+    }: {
+      args: Record<string, unknown>;
+      evidence: Record<string, unknown> | null;
+    }): Promise<string | null> => {
       if (!profile || !read) return null;
       const fn =
         profile.target.kind === "opening" ? "erp_stage_opening_balances" : "erp_stage_import";
-      const batch = await callErp<string>(fn, args);
+      // The opening door answers {batch_id}; the master-data door, the id itself.
+      const answer = await callErp<string | { batch_id: string }>(fn, args);
+      const batch = typeof answer === "string" ? answer : answer.batch_id;
       const problems: string[] = [];
+      if (evidence) {
+        try {
+          await callErp("erp_record_control_evidence", { p_batch_id: batch, ...evidence });
+        } catch {
+          problems.push("the printed total and the lines held back were not kept with the batch");
+        }
+      }
       try {
         await callErp("erp_save_import_mapping", {
           p_profile_id: profile.id,
@@ -243,19 +304,38 @@ export function FileImport({
     if (!result) return;
     if (profile.target.kind === "master") {
       action.mutate({
-        p_object_type: profile.target.objectType,
-        p_rows: result.rows,
-        p_code: null,
-        p_source: `${profile.id}:${file?.name ?? ""}`,
+        args: {
+          p_object_type: profile.target.objectType,
+          p_rows: result.rows,
+          p_code: null,
+          p_source: `${profile.id}:${file?.name ?? ""}`,
+        },
+        evidence: null,
       });
     } else {
       action.mutate({
-        p_domain_code: profile.target.domain,
-        p_as_at: asAt,
-        p_rows: result.rows,
-        p_control_total_minor: control,
-        p_control_quantity: controlQty === null ? null : Number(controlQty),
-        p_code: null,
+        args: {
+          p_domain_code: profile.target.domain,
+          p_as_at: asAt,
+          p_rows: result.rows,
+          p_control_total_minor: control,
+          p_control_quantity: controlQty === null ? null : Number(controlQty),
+          p_code: null,
+        },
+        // The working behind the control total, kept beside the batch.
+        evidence: printedMinor.ok
+          ? {
+              p_printed_minor: printedMinor.minor,
+              p_printed_quantity: controlQty === null ? null : Number(printedQty),
+              p_exclusions: result.exclusions.map((e) => ({
+                line: e.line,
+                label: e.label,
+                reason: e.reason,
+                amount_minor: e.amountMinor,
+                quantity: e.quantity,
+              })),
+            }
+          : null,
       });
     }
   };
@@ -488,6 +568,31 @@ export function FileImport({
                   </p>
                 ) : null}
               </Block>
+            ) : null}
+
+            {products ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Label text="Weights in the file are in">
+                  <select
+                    aria-label="Weights in the file are in"
+                    className={INPUT}
+                    value={weightUnit}
+                    onChange={(e) => setWeightUnit(e.target.value as "kg" | "g")}
+                  >
+                    <option value="kg">Kilograms</option>
+                    <option value="g">Grams</option>
+                  </select>
+                </Label>
+                <Label text="Warehouse the stock alert levels belong to">
+                  <input
+                    aria-label="Warehouse the stock alert levels belong to"
+                    className={INPUT}
+                    value={reorderSite}
+                    placeholder="MAIN"
+                    onChange={(e) => setReorderSite(e.target.value)}
+                  />
+                </Label>
+              </div>
             ) : null}
 
             {profile.id === "unleashed-stock" ? (

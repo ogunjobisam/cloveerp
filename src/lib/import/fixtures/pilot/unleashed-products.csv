@@ -1,0 +1,8 @@
+Product Code,Product Description,Product Group,Product Sub Group,Unit Of Measure,Default Purchases Unit Of Measure,Is Batch Tracked,Is Serialized,Barcode,Weight,Default Purchase Price,Default Sell Price,Supplier,Min Stock Alert Level,Max Stock Alert Level,Minimum Order Quantity,Obsolete,Sell Price Tier 1
+FIX-M6,"M6 fixings, zinc",Fixings,Bolts,EA,BOX,No,No,5012345678900,0.004,0.043,0.09,EASTGATE,5000,50000,1000,No,0.08
+FIX-M8,"M8 fixings, zinc",Fixings,Bolts,EA,BOX,No,No,5012345678917,0.007,0.061,0.12,EASTGATE,2000,30000,1000,No,
+BOLT-10,M10 coach bolt,Fixings,Bolts,EA,,No,No,,0.03,2.00,3.50,FERNLEY,,,,No,
+PAINT-5L,"Trade emulsion ""white"" 5L",Paint,,EA,,Yes,No,5012345678924,5.2,11.50,24.99,,20,200,,No,22.00
+WID-01,Shelf bracket,Hardware,,EA,,No,No,,0.25,2.335,4.75,Fernley Metals Ltd,50,500,,No,
+GLUE-1,Contact adhesive 1L,Adhesives,,EA,,No,No,,1.1,4.20,8.99,,10,60,,No,
+OLD-01,Discontinued widget,Hardware,,EA,,No,No,,,1.00,2.00,,,,,Yes,
