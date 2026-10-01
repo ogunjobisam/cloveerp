@@ -129,6 +129,12 @@ export type ProfileContext = {
   weightUnit: "kg" | "g";
   /** Products: the site Unleashed's product-level stock alert levels belong to. */
   reorderSite: string;
+  /**
+   * Trial balance: the opening stock loaded, and the account a difference
+   * between it and Xero's Inventory is written off to (decision D7). Null
+   * while no opening stock is loaded.
+   */
+  stock: { valueMinor: number; adjustmentAccount: string } | null;
 };
 
 export type Column = {

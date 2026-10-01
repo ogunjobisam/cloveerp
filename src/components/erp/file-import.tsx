@@ -45,6 +45,13 @@ const INPUT = `${TOUCH} w-full rounded-md border border-input bg-background px-2
 const TONE = { error: "bad", warning: "warn", info: "muted" } as const;
 
 const NO_ENTRIES: CrosswalkEntry[] = [];
+
+/** The stock domain as erp_migration_domains answers it, for decision D7. */
+type StockDomain = {
+  domain_code: string;
+  loaded_total_minor: number | null;
+  adjustment_account: string | null;
+};
 const NO_ACCOUNTS: ChartAccount[] = [];
 
 export function FileImport({
@@ -115,6 +122,13 @@ export function FileImport({
       }),
     enabled: readsAccounts,
   });
+  // The trial balance writes off the difference between Xero's Inventory and
+  // the stock loaded (D7), so it reads what the stock domain loaded.
+  const domains = useQuery({
+    queryKey: ["erp_migration_domains", {}],
+    queryFn: () => callErp<StockDomain[]>("erp_migration_domains"),
+    enabled: profile?.id === "xero-trial-balance",
+  });
   const accounts = useQuery({
     queryKey: ["erp_accounts", { p_postable_only: false }],
     queryFn: () => callErp<ChartAccount[]>("erp_accounts", { p_postable_only: false }),
@@ -130,6 +144,12 @@ export function FileImport({
   );
   const accountMap = accountEntries.data ?? NO_ENTRIES;
   const chartAccounts = accounts.data ?? NO_ACCOUNTS;
+  const stock = useMemo(() => {
+    const d = domains.data?.find((x) => x.domain_code === "stock");
+    return d?.adjustment_account && d.loaded_total_minor
+      ? { valueMinor: d.loaded_total_minor, adjustmentAccount: d.adjustment_account }
+      : null;
+  }, [domains.data]);
 
   const read = useMemo(() => {
     if (!profile || !file) return null;
@@ -148,10 +168,12 @@ export function FileImport({
         termsFromXero,
         weightUnit,
         reorderSite,
+        stock,
       },
       { mapping, saved },
     );
   }, [
+    stock,
     weightUnit,
     reorderSite,
     partyRoles,

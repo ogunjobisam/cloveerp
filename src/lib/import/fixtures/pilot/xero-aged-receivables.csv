@@ -1,0 +1,16 @@
+Aged Receivables Detail
+Harbour Fixings Ltd
+As at cutover
+Invoice Date,Invoice Number,Invoice Reference,Due Date,Current,< 1 Month,1 Month,2 Months,Older,Total,Currency
+Bayside Builders Ltd,,,,,,,,,,
+03/09/2026,INV-1001,PO 4471,03/10/2026,"1,500.00",,,,,"1,500.00",GBP
+15/08/2026,CN-0007,,15/08/2026,,(120.00),,,,(120.00),GBP
+Total Bayside Builders Ltd,,,,,,,,,"1,380.00",
+Carter & Sons,,,,,,,,,,
+20/08/2026,INV-1002,,03/09/2026,,845.50,,,,845.50,GBP
+Total Carter & Sons,,,,,,,,,845.50,
+Dunmore Hardware Ltd,,,,,,,,,,
+01/07/2026,INV-0988,,31/07/2026,,,,"2,000.00",,"2,000.00",GBP
+12/09/2026,INV-1010,,12/10/2026,0.00,,,,,0.00,GBP
+Total Dunmore Hardware Ltd,,,,,,,,,"2,000.00",
+Total Aged Receivables,,,,,,,,,"4,225.50",
