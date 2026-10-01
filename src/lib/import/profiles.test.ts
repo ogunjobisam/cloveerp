@@ -36,6 +36,9 @@ const ctx = (
       | "partyRoles"
       | "defaultPartyRole"
       | "termsFromXero"
+      | "weightUnit"
+      | "reorderSite"
+      | "stock"
     >
   > = {},
 ): ProfileContext => ({
@@ -48,6 +51,9 @@ const ctx = (
   partyRoles: {},
   defaultPartyRole: "none",
   termsFromXero: false,
+  weightUnit: "kg",
+  reorderSite: "",
+  stock: null,
   ...more,
 });
 
@@ -265,19 +271,65 @@ describe("payment terms", () => {
 });
 
 describe("Unleashed products", () => {
-  const r = run(unleashedProducts, "unleashed-products.csv");
+  const suppliers = { PowerDirect: "POWERDIRECT", POWERDIRECT: "POWERDIRECT" };
+  const r = run(
+    unleashedProducts,
+    "unleashed-products.csv",
+    ctx(suppliers, "", { reorderSite: "main" }),
+  );
+  const row = (i: number) => r.rows[i] as Record<string, unknown>;
 
-  test("code, name, description and group", () => {
-    expect(r.rows[0]).toEqual({
+  test("a product is one whole profile in its own unit", () => {
+    expect(row(0)).toMatchObject({
+      source: "unleashed",
       code: "FIX-M6",
       name: "M6 fixings, zinc",
       description: "M6 fixings, zinc",
       item_group: "Fixings",
+      stock_uom: "EA",
+      purchase_uom: "BOX",
+      barcode: "5012345678900",
     });
   });
 
+  test("weights become grams, from the unit the account uses", () => {
+    expect(row(0)["gross_weight_g"]).toBe("4");
+    expect(row(1)["gross_weight_g"]).toBe("5200");
+    const inGrams = run(
+      unleashedProducts,
+      "unleashed-products.csv",
+      ctx({}, "", { weightUnit: "g" }),
+    );
+    expect((inGrams.rows[1] as Record<string, unknown>)["gross_weight_g"]).toBe("5.2");
+  });
+
+  test("tracking comes from the flags", () => {
+    expect(row(0)["is_batch_controlled"]).toBeUndefined();
+    expect(row(1)["is_batch_controlled"]).toBe(true);
+  });
+
+  test("a sub-penny price loads in whole pence and says what it was", () => {
+    expect(row(0)["purchase_price"]).toEqual({ amount_minor: 4 });
+    expect(row(0)["sales_price"]).toEqual({ amount_minor: 9 });
+    expect(row(1)["sales_price"]).toEqual({ amount_minor: 2499 });
+    expect(
+      r.findings.some(
+        (f) =>
+          f.message ===
+          "purchase price 0.043 loads as £0.04 a unit: prices are per unit in whole pence",
+      ),
+    ).toBe(true);
+  });
+
+  test("the supplier resolves through the loaded suppliers, and levels go to the chosen warehouse", () => {
+    expect(row(0)["supplier"]).toEqual({ party: "POWERDIRECT", min_order_quantity: "1000" });
+    expect(row(0)["sites"]).toEqual([
+      { site: "MAIN", reorder_point: "5000", order_up_to: "50000", min_order_quantity: "1000" },
+    ]);
+  });
+
   test("an obsolete product is discontinued", () => {
-    expect(r.rows[2]).toMatchObject({ code: "OLD-01", lifecycle: "discontinued" });
+    expect(row(2)).toMatchObject({ code: "OLD-01", lifecycle: "discontinued" });
   });
 
   test("a duplicate code and a missing code are refused", () => {
@@ -290,16 +342,16 @@ describe("Unleashed products", () => {
     expect(r.findings.filter((f) => f.message.includes("VAT class"))).toHaveLength(1);
   });
 
-  test("units, tracking, prices and supply wait for the item extras", () => {
-    for (const name of [
-      "Unit Of Measure",
-      "Is Batch Tracked",
-      "Barcode",
-      "Default Sell Price",
-      "Supplier",
-    ]) {
-      expect(r.deferred.some((d) => d.startsWith(name))).toBe(true);
-    }
+  test("an unknown supplier and levels with no warehouse are said, and the product still stages", () => {
+    const bare = run(unleashedProducts, "unleashed-products.csv");
+    expect((bare.rows[0] as Record<string, unknown>)["supplier"]).toBeUndefined();
+    expect((bare.rows[0] as Record<string, unknown>)["sites"]).toBeUndefined();
+    expect(
+      bare.findings.some((f) => f.message.startsWith("supplier POWERDIRECT is not in a loaded")),
+    ).toBe(true);
+    expect(
+      bare.findings.some((f) => f.message.startsWith("2 products have stock alert levels")),
+    ).toBe(true);
   });
 });
 
@@ -317,6 +369,7 @@ describe("Unleashed stock on hand", () => {
       location: "A-01",
       quantity: "50000",
       unit_cost_minor: 4,
+      value_minor: 215000,
     });
     expect(r.rows[1]).toEqual({
       item: "PAINT-5L",
@@ -329,9 +382,23 @@ describe("Unleashed stock on hand", () => {
     });
   });
 
-  test("a sub-penny average cost says what it will load at and what Unleashed says", () => {
+  test("a sub-penny average cost loads at the value Unleashed states", () => {
     expect(messagesAt(r, 4)).toEqual([
-      "warning: loads at £2,000.00 (£0.04 a unit); Unleashed says £2,150.00. The exact value arrives with M5",
+      "info: loads at £2,150.00, the value Unleashed states; £0.04 a unit is the rounded cost shown",
+    ]);
+  });
+
+  test("a Total Cost further than a penny a unit from quantity × cost is refused", () => {
+    const text = [
+      "Product Code,Warehouse,Bin,Qty On Hand,Avg Cost,Total Cost",
+      "FIX-M6,MAIN,A-01,10,0.043,0.43",
+      "FIX-M8,MAIN,A-01,10,0.043,0.60",
+    ].join("\n");
+    const read = readFile(text, unleashedStock, ctx());
+    expect(read.result?.rows.map((x) => x["item"])).toEqual(["FIX-M6"]);
+    expect(read.result?.rows[0]?.["value_minor"]).toBe(43);
+    expect(messagesAt(read.result as ProfileResult, 3)).toEqual([
+      "error: Total Cost £0.60 is not Qty On Hand × Avg Cost (£0.40); check the line in Unleashed",
     ]);
   });
 
@@ -343,12 +410,13 @@ describe("Unleashed stock on hand", () => {
   });
 
   test("the totals the loader will reach", () => {
-    expect(r.stagedTotalMinor).toBe(200000 + 46000);
+    expect(r.stagedTotalMinor).toBe(215000 + 46000);
     expect(r.stagedQuantity).toBe("50040");
   });
 
-  test("printed less exclusions is the control, and the gap left is the M5 gap", () => {
+  test("printed less exclusions is the control, and the staged rows reach it exactly", () => {
     expect(controlFigure(260400, r.exclusions)).toBe(261000);
+    expect(r.stagedTotalMinor).toBe(261000);
     expect(controlQuantity("50037", r.exclusions)).toBe("50040");
   });
 
@@ -459,6 +527,7 @@ describe("Xero trial balance", () => {
 
   test("a name with no code, and no chart loaded, is refused with what to do", () => {
     expect(r.findings.map((f) => f.message)).toEqual([
+      "no opening stock is loaded yet, so a difference between it and Xero's Inventory cannot be written off; load the Unleashed stock first",
       "Suspense carries no account code and no loaded chart names it; load the Xero chart first, or map it there",
     ]);
   });
@@ -481,7 +550,9 @@ describe("Xero trial balance", () => {
       { account: "090", debit_minor: 4500000 },
       { account: "XSUS", debit_minor: 1000 },
     ]);
-    expect(mapped.findings).toEqual([]);
+    expect(mapped.findings.map((f) => f.message)).toEqual([
+      "no opening stock is loaded yet, so a difference between it and Xero's Inventory cannot be written off; load the Unleashed stock first",
+    ]);
     expect(mapped.exclusions.map((e) => e.label)).toEqual([
       "610 - Accounts Receivable",
       "630 - Inventory",
@@ -499,13 +570,50 @@ describe("Xero trial balance", () => {
       ctx({}, "", { account, chartLoaded: true }),
     );
     expect(strict.rows).toEqual([{ account: "4000", credit_minor: 4800000 }]);
-    expect(strict.findings.map((f) => f.line)).toEqual([8, 12, 15]);
+    expect(strict.findings.map((f) => f.line)).toEqual([8, 11, 12, 15]);
     expect(strict.findings[0]?.message).toContain("is not in the loaded Xero chart");
   });
 
   test("debits staged against the printed debits less the control accounts", () => {
     expect(r.stagedTotalMinor).toBe(4800000);
     expect(controlFigure(5432849, r.exclusions)).toBe(4801000);
+  });
+
+  test("Xero's Inventory above the stock loaded is a debit to stock adjustment, and the control explains it (D7)", () => {
+    const d7 = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { stock: { valueMinor: 250000, adjustmentAccount: "5900" } }),
+    );
+    expect(d7.rows).toContainEqual({ account: "5900", debit_minor: 10400 });
+    expect(d7.stagedTotalMinor).toBe(4800000 + 10400);
+    expect(controlFigure(5432849, d7.exclusions)).toBe(4801000 + 10400);
+    expect(d7.exclusions.find((e) => e.label === "Stock adjustment 5900")?.amountMinor).toBe(
+      -10400,
+    );
+  });
+
+  test("stock above Xero's Inventory is a credit, which leaves the debit column as printed", () => {
+    const d7 = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { stock: { valueMinor: 261000, adjustmentAccount: "5900" } }),
+    );
+    expect(d7.rows).toContainEqual({ account: "5900", credit_minor: 600 });
+    expect(controlFigure(5432849, d7.exclusions)).toBe(4801000);
+    expect(d7.findings.map((f) => f.message)).toContain(
+      "£6.00 between Xero's Inventory and the stock loaded goes to stock adjustment 5900",
+    );
+  });
+
+  test("stock that agrees with Xero adds nothing", () => {
+    const same = run(
+      xeroTrialBalance,
+      "xero-trial-balance.csv",
+      ctx({}, "", { stock: { valueMinor: 260400, adjustmentAccount: "5900" } }),
+    );
+    expect(same.rows).toEqual(r.rows);
+    expect(same.exclusions).toHaveLength(3);
   });
 });
 

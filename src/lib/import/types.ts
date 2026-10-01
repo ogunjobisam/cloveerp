@@ -36,7 +36,7 @@ export type StageRow = Record<string, Json>;
 
 export type MasterTarget = {
   kind: "master";
-  objectType: "party" | "item" | "account" | "party_profile";
+  objectType: "party" | "item" | "account" | "party_profile" | "item_profile";
 };
 export type OpeningTarget = {
   kind: "opening";
@@ -125,6 +125,16 @@ export type ProfileContext = {
   defaultPartyRole: PartyRole | "none";
   /** Xero contacts: stage Xero's payment terms, for a customer with no Unleashed. */
   termsFromXero: boolean;
+  /** Products: the unit Unleashed's weights are in, set per Unleashed account. */
+  weightUnit: "kg" | "g";
+  /** Products: the site Unleashed's product-level stock alert levels belong to. */
+  reorderSite: string;
+  /**
+   * Trial balance: the opening stock loaded, and the account a difference
+   * between it and Xero's Inventory is written off to (decision D7). Null
+   * while no opening stock is loaded.
+   */
+  stock: { valueMinor: number; adjustmentAccount: string } | null;
 };
 
 export type Column = {

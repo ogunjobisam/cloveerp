@@ -18,6 +18,10 @@ const norm = (text: string) => text.trim().toLowerCase();
 /** Legacy name → party code, for the ledgers that name parties by name. */
 export function partyKeysFrom(entries: readonly CrosswalkEntry[]): Record<string, string> {
   const keys: Record<string, string> = {};
+  // A name is a key where no entry uses it as one: Unleashed's lists are keyed
+  // by code, and a product names its supplier by either.
+  for (const e of entries)
+    if (e.legacy_name && !(e.legacy_name in keys)) keys[e.legacy_name] = e.clove_code;
   for (const e of entries) keys[e.legacy_key] = e.clove_code;
   return keys;
 }

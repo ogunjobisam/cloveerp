@@ -92,7 +92,7 @@ describe("the two screens this pass cut", () => {
     expect(stageDoors(stock)).toContain("erp_warehouse_tasks");
   });
 
-  // Its one worklist is what needs a person (20261003900000), a door no step
+  // Its one worklist is what needs a person (20261004600000), a door no step
   // lists; the shipments themselves stay the steps' own.
   test("/logistics lists only what needs a person, never its steps' own shipments", () => {
     const despatch = moduleAt("/logistics");
