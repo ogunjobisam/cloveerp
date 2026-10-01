@@ -110,10 +110,12 @@ bun "$HERE/pilot.ts" "$LOADER" "$AS_AT"
 # ── 3–5. Proof, cutover, reconciliation ─────────────────────────────────────
 $PSQL_CMD -v loader="$LOADER" -v second="$SECOND" -v as_at="$AS_AT" <<'SQL'
 \set ON_ERROR_STOP on
+-- Session-wide, not transaction-local: the cutover below is a transaction of
+-- its own and signs in as the second administrator from these.
+select set_config('pilot.loader', :'loader', false) as l,
+       set_config('pilot.second', :'second', false) as s,
+       set_config('pilot.as_at', :'as_at', false) as a \gset
 begin;
-select set_config('pilot.loader', :'loader', true) as l,
-       set_config('pilot.second', :'second', true) as s,
-       set_config('pilot.as_at', :'as_at', true) as a \gset
 
 do $proof$
 declare
