@@ -172,12 +172,27 @@ export function FileImport({
     // The batch is the write that matters. Once it is staged, what follows is
     // bookkeeping beside it: a failure there is reported with the batch, never
     // left looking like a failed stage that invites a second, duplicate batch.
-    mutationFn: async (args: Record<string, unknown>): Promise<string | null> => {
+    mutationFn: async ({
+      args,
+      evidence,
+    }: {
+      args: Record<string, unknown>;
+      evidence: Record<string, unknown> | null;
+    }): Promise<string | null> => {
       if (!profile || !read) return null;
       const fn =
         profile.target.kind === "opening" ? "erp_stage_opening_balances" : "erp_stage_import";
-      const batch = await callErp<string>(fn, args);
+      // The opening door answers {batch_id}; the master-data door, the id itself.
+      const answer = await callErp<string | { batch_id: string }>(fn, args);
+      const batch = typeof answer === "string" ? answer : answer.batch_id;
       const problems: string[] = [];
+      if (evidence) {
+        try {
+          await callErp("erp_record_control_evidence", { p_batch_id: batch, ...evidence });
+        } catch {
+          problems.push("the printed total and the lines held back were not kept with the batch");
+        }
+      }
       try {
         await callErp("erp_save_import_mapping", {
           p_profile_id: profile.id,
@@ -267,19 +282,38 @@ export function FileImport({
     if (!result) return;
     if (profile.target.kind === "master") {
       action.mutate({
-        p_object_type: profile.target.objectType,
-        p_rows: result.rows,
-        p_code: null,
-        p_source: `${profile.id}:${file?.name ?? ""}`,
+        args: {
+          p_object_type: profile.target.objectType,
+          p_rows: result.rows,
+          p_code: null,
+          p_source: `${profile.id}:${file?.name ?? ""}`,
+        },
+        evidence: null,
       });
     } else {
       action.mutate({
-        p_domain_code: profile.target.domain,
-        p_as_at: asAt,
-        p_rows: result.rows,
-        p_control_total_minor: control,
-        p_control_quantity: controlQty === null ? null : Number(controlQty),
-        p_code: null,
+        args: {
+          p_domain_code: profile.target.domain,
+          p_as_at: asAt,
+          p_rows: result.rows,
+          p_control_total_minor: control,
+          p_control_quantity: controlQty === null ? null : Number(controlQty),
+          p_code: null,
+        },
+        // The working behind the control total, kept beside the batch.
+        evidence: printedMinor.ok
+          ? {
+              p_printed_minor: printedMinor.minor,
+              p_printed_quantity: controlQty === null ? null : Number(printedQty),
+              p_exclusions: result.exclusions.map((e) => ({
+                line: e.line,
+                label: e.label,
+                reason: e.reason,
+                amount_minor: e.amountMinor,
+                quantity: e.quantity,
+              })),
+            }
+          : null,
       });
     }
   };

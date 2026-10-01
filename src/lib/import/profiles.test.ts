@@ -367,6 +367,7 @@ describe("Unleashed stock on hand", () => {
       location: "A-01",
       quantity: "50000",
       unit_cost_minor: 4,
+      value_minor: 215000,
     });
     expect(r.rows[1]).toEqual({
       item: "PAINT-5L",
@@ -379,9 +380,23 @@ describe("Unleashed stock on hand", () => {
     });
   });
 
-  test("a sub-penny average cost says what it will load at and what Unleashed says", () => {
+  test("a sub-penny average cost loads at the value Unleashed states", () => {
     expect(messagesAt(r, 4)).toEqual([
-      "warning: loads at £2,000.00 (£0.04 a unit); Unleashed says £2,150.00. The exact value arrives with M5",
+      "info: loads at £2,150.00, the value Unleashed states; £0.04 a unit is the rounded cost shown",
+    ]);
+  });
+
+  test("a Total Cost further than a penny a unit from quantity × cost is refused", () => {
+    const text = [
+      "Product Code,Warehouse,Bin,Qty On Hand,Avg Cost,Total Cost",
+      "FIX-M6,MAIN,A-01,10,0.043,0.43",
+      "FIX-M8,MAIN,A-01,10,0.043,0.60",
+    ].join("\n");
+    const read = readFile(text, unleashedStock, ctx());
+    expect(read.result?.rows.map((x) => x["item"])).toEqual(["FIX-M6"]);
+    expect(read.result?.rows[0]?.["value_minor"]).toBe(43);
+    expect(messagesAt(read.result as ProfileResult, 3)).toEqual([
+      "error: Total Cost £0.60 is not Qty On Hand × Avg Cost (£0.40); check the line in Unleashed",
     ]);
   });
 
@@ -393,12 +408,13 @@ describe("Unleashed stock on hand", () => {
   });
 
   test("the totals the loader will reach", () => {
-    expect(r.stagedTotalMinor).toBe(200000 + 46000);
+    expect(r.stagedTotalMinor).toBe(215000 + 46000);
     expect(r.stagedQuantity).toBe("50040");
   });
 
-  test("printed less exclusions is the control, and the gap left is the M5 gap", () => {
+  test("printed less exclusions is the control, and the staged rows reach it exactly", () => {
     expect(controlFigure(260400, r.exclusions)).toBe(261000);
+    expect(r.stagedTotalMinor).toBe(261000);
     expect(controlQuantity("50037", r.exclusions)).toBe("50040");
   });
 
