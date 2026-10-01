@@ -4167,6 +4167,27 @@ export const LOGISTICS: ModuleDef = {
         recordArg: "p_shipment_id",
         actionFn: "erp_record_proof_of_delivery",
       },
+      {
+        // The carrier's bill, met against what the shipment was booked at
+        // (20261004000000): the third press.
+        label: "Carrier's bill",
+        hint: "Delivered shipments the carrier has not billed yet. Bill from shipment meets their bill against what the shipment was booked at.",
+        fedBy: "Shipments appear here once they are delivered.",
+        list: {
+          fn: "erp_shipments_to_bill",
+          args: {},
+          id: "shipment_id",
+          title: ["number"],
+          subtitle: ["destination", "carrier"],
+          status: "status",
+          noun: "shipment",
+          nounPlural: "shipments",
+        },
+        // Delivered, and not yet billed: the read holds nothing else.
+        states: ["delivered"],
+        recordArg: "p_shipment_id",
+        actionFn: "erp_bill_from_shipment",
+      },
     ],
   },
   key: "logistics",
@@ -4310,6 +4331,50 @@ export const LOGISTICS: ModuleDef = {
       ],
 
       invalidates: ["erp_shipments", "erp_delivery_performance"],
+    },
+    {
+      label: "Bill from shipment",
+      description:
+        "Enter the carrier's bill for a delivered shipment. It is met against what the shipment was booked at; a bill outside the shipping policy's tolerance lands disputed on the match workbench.",
+      permission: "procurement.match",
+      fn: "erp_bill_from_shipment",
+      fields: [
+        pickFrom(
+          "erp_shipments_to_bill",
+          "shipment_id",
+          ["number", "carrier"],
+          "p_shipment_id",
+          "Shipment",
+        ),
+        {
+          kind: "text",
+          name: "p_their_reference",
+          label: "Their reference",
+          required: true,
+          placeholder: "INV-20931",
+          hint: "The carrier's own invoice number.",
+        },
+        {
+          kind: "money",
+          name: "p_amount_minor",
+          label: "Amount",
+          currency: "GBP",
+          required: false,
+          placeholder: "23.50",
+          hint: "Leave empty when the bill is for what the shipment was booked at.",
+        },
+        {
+          kind: "money",
+          name: "p_tax_minor",
+          label: "VAT",
+          currency: "GBP",
+          required: false,
+          placeholder: "4.70",
+          hint: "The VAT on the carrier's bill, if they charged it.",
+        },
+        { kind: "date", name: "p_invoice_date", label: "Bill date", required: false },
+      ],
+      invalidates: ["erp_shipments_to_bill", "erp_shipments", "erp_match_workbench"],
     },
     {
       label: "Cancel a shipment",
