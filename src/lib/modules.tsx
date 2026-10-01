@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Field } from "../components/erp/action";
 import { AllocateOnAccount } from "../components/erp/allocate-on-account";
 import { AllocatePrepayment } from "../components/erp/allocate-prepayment";
+import { AllocateSupplierCredit } from "../components/erp/allocate-supplier-credit";
 import type { Column } from "../components/erp/auto";
 import { StatusPill, moneyCell, shortDate } from "../components/erp/auto";
 import type { InquirySpec } from "../components/erp/inquiry";
@@ -2257,6 +2258,26 @@ export const FINANCE: ModuleDef = {
       ],
     },
     {
+      // What a supplier credited for goods sent back that no bill took
+      // (20261004910000): a credit note pays the bill it credits as it is
+      // issued, and the order's next bill takes the rest; Allocate is for a
+      // bill of another order, drawn only where the read says the reader may.
+      title: "Supplier credit notes",
+      description:
+        "What suppliers credited for goods sent back that no bill has taken yet, kept on their account until one does.",
+      fn: "erp_supplier_credit_notes",
+      empty:
+        "No credit is waiting. A supplier credit note no bill takes lands here, to go against their next bill.",
+      rowKey: (r, i) => String(r["credit_note_id"] ?? i),
+      columns: [
+        { header: "Supplier", cell: "party_name" },
+        { header: "Credit note", cell: "credit_note_number" },
+        { header: "Company", cell: "company" },
+        { header: "Left", cell: moneyCell("left_minor", "currency"), numeric: true },
+        { header: "Allocate", cell: (r) => <AllocateSupplierCredit row={r} /> },
+      ],
+    },
+    {
       title: "Received, not yet billed",
       description: "Received against a purchase order, still awaiting an invoice.",
       fn: "erp_grni",
@@ -3712,6 +3733,50 @@ export const QUALITY: ModuleDef = {
       invalidates: ["erp_inspections", "erp_quality_events", "erp_batches"],
     },
     RELEASE_BATCH,
+    {
+      // What an inspection of a goods receipt rejected, back to the supplier
+      // (20261004910000), for credit or replacement. Only rejected inspections
+      // are offered; the database refuses anything else, and twice.
+      label: "Return rejected goods to the supplier",
+      permission: "procurement.order",
+      fn: "erp_return_rejected",
+      description:
+        "Sends back what an inspection of a goods receipt rejected, as much as was inspected and is still here, as a draft supplier credit note.",
+      fields: [
+        {
+          kind: "select",
+          name: "p_inspection_id",
+          label: "Rejected inspection",
+          required: true,
+          options: {
+            fn: "erp_inspections",
+            args: { p_limit: 100 },
+            value: "inspection_id",
+            label: ["item", "batch", "quantity_inspected", "completed_at"],
+            keep: (row) => row["disposition"] === "reject",
+          },
+        },
+        {
+          kind: "choice",
+          name: "p_outcome",
+          label: "What for",
+          required: true,
+          hint: "The supplier credits it, or sends the goods again.",
+          choices: [
+            { value: "credit", label: "Credit" },
+            { value: "replacement", label: "Replacement" },
+          ],
+        },
+        {
+          kind: "text",
+          name: "p_rma",
+          label: "Their return authorisation",
+          placeholder: "RMA-1234",
+          hint: "Optional. The number the supplier gave for this return.",
+        },
+      ],
+      invalidates: ["erp_inspections", "erp_documents"],
+    },
     {
       label: "Start a recall",
       permission: "quality.recall",

@@ -5,6 +5,7 @@ import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../compo
 import { Gate } from "../../components/erp/gate";
 import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { OrderPrepayment } from "../../components/erp/order-prepayment";
+import { SupplierReturn } from "../../components/erp/supplier-return";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { decisionWords, type ApprovalDecision } from "../../lib/approval-decisions";
@@ -303,6 +304,16 @@ function Document() {
       {(doc.document_type === "delivery" || doc.document_type === "sales_invoice") &&
       doc.is_committed ? (
         <CreditCustomer
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
+
+      {/* Goods sent back to a supplier: what for, their authorisation, what
+          is left of the credit, and a replacement's arrival (20261004910000).
+          Receive the replacement is drawn where the database says so. */}
+      {(base ?? doc.document_type) === "return_to_supplier" ? (
+        <SupplierReturn
           documentId={documentId}
           context={`${doc.document_number} · ${doc.party ?? "no party"}`}
         />
@@ -1135,11 +1146,32 @@ function CreditSupplier({ documentId, context }: { documentId: string; context: 
               placeholder: "Wrong grade on ten of the hundred",
               hint: "Optional, and the only thing anybody will remember six months later.",
             },
+            {
+              kind: "choice",
+              name: "p_outcome",
+              label: "What for",
+              required: true,
+              hint: "Credit: the supplier gives the money back. Replacement: they send the same goods again, and nothing is credited.",
+              choices: [
+                { value: "credit", label: "Credit" },
+                { value: "replacement", label: "Replacement" },
+              ],
+            },
+            {
+              kind: "text",
+              name: "p_rma",
+              label: "Their return authorisation",
+              placeholder: "RMA-1234",
+              hint: "Optional. The number the supplier gave for this return.",
+            },
           ]}
+          preselect={{ p_outcome: "credit" }}
           mapArgs={(v) => ({
             p_document_id: documentId,
             p_reason_code: (v["p_reason_code"] as string) || "",
             p_reason: (v["p_reason"] as string) || null,
+            p_outcome: (v["p_outcome"] as string) || "credit",
+            p_rma: (v["p_rma"] as string) || null,
           })}
           invalidates={["erp_document", "erp_documents"]}
         />
