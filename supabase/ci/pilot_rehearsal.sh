@@ -202,8 +202,12 @@ end
 $proof$;
 commit;
 
--- Cutover, by the second administrator.
+-- Cutover, by the second administrator. The settings above were local to the
+-- transaction that committed, so this one says them again.
 begin;
+select set_config('pilot.loader', :'loader', true) as l,
+       set_config('pilot.second', :'second', true) as s,
+       set_config('pilot.as_at', :'as_at', true) as a \gset
 do $cutover$
 declare
   d text;
