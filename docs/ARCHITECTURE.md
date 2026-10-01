@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->253<!-- /count --> tenant tables,
 <!-- count:policies -->371<!-- /count --> row-security policies and
 <!-- count:triggers -->836<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->622<!-- /count --> migrations and
-<!-- count:sql_lines -->400422<!-- /count --> lines of SQL.
+<!-- count:migrations -->623<!-- /count --> migrations and
+<!-- count:sql_lines -->400451<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -95,7 +95,7 @@ nobody wrote down:
 - **`erp_meta.security_definer_allowance`** — <!-- count:definer_allowances -->209<!-- /count --> entries. A `SECURITY DEFINER` function runs as the owner, who bypasses row-level security. Every one in the product schemas is listed with the reason it needs the privilege.
 - **`erp_meta.public_write_allowance`** — <!-- count:write_allowances -->536<!-- /count --> entries. The doors permitted to be volatile, each naming the gate it reaches. A volatile `public.erp_*` function that is not listed fails the build; so does one whose gate no longer authorises.
 - **`erp_meta.check_run_exemption`** — the catalogue checks CI cannot run without an argument, each naming what drives it instead.
-- **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->24<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->4<!-- /count --> waiting for their screen with the path recorded.
+- **`erp_meta.api_only_door`** — <!-- count:api_only_doors -->23<!-- /count --> doors no screen names, each with the caller it exists for (the worker, the build, the device client, an integration, the platform) and <!-- count:doors_pending_screen -->4<!-- /count --> waiting for their screen with the path recorded.
 - **`erp_meta.linter_finding_allowance`** — the host's security lints, reimplemented in `erp.linter_report()`, with every remaining finding either fixed or allowed with a reason.
 
 ---
