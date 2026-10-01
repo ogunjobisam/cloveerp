@@ -4,6 +4,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { InvoiceIssue } from "../../components/erp/invoice-issue";
+import { OrderPrepayment } from "../../components/erp/order-prepayment";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { decisionWords, type ApprovalDecision } from "../../lib/approval-decisions";
@@ -281,6 +282,17 @@ function Document() {
       {(doc.document_type === "purchase_invoice" || doc.document_type === "purchase_credit_note") &&
       !doc.is_committed ? (
         <SupplierTax documentId={documentId} currency={doc.currency} minorUnits={minorUnits} />
+      ) : null}
+
+      {/* What the supplier asked for before the goods, paid by the run and
+          taken by their bill (20261004900000). The section draws itself only
+          where something was asked for or paid, or the reader may ask; the
+          database decides which orders may be prepaid. */}
+      {doc.document_type === "purchase_order" ? (
+        <OrderPrepayment
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
       ) : null}
 
       {/* A credit note starts from the document that moved the goods, because

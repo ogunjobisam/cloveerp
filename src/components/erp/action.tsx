@@ -44,6 +44,7 @@ import {
   type Outcome,
 } from "../../lib/plain-words";
 import { allocationOutcome } from "../../lib/on-account";
+import { prepaymentAllocationOutcome } from "../../lib/prepayment";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
@@ -1035,6 +1036,9 @@ const FOLLOW_UP_BY_FN: Record<
   // What a credit on account allocated, to which invoice, and what that
   // invoice still owes (20260930400000).
   erp_allocate_on_account: (result) => Promise.resolve(allocationOutcome(result)),
+  // What a supplier's prepayment paid, on which bill, and what is still
+  // prepaid on the order (20261004900000).
+  erp_allocate_prepayment: (result) => Promise.resolve(prepaymentAllocationOutcome(result)),
 };
 
 /** The documents an outcome names, each a link to its page. */
