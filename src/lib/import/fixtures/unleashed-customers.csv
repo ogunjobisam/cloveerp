@@ -1,0 +1,7 @@
+Customer Code,Customer Name,Currency Code,Payment Terms,Credit Limit,GST/VAT Number,Email,Phone,Contact First Name,Contact Last Name,Postal Address Line 1,Postal Address Line 2,Postal City,Postal Region,Postal Post Code,Postal Country,Delivery Address Line 1,Delivery Address Line 2,Delivery City,Delivery Region,Delivery Post Code,Delivery Country,Obsolete
+BAYSIDE,Bayside Club,AUD,30 Days,"5,000.00",,accounts@bayside.example,,Bob,Partridge,148 Bay Harbour Road,,Ridge Heights,Madeupville,VIC 3999,Australia,,,,,,,No
+HAM01,Hamilton Smith Ltd,GBP,20th Month Following,2500,,,0113 496 0000,,,Unit 4,Mill Lane,Leeds,,LS1 4AB,United Kingdom,Dock 2,,Leeds,West Yorkshire,LS2 2BB,UK,No
+NEWCO,New Co Ltd,GBP,Net 20,,,sales@newco.example,,,,,,Hull,,,,,,,,,,No
+OLDCO,Old Co Ltd,GBP,Net 30,,,,,,,,,,,,,,,,,,,Yes
+BAYSIDE,Bayside Again,GBP,,,,,,,,,,,,,,,,,,,,No
+,No Code Ltd,GBP,,,,,,,,,,,,,,,,,,,,No

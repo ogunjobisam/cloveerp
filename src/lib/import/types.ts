@@ -29,9 +29,15 @@ export type Exclusion = {
   quantity: string | null;
 };
 
-export type StageRow = Record<string, string | number>;
+/** A value a door takes as JSON. */
+export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
-export type MasterTarget = { kind: "master"; objectType: "party" | "item" | "account" };
+export type StageRow = Record<string, Json>;
+
+export type MasterTarget = {
+  kind: "master";
+  objectType: "party" | "item" | "account" | "party_profile";
+};
 export type OpeningTarget = {
   kind: "opening";
   domain: "stock" | "sales_ledger" | "purchase_ledger" | "nominal";
@@ -54,7 +60,13 @@ export type ProfileResult = {
   stagedQuantity: string | null;
   /** Chart only: every legacy account and the choice it stands at, for the mapping step. */
   chart: ChartLine[];
+  /** Parties only: every contact staged and the roles it stands at, for the role step. */
+  parties: PartyLine[];
 };
+
+export type PartyRole = "customer" | "supplier";
+
+export type PartyLine = { line: number; key: string; name: string; roles: PartyRole[] };
 
 export type ChartLine = {
   line: number;
@@ -107,6 +119,12 @@ export type ProfileContext = {
   accounts: readonly ChartAccount[];
   /** Chart: a person's choice per legacy key, over the default. */
   chartChoices: Readonly<Record<string, ChartChoice>>;
+  /** Parties: a person's roles per legacy key, over what the file says. */
+  partyRoles: Readonly<Record<string, readonly PartyRole[]>>;
+  /** Parties: the role a contact takes when nothing names one. */
+  defaultPartyRole: PartyRole | "none";
+  /** Xero contacts: stage Xero's payment terms, for a customer with no Unleashed. */
+  termsFromXero: boolean;
 };
 
 export type Column = {
@@ -141,6 +159,7 @@ export function emptyResult(): ProfileResult {
     stagedTotalMinor: 0,
     stagedQuantity: null,
     chart: [],
+    parties: [],
   };
 }
 
