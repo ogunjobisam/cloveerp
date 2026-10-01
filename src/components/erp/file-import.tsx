@@ -63,6 +63,8 @@ export function FileImport({
   const [partyRoles, setPartyRoles] = useState<Record<string, PartyRole[]>>({});
   const [defaultPartyRole, setDefaultPartyRole] = useState<PartyRole | "none">("none");
   const [termsFromXero, setTermsFromXero] = useState(false);
+  const [weightUnit, setWeightUnit] = useState<"kg" | "g">("kg");
+  const [reorderSite, setReorderSite] = useState("");
   const [defaultLocation, setDefaultLocation] = useState("");
   const [asAt, setAsAt] = useState("");
   const [printed, setPrinted] = useState("");
@@ -74,6 +76,10 @@ export function FileImport({
   const chart = profile?.target.kind === "master" && profile.target.objectType === "account";
   const partyProfile =
     profile?.target.kind === "master" && profile.target.objectType === "party_profile";
+  // A product names its supplier by the Unleashed code or name its supplier
+  // list loaded under, or by the Xero contact it matched.
+  const products =
+    profile?.target.kind === "master" && profile.target.objectType === "item_profile";
   const readsAccounts = chart || profile?.id === "xero-trial-balance";
 
   const mappings = useQuery({
@@ -89,7 +95,16 @@ export function FileImport({
       }),
     // The ledgers name parties by their Xero names; Unleashed's lists find the
     // party Xero's contacts already loaded the same way.
-    enabled: profile?.target.kind === "opening" || partyProfile,
+    enabled: profile?.target.kind === "opening" || partyProfile || products,
+  });
+  const unleashedParties = useQuery({
+    queryKey: ["erp_import_crosswalk", { p_source_system: "unleashed", p_object_type: "party" }],
+    queryFn: () =>
+      callErp<CrosswalkEntry[]>("erp_import_crosswalk", {
+        p_source_system: "unleashed",
+        p_object_type: "party",
+      }),
+    enabled: products,
   });
   const accountEntries = useQuery({
     queryKey: ["erp_import_crosswalk", { p_source_system: "xero", p_object_type: "account" }],
@@ -107,7 +122,12 @@ export function FileImport({
   });
 
   const saved = profile ? (mappings.data?.[profile.id] ?? null) : null;
-  const parties = partyEntries.data ?? NO_ENTRIES;
+  const xeroParties = partyEntries.data ?? NO_ENTRIES;
+  const fromUnleashed = unleashedParties.data ?? NO_ENTRIES;
+  const parties = useMemo(
+    () => (products ? [...xeroParties, ...fromUnleashed] : xeroParties),
+    [products, xeroParties, fromUnleashed],
+  );
   const accountMap = accountEntries.data ?? NO_ENTRIES;
   const chartAccounts = accounts.data ?? NO_ACCOUNTS;
 
@@ -126,10 +146,14 @@ export function FileImport({
         partyRoles,
         defaultPartyRole,
         termsFromXero,
+        weightUnit,
+        reorderSite,
       },
       { mapping, saved },
     );
   }, [
+    weightUnit,
+    reorderSite,
     partyRoles,
     defaultPartyRole,
     termsFromXero,
@@ -488,6 +512,31 @@ export function FileImport({
                   </p>
                 ) : null}
               </Block>
+            ) : null}
+
+            {products ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Label text="Weights in the file are in">
+                  <select
+                    aria-label="Weights in the file are in"
+                    className={INPUT}
+                    value={weightUnit}
+                    onChange={(e) => setWeightUnit(e.target.value as "kg" | "g")}
+                  >
+                    <option value="kg">Kilograms</option>
+                    <option value="g">Grams</option>
+                  </select>
+                </Label>
+                <Label text="Warehouse the stock alert levels belong to">
+                  <input
+                    aria-label="Warehouse the stock alert levels belong to"
+                    className={INPUT}
+                    value={reorderSite}
+                    placeholder="MAIN"
+                    onChange={(e) => setReorderSite(e.target.value)}
+                  />
+                </Label>
+              </div>
             ) : null}
 
             {profile.id === "unleashed-stock" ? (
