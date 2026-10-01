@@ -23,11 +23,10 @@
 -- runs; a build that crossed midnight failed the same case (15 September).
 -- It now asks for the figure as at the day the write-off is stamped with.
 --
--- 20261003910000 patched the as-at line on every first but 1 January; this
--- restates the whole body over it. And 20261003900000 gave the stock domain
--- an eighth row key, value_minor, without running the suite, whose domains
--- door case still counted seven — so it failed on every day, not only the
--- first. It counts eight now, and names the new key.
+-- 20261003910000 patched the as-at line on every first but 1 January, and
+-- 20261004020000 moved the domains door case from seven stock keys to eight
+-- (value_minor, optional). This restates the whole body over both, keeping
+-- the second as it was written.
 --
 -- 20260904460000 and four later migrations end by running the suite, and
 -- cannot be edited, so a build from an empty cluster would run the old body
@@ -531,7 +530,7 @@ begin
     and (select x ->> 'name' from jsonb_array_elements(res) x where x ->> 'domain_code' = 'sales_ledger') = 'Sales ledger'
     and (select jsonb_array_length(x -> 'row_keys') from jsonb_array_elements(res) x where x ->> 'domain_code' = 'stock') = 8
     and exists (select 1 from jsonb_array_elements(res) x, jsonb_array_elements(x -> 'row_keys') k
-                 where x ->> 'domain_code' = 'stock' and k ->> 'key' = 'value_minor'),
+                 where x ->> 'domain_code' = 'stock' and k ->> 'key' = 'value_minor' and not (k ->> 'required')::boolean),
     format('%s domain(s)', jsonb_array_length(res));
 
   res := public.erp_opening_batches();
