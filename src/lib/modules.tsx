@@ -4169,7 +4169,7 @@ export const LOGISTICS: ModuleDef = {
       },
       {
         // The carrier's bill, met against what the shipment was booked at
-        // (20261004000000): the third press.
+        // (20261004700000): the third press.
         label: "Carrier's bill",
         hint: "Delivered shipments the carrier has not billed yet. Bill from shipment meets their bill against what the shipment was booked at.",
         fedBy: "Shipments appear here once they are delivered.",

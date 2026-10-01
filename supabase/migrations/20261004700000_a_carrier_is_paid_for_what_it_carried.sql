@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261004000000  A carrier is paid for what it carried
+-- 20261004700000  A carrier is paid for what it carried
 -- -----------------------------------------------------------------------------
 -- LPR4 of docs/spec/logistics-target-flow.md: node L9, settlement option A,
 -- chosen on 29 September.
@@ -57,7 +57,7 @@ insert into erp_ref.chart_account_purpose
   (purpose, name, account_type, control_kind, default_code, statutory_code, installer_creates, note, seq) values
   ('carriage_outwards', 'Carriage outwards', 'expense', null, '7200', '7200', true,
    'What carriers charge to take goods to customers: a distribution cost, not cost of sales. A carrier''s '
-   'bill born from a delivered shipment posts its net here through the carrier_bill rule (20261004000000).', 146)
+   'bill born from a delivered shipment posts its net here through the carrier_bill rule (20261004700000).', 146)
 on conflict (purpose) do nothing;
 
 do $purpose$
@@ -65,7 +65,7 @@ begin
   if (select count(*) from erp_ref.chart_account_purpose p
        where p.purpose = 'carriage_outwards' and p.default_code = '7200'
          and p.statutory_code = '7200' and p.account_type = 'expense' and p.installer_creates) <> 1 then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: carriage_outwards is declared already, and not as 20261004000000 declares it';
+    raise exception 'CLOVEERP_ANCHOR_MOVED: carriage_outwards is declared already, and not as 20261004700000 declares it';
   end if;
 end
 $purpose$;
@@ -73,7 +73,7 @@ $purpose$;
 insert into erp_ref.pack_item (pack_code, object_kind, object_key, payload, provenance, seq) values
   ('chart_8_1', 'account', '7200',
    '{"code": "7200", "name": "Carriage outwards", "is_postable": true, "account_type": "expense", "close_blocking": false, "reconciliation_required": false}'::jsonb,
-   'What carriers charge to take goods to customers, in §8.1''s operating expenses band (20261004000000).', 146)
+   'What carriers charge to take goods to customers, in §8.1''s operating expenses band (20261004700000).', 146)
 on conflict do nothing;
 
 insert into erp_ref.resource (key, locale, value, module_code, description) values
@@ -82,7 +82,7 @@ insert into erp_ref.resource (key, locale, value, module_code, description) valu
   ('interview.account_purpose.carriage_outwards.note', 'en',
    'What carriers charge to take goods to customers, from their bills for the shipments they carried.', 'finance',
    'What the carriage outwards account holds.'),
-  ('document.carrier_bill', 'en', 'Carrier bill', 'logistics', 'Document type name (20261004000000).'),
+  ('document.carrier_bill', 'en', 'Carrier bill', 'logistics', 'Document type name (20261004700000).'),
   ('document.carrier_bill', 'de', 'Frachtrechnung', 'logistics', null)
 on conflict (key, locale) do update set value = excluded.value, description = excluded.description;
 
@@ -96,7 +96,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- A carrier's bill (20261004000000): the net is carriage outwards, the tax
+  -- A carrier's bill (20261004700000): the net is carriage outwards, the tax
   -- the carrier charged is input tax, and the total is owed to the carrier.
   -- Named by purpose for the upgrade register, which adds the account to a
   -- company that lacks it, and by the code in force for an install.
@@ -129,7 +129,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- What logistics version 4 adds (20261004000000), read by
+  -- What logistics version 4 adds (20261004700000), read by
   -- erp.configure_logistics() for a new install and by the upgrade register
   -- for an organisation on version 3. The rule and the sequence before the
   -- type that names them.
@@ -160,7 +160,7 @@ $$;
 revoke all on function erp.carrier_bill_pack_items(boolean) from public, anon;
 
 comment on function erp.carrier_bill_pack_items(boolean) is
-  'The carrier bill (20261004000000): its posting rule, numbering rule and document type, the items '
+  'The carrier bill (20261004700000): its posting rule, numbering rule and document type, the items '
   'erp.configure_logistics() and the logistics upgrade register both read.';
 
 do $configure$
@@ -169,7 +169,7 @@ declare
   v_def  text := pg_get_functiondef(v_sig::regprocedure);
   v_old  constant text := $o$      || erp.despatch_pack_items());$o$;
   v_new  constant text := $n$      || erp.despatch_pack_items()
-      -- The carrier's bill, settled against the shipment (20261004000000).
+      -- The carrier's bill, settled against the shipment (20261004700000).
       || erp.carrier_bill_pack_items());$n$;
   v_hits integer := (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old);
 begin
@@ -183,7 +183,7 @@ $configure$;
 update erp_ref.module_installer
    set current_version = 4,
        description = description
-         || ' Version 4 (20261004000000): the carrier bill, born from a delivered shipment and posted to '
+         || ' Version 4 (20261004700000): the carrier bill, born from a delivered shipment and posted to '
          || 'carriage outwards.'
  where install_code = 'logistics' and current_version = 3;
 
@@ -238,7 +238,7 @@ create index if not exists match_exception_shipment_idx
 
 comment on column erp.match_exception.shipment_id is
   'The shipment a carrier''s bill does not match, where the exception is about carriage rather than an order '
-  'line; exactly one of order_line_id and shipment_id is set (20261004000000).';
+  'line; exactly one of order_line_id and shipment_id is set (20261004700000).';
 
 create or replace function erp.match_exception_workbench()
 returns table(exception_id uuid, order_number text, line_no integer, item_code text, party_name text,
@@ -248,7 +248,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- Every bill that does not match, goods or carriage (20261004000000). A
+  -- Every bill that does not match, goods or carriage (20261004700000). A
   -- carrier's names its shipment where a goods bill names its order, has no
   -- line or product, and names the carrier as its party.
   select e.id, coalesce(d.document_number, sd.document_number, sh.reference), ol.line_no, i.code,
@@ -286,7 +286,7 @@ declare
 $o$,
     $n$   where ol.tenant_id = v_tenant and ol.id = e.order_line_id;
 
-  -- Or the shipment a carrier's bill does not match (20261004000000).
+  -- Or the shipment a carrier's bill does not match (20261004700000).
   if e.shipment_id is not null then
     select coalesce(sd.document_number, sh.reference), sh.entity_id, sh.site_id
       into v_order, v_entity, v_site
@@ -312,7 +312,7 @@ begin
 end
 $accept$;
 
--- A carrier is someone the organisation buys from (20261004000000): a
+-- A carrier is someone the organisation buys from (20261004700000): a
 -- document in a carrier's role is a purchase, so its tax is input tax.
 do $side$
 declare
@@ -442,7 +442,7 @@ begin
   end if;
 
   -- Against what it was booked at, under the shipping policy's tolerance
-  -- (20261003900000). Outside it, the difference is an exception under the
+  -- (20261004600000). Outside it, the difference is an exception under the
   -- match tolerance's approval chain, raised while the bill is a draft as a
   -- goods bill's is, so registering it lands it disputed.
   v_pct := coalesce((erp.shipping_policy(sh.entity_id, sh.site_id) ->> 'cost_override_tolerance_pct')::numeric, 10);
@@ -478,7 +478,7 @@ end;
 $$;
 
 comment on function erp.bill_from_shipment(uuid, text, bigint, bigint, text, date, date) is
-  'Bill from shipment (20261004000000): the carrier''s bill for a delivered shipment, born from it at its '
+  'Bill from shipment (20261004700000): the carrier''s bill for a delivered shipment, born from it at its '
   'booked cost unless the bill says otherwise; registered, or registered disputed where it is above or '
   'below the booked cost by more than the shipping policy allows. Authorises procurement.match.';
 
@@ -497,7 +497,7 @@ as $$ select erp.bill_from_shipment(p_shipment_id, p_their_reference, p_amount_m
                                      p_tax_code, p_invoice_date, p_due_date) $$;
 
 comment on function public.erp_bill_from_shipment(uuid, text, bigint, bigint, text, date, date) is
-  'Bill from shipment (20261004000000): the Despatch strip''s third press. erp.bill_from_shipment() '
+  'Bill from shipment (20261004700000): the Despatch strip''s third press. erp.bill_from_shipment() '
   'authorises procurement.match at the shipment''s site.';
 
 revoke all on function public.erp_bill_from_shipment(uuid, text, bigint, bigint, text, date, date) from public, anon;
@@ -516,7 +516,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- Delivered shipments no carrier's bill has met yet (20261004000000): the
+  -- Delivered shipments no carrier's bill has met yet (20261004700000): the
   -- Despatch strip's third step, and what Bill from shipment offers.
   select coalesce(jsonb_agg(x order by x ->> 'actual_arrival' desc nulls last, x ->> 'number'), '[]'::jsonb)
     from (
@@ -552,7 +552,7 @@ update erp_meta.flow_budget
        rationale = 'Three presses from posted deliveries to a carrier paid for what it carried: Ship these '
                 || 'deliveries, which opens the shipment and books the carrier the rate card recommends '
                 || '(20261002500000); Record proof of delivery; and Bill from shipment, the carrier''s bill '
-                || 'met against the booked cost (20261004000000). Walked by erp_test.despatch_walk().'
+                || 'met against the booked cost (20261004700000). Walked by erp_test.despatch_walk().'
  where flow_code = 'despatch';
 
 create or replace function erp_test.despatch_walk()
@@ -586,8 +586,8 @@ declare
   v_block  text;
   v_out    jsonb;
 begin
-  -- Despatch walked by pressing (20261003900000), to the carrier's bill
-  -- (20261004000000): an organisation configured as the demonstration is; a
+  -- Despatch walked by pressing (20261004600000), to the carrier's bill
+  -- (20261004700000): an organisation configured as the demonstration is; a
   -- planner who ships, a driver who proves delivery and a clerk who enters the
   -- carrier's bill, none an administrator, each holding only what their press
   -- needs. Three presses, from posted deliveries to a carrier paid for what
@@ -766,27 +766,27 @@ begin
     select * from (values
       ('erp_test.chart_alternative_suite()', array[
          $o$(select count(*) from erp.account a where a.tenant_id = v_t) = 22,  -- Re-pinned by 20260929300000: 7900.$o$,
-         $n$(select count(*) from erp.account a where a.tenant_id = v_t) = 23,  -- Re-pinned by 20261004000000: 7200.$n$,
+         $n$(select count(*) from erp.account a where a.tenant_id = v_t) = 23,  -- Re-pinned by 20261004700000: 7200.$n$,
          $o$(select count(*) from erp.account a where a.tenant_id = v_t) = 22,  -- and here.$o$,
          $n$(select count(*) from erp.account a where a.tenant_id = v_t) = 23,  -- and here.$n$]),
       ('erp_test.companies_suite()', array[
          $o$        and v_m = 17  -- Re-pinned by 20260929300000: 7900.
 $o$,
-         $n$        and v_m = 18  -- Re-pinned by 20261004000000: 7200.
+         $n$        and v_m = 18  -- Re-pinned by 20261004700000: 7200.
 $n$,
          $o$%s account(s) (expected 17)$o$,
          $n$%s account(s) (expected 18)$n$]),
       ('erp_test.demo_chart_suite()', array[
          $o$where a.tenant_id = d.tenant_id) = 22  -- Re-pinned by 20260929300000: 7900.
 $o$,
-         $n$where a.tenant_id = d.tenant_id) = 23  -- Re-pinned by 20261004000000: 7200.
+         $n$where a.tenant_id = d.tenant_id) = 23  -- Re-pinned by 20261004700000: 7200.
 $n$,
          $o$e.code = 'ACME') = 22$o$,
          $n$e.code = 'ACME') = 23$n$])
     ) v(sig, pairs)
   loop
     v_def := pg_get_functiondef(r.sig::regprocedure);
-    if position('Re-pinned by 20261004000000' in v_def) > 0 then
+    if position('Re-pinned by 20261004700000' in v_def) > 0 then
       raise notice '% already counts 7200; left as it is', r.sig;
       continue;
     end if;
@@ -1042,7 +1042,7 @@ revoke all on function erp_test.assert_freight_settlement_suite() from public, a
 comment on function erp_test.assert_freight_settlement_suite() is
   'A carrier''s bill is born from a delivered shipment, posts to carriage outwards, is billed once, and '
   'a difference outside the shipping policy''s tolerance is disputed and cleared on the match workbench '
-  '(20261004000000).';
+  '(20261004700000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- G. The words the Despatch screen adds
@@ -1050,7 +1050,7 @@ comment on function erp_test.assert_freight_settlement_suite() is
 
 insert into erp_ref.resource (key, locale, value, module_code, description)
 select erp_ref.ui_key(v.text), 'en', v.text, 'logistics',
-       'A screen string of the Despatch screen (20261004000000).'
+       'A screen string of the Despatch screen (20261004700000).'
   from (values
     ('Carrier''s bill'),
     ('Delivered shipments the carrier has not billed yet. Bill from shipment meets their bill against what the shipment was booked at.'),
