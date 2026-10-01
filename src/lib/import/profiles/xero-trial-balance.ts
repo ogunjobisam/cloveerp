@@ -15,6 +15,13 @@ import { gbp, isTotalLabel, readMinorOrZero } from "./common";
  * accounts the other domains load; they are listed as exclusions with the
  * Xero figure beside each, which is the first reconciliation the finance
  * person sees.
+ *
+ * Opening stock loads at Unleashed's value, which need not be Xero's
+ * Inventory figure. Decision D7: the difference is written off to stock
+ * adjustment, as one more line of the trial balance, so migration clearing
+ * still comes to zero. A line the report does not print changes the debit
+ * column, so it is listed with the exclusions, as a negative one, and the
+ * control total explains it.
  */
 
 const COLUMNS: Column[] = [
@@ -63,6 +70,39 @@ export const xeroTrialBalance: Profile = {
   transform(records, ctx) {
     const out = emptyResult();
 
+    // D7: Xero's Inventory against the stock loaded.
+    const stockAdjustment = (xeroMinor: number, line: number) => {
+      if (!ctx.stock) {
+        out.findings.push({
+          line,
+          severity: "warning",
+          message:
+            "no opening stock is loaded yet, so a difference between it and Xero's Inventory cannot be written off; load the Unleashed stock first",
+        });
+        return;
+      }
+      const difference = xeroMinor - ctx.stock.valueMinor;
+      if (difference === 0) return;
+      const row: Record<string, string | number> = { account: ctx.stock.adjustmentAccount };
+      if (difference > 0) row["debit_minor"] = difference;
+      else row["credit_minor"] = -difference;
+      out.rows.push(row);
+      out.lines.push(line);
+      if (difference > 0) out.stagedTotalMinor += difference;
+      out.exclusions.push({
+        line,
+        label: `Stock adjustment ${ctx.stock.adjustmentAccount}`,
+        reason: `Xero's Inventory is ${gbp(xeroMinor)} and the stock loaded is ${gbp(ctx.stock.valueMinor)}; the ${gbp(Math.abs(difference))} difference is written off to stock adjustment (D7), a line the report does not print`,
+        amountMinor: difference > 0 ? -difference : 0,
+        quantity: null,
+      });
+      out.findings.push({
+        line,
+        severity: "warning",
+        message: `${gbp(Math.abs(difference))} between Xero's Inventory and the stock loaded goes to stock adjustment ${ctx.stock.adjustmentAccount}`,
+      });
+    };
+
     for (const r of records) {
       const accountText = cell(r, "account");
       if (accountText === "" || isTotalLabel(accountText)) continue;
@@ -81,6 +121,7 @@ export const xeroTrialBalance: Profile = {
       const resolved = ctx.account(code, name);
       const byName = CONTROL.find((c) => c.pattern.test(name));
       if (resolved?.control || (!resolved && byName)) {
+        if (byName?.domain === "the stock domain") stockAdjustment(debit - credit, r.line);
         out.exclusions.push({
           line: r.line,
           label: accountText,

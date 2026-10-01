@@ -857,7 +857,7 @@ first learned it had no close when a close was refused
 (`CLOVEERP_NO_CLOSE_TEMPLATE`). The build could not see it: `close_month.sh`
 installs the module before closing ci-demo, and `erp.demonstration_catch_up()`
 installs it retroactively. A customer got neither.
-Built in `20261003800000_going_live_needs_a_close_checklist.sql`, as a go-live
+Built in `20261004500000_going_live_needs_a_close_checklist.sql`, as a go-live
 refusal rather than the finding of `erp.dead_configuration_report()` this node
 first proposed. That report is asserted across every organisation on every
 deploy (`erp.platform_assurance()`, check `dead_configuration`, platform scope),
