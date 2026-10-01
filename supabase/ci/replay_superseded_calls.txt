@@ -18,10 +18,11 @@
 # run_checks.sh walks it after every build, against the report as it is now.
 #
 # erp_test.migration_cutover_suite() took the first of the month as its as-at
-# date and asserted a write-off dated today came after it, which is false on
-# the first: the nightly and every from-empty build of 1 October failed in
-# 20260904460000 itself. 20261003910000 moves the date; the five calls below
-# ran the old body.
+# date and asserted that a write-off made today came after it, which is false
+# on the first: every build of 1 October failed, from-empty ones in
+# 20260904460000 itself. 20261003910000 moved the date except on 1 January;
+# 20261004200000 moves it on every day and restates the suite, so it answers
+# for the five calls below, which ran the old body.
 #
 # One line per call: <migration> <line> <superseded by> <routine>
 #
@@ -34,8 +35,8 @@
 20260916090000_tax_reaches_the_ledger.sql                    799  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
 20260919845000_two_suites_pinned_the_name_of_the_defect.sql  256  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
 20260919910000_the_tax_point_is_the_issue.sql                405  20260922180000_input_tax_is_debited_not_credited.sql  erp_test.assert_invoice_tax_suite
-20260904460000_migration_reconciliation_and_cutover.sql      2903  20261003910000_the_first_of_the_month_is_not_after_itself.sql  erp_test.assert_migration_cutover_suite
-20260906050000_valuation_is_the_ledger.sql                    1090  20261003910000_the_first_of_the_month_is_not_after_itself.sql  erp_test.assert_migration_cutover_suite
-20260906060000_stock_has_an_owner_and_a_keeper.sql            1304  20261003910000_the_first_of_the_month_is_not_after_itself.sql  erp_test.assert_migration_cutover_suite
-20260906137000_a_settlement_statement_is_reconciled.sql       1155  20261003910000_the_first_of_the_month_is_not_after_itself.sql  erp_test.assert_migration_cutover_suite
-20260906145000_an_approval_is_net_in_its_currency_and_cash_lands_in_the_company_owed.sql  619  20261003910000_the_first_of_the_month_is_not_after_itself.sql  erp_test.assert_migration_cutover_suite
+20260904460000_migration_reconciliation_and_cutover.sql      2903  20261004200000_the_as_at_date_has_finished.sql  erp_test.assert_migration_cutover_suite
+20260906050000_valuation_is_the_ledger.sql                    1090  20261004200000_the_as_at_date_has_finished.sql  erp_test.assert_migration_cutover_suite
+20260906060000_stock_has_an_owner_and_a_keeper.sql            1304  20261004200000_the_as_at_date_has_finished.sql  erp_test.assert_migration_cutover_suite
+20260906137000_a_settlement_statement_is_reconciled.sql       1155  20261004200000_the_as_at_date_has_finished.sql  erp_test.assert_migration_cutover_suite
+20260906145000_an_approval_is_net_in_its_currency_and_cash_lands_in_the_company_owed.sql  619  20261004200000_the_as_at_date_has_finished.sql  erp_test.assert_migration_cutover_suite
