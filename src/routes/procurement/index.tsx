@@ -15,6 +15,7 @@ import {
 } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
+import { Samples } from "../../components/erp/samples";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow, type FlowSpec } from "../../components/erp/process-flow";
@@ -521,6 +522,55 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_documents"],
   },
   {
+    // A supplier's samples, arrived (20261004930000): held here as theirs,
+    // valued by nobody, until they go back, are kept or are bought from
+    // Samples below.
+    label: "Receive samples",
+    description:
+      "The samples stay the supplier's: held and counted here, valued by nobody, until they go back, are kept or are bought.",
+    permission: "procurement.receive",
+    fn: "erp_receive_samples",
+    fields: [
+      pickParty("supplier", "p_supplier", "Supplier"),
+      pickSite("p_site"),
+      {
+        kind: "rows",
+        name: "p_lines",
+        label: "Products",
+        addLabel: "Add a product",
+        columns: [
+          {
+            name: "item_id",
+            label: "Product",
+            kind: "select",
+            options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+          },
+          { name: "quantity", label: "Quantity", kind: "number", placeholder: "1" },
+        ],
+      },
+      {
+        kind: "choice",
+        name: "p_purpose",
+        label: "Purpose",
+        required: true,
+        choices: [
+          { value: "shoot", label: "Photo shoot" },
+          { value: "buying", label: "Buying appointment" },
+          { value: "press", label: "Press loan" },
+          { value: "fit", label: "Fit or quality check" },
+        ],
+      },
+      { kind: "date", name: "p_due_back", label: "Due back" },
+      {
+        kind: "text",
+        name: "p_their_reference",
+        label: "Their reference",
+        placeholder: "Their delivery note or sample request",
+      },
+    ],
+    invalidates: ["erp_samples", "erp_documents", "erp_stock_health"],
+  },
+  {
     label: "Confirm a supplier-direct order",
     description:
       "The supplier delivered straight to the customer: both the purchase and the sales order are fulfilled, and no stock moves here.",
@@ -830,6 +880,8 @@ function Procurement() {
       <KpiRow kpis={PURCHASING_KPIS} />
 
       <ProcessFlow flow={PURCHASE_TO_PAY} actions={PURCHASING_VERBS} />
+
+      <Samples />
 
       <InquiryBoard
         inquiries={[

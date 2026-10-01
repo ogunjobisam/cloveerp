@@ -1,0 +1,162 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+
+import { callErp, hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
+import {
+  canSettle,
+  quantityWords,
+  sample,
+  type Sample,
+  type SamplePurpose,
+} from "../../lib/samples";
+import { ActionDialog, ErrorNote, type Field } from "./action";
+import { Prose, TOUCH } from "./page";
+import { Pill } from "./panel";
+import { useErpSession } from "./session-context";
+
+/**
+ * Suppliers' samples on the Purchasing screen (20261004930000): what each
+ * supplier lent, what is still here, what for, and when it is due back, the
+ * overdue first.
+ *
+ * Settle is drawn on a line only where public.erp_samples says the reader may
+ * decide what becomes of it. It returns the sample to the supplier, keeps it
+ * free of charge (ours at no cost), or buys it at the agreed price. The door
+ * refuses regardless, and refuses buying at nothing.
+ */
+
+const INVALIDATES = ["erp_samples", "erp_stock_health", "erp_stock_valuation", "erp_documents"];
+
+const TRIGGER = `${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-sm font-medium`;
+
+function SettleSample({ s }: { s: Sample }) {
+  const { ui } = useT();
+  const fields: Field[] = [
+    {
+      kind: "choice",
+      name: "p_outcome",
+      label: "Settle",
+      required: true,
+      choices: [
+        { value: "return", label: "Return to the supplier" },
+        { value: "keep", label: "Keep free of charge" },
+        { value: "buy", label: "Buy" },
+      ],
+    },
+    {
+      kind: "number",
+      name: "p_quantity",
+      label: "Quantity",
+      hint: "Leave empty to settle everything still held.",
+    },
+    {
+      kind: "money",
+      name: "p_price_minor",
+      label: "Price each",
+      currency: s.currency,
+      hint: "Required to buy. The price agreed with the supplier.",
+    },
+    {
+      kind: "text",
+      name: "p_reason",
+      label: "Reason",
+      placeholder: "Shot and done",
+    },
+  ];
+  const context = fill(ui("{quantity} of {item} from {supplier}"), {
+    quantity: quantityWords(s.held),
+    item: s.description,
+    supplier: s.supplier,
+  });
+  return (
+    <ActionDialog
+      trigger={
+        <button type="button" className={TRIGGER} aria-label={`${ui("Settle")} ${context}`}>
+          {ui("Settle")}
+        </button>
+      }
+      title="Settle a sample"
+      description="Return it to the supplier, keep it free, or buy it at the agreed price."
+      permission="procurement.order"
+      fn="erp_settle_samples"
+      fields={fields}
+      prefill={{ p_line: s.lineId }}
+      preselect={{ p_outcome: "return" }}
+      context={`${s.receiptNumber} · ${context}`}
+      invalidates={INVALIDATES}
+      submitLabel="Settle"
+    />
+  );
+}
+
+export function Samples() {
+  const { ui } = useT();
+  const { session } = useErpSession();
+  const mayRead = hasPermission(session, "procurement.read");
+  const { data, error } = useQuery({
+    queryKey: ["erp_samples", { p_include_settled: false }],
+    queryFn: () => callErp<unknown>("erp_samples", { p_include_settled: false }),
+    enabled: mayRead,
+  });
+  if (!mayRead) return null;
+
+  const purposeWord: Record<SamplePurpose, string> = {
+    shoot: ui("Photo shoot"),
+    buying: ui("Buying appointment"),
+    press: ui("Press loan"),
+    fit: ui("Fit or quality check"),
+  };
+  const samples = (Array.isArray(data) ? data : [])
+    .map(sample)
+    .filter((s): s is Sample => s !== null);
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <h2 className="text-sm font-semibold">{ui("Samples")}</h2>
+      <Prose className="mt-0.5 text-xs text-muted-foreground">
+        {ui("Samples suppliers lent: theirs until they go back, are kept or are bought.")}
+      </Prose>
+      <ErrorNote error={error} />
+      {samples.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          {ui(
+            "No samples are held. Samples a supplier lends land here until they go back, are kept or are bought.",
+          )}
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-col divide-y divide-border text-sm">
+          {samples.map((s) => (
+            <li key={s.lineId} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 py-2">
+              <span className="min-w-0 font-medium">{s.description}</span>
+              <span className="text-muted-foreground">{s.supplier}</span>
+              <span className="tabular-nums">
+                {ui("Held")} {quantityWords(s.held)}
+              </span>
+              {s.purpose ? (
+                <span className="text-muted-foreground">{purposeWord[s.purpose]}</span>
+              ) : null}
+              {s.dueBack ? (
+                <span className="tabular-nums text-muted-foreground">
+                  {ui("Due back")} {s.dueBack}
+                </span>
+              ) : null}
+              {s.overdue ? <Pill tone="bad">{ui("Overdue")}</Pill> : null}
+              {s.receiptId ? (
+                <Link
+                  to="/documents/$documentId"
+                  params={{ documentId: s.receiptId }}
+                  className="text-xs underline underline-offset-2"
+                >
+                  {s.receiptNumber}
+                </Link>
+              ) : null}
+              <span className="ml-auto">{canSettle(s) ? <SettleSample s={s} /> : null}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
