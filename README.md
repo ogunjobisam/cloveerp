@@ -22,11 +22,7 @@ and checked on every push; the words around them are written by a person.
 |                        |                                                                                                                                                                                                                                        |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Specification          | <!-- count:spec_version -->v1.6<!-- /count -->, Parts 1–23; every product decision D1–D<!-- count:product_decisions -->41<!-- /count --> registered and bound to the check that enforces it                                            |
-<<<<<<< HEAD
-| Schema                 | <!-- count:migrations -->622<!-- /count --> migrations, <!-- count:erp_tables -->253<!-- /count --> tenant tables, <!-- count:ref_tables -->78<!-- /count --> product-content tables, <!-- count:meta_tables -->79<!-- /count --> platform tables |
-=======
-| Schema                 | <!-- count:migrations -->622<!-- /count --> migrations, <!-- count:erp_tables -->253<!-- /count --> tenant tables, <!-- count:ref_tables -->78<!-- /count --> product-content tables, <!-- count:meta_tables -->79<!-- /count --> platform tables |
->>>>>>> 607c1b1d2d7d523f633a61cb9a33291988d1c1c0
+| Schema                 | <!-- count:migrations -->624<!-- /count --> migrations, <!-- count:erp_tables -->253<!-- /count --> tenant tables, <!-- count:ref_tables -->78<!-- /count --> product-content tables, <!-- count:meta_tables -->79<!-- /count --> platform tables |
 | Public API             | <!-- count:doors -->726<!-- /count --> doors, every one with a screen or a registered caller; <!-- count:doors_pending_screen -->4<!-- /count --> waiting for a screen                                                                 |
 | Part 5 capabilities    | <!-- count:part5_built -->97<!-- /count --> built, <!-- count:part5_partial -->0<!-- /count --> partial, <!-- count:part5_absent -->1<!-- /count --> absent by a recorded decision, of <!-- count:part5_total -->98<!-- /count -->       |
 | Verification           | <!-- count:catalogue_checks -->403<!-- /count --> catalogue checks, walked on every change to what they read and nightly from an empty database: <!-- count:assertions -->124<!-- /count --> structural assertions, <!-- count:suites -->301<!-- /count --> adversarial suites |
