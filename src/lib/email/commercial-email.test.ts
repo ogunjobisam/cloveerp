@@ -416,3 +416,11 @@ describe("the PDF that goes with it", () => {
     }
   });
 });
+
+describe("an amount in its own currency", () => {
+  test("a yen has no places, a dinar three, a pound two", () => {
+    expect(formatMoney(12000, "JPY")).toBe("JP¥12,000");
+    expect(formatMoney(12500, "KWD")).toBe("KWD\u00A012.500");
+    expect(formatMoney(1250, "GBP")).toBe("£12.50");
+  });
+});

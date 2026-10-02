@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
 import { ApiAccess } from "../../components/erp/api-access";
+import { CarrierAccount } from "../../components/erp/carrier-account";
 import { Gate } from "../../components/erp/gate";
 
 import { PageHeader } from "../../components/erp/page";
@@ -117,6 +118,9 @@ function Integrations() {
       <section className="min-w-0">
         <ApiAccess />
       </section>
+
+      {/* The organisation's own carrier account (20261004965000). */}
+      <CarrierAccount />
 
       <ActionBar
         title="Replaying a message"

@@ -21,6 +21,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { companyInvoiceDetailsArgs } from "../../lib/invoice-details";
 import { toMinor } from "../../lib/money";
+import { siteAddressIsComplete, siteAddressLine } from "../../lib/site-address";
 
 /**
  * Whether administrators may approve anything here (20260914098000): on by
@@ -100,6 +101,7 @@ type Site = {
   entity_code: string | null;
   country_code: string | null;
   status: string;
+  address: unknown;
 };
 
 /** The kinds of place stock can stand in. */
@@ -1056,6 +1058,55 @@ function Organisation() {
             // cannot be posted at this site" over four locations that existed.
             invalidates: ["erp_sites", "erp_locations", "erp_session"],
           },
+          {
+            // Where a carrier labels an outbound parcel from and delivers an
+            // inbound one to (20261004965000). Whole or not at all.
+            label: "Set a site's address",
+            description:
+              "The postal address carriers label parcels from and deliver to. A label cannot be bought for a site without one.",
+            permission: "administration.configure",
+            fn: "erp_set_site_address",
+            fields: [
+              pickSite(),
+              {
+                kind: "text",
+                name: "p_line1",
+                label: "First line",
+                required: true,
+                placeholder: "1 Dock Road",
+              },
+              {
+                kind: "text",
+                name: "p_line2",
+                label: "Second line",
+                placeholder: "Unit 4",
+                hint: "Optional.",
+              },
+              {
+                kind: "text",
+                name: "p_city",
+                label: "Town",
+                required: true,
+                placeholder: "London",
+              },
+              {
+                kind: "text",
+                name: "p_region",
+                label: "County or state",
+                placeholder: "Greater London",
+                hint: "Optional, except where the country's carriers need one.",
+              },
+              {
+                kind: "text",
+                name: "p_postcode",
+                label: "Postcode",
+                required: true,
+                placeholder: "E16 1AA",
+              },
+              pickCountry("p_country_code", "Country", true),
+            ],
+            invalidates: ["erp_sites", "erp_session"],
+          },
         ]}
       />
 
@@ -1070,12 +1121,29 @@ function Organisation() {
         )}
       >
         {(rows) => (
-          <Table columns={[ui("Code"), ui("Name"), ui("Kind"), ui("Company"), ui("Status")]}>
+          <Table
+            columns={[
+              ui("Code"),
+              ui("Name"),
+              ui("Kind"),
+              ui("Address"),
+              ui("Company"),
+              ui("Status"),
+            ]}
+          >
             {rows.map((s) => (
               <tr key={s.site_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{s.code}</td>
                 <td className="py-2 pr-4">{s.name}</td>
                 <td className="py-2 pr-4">{s.site_type}</td>
+                <td className="py-2 pr-4 text-xs">
+                  {siteAddressLine(s.address) ?? (
+                    <span className="text-muted-foreground">{ui("No address yet")}</span>
+                  )}
+                  {siteAddressLine(s.address) && !siteAddressIsComplete(s.address) ? (
+                    <Pill tone="warn">{ui("Incomplete")}</Pill>
+                  ) : null}
+                </td>
                 <td className="py-2 pr-4 font-mono text-xs">{s.entity_code ?? "—"}</td>
                 <td className="py-2 pr-4">
                   <Pill tone={s.status === "active" ? "ok" : "muted"}>{s.status}</Pill>

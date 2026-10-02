@@ -22,6 +22,7 @@
  * read it.
  */
 
+import { isoMinorUnits } from "../money.ts";
 import { oneLine, renderEmail, type EmailDetail, type EmailInput } from "./layout.ts";
 
 /** What erp.claim_commercial_email_batch() returns, as far as an email needs it. */
@@ -76,12 +77,14 @@ export function formatMoney(minor: unknown, currency: unknown): string | null {
   const amount = num(minor);
   if (amount === null) return null;
   if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) return null;
+  // In the currency's own places: a yen has none, a dinar three.
+  const places = isoMinorUnits(currency);
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount / 100);
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  }).format(amount / 10 ** places);
 }
 
 /** A calendar date as a person says it: "28 September 2026". Never shifted by a zone. */

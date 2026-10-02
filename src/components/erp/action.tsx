@@ -296,6 +296,11 @@ export type OptionSource = {
 
 export type Field =
   | ({ kind: "text" } & FieldBase)
+  /**
+   * Text that is never shown as it is typed and never offered back by the
+   * browser: a key to somebody else's system (20261004965000). Sent verbatim.
+   */
+  | ({ kind: "secret" } & FieldBase)
   | ({ kind: "number" } & FieldBase)
   | ({ kind: "date" } & FieldBase)
   /** Entered in major units, sent in minor. */
@@ -1503,7 +1508,17 @@ export function ActionDialog({
               ) : (
                 <input
                   aria-label={ui(f.label)}
-                  type={f.kind === "date" ? "date" : f.kind === "text" ? "text" : "number"}
+                  type={
+                    f.kind === "date"
+                      ? "date"
+                      : f.kind === "text"
+                        ? "text"
+                        : f.kind === "secret"
+                          ? "password"
+                          : "number"
+                  }
+                  autoComplete={f.kind === "secret" ? "off" : undefined}
+                  spellCheck={f.kind === "secret" ? false : undefined}
                   inputMode={f.kind === "money" || f.kind === "number" ? "decimal" : undefined}
                   step={f.kind === "money" ? "any" : undefined}
                   required={f.required ?? false}

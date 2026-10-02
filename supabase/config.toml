@@ -88,6 +88,19 @@ import_map = "./functions/import_map.json"
 verify_jwt = false
 import_map = "./functions/import_map.json"
 
+# Where a carrier says a shipment is (20261004965000).
+#
+# verify_jwt is false for the reason resend_webhook has it false: EasyPost
+# sends no Authorization header. The gate is the signature — each organisation
+# gives its own signing secret when it connects its EasyPost account, kept in
+# the vault, and the function verifies X-Hmac-Signature against it before it
+# records anything. An organisation that gave none has every event refused.
+#
+# import_map because it reaches worker/src/core/db.ts.
+[functions.carrier_webhook]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
 # Passwords.
 #
 # The two settings the CLI carries. Leaked-password protection (checking a new

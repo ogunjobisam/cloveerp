@@ -24,6 +24,7 @@ import {
   type ActionSpec,
 } from "../components/erp/actions-bar";
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
+import { toMinor } from "./money";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
 
 /** Works orders, listed the same way at every step of making. */
@@ -4349,6 +4350,14 @@ export const LOGISTICS: ModuleDef = {
           placeholder: "12.50",
           hint: "Leave empty to take the rate card's price.",
         },
+        {
+          kind: "number",
+          name: "p_weight_g",
+          label: "Weight (g)",
+          required: false,
+          placeholder: "4200",
+          hint: "The consignment as weighed. Leave empty to take the items' own weights; a carrier booked through EasyPost needs one or the other.",
+        },
       ],
       invalidates: ["erp_shipments", "erp_deliveries_to_ship", "erp_delivery_performance"],
       mapArgs: (v, picked) => ({
@@ -4356,7 +4365,10 @@ export const LOGISTICS: ModuleDef = {
         p_planned_despatch: v["p_planned_despatch"] ?? null,
         p_carrier_code: v["p_carrier_code"] ?? null,
         p_service_code: v["p_service_code"] ?? null,
-        p_cost_minor: v["p_cost_minor"] ?? null,
+        // mapArgs is handed what was typed: the cost in pounds, the weight as
+        // text. The door takes pence and grams.
+        p_cost_minor: v["p_cost_minor"] ? toMinor(v["p_cost_minor"]) : null,
+        p_weight_g: v["p_weight_g"] ? Number(v["p_weight_g"]) : null,
       }),
     },
     {
@@ -4395,6 +4407,14 @@ export const LOGISTICS: ModuleDef = {
           required: true,
           placeholder: "12.50",
           hint: "What the carrier charges for this shipment.",
+        },
+        {
+          kind: "number",
+          name: "p_weight_g",
+          label: "Weight (g)",
+          required: false,
+          placeholder: "4200",
+          hint: "The consignment as weighed. Leave empty to take the items' own weights; a carrier booked through EasyPost needs one or the other.",
         },
       ],
       invalidates: ["erp_shipments", "erp_delivery_performance"],

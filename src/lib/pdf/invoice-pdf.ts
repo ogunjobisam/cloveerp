@@ -23,6 +23,7 @@
 import { PDFDocument, degrees, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { NOTO_SANS_BOLD_BASE64, NOTO_SANS_REGULAR_BASE64, fontBytes } from "./fonts.ts";
+import { isoMinorUnits } from "../money.ts";
 
 export interface InvoiceContractLine {
   line_no?: number | null;
@@ -81,9 +82,14 @@ function text(value: unknown): string {
 }
 
 export function formatMinor(minor: unknown, currency: string): string {
-  const n = Number(minor ?? 0) / 100;
+  // In the currency's own places: a yen has none, a dinar three.
+  const places = isoMinorUnits(currency);
+  const n = Number(minor ?? 0) / 10 ** places;
   const symbol = currency === "GBP" ? "\u00A3" : currency === "EUR" ? "\u20AC" : "";
-  const body = n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const body = n.toLocaleString("en-GB", {
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  });
   return symbol ? `${symbol}${body}` : `${body} ${currency}`;
 }
 

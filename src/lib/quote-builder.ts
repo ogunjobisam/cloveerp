@@ -9,6 +9,8 @@
  * without a screen or a database.
  */
 
+import { isoMinorUnits } from "./money";
+
 export type TermKind = "annual" | "monthly" | "multi_year";
 
 export type Rate = {
@@ -199,11 +201,13 @@ export function termLabel(term: string, months?: number | null): string {
  */
 export function money(minor: number | null | undefined, currency: string): string {
   if (minor == null || !Number.isFinite(minor)) return "—";
-  const major = minor / 100;
+  // The currency's own places: a yen has none, a dinar three.
+  const places = isoMinorUnits(currency);
+  const major = minor / 10 ** places;
   const whole = Number.isInteger(major);
   const text = major.toLocaleString("en-GB", {
-    minimumFractionDigits: whole ? 0 : 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: whole ? 0 : places,
+    maximumFractionDigits: places,
   });
   return currency === "GBP" ? `£${text}` : `${text} ${currency}`;
 }
