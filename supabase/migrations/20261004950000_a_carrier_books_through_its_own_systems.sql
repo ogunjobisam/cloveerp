@@ -1593,7 +1593,8 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('Country'),
     ('Address'),
     ('No address yet'),
-    ('Incomplete')
+    ('Incomplete'),
+    ('No weight')
   ) as v(text)
 on conflict (key, locale) do nothing;
 

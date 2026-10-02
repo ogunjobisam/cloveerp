@@ -16,6 +16,8 @@ export type InboundShipment = {
   tracking: string | null;
   expected: string | null;
   late: boolean;
+  /** Grams, as weighed or as its items weigh; null when nothing says. */
+  weightG: number | null;
 };
 
 type Row = Record<string, unknown>;
@@ -24,6 +26,19 @@ const asRecord = (v: unknown): Row | null =>
   typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Row) : null;
 
 const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+
+/** A weight in grams, from the number or numeric string the database answers. */
+const grams = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/** A weight as a person reads it: grams under a kilogram, else kilograms to a tenth. */
+export function weightWords(grams: number): string {
+  if (grams < 1000) return `${Math.round(grams)} g`;
+  const kg = Math.round(grams / 100) / 10;
+  return `${kg.toLocaleString("en-GB", { maximumFractionDigits: 1 })} kg`;
+}
 
 /** One row of erp_inbound_shipments, or null when it is not one. */
 export function inboundShipment(row: unknown): InboundShipment | null {
@@ -42,6 +57,7 @@ export function inboundShipment(row: unknown): InboundShipment | null {
     tracking: text(r["tracking_reference"]),
     expected: text(r["expected_arrival"]),
     late: r["late"] === true,
+    weightG: grams(r["weight_g"]),
   };
 }
 

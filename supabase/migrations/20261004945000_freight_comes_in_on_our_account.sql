@@ -757,17 +757,19 @@ $transition$;
 create or replace function erp.inbound_shipments()
 returns table(shipment_id uuid, document_id uuid, document_number text, order_id uuid, order_number text,
               supplier text, site_id uuid, carrier text, service_code text, tracking_reference text,
-              status text, expected_arrival date, late boolean, cost_minor bigint, currency char(3))
+              status text, expected_arrival date, late boolean, cost_minor bigint, currency char(3),
+              weight_g numeric)
 language sql
 stable
 set search_path = ''
 as $$
   -- The collections booked and not yet arrived (20261004945000), the latest
   -- expected first among the late: from whom, for which order, with which
-  -- carrier, expected when.
+  -- carrier, expected when, and how heavy.
   select s.id, s.document_id, d.document_number, o.id, o.document_number, p.name, s.site_id,
          c.name, s.service_code, s.tracking_reference, s.status, s.planned_arrival,
-         s.planned_arrival < current_date, s.freight_cost_minor, s.currency
+         s.planned_arrival < current_date, s.freight_cost_minor, s.currency,
+         nullif(s.total_weight_g, 0)
     from erp.shipment s
     left join erp.document d on d.tenant_id = s.tenant_id and d.id = s.document_id
     left join erp.shipment_line sl on sl.tenant_id = s.tenant_id and sl.shipment_id = s.id
@@ -885,7 +887,7 @@ begin
     v_list := public.erp_inbound_shipments();
     select x into v_row from jsonb_array_elements(v_list) x where x ->> 'shipment_id' = v_ship ->> 'shipment_id';
     v_cases := v_cases + 1;
-    case_name := 'an order we collect, once sent, books an inbound shipment on the shipment document from the supplier to the order''s site: booked at the cost named, with its tracking reference, expected arrival and the weight given, listed as on its way and not late';
+    case_name := 'an order we collect, once sent, books an inbound shipment on the shipment document from the supplier to the order''s site: booked at the cost named, with its tracking reference, expected arrival and the weight given, listed as on its way, with its weight, and not late';
     passed := v_state is null
           and erp.order_freight_terms(v_po) = 'we_collect'
           and v_ship ->> 'status' = 'booked'
@@ -897,7 +899,8 @@ begin
           and (select s.direction from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = 'inbound'
           and (select s.origin_party_id from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = v_sa
           and v_row is not null and v_row ->> 'order_number' = (select d.document_number from erp.document d where d.id = v_po)
-          and not (v_row ->> 'late')::boolean;
+          and not (v_row ->> 'late')::boolean
+          and (v_row ->> 'weight_g')::numeric = 12500;
     detail := coalesce(v_state, left(format('%s; listed %s', v_ship, v_row), 600));
     return next;
 

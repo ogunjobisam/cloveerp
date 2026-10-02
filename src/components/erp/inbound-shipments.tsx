@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { inboundShipments } from "../../lib/inbound-shipments";
+import { inboundShipments, weightWords } from "../../lib/inbound-shipments";
 import { ErrorNote } from "./action";
 import { Prose } from "./page";
 import { Pill } from "./panel";
@@ -12,7 +12,7 @@ import { useErpSession } from "./session-context";
 /**
  * Collections on their way, on the Purchasing screen (20261004945000): the
  * inbound shipments booked for orders we collect, late first, each with its
- * order, supplier, carrier and tracking reference. One leaves the list when
+ * order, supplier, carrier, weight and tracking reference. One leaves the list when
  * the goods it carried are received; receiving them delivers it.
  */
 export function InboundShipments() {
@@ -69,6 +69,13 @@ export function InboundShipments() {
               ) : null}
               <span className="text-muted-foreground">{s.supplier}</span>
               <span>{s.carrier}</span>
+              {s.weightG !== null ? (
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {weightWords(s.weightG)}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">{ui("No weight")}</span>
+              )}
               {s.tracking ? (
                 <span className="text-xs text-muted-foreground">
                   {ui("Tracking")} {s.tracking}
