@@ -1,6 +1,6 @@
 /**
  * EasyPost, the carrier aggregator an organisation books through with its own
- * account (20261004960000): buying a shipment's label, and reading what its
+ * account (20261004965000): buying a shipment's label, and reading what its
  * webhook says afterwards.
  *
  * No database, no environment and no network of its own: the dispatch worker

@@ -1060,7 +1060,7 @@ function Organisation() {
           },
           {
             // Where a carrier labels an outbound parcel from and delivers an
-            // inbound one to (20261004960000). Whole or not at all.
+            // inbound one to (20261004965000). Whole or not at all.
             label: "Set a site's address",
             description:
               "The postal address carriers label parcels from and deliver to. A label cannot be bought for a site without one.",

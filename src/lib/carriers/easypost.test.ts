@@ -17,7 +17,7 @@ import {
   type LabelRequest,
 } from "./easypost";
 
-/** A shipment.buy payload as erp.request_carrier_label() queues it (20261004960000). */
+/** A shipment.buy payload as erp.request_carrier_label() queues it (20261004965000). */
 const request = (over: Partial<LabelRequest> = {}): LabelRequest => ({
   shipment_id: "s1",
   reference: "SHP-000001",

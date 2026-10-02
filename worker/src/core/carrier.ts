@@ -8,7 +8,7 @@ import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { asPrincipal, type Sql } from "./db.ts";
 
 /**
- * Labels from the carriers' own systems (20261004960000): the shipment.buy
+ * Labels from the carriers' own systems (20261004965000): the shipment.buy
  * commands erp.request_carrier_label() queued when a shipment was booked with
  * a carrier linked to the organisation's EasyPost account.
  *

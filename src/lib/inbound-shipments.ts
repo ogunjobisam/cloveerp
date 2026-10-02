@@ -1,5 +1,5 @@
 /**
- * Collections on their way (20261004945000), as public.erp_inbound_shipments
+ * Collections on their way (20261004955000), as public.erp_inbound_shipments
  * answers them: an inbound shipment booked for an order we collect, from
  * whom, with which carrier, expected when, and whether it is late. It leaves
  * the list when the goods it carried are received.

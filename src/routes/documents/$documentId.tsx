@@ -302,7 +302,7 @@ function Document() {
       ) : null}
 
       {/* A shipment as its carrier's own system knows it: the label and the
-          latest tracking (20261004960000). */}
+          latest tracking (20261004965000). */}
       {base === "shipment" ? <ShipmentTracking documentId={documentId} /> : null}
 
       {doc.document_type === "purchase_order" ? (

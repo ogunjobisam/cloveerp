@@ -10,7 +10,7 @@ import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
 
 /**
- * Collections on their way, on the Purchasing screen (20261004945000): the
+ * Collections on their way, on the Purchasing screen (20261004955000): the
  * inbound shipments booked for orders we collect, late first, each with its
  * order, supplier, carrier, weight and tracking reference. One leaves the list when
  * the goods it carried are received; receiving them delivers it.

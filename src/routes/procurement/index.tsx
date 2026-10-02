@@ -574,7 +574,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_documents"],
   },
   {
-    // Who brings an order's goods (20261004945000): the supplier, at their
+    // Who brings an order's goods (20261004955000): the supplier, at their
     // cost, or us, which lets a collection be booked for it.
     label: "Set freight terms",
     description:
@@ -604,7 +604,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_documents", "erp_document"],
   },
   {
-    // The collection of an order we collect (20261004945000): an inbound
+    // The collection of an order we collect (20261004955000): an inbound
     // shipment, booked with the carrier. Receiving the goods delivers it.
     label: "Book a collection",
     description:

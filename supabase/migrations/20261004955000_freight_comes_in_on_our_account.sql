@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261004945000  Freight comes in on our account
+-- 20261004955000  Freight comes in on our account
 -- -----------------------------------------------------------------------------
 -- The first half of inbound carriers, the fifth procure-to-pay gap the owner
 -- named, on top of a supplier lending its samples (20261004930000). A brand
@@ -53,7 +53,7 @@ set lock_timeout = '30s';
 --   * erp.allocate_landed_cost() stays as it is: nothing in the product calls
 --     it, and freight now lands through the bill. Retiring it is a follow-up.
 --   * The carrier's own systems (booking, labels, tracking): the second half,
---     20261004960000.
+--     20261004965000.
 --   * Duty and customs: not freight, and out of scope.
 --
 -- Proved by erp_test.inbound_freight_suite.
@@ -83,9 +83,9 @@ end
 $cols$;
 
 comment on column erp.shipment.direction is
-  'outbound: from a site to a customer. inbound: from a supplier to a site, on an order we collect (20261004945000).';
+  'outbound: from a site to a customer. inbound: from a supplier to a site, on an order we collect (20261004955000).';
 comment on column erp.shipment.origin_party_id is
-  'The supplier an inbound shipment is collected from (20261004945000).';
+  'The supplier an inbound shipment is collected from (20261004955000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- B. The registers
@@ -133,7 +133,7 @@ begin
   if (select count(*) from erp_ref.event_type et
        where et.code = 'freight.capitalised' and et.is_current and et.version = 1
          and et.aggregate_type = 'document' and et.name_key = 'event.freight.capitalised') <> 1 then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: freight.capitalised is declared already, and not as 20261004945000 declares it';
+    raise exception 'CLOVEERP_ANCHOR_MOVED: freight.capitalised is declared already, and not as 20261004955000 declares it';
   end if;
 end
 $event$;
@@ -148,7 +148,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- Who brings an order's goods (20261004945000): the supplier, by default,
+  -- Who brings an order's goods (20261004955000): the supplier, by default,
   -- or us.
   select coalesce((select d.attributes ->> 'freight_terms' from erp.document d
                     where d.tenant_id = erp.current_tenant_id() and d.id = p_order), 'supplier_delivers')
@@ -167,7 +167,7 @@ declare
   v_terms  text := lower(btrim(coalesce(p_terms, '')));
   v_base   text;
 begin
-  -- Who brings the goods, on an order not yet closed (20261004945000).
+  -- Who brings the goods, on an order not yet closed (20261004955000).
   select x.* into d from erp.document x where x.tenant_id = v_tenant and x.id = p_order for update;
   select dt.base_type_code into v_base from erp.document_type dt where dt.tenant_id = v_tenant and dt.id = d.document_type_id;
   if d.id is null or v_base is distinct from 'purchase_order' or d.is_cancelled
@@ -202,7 +202,7 @@ revoke all on function public.erp_set_freight_terms(uuid, text) from public, ano
 grant execute on function public.erp_set_freight_terms(uuid, text) to authenticated, service_role;
 
 comment on function public.erp_set_freight_terms(uuid, text) is
-  'Sets who brings a purchase order''s goods: the supplier, delivered, or us, collected (20261004945000).';
+  'Sets who brings a purchase order''s goods: the supplier, delivered, or us, collected (20261004955000).';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_set_freight_terms', 'erp.set_freight_terms',
@@ -224,7 +224,7 @@ declare
   v_weight numeric;
   sh       erp.shipment%rowtype;
 begin
-  -- The collection of an order we collect (20261004945000): an inbound
+  -- The collection of an order we collect (20261004955000): an inbound
   -- shipment from the supplier to the order's site, opened on the shipment
   -- document and booked with the carrier as an outbound one is.
   select x.* into d from erp.document x where x.tenant_id = v_tenant and x.id = p_order for update;
@@ -249,7 +249,7 @@ begin
 
   -- The consignment's weight: as weighed, where it was, else what its items
   -- weigh. It is on the shipment before the booking, which is what asks a
-  -- carrier's system for the label (20261004960000).
+  -- carrier's system for the label (20261004965000).
   if p_weight_g is not null and p_weight_g <= 0 then
     raise exception 'CLOVEERP_SHIPMENT_WEIGHT_INVALID: % g is not a weight a carrier can carry', p_weight_g
       using errcode = '22023',
@@ -300,7 +300,7 @@ revoke all on function erp.ship_inbound(uuid, text, text, bigint, date, text, bi
 
 comment on function erp.ship_inbound(uuid, text, text, bigint, date, text, bigint) is
   'Books the collection of an order we collect: an inbound shipment from the supplier to the order''s '
-  'site, booked with the carrier (20261004945000). Authorises logistics.plan at the site.';
+  'site, booked with the carrier (20261004955000). Authorises logistics.plan at the site.';
 
 create or replace function public.erp_ship_inbound(p_order uuid, p_carrier_code text, p_service_code text,
                                                    p_cost_minor bigint default null, p_expected_arrival date default null,
@@ -315,7 +315,7 @@ revoke all on function public.erp_ship_inbound(uuid, text, text, bigint, date, t
 grant execute on function public.erp_ship_inbound(uuid, text, text, bigint, date, text, bigint) to authenticated, service_role;
 
 comment on function public.erp_ship_inbound(uuid, text, text, bigint, date, text, bigint) is
-  'Books the collection of a purchase order we collect (20261004945000).';
+  'Books the collection of a purchase order we collect (20261004955000).';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_ship_inbound', 'erp.ship_inbound',
@@ -335,7 +335,7 @@ stable
 set search_path = ''
 as $$
   -- An inbound shipment whose goods a posted receipt brought in
-  -- (20261004945000): the fact its delivery is derived from.
+  -- (20261004955000): the fact its delivery is derived from.
   select exists (
     select 1 from erp.shipment s
       join erp.document r on r.tenant_id = s.tenant_id and r.attributes ->> 'inbound_shipment_id' = s.id::text
@@ -358,7 +358,7 @@ declare
   v_n      integer := 0;
 begin
   -- A posted receipt against an order we collect delivers the order's booked
-  -- collection (20261004945000), the oldest first, and names it. The system's
+  -- collection (20261004955000), the oldest first, and names it. The system's
   -- move, derived from the receipt.
   select d.document_number into v_number from erp.document d where d.tenant_id = v_tenant and d.id = p_receipt;
   for r in
@@ -399,7 +399,7 @@ revoke all on function erp.arrive_inbound_shipments(uuid) from public, anon;
 
 comment on function erp.arrive_inbound_shipments(uuid) is
   'Delivers the booked collection of the order a posted receipt fulfils, and names it on the receipt '
-  '(20261004945000). Called as the receipt posts.';
+  '(20261004955000). Called as the receipt posts.';
 
 -- The fact the delivery is derived from. Edited, not rewritten: one anchor
 -- over erp.derived_move_fact() (md5 6a52f8ad…).
@@ -413,7 +413,7 @@ declare
          end$o$;
   v_new  constant text := $n$             then 'erp.shipment_needs_no_proof'
            -- An inbound shipment's delivery, once a posted receipt brought its
-           -- goods in (20261004945000), asked for by
+           -- goods in (20261004955000), asked for by
            -- erp.arrive_inbound_shipments().
            when dt.base_type_code = 'shipment' and p_transition_code = 'deliver'
             and erp.object_current_state('document', p_object_id) = 'booked'
@@ -421,12 +421,12 @@ declare
              then 'erp.inbound_shipment_is_received'
          end$n$;
 begin
-  if strpos(v_src, '20261004945000') > 0 then
+  if strpos(v_src, '20261004955000') > 0 then
     raise notice '% already derives an inbound delivery; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> '6a52f8ad60c050886beb86855003710c' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004945000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004955000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
     raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;
@@ -446,7 +446,7 @@ stable
 set search_path = ''
 as $$
   -- What an item at a site is worth on the company's books, as
-  -- erp.stock_valuation_report() reads it (20261004945000): its FIFO layers
+  -- erp.stock_valuation_report() reads it (20261004955000): its FIFO layers
   -- still held, or its stored average value.
   select case erp.costing_method_for(p_item, p_site)
            when 'fifo' then
@@ -481,7 +481,7 @@ declare
   ic        erp.item_cost%rowtype;
 begin
   -- A receipt line's share of freight, onto what of it is still held
-  -- (20261004945000), returning exactly how much the stock's value rose by,
+  -- (20261004955000), returning exactly how much the stock's value rose by,
   -- read as the valuation reads it. FIFO: the line's own layers still held,
   -- each by whole minor units per unit; the rest is a period cost. Average:
   -- onto the item's pool, in proportion to what of the line the pool can
@@ -533,7 +533,7 @@ revoke all on function erp.add_freight_to_receipt_line(uuid, bigint) from public
 
 comment on function erp.add_freight_to_receipt_line(uuid, bigint) is
   'Adds a receipt line''s share of freight to what of it is still held, returning exactly what the '
-  'stock''s value rose by (20261004945000).';
+  'stock''s value rose by (20261004955000).';
 
 create or replace function erp.capitalise_inbound_freight(p_bill uuid)
 returns jsonb
@@ -565,7 +565,7 @@ declare
   v_i       integer := 0;
 begin
   -- A carrier's bill for freight in, onto the goods it carried
-  -- (20261004945000; owner: into item cost). Once per bill. The net its
+  -- (20261004955000; owner: into item cost). Once per bill. The net its
   -- rule posted to carriage outwards moves: what lands on stock still held
   -- to inventory, the rest to freight variance.
   select x.* into b from erp.document x where x.tenant_id = v_tenant and x.id = p_bill;
@@ -699,7 +699,7 @@ revoke all on function erp.capitalise_inbound_freight(uuid) from public, anon;
 
 comment on function erp.capitalise_inbound_freight(uuid) is
   'Moves a carrier''s bill for freight in from carriage outwards onto the goods it carried: inventory '
-  'for what lands on stock still held, freight variance for the rest, once per bill (20261004945000).';
+  'for what lands on stock still held, freight variance for the rest, once per bill (20261004955000).';
 
 -- The hooks, in erp.transition_document(). Edited, not rewritten: two
 -- anchors over the body 20261004910000 left (md5 daddb01e…).
@@ -717,7 +717,7 @@ $o$,
   end if;
 
   -- A carrier's bill for freight in lands on the goods it carried as it
-  -- registers, or as its dispute is resolved (20261004945000).
+  -- registers, or as its dispute is resolved (20261004955000).
   if dt.base_type_code = 'invoice_reference' and p_transition_code in ('register', 'resolve')
      and v_to in ('registered', 'part_paid', 'paid') then
     perform erp.capitalise_inbound_freight(p_document_id);
@@ -727,17 +727,17 @@ $n$,
     $o$    perform erp.advance_orders_for_receipt(p_document_id);
   end if;$o$,
     $n$    perform erp.advance_orders_for_receipt(p_document_id);
-    -- And the collection that brought it arrives (20261004945000).
+    -- And the collection that brought it arrives (20261004955000).
     perform erp.arrive_inbound_shipments(p_document_id);
   end if;$n$];
   v_hits integer;
 begin
-  if strpos(v_src, '20261004945000') > 0 then
+  if strpos(v_src, '20261004955000') > 0 then
     raise notice '% already brings freight in; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> 'daddb01eb0af364fa789f1d3fdab3155' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004945000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004955000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   for v_i in 1 .. array_length(v_pairs, 1) / 2 loop
     v_hits := (length(v_def) - length(replace(v_def, v_pairs[2*v_i - 1], ''))) / length(v_pairs[2*v_i - 1]);
@@ -763,7 +763,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- The collections booked and not yet arrived (20261004945000), the latest
+  -- The collections booked and not yet arrived (20261004955000), the latest
   -- expected first among the late: from whom, for which order, with which
   -- carrier, expected when, and how heavy.
   select s.id, s.document_id, d.document_number, o.id, o.document_number, p.name, s.site_id,
@@ -794,7 +794,7 @@ revoke all on function public.erp_inbound_shipments() from public, anon;
 grant execute on function public.erp_inbound_shipments() to authenticated, service_role;
 
 comment on function public.erp_inbound_shipments() is
-  'Collections on their way: from whom, for which order, with which carrier, expected when (20261004945000).';
+  'Collections on their way: from whom, for which order, with which carrier, expected when (20261004955000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- G. The suite
@@ -1060,7 +1060,7 @@ $$;
 revoke all on function erp_test.inbound_freight_suite() from public, anon;
 
 comment on function erp_test.inbound_freight_suite() is
-  'Freight comes in on our account (20261004945000): an order we collect books an inbound shipment, '
+  'Freight comes in on our account (20261004955000): an order we collect books an inbound shipment, '
   'refused by name where it may not; the receipt delivers it; the carrier''s bill lands on the goods '
   'still held and the rest goes to freight variance, carriage outwards untouched, once; and the whole '
   'database reconciles.';
@@ -1095,7 +1095,7 @@ revoke all on function erp_test.assert_inbound_freight_suite() from public, anon
 
 comment on function erp_test.assert_inbound_freight_suite() is
   'Inbound freight is booked, arrives with its goods and lands on them without parting stock from the '
-  'ledger (20261004945000).';
+  'ledger (20261004955000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- H. The words the screens say
@@ -1103,7 +1103,7 @@ comment on function erp_test.assert_inbound_freight_suite() is
 
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key(v.text), 'en', v.text,
-       'A screen string, rendered through ui(). Collections on their way, on the Purchasing screen (20261004945000).'
+       'A screen string, rendered through ui(). Collections on their way, on the Purchasing screen (20261004955000).'
   from (values
     ('On its way'),
     ('Collections we booked from suppliers, until their goods are received.'),
