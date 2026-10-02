@@ -45,6 +45,7 @@ import {
 } from "../../lib/plain-words";
 import { allocationOutcome } from "../../lib/on-account";
 import { prepaymentAllocationOutcome } from "../../lib/prepayment";
+import { supplierCreditOutcome } from "../../lib/supplier-return";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
@@ -1039,6 +1040,9 @@ const FOLLOW_UP_BY_FN: Record<
   // What a supplier's prepayment paid, on which bill, and what is still
   // prepaid on the order (20261004900000).
   erp_allocate_prepayment: (result) => Promise.resolve(prepaymentAllocationOutcome(result)),
+  // What a supplier's credit note paid, on which bill, and what of it is
+  // still to use (20261004910000).
+  erp_allocate_supplier_credit: (result) => Promise.resolve(supplierCreditOutcome(result)),
 };
 
 /** The documents an outcome names, each a link to its page. */
