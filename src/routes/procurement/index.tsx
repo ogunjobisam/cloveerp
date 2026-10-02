@@ -351,6 +351,57 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       "erp_payables_ageing",
     ],
   },
+  {
+    // Consigned stock and samples are the supplier's until used, so they are
+    // billed for what was used rather than from the receipt, which refuses
+    // them (20261004940000).
+    label: "Bill what was used",
+    description:
+      "The supplier's bill for consigned stock you used and samples you bought: what was used and not yet billed, at the agreed price.",
+    permission: "procurement.match",
+    fn: "erp_bill_from_consumption",
+    fields: [
+      pickParty("supplier", "p_supplier", "Supplier", true),
+      pickSite("p_site_id", "Site (if more than one company)", false),
+      {
+        kind: "date",
+        name: "p_through",
+        label: "Used up to",
+        hint: "Leave empty to bill everything used so far.",
+      },
+      {
+        kind: "text",
+        name: "p_their_reference",
+        label: "Supplier's invoice number",
+        placeholder: "INV-88213",
+        hint: "The number printed on their bill, so it can be matched later.",
+      },
+      { kind: "date", name: "p_invoice_date", label: "Invoice date" },
+      { kind: "date", name: "p_due_date", label: "Due date" },
+      {
+        kind: "money",
+        name: "p_tax_minor",
+        label: "Tax the supplier charged",
+        currency: "GBP",
+        placeholder: "200.00",
+        hint: "The figure on their invoice. Leave empty if they charged none.",
+      },
+      {
+        kind: "text",
+        name: "p_tax_code",
+        label: "Tax code",
+        placeholder: "S",
+        hint: "The code on their invoice. S is the standard rate.",
+      },
+    ],
+    invalidates: [
+      "erp_documents",
+      "erp_grni",
+      "erp_match_workbench",
+      "erp_supplier_balances",
+      "erp_payables_ageing",
+    ],
+  },
   // Raised from the order, holding what is left on each line; posting it moves
   // the order to partially received or received.
   RECEIVE_AN_ORDER,
