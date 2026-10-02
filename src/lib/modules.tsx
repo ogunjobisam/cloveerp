@@ -487,6 +487,76 @@ export const countPostingArgs = (values: Record<string, string>): Record<string,
   return args;
 };
 
+/**
+ * Bill a landed cost (20261004970000): a supplier's bill for duty, brokerage,
+ * insurance, handling or freight on a posted goods receipt. Registering it
+ * lands the charge on the goods still held, by value; the rest stays a cost of
+ * sales. Offered on Purchasing and in Finance; the database refuses regardless.
+ */
+export const BILL_A_LANDED_COST: ActionSpec = {
+  label: "Bill a landed cost",
+  description:
+    "A supplier's bill for duty, brokerage, insurance, handling or freight on goods already received. It lands on the goods still held; the rest is a cost of sales.",
+  permission: "procurement.match",
+  fn: "erp_bill_landed_cost",
+  fields: [
+    pickFrom(
+      "erp_documents",
+      "document_id",
+      ["document_number", "party", "state"],
+      "p_receipt_id",
+      "Goods receipt",
+      { p_type_code: "goods_receipt", p_limit: 100 },
+    ),
+    pickParty("supplier", "p_party_id", "Supplier"),
+    {
+      kind: "choice",
+      name: "p_charge",
+      label: "Charge",
+      required: true,
+      choices: [
+        { value: "duty", label: "Duty" },
+        { value: "brokerage", label: "Brokerage" },
+        { value: "insurance", label: "Insurance" },
+        { value: "handling", label: "Handling" },
+        { value: "freight", label: "Freight" },
+        { value: "other", label: "Other" },
+      ],
+    },
+    {
+      kind: "money",
+      name: "p_amount_minor",
+      label: "Net amount",
+      currency: "GBP",
+      required: true,
+      hint: "Before tax, in the company's own currency.",
+    },
+    {
+      kind: "text",
+      name: "p_their_reference",
+      label: "Their reference",
+      placeholder: "C88-4471",
+      hint: "The supplier's own invoice number.",
+    },
+    {
+      kind: "money",
+      name: "p_tax_minor",
+      label: "VAT",
+      currency: "GBP",
+      hint: "Optional. Leave empty when the bill carries none.",
+    },
+    { kind: "date", name: "p_invoice_date", label: "Invoice date" },
+  ],
+  invalidates: [
+    "erp_landed_costs",
+    "erp_documents",
+    "erp_stock_valuation",
+    "erp_trial_balance",
+    "erp_supplier_balances",
+    "erp_payables_ageing",
+  ],
+};
+
 /** A count, coloured by whether zero is the good answer. */
 const zeroIsGood = (n: number, label: string) => ({
   value: String(n),
@@ -2102,21 +2172,7 @@ export const FINANCE: ModuleDef = {
         "erp_documents",
       ],
     },
-    {
-      label: "Add delivery costs to the stock value",
-      permission: "procurement.match",
-      fn: "erp_allocate_landed_cost",
-      fields: [
-        pickFrom(
-          "erp_landed_costs",
-          "landed_cost_id",
-          ["charge_code", "description", "receipt"],
-          "p_landed_cost_id",
-          "Landed cost",
-        ),
-      ],
-      invalidates: ["erp_trial_balance", "erp_stock_valuation"],
-    },
+    BILL_A_LANDED_COST,
   ],
 
   kpis: [
