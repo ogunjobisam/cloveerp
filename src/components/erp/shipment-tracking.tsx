@@ -1,0 +1,64 @@
+import { useQuery } from "@tanstack/react-query";
+
+import { shipmentTracking, trackingWords } from "../../lib/carriers/carrier-account";
+import { callErp, hasPermission } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
+import { formatMinor } from "../../lib/money";
+import { ErrorNote } from "./action";
+import { Pill } from "./panel";
+import { useErpSession } from "./session-context";
+
+/**
+ * A shipment as its carrier's system knows it (20261004950000): the label the
+ * carrier issued, its tracking code and the latest status the carrier
+ * reported, on the shipment's page. Drawn only for a shipment booked through
+ * the organisation's provider, or one with a tracking code.
+ */
+export function ShipmentTracking({ documentId }: { documentId: string }) {
+  const { ui } = useT();
+  const { session } = useErpSession();
+  const mayRead = hasPermission(session, "logistics.read");
+  const { data, error } = useQuery({
+    queryKey: ["erp_shipment_tracking", { p_shipment_document: documentId }],
+    queryFn: () => callErp<unknown>("erp_shipment_tracking", { p_shipment_document: documentId }),
+    enabled: mayRead,
+  });
+  if (!mayRead) return null;
+  if (error) return <ErrorNote error={error} />;
+  const t = shipmentTracking(data);
+  if (!t || (t.provider === null && t.trackingReference === null)) return null;
+  const status = trackingWords(t.status);
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <h2 className="text-sm font-semibold">{ui("Tracking status")}</h2>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <Pill tone={status.tone}>{ui(status.words)}</Pill>
+        {t.trackingReference ? (
+          <span className="font-mono text-xs">{t.trackingReference}</span>
+        ) : null}
+        {t.statusAt ? (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {t.statusAt.slice(0, 16).replace("T", " ")}
+          </span>
+        ) : null}
+        {t.labelRateMinor !== null && t.currency ? (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {ui("Label")} {formatMinor(t.labelRateMinor, t.currency)}
+          </span>
+        ) : null}
+        {t.labelUrl ? (
+          <a
+            href={t.labelUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-medium underline underline-offset-2"
+          >
+            {ui("Open the label")}
+          </a>
+        ) : null}
+      </div>
+      {t.detail ? <p className="mt-1 text-xs text-muted-foreground">{t.detail}</p> : null}
+    </section>
+  );
+}

@@ -6,6 +6,7 @@ import { Gate } from "../../components/erp/gate";
 import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { OrderPrepayment } from "../../components/erp/order-prepayment";
 import { PurchaseOrderSends } from "../../components/erp/purchase-order-sends";
+import { ShipmentTracking } from "../../components/erp/shipment-tracking";
 import { SupplierReturn } from "../../components/erp/supplier-return";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
@@ -299,6 +300,10 @@ function Document() {
           context={`${doc.document_number} · ${doc.party ?? "no party"}`}
         />
       ) : null}
+
+      {/* A shipment as its carrier's own system knows it: the label and the
+          latest tracking (20261004950000). */}
+      {base === "shipment" ? <ShipmentTracking documentId={documentId} /> : null}
 
       {doc.document_type === "purchase_order" ? (
         <OrderPrepayment

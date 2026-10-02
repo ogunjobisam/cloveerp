@@ -1,5 +1,6 @@
 import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { resolveCredential } from "./config.ts";
+import { CARRIER_SYSTEMS, drainCarrierLabels } from "./carrier.ts";
 import { drainCommercialEmail } from "./commercial.ts";
 import { drainDocumentEmail } from "./document-email.ts";
 import { asPrincipal, type Sql } from "./db.ts";
@@ -38,6 +39,14 @@ export type DrainReport = {
   documentEmailClaimed: number;
   documentEmailSent: number;
   documentEmailFailed: number;
+  /**
+   * Labels bought from the carriers' own systems through the organisation's
+   * EasyPost account (worker/src/core/carrier.ts, 20261004950000).
+   */
+  labelsClaimed: number;
+  labelsBought: number;
+  labelsFailed: number;
+  labelsAmbiguous: number;
   /** Webhook notifications: dispatch queues them, this worker posts them. */
   webhooksClaimed: number;
   webhooksSent: number;
@@ -91,6 +100,10 @@ const empty = (): DrainReport => ({
   documentEmailClaimed: 0,
   documentEmailSent: 0,
   documentEmailFailed: 0,
+  labelsClaimed: 0,
+  labelsBought: 0,
+  labelsFailed: 0,
+  labelsAmbiguous: 0,
   webhooksClaimed: 0,
   webhooksSent: 0,
   webhooksFailed: 0,
@@ -369,6 +382,9 @@ async function drainOutbox(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: D
 
 async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: DrainReport) {
   for (const systemCode of cfg.systems) {
+    // A carrier's commands are bought by drainCarrierLabels, against the
+    // carrier's own API with the organisation's own key.
+    if ((CARRIER_SYSTEMS as readonly string[]).includes(systemCode)) continue;
     const claimed = await asPrincipal(
       sql,
       b,
@@ -679,6 +695,7 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
     }
     await stage(out, "email", t, () => drainEmail(sql, binding, cfg, out));
     await stage(out, "document-email", t, () => drainDocumentEmail(sql, binding, cfg, out));
+    await stage(out, "carriers", t, () => drainCarrierLabels(sql, binding, cfg, out));
     await stage(out, "webhooks", t, () => drainWebhooks(sql, binding, cfg, out));
   }
   // Order forms and invoices belong to the platform, not to one organisation:
