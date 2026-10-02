@@ -49,6 +49,10 @@ set lock_timeout = '30s';
 --     delivered is delivered, by the system (a derived move,
 --     erp.shipment_delivered_by_carrier()). An inbound one still arrives with
 --     its goods.
+--   * An outbound shipment is booked with its weight: erp_ship_deliveries and
+--     erp_book_shipment take p_weight_g, the consignment as weighed, which
+--     replaces what its items weigh before the booking asks for the label. A
+--     booked shipment's weight is not changed: its label was asked for.
 --   * A site has a postal address (erp_set_site_address, by an administrator,
 --     administration.configure), kept in erp.site.address and read by
 --     erp_sites: a carrier labels an outbound parcel from it and an inbound one
@@ -133,6 +137,11 @@ select erp.register_refusal('CLOVEERP_SITE_ADDRESS_INCOMPLETE',
   'Giving a site an address with no street, town, postcode or country.',
   'A carrier labels a parcel from the site''s address and delivers one to it; half an address is a parcel that goes nowhere.',
   'Give the first line, the town, the postcode and the two-letter country code.');
+
+select erp.register_refusal('CLOVEERP_SHIPMENT_WEIGHT_TOO_LATE',
+  'Changing the weight of a shipment already booked with its carrier.',
+  'The booking priced the shipment and asked the carrier for its label at the weight it had; a different weight now would leave the label and the bill disagreeing with the record.',
+  'Cancel the booking, weigh the consignment and book it again with its weight.');
 
 select erp.register_refusal('CLOVEERP_CARRIER_ACCOUNT_NOT_CONNECTED',
   'Linking a carrier to a provider the organisation has not connected.',
@@ -651,6 +660,135 @@ begin
   execute replace(v_def, v_old, v_new);
 end
 $book$;
+
+-- An outbound shipment's weight, as weighed. A planned shipment weighs what its
+-- deliveries' items weigh, which is nothing for an item nobody weighed; the
+-- planner who weighs the consignment says so before it is booked.
+
+create or replace function erp.set_shipment_weight(p_shipment_id uuid, p_weight_g bigint)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_tenant uuid := erp.require_tenant_id();
+  sh       erp.shipment%rowtype;
+begin
+  -- The consignment as weighed (20261004950000), on a shipment not yet booked.
+  -- Nothing given, nothing changed.
+  if p_weight_g is null then
+    return;
+  end if;
+  select x.* into sh from erp.shipment x where x.tenant_id = v_tenant and x.id = p_shipment_id for update;
+  if sh.id is null then
+    raise exception 'CLOVEERP_UNKNOWN_SHIPMENT: %', coalesce(p_shipment_id::text, 'nothing') using errcode = '23503';
+  end if;
+  perform erp.authorise('logistics.plan', sh.entity_id, sh.site_id, null, 'shipment', sh.id);
+  if p_weight_g <= 0 then
+    raise exception 'CLOVEERP_SHIPMENT_WEIGHT_INVALID: % g is not a weight a carrier can carry', p_weight_g
+      using errcode = '22023',
+            hint = 'Weigh the consignment and give its weight in grams, or leave the weight empty to take the items'' own.';
+  end if;
+  if sh.status not in ('planning', 'planned') then
+    raise exception 'CLOVEERP_SHIPMENT_WEIGHT_TOO_LATE: % is % already; its weight was what it was booked at',
+      sh.reference, sh.status
+      using errcode = '23514', hint = 'Cancel the booking, weigh the consignment and book it again with its weight.';
+  end if;
+  update erp.shipment set total_weight_g = p_weight_g, updated_at = now() where id = sh.id;
+end;
+$$;
+
+revoke all on function erp.set_shipment_weight(uuid, bigint) from public, anon;
+
+comment on function erp.set_shipment_weight(uuid, bigint) is
+  'Sets an unbooked shipment''s weight as weighed, in grams; refuses a booked one (20261004950000). '
+  'Authorises logistics.plan at the shipment''s site.';
+
+-- Shipping deliveries takes the weight, and sets it between planning and
+-- booking. A new argument, so a new signature: the routine as it stands,
+-- with the weight set where the shipment has just been planned (md5 a6906cdd…).
+
+drop function if exists public.erp_ship_deliveries(uuid[], date, text, text, bigint);
+
+do $ship$
+declare
+  v_sig  constant text := 'erp.ship_deliveries(uuid[],date,text,text,bigint)';
+  v_src  text;
+  v_def  text;
+  v_head constant text := 'p_cost_minor bigint DEFAULT NULL::bigint)';
+  v_old  constant text := $o$  v_ship := erp.plan_shipment(v_site, p_delivery_ids, coalesce(p_planned_despatch, erp.local_today()));$o$;
+  v_new  constant text := $n$  v_ship := erp.plan_shipment(v_site, p_delivery_ids, coalesce(p_planned_despatch, erp.local_today()));
+  -- As weighed, where the planner weighed it, before any booking asks a
+  -- carrier for its label (20261004950000).
+  perform erp.set_shipment_weight(v_ship, p_weight_g);$n$;
+begin
+  if to_regprocedure('erp.ship_deliveries(uuid[],date,text,text,bigint,bigint)') is not null then
+    raise notice 'erp.ship_deliveries already takes a weight; left as it is';
+    return;
+  end if;
+  v_src := (select p.prosrc from pg_catalog.pg_proc p where p.oid = v_sig::regprocedure);
+  v_def := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
+  if md5(v_src) <> 'a6906cddae2bea2ae8c667d2ea300686' then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+  end if;
+  if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1
+     or (length(v_def) - length(replace(v_def, v_head, ''))) / length(v_head) <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;
+  end if;
+  execute 'drop function ' || v_sig;
+  execute replace(replace(v_def, v_head, 'p_cost_minor bigint DEFAULT NULL::bigint, p_weight_g bigint DEFAULT NULL::bigint)'),
+                  v_old, v_new);
+end
+$ship$;
+
+revoke all on function erp.ship_deliveries(uuid[], date, text, text, bigint, bigint) from public, anon;
+
+comment on function erp.ship_deliveries(uuid[], date, text, text, bigint, bigint) is
+  'Ships posted deliveries of one site to one customer in one press (20261002500000): opens the shipment '
+  'document, sets its weight where one is given (20261004950000), takes the carrier and service the rate '
+  'card recommends unless others are named, and books it when a tariff or a cost is known; otherwise it is '
+  'left planned. Returns the shipment.';
+
+create or replace function public.erp_ship_deliveries(p_delivery_ids uuid[], p_planned_despatch date default null,
+                                                      p_carrier_code text default null, p_service_code text default null,
+                                                      p_cost_minor bigint default null, p_weight_g bigint default null)
+returns uuid
+language sql
+set search_path = ''
+as $$ select erp.ship_deliveries(p_delivery_ids, p_planned_despatch, p_carrier_code, p_service_code, p_cost_minor, p_weight_g) $$;
+
+revoke all on function public.erp_ship_deliveries(uuid[], date, text, text, bigint, bigint) from public, anon;
+grant execute on function public.erp_ship_deliveries(uuid[], date, text, text, bigint, bigint) to authenticated, service_role;
+
+comment on function public.erp_ship_deliveries(uuid[], date, text, text, bigint, bigint) is
+  'Ship these deliveries (20261002500000): the Despatch strip''s first press, with the consignment''s weight '
+  'where it was weighed (20261004950000). erp.ship_deliveries() authorises logistics.plan at the deliveries'' site.';
+
+-- Booking a planned shipment takes the weight too.
+
+drop function if exists public.erp_book_shipment(uuid, text, text, bigint);
+
+create or replace function public.erp_book_shipment(p_shipment_id uuid, p_carrier_code text, p_service_code text,
+                                                    p_cost_minor bigint default null, p_weight_g bigint default null)
+returns void
+language sql
+set search_path = ''
+as $$
+  select erp.set_shipment_weight(p_shipment_id, p_weight_g);
+  select erp.book_shipment(p_shipment_id, p_carrier_code, p_service_code, p_cost_minor);
+$$;
+
+revoke all on function public.erp_book_shipment(uuid, text, text, bigint, bigint) from public, anon;
+grant execute on function public.erp_book_shipment(uuid, text, text, bigint, bigint) to authenticated, service_role;
+
+comment on function public.erp_book_shipment(uuid, text, text, bigint, bigint) is
+  'Books a planned shipment with a carrier, at the weight it was weighed at where one is given '
+  '(20261004950000). erp.set_shipment_weight() and erp.book_shipment() authorise logistics.plan at its site.';
+
+update erp_meta.public_write_allowance
+   set rationale = rationale || ' Takes the consignment''s weight first (erp.set_shipment_weight, logistics.plan) (20261004950000).'
+ where function_name in ('erp_ship_deliveries', 'erp_book_shipment')
+   and rationale not like '%(20261004950000)%';
 
 -- A site's postal address: where an outbound parcel is labelled from and an
 -- inbound one is delivered to. erp.site.address has been a column since the
@@ -1407,14 +1545,18 @@ begin
     perform public.erp_set_site_address(x.id, '1 Dock Road', 'Unit 4', 'London', null, 'e16 1aa', 'gb')
        from erp.site x where x.tenant_id = rb.tenant_id and x.address is distinct from
             '{"line1": "1 Dock Road", "line2": "Unit 4", "city": "London", "postcode": "E16 1AA", "country_code": "GB"}'::jsonb;
-    v_out := erp.ship_deliveries(array[(v_fx #>> '{deliveries,0}')::uuid], null, v_carrier, 'standard', 3000);
+    v_out := public.erp_ship_deliveries(array[(v_fx #>> '{deliveries,0}')::uuid], null, v_carrier, 'standard', 3000, 4200);
+    begin
+      perform erp.set_shipment_weight(v_out, 5000);
+      v_err3 := 'changed';
+    exception when others then v_err3 := sqlerrm; end;
     select s.document_id into v_outdoc from erp.shipment s where s.id = v_out;
     select c.* into v_cmd from erp.command c
      where c.tenant_id = rb.tenant_id and c.source_object_type = 'shipment' and c.source_object_id = v_out;
     perform erp.apply_carrier_label(v_cmd.id, jsonb_build_object('tracking_code', 'EZ2000000002'));
     v_trk := erp.record_carrier_tracking('zzcar-' || v_tag, 'evt_9', 'EZ2000000002', 'delivered', now(), 'Left with neighbour');
     v_cases := v_cases + 1;
-    case_name := 'an outbound shipment with a linked carrier asks for its label from the site''s own address to the customer, and reported delivered by the carrier it is delivered by the system, its proof the carrier''s';
+    case_name := 'an outbound shipment with a linked carrier asks for its label from the site''s own address to the customer at the weight it was shipped with, which the booking then holds, and reported delivered by the carrier it is delivered by the system, its proof the carrier''s';
     passed := v_state is null
           and v_cmd.payload ->> 'direction' = 'outbound'
           and v_cmd.payload #>> '{from_address,street1}' = '1 Dock Road'
@@ -1422,6 +1564,8 @@ begin
           and v_cmd.payload #>> '{from_address,city}' = 'London'
           and v_cmd.payload #>> '{from_address,zip}' = 'E16 1AA'
           and v_cmd.payload #>> '{from_address,country}' = 'GB'
+          and (v_cmd.payload #>> '{parcel,weight_g}')::numeric = 4200
+          and v_err3 like 'CLOVEERP_SHIPMENT_WEIGHT_TOO_LATE:%'
           and (v_trk ->> 'delivered')::boolean
           and erp.object_current_state('document', v_outdoc) = 'delivered'
           and (select s.proof_of_delivery ->> 'by' from erp.shipment s where s.id = v_out) = 'the carrier';
@@ -1597,7 +1741,8 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('Incomplete'),
     ('No weight'),
     ('Carriage'),
-    ('Weight')
+    ('Weight'),
+    ('4200')
   ) as v(text)
 on conflict (key, locale) do nothing;
 
