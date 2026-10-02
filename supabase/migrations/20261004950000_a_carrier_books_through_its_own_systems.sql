@@ -4,7 +4,7 @@ set lock_timeout = '30s';
 -- 20261004950000  A carrier books through its own systems
 -- -----------------------------------------------------------------------------
 -- The second half of inbound carriers (owner, 2 October 2026: both halves in
--- one change), on top of freight coming in on our account (20261004940000).
+-- one change), on top of freight coming in on our account (20261004945000).
 -- Through a multi-carrier aggregator, EasyPost first (owner), behind an
 -- adapter of the integration gateway, so another provider is another adapter.
 -- docs/spec/logistics-target-flow.md §10 had carrier integration out of
@@ -879,7 +879,7 @@ comment on function erp.carrier_webhook_secret(text) is
   'connection (20261004950000). UNGATED BY DESIGN for principals: it refuses every untrusted caller.';
 
 -- The fact the delivery is derived from. Edited, not rewritten: one anchor
--- over erp.derived_move_fact() as 20261004940000 left it (md5 f51e4574…).
+-- over erp.derived_move_fact() as 20261004945000 left it (md5 d35a7005…).
 
 do $fact$
 declare
@@ -902,7 +902,7 @@ begin
     raise notice '% already derives a carrier''s delivery; left as it is', v_sig;
     return;
   end if;
-  if md5(v_src) <> 'f51e4574d8a0a8b3304bf3d7dca2dbef' then
+  if md5(v_src) <> 'd35a700531df0d45a99d8d038b7f9419' then
     raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then

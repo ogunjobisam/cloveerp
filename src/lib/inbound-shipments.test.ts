@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { inboundShipment, inboundShipments } from "./inbound-shipments";
 
-/** A row as public.erp_inbound_shipments answers it (20261004940000). */
+/** A row as public.erp_inbound_shipments answers it (20261004945000). */
 const row = (over: Record<string, unknown> = {}) => ({
   shipment_id: "s1",
   document_id: "d1",
