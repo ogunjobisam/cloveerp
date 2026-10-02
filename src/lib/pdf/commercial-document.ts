@@ -719,3 +719,32 @@ export async function renderCommercialDocumentPdf(payload: unknown): Promise<Uin
 
   return await pdf.save({ useObjectStreams: false });
 }
+
+/**
+ * The drawing kit, for the other documents drawn in the same hand: the
+ * purchase order a buyer sends its supplier (purchase-order-pdf.ts,
+ * 20261004920000). One letter size, one palette, one table, so every document
+ * the product sends reads as one family.
+ */
+export {
+  ACCENT,
+  BRAND,
+  FOOTER_Y,
+  INK,
+  MARGIN,
+  MUTED,
+  RIGHT,
+  RULE,
+  Sheet,
+  WIDTH,
+  dict,
+  heading,
+  num,
+  printable,
+  quantityWords,
+  str,
+  table,
+  titleBlock,
+  totals,
+  type Dict,
+};

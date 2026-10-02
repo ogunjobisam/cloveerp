@@ -1,6 +1,7 @@
 import type { TenantBinding, WorkerConfig } from "./config.ts";
 import { resolveCredential } from "./config.ts";
 import { drainCommercialEmail } from "./commercial.ts";
+import { drainDocumentEmail } from "./document-email.ts";
 import { asPrincipal, type Sql } from "./db.ts";
 import { drainEmail } from "./email.ts";
 import { drainWebhooks } from "./webhook.ts";
@@ -30,6 +31,13 @@ export type DrainReport = {
   commercialEmailClaimed: number;
   commercialEmailSent: number;
   commercialEmailFailed: number;
+  /**
+   * Documents an organisation sent outside itself: a purchase order to its
+   * supplier (worker/src/core/document-email.ts, 20261004920000).
+   */
+  documentEmailClaimed: number;
+  documentEmailSent: number;
+  documentEmailFailed: number;
   /** Webhook notifications: dispatch queues them, this worker posts them. */
   webhooksClaimed: number;
   webhooksSent: number;
@@ -80,6 +88,9 @@ const empty = (): DrainReport => ({
   commercialEmailClaimed: 0,
   commercialEmailSent: 0,
   commercialEmailFailed: 0,
+  documentEmailClaimed: 0,
+  documentEmailSent: 0,
+  documentEmailFailed: 0,
   webhooksClaimed: 0,
   webhooksSent: 0,
   webhooksFailed: 0,
@@ -318,10 +329,7 @@ async function drainOutbox(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out: D
     );
 
     const endpoint = endpointOf(system?.["connection"]);
-    const credential = resolveCredential(
-      (system?.["credential_ref"] ?? null) as string | null,
-      b,
-    );
+    const credential = resolveCredential((system?.["credential_ref"] ?? null) as string | null, b);
 
     for (const message of claimed) {
       const id = message["id"] as string;
@@ -381,10 +389,7 @@ async function drainCommands(sql: Sql, b: TenantBinding, cfg: WorkerConfig, out:
     );
 
     const endpoint = endpointOf(system?.["connection"]);
-    const credential = resolveCredential(
-      (system?.["credential_ref"] ?? null) as string | null,
-      b,
-    );
+    const credential = resolveCredential((system?.["credential_ref"] ?? null) as string | null, b);
     const timeoutMs = timeoutFor(system?.["connection"], cfg);
 
     for (const command of claimed) {
@@ -522,7 +527,9 @@ async function sweepExpiredDocumentPreviews(
     body: JSON.stringify({ prefixes: paths }),
   });
   if (!response.ok) {
-    throw new Error(`expired document previews could not be removed from storage (${response.status})`);
+    throw new Error(
+      `expired document previews could not be removed from storage (${response.status})`,
+    );
   }
   out.previewsPurged += paths.length;
 }
@@ -543,7 +550,11 @@ async function sweepExpiredDocumentPreviews(
  * the named organisations are still served and the pass counts the failure, so
  * a deployment that names its organisations is not stopped by one that does not.
  */
-async function bindingsFor(sql: Sql, cfg: WorkerConfig, out: DrainReport): Promise<TenantBinding[]> {
+async function bindingsFor(
+  sql: Sql,
+  cfg: WorkerConfig,
+  out: DrainReport,
+): Promise<TenantBinding[]> {
   const bindings = [...cfg.bindings];
   const named = new Set(cfg.bindings.map((b) => b.tenantId.toLowerCase()));
   try {
@@ -667,6 +678,7 @@ export async function drainOnce(sql: Sql, cfg: WorkerConfig): Promise<DrainRepor
       await stage(out, "commands", t, () => drainCommands(sql, binding, cfg, out));
     }
     await stage(out, "email", t, () => drainEmail(sql, binding, cfg, out));
+    await stage(out, "document-email", t, () => drainDocumentEmail(sql, binding, cfg, out));
     await stage(out, "webhooks", t, () => drainWebhooks(sql, binding, cfg, out));
   }
   // Order forms and invoices belong to the platform, not to one organisation:

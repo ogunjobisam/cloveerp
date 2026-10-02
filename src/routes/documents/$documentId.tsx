@@ -5,6 +5,7 @@ import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../compo
 import { Gate } from "../../components/erp/gate";
 import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { OrderPrepayment } from "../../components/erp/order-prepayment";
+import { PurchaseOrderSends } from "../../components/erp/purchase-order-sends";
 import { SupplierReturn } from "../../components/erp/supplier-return";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
@@ -289,6 +290,16 @@ function Document() {
           taken by their bill (20261004900000). The section draws itself only
           where something was asked for or paid, or the reader may ask; the
           database decides which orders may be prepaid. */}
+      {/* The order on its way to its supplier: emailed with its PDF, or
+          downloaded, and every send with how far it got (20261004920000). */}
+      {doc.document_type === "purchase_order" &&
+      !["draft", "pending_approval"].includes(doc.state ?? "") ? (
+        <PurchaseOrderSends
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
+
       {doc.document_type === "purchase_order" ? (
         <OrderPrepayment
           documentId={documentId}
