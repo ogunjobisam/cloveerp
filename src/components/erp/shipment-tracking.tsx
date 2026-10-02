@@ -3,16 +3,18 @@ import { useQuery } from "@tanstack/react-query";
 import { shipmentTracking, trackingWords } from "../../lib/carriers/carrier-account";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { weightWords } from "../../lib/inbound-shipments";
 import { formatMinor } from "../../lib/money";
 import { ErrorNote } from "./action";
 import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
 
 /**
- * A shipment as its carrier's system knows it (20261004950000): the label the
- * carrier issued, its tracking code and the latest status the carrier
- * reported, on the shipment's page. Drawn only for a shipment booked through
- * the organisation's provider, or one with a tracking code.
+ * A shipment's carriage, on its page (20261004950000): its weight, and as its
+ * carrier's system knows it, the label the carrier issued, its tracking code
+ * and the latest status the carrier reported. Drawn for a shipment with a
+ * weight, one booked through the organisation's provider, or one with a
+ * tracking code.
  */
 export function ShipmentTracking({ documentId }: { documentId: string }) {
   const { ui } = useT();
@@ -26,14 +28,22 @@ export function ShipmentTracking({ documentId }: { documentId: string }) {
   if (!mayRead) return null;
   if (error) return <ErrorNote error={error} />;
   const t = shipmentTracking(data);
-  if (!t || (t.provider === null && t.trackingReference === null)) return null;
+  if (!t) return null;
+  const tracked = t.provider !== null || t.trackingReference !== null;
+  if (!tracked && t.weightG === null) return null;
   const status = trackingWords(t.status);
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h2 className="text-sm font-semibold">{ui("Tracking status")}</h2>
+      <h2 className="text-sm font-semibold">{ui("Carriage")}</h2>
       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <Pill tone={status.tone}>{ui(status.words)}</Pill>
+        <span className="text-xs text-muted-foreground">
+          {ui("Weight")}{" "}
+          <span className="tabular-nums text-foreground">
+            {t.weightG !== null ? weightWords(t.weightG) : ui("No weight")}
+          </span>
+        </span>
+        {tracked ? <Pill tone={status.tone}>{ui(status.words)}</Pill> : null}
         {t.trackingReference ? (
           <span className="font-mono text-xs">{t.trackingReference}</span>
         ) : null}

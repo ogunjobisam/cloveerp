@@ -1139,15 +1139,15 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- A shipment as the carrier's system knows it (20261004950000): its label,
-  -- its tracking code and status, and whether its carrier is booked through
+  -- A shipment as the carrier's system knows it (20261004950000): its weight,
+  -- its label, its tracking code and status, and whether its carrier is booked through
   -- the organisation's provider.
   select jsonb_build_object(
            'shipment_id', s.id, 'direction', s.direction,
            'tracking_reference', s.tracking_reference, 'tracking_status', s.tracking_status,
            'tracking_status_at', s.tracking_status_at, 'tracking_detail', s.tracking_detail,
            'label_url', s.label_url, 'label_rate_minor', s.label_rate_minor, 'currency', s.currency,
-           'provider', c.provider,
+           'provider', c.provider, 'weight_g', nullif(s.total_weight_g, 0),
            'label_command_status', (select cmd.status::text from erp.command cmd
                                      where cmd.tenant_id = s.tenant_id and cmd.source_object_type = 'shipment'
                                        and cmd.source_object_id = s.id order by cmd.created_at desc limit 1))
@@ -1343,13 +1343,14 @@ begin
       'tracking_code', 'EZ1000000001', 'label_url', 'https://easypost-files.example/label.png',
       'carrier_shipment_id', 'shp_123', 'rate_minor', 7650));
     v_cases := v_cases + 1;
-    case_name := 'the carrier''s answer is kept on the shipment: its tracking code, its label, the provider''s shipment and the rate it charged, the shipment reads pre-transit, and shipment.labelled is raised';
+    case_name := 'the carrier''s answer is kept on the shipment: its tracking code, its label, the provider''s shipment and the rate it charged, the shipment reads pre-transit with its weight, and shipment.labelled is raised';
     passed := v_state is null
           and (select s.tracking_reference from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = 'EZ1000000001'
           and (select s.label_url from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) like 'https://%'
           and (select s.carrier_shipment_ref from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = 'shp_123'
           and (select s.label_rate_minor from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = 7650
           and (select s.tracking_status from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = 'pre_transit'
+          and (public.erp_shipment_tracking((v_ship ->> 'document_id')::uuid) ->> 'weight_g')::numeric = 2000
           and exists (select 1 from erp.event e where e.tenant_id = rb.tenant_id and e.event_type = 'shipment.labelled'
                          and e.aggregate_id = (v_ship ->> 'document_id')::uuid);
     detail := coalesce(v_state, left(coalesce(v_label::text, 'nothing'), 300));
@@ -1594,7 +1595,9 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('Address'),
     ('No address yet'),
     ('Incomplete'),
-    ('No weight')
+    ('No weight'),
+    ('Carriage'),
+    ('Weight')
   ) as v(text)
 on conflict (key, locale) do nothing;
 

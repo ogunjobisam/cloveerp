@@ -26,6 +26,8 @@ export type ShipmentTracking = {
   currency: string | null;
   provider: string | null;
   labelCommandStatus: string | null;
+  /** Grams, as weighed or as its items weigh; null when nothing says. */
+  weightG: number | null;
 };
 
 type Row = Record<string, unknown>;
@@ -58,6 +60,11 @@ export function webhookAddress(supabaseUrl: string, path: string | null): string
   return `${supabaseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+const grams = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 /** A shipment's carrier side, or null when the answer is not one. */
 export function shipmentTracking(result: unknown): ShipmentTracking | null {
   const r = asRecord(result);
@@ -76,6 +83,7 @@ export function shipmentTracking(result: unknown): ShipmentTracking | null {
     currency: text(r["currency"]),
     provider: text(r["provider"]),
     labelCommandStatus: text(r["label_command_status"]),
+    weightG: grams(r["weight_g"]),
   };
 }
 

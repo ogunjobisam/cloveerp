@@ -54,10 +54,13 @@ describe("a shipment's tracking", () => {
       currency: "GBP",
       provider: "easypost",
       label_command_status: "succeeded",
+      weight_g: "2000.000000",
     });
     expect(t?.direction).toBe("inbound");
     expect(t?.status).toBe("in_transit");
     expect(t?.labelRateMinor).toBe(4120);
+    expect(t?.weightG).toBe(2000);
+    expect(shipmentTracking({ shipment_id: "s2", weight_g: 0 })?.weightG).toBeNull();
     expect(shipmentTracking({ nope: 1 })).toBeNull();
   });
 
