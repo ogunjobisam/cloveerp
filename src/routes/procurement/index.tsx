@@ -597,6 +597,13 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         label: "Tracking reference",
         hint: "Leave empty when the carrier is booked through EasyPost: its label brings one.",
       },
+      {
+        kind: "number",
+        name: "p_weight_g",
+        label: "Weight (g)",
+        placeholder: "12500",
+        hint: "The consignment as weighed. Leave empty to take the items' own weights; a carrier booked through EasyPost needs one or the other.",
+      },
     ],
     invalidates: ["erp_inbound_shipments", "erp_shipments", "erp_documents"],
   },

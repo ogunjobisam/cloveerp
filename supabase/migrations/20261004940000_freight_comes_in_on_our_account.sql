@@ -23,10 +23,11 @@ set lock_timeout = '30s';
 --   * A purchase order's freight terms, erp_set_freight_terms(p_order,
 --     p_terms): supplier_delivers (the default, as before) or we_collect.
 --   * erp_ship_inbound(p_order, p_carrier_code, p_service_code, p_cost_minor,
---     p_expected_arrival, p_tracking_reference): for an order we collect, an
---     inbound shipment on the shipment document, from the supplier to the
---     order's site, booked with the carrier at the rate card's price or the
---     cost named (logistics.plan). erp.shipment gains direction and
+--     p_expected_arrival, p_tracking_reference, p_weight_g): for an order we
+--     collect, an inbound shipment on the shipment document, from the supplier
+--     to the order's site, booked with the carrier at the rate card's price or
+--     the cost named (logistics.plan). Its weight is the one given, else the
+--     order lines' items' net weight. erp.shipment gains direction and
 --     origin_party_id.
 --   * It arrives with its goods. A goods receipt posted against the order
 --     delivers the order's booked inbound shipment, by the system (a derived
@@ -99,6 +100,11 @@ select erp.register_refusal('CLOVEERP_ORDER_NOT_COLLECTED',
   'Booking an inbound shipment for an order the supplier delivers, or one that is not on its way.',
   'We book a carrier only for an order we collect, once the supplier has it; for an order the supplier delivers, the supplier books and pays the carrier.',
   'Set the order''s freight terms to we_collect, send it to the supplier, then book the collection.');
+
+select erp.register_refusal('CLOVEERP_SHIPMENT_WEIGHT_INVALID',
+  'Booking a collection with a weight that is not a positive number of grams.',
+  'A carrier prices and labels a parcel by its weight; nothing, or less than nothing, cannot be carried.',
+  'Weigh the consignment and give its weight in grams, or leave the weight empty to take the items'' own.');
 
 select erp.register_refusal('CLOVEERP_INBOUND_ALREADY_BOOKED',
   'Booking a second collection for an order while one is still booked.',
@@ -205,7 +211,7 @@ on conflict (function_name) do update set gate = excluded.gate, rationale = excl
 
 create or replace function erp.ship_inbound(p_order uuid, p_carrier_code text, p_service_code text,
                                             p_cost_minor bigint default null, p_expected_arrival date default null,
-                                            p_tracking_reference text default null)
+                                            p_tracking_reference text default null, p_weight_g bigint default null)
 returns jsonb
 language plpgsql
 set search_path = ''
@@ -241,9 +247,18 @@ begin
             hint = 'Cancel the booked collection before booking another, or wait for it to arrive.';
   end if;
 
+  -- The consignment's weight: as weighed, where it was, else what its items
+  -- weigh. It is on the shipment before the booking, which is what asks a
+  -- carrier's system for the label (20261004950000).
+  if p_weight_g is not null and p_weight_g <= 0 then
+    raise exception 'CLOVEERP_SHIPMENT_WEIGHT_INVALID: % g is not a weight a carrier can carry', p_weight_g
+      using errcode = '22023',
+            hint = 'Weigh the consignment and give its weight in grams, or leave the weight empty to take the items'' own.';
+  end if;
   select coalesce(sum(l.quantity * coalesce(i.net_weight_g, 0)), 0) into v_weight
     from erp.document_line l left join erp.item i on i.tenant_id = l.tenant_id and i.id = l.item_id
    where l.tenant_id = v_tenant and l.document_id = d.id and not l.is_cancelled;
+  v_weight := coalesce(p_weight_g::numeric, v_weight);
 
   insert into erp.shipment (tenant_id, entity_id, site_id, reference, status, planned_despatch, direction,
                             origin_party_id, total_weight_g, currency, tracking_reference)
@@ -276,28 +291,30 @@ begin
     'document_number', (select x.document_number from erp.document x where x.id = sh.document_id),
     'order_number', d.document_number, 'status', sh.status, 'carrier_code', p_carrier_code,
     'service_code', sh.service_code, 'cost_minor', sh.freight_cost_minor, 'currency', sh.currency,
-    'expected_arrival', sh.planned_arrival, 'tracking_reference', sh.tracking_reference);
+    'expected_arrival', sh.planned_arrival, 'tracking_reference', sh.tracking_reference,
+    'weight_g', sh.total_weight_g);
 end;
 $$;
 
-revoke all on function erp.ship_inbound(uuid, text, text, bigint, date, text) from public, anon;
+revoke all on function erp.ship_inbound(uuid, text, text, bigint, date, text, bigint) from public, anon;
 
-comment on function erp.ship_inbound(uuid, text, text, bigint, date, text) is
+comment on function erp.ship_inbound(uuid, text, text, bigint, date, text, bigint) is
   'Books the collection of an order we collect: an inbound shipment from the supplier to the order''s '
   'site, booked with the carrier (20261004940000). Authorises logistics.plan at the site.';
 
 create or replace function public.erp_ship_inbound(p_order uuid, p_carrier_code text, p_service_code text,
                                                    p_cost_minor bigint default null, p_expected_arrival date default null,
-                                                   p_tracking_reference text default null)
+                                                   p_tracking_reference text default null, p_weight_g bigint default null)
 returns jsonb
 language sql
 set search_path = ''
-as $$ select erp.ship_inbound(p_order, p_carrier_code, p_service_code, p_cost_minor, p_expected_arrival, p_tracking_reference) $$;
+as $$ select erp.ship_inbound(p_order, p_carrier_code, p_service_code, p_cost_minor, p_expected_arrival,
+                              p_tracking_reference, p_weight_g) $$;
 
-revoke all on function public.erp_ship_inbound(uuid, text, text, bigint, date, text) from public, anon;
-grant execute on function public.erp_ship_inbound(uuid, text, text, bigint, date, text) to authenticated, service_role;
+revoke all on function public.erp_ship_inbound(uuid, text, text, bigint, date, text, bigint) from public, anon;
+grant execute on function public.erp_ship_inbound(uuid, text, text, bigint, date, text, bigint) to authenticated, service_role;
 
-comment on function public.erp_ship_inbound(uuid, text, text, bigint, date, text) is
+comment on function public.erp_ship_inbound(uuid, text, text, bigint, date, text, bigint) is
   'Books the collection of a purchase order we collect (20261004940000).';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
@@ -800,7 +817,7 @@ declare
   v_entity uuid; v_site uuid; v_uom uuid; v_item uuid; v_item2 uuid; v_sa uuid; v_carrier text;
   v_po uuid; v_po2 uuid; v_ship jsonb; v_grn uuid; v_bill uuid; v_cap jsonb;
   v_val0 bigint; v_val1 bigint; v_out0 bigint; v_out1 bigint; v_list jsonb; v_row jsonb; v_tie text;
-  v_err text; v_err2 text; v_err3 text; v_err4 text;
+  v_err text; v_err2 text; v_err3 text; v_err4 text; v_err5 text;
 begin
   begin
     -- ── The fixture ─────────────────────────────────────────────────────────
@@ -840,7 +857,7 @@ begin
     -- ── 1. The registers ────────────────────────────────────────────────────
     v_step := 'the doors, the refusals, the event and the columns';
     v_cases := v_cases + 1;
-    case_name := 'both write doors are on the allow-list under their gates and on the Procurement screen''s help, the three refusals are registered with a next action, freight.capitalised is current in English and German, and a shipment knows its direction';
+    case_name := 'both write doors are on the allow-list under their gates and on the Procurement screen''s help, the four refusals are registered with a next action, freight.capitalised is current in English and German, and a shipment knows its direction';
     passed := v_state is null
           and (select count(*) from erp_meta.public_write_allowance a
                 where (a.function_name, a.gate) in (('erp_set_freight_terms', 'erp.set_freight_terms'),
@@ -849,7 +866,8 @@ begin
                          and h.actions @> array['erp_set_freight_terms', 'erp_ship_inbound'])
           and (select count(*) from erp_ref.refusal f
                 where f.code in ('CLOVEERP_FREIGHT_TERMS_UNKNOWN', 'CLOVEERP_ORDER_NOT_COLLECTED',
-                                 'CLOVEERP_INBOUND_ALREADY_BOOKED') and coalesce(f.next_action, '') <> '') = 3
+                                 'CLOVEERP_INBOUND_ALREADY_BOOKED', 'CLOVEERP_SHIPMENT_WEIGHT_INVALID')
+                  and coalesce(f.next_action, '') <> '') = 4
           and (select count(*) from erp_ref.resource x
                 where x.key = 'event.freight.capitalised' and x.locale in ('en', 'de')) = 2
           and exists (select 1 from information_schema.columns
@@ -863,17 +881,18 @@ begin
     perform erp.add_document_line(v_po, v_item2, 10, 1000, 'scarves');
     perform public.erp_set_freight_terms(v_po, 'we_collect');
     perform erp.transition_document(v_po, 'send', null);
-    v_ship := public.erp_ship_inbound(v_po, v_carrier, 'standard', 10000, current_date + 3, 'TRK-123');
+    v_ship := public.erp_ship_inbound(v_po, v_carrier, 'standard', 10000, current_date + 3, 'TRK-123', 12500);
     v_list := public.erp_inbound_shipments();
     select x into v_row from jsonb_array_elements(v_list) x where x ->> 'shipment_id' = v_ship ->> 'shipment_id';
     v_cases := v_cases + 1;
-    case_name := 'an order we collect, once sent, books an inbound shipment on the shipment document from the supplier to the order''s site: booked at the cost named, with its tracking reference and expected arrival, listed as on its way and not late';
+    case_name := 'an order we collect, once sent, books an inbound shipment on the shipment document from the supplier to the order''s site: booked at the cost named, with its tracking reference, expected arrival and the weight given, listed as on its way and not late';
     passed := v_state is null
           and erp.order_freight_terms(v_po) = 'we_collect'
           and v_ship ->> 'status' = 'booked'
           and (v_ship ->> 'cost_minor')::bigint = 10000
           and v_ship ->> 'tracking_reference' = 'TRK-123'
           and (v_ship ->> 'expected_arrival')::date = current_date + 3
+          and (v_ship ->> 'weight_g')::numeric = 12500
           and erp.object_current_state('document', (v_ship ->> 'document_id')::uuid) = 'booked'
           and (select s.direction from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = 'inbound'
           and (select s.origin_party_id from erp.shipment s where s.id = (v_ship ->> 'shipment_id')::uuid) = v_sa
@@ -898,6 +917,10 @@ begin
       v_err3 := 'set';
     exception when others then v_err3 := sqlerrm; end;
     perform public.erp_set_freight_terms(v_po2, 'we_collect');
+    begin
+      perform public.erp_ship_inbound(v_po2, v_carrier, 'standard', 10000, null, null, 0);
+      v_err5 := 'booked';
+    exception when others then v_err5 := sqlerrm; end;
     perform set_config('request.jwt.claims', json_build_object('sub', s_buy)::text, true);
     begin
       perform public.erp_ship_inbound(v_po2, v_carrier, 'standard', 10000, null, null);
@@ -905,13 +928,14 @@ begin
     exception when others then v_err4 := sqlerrm; end;
     perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
     v_cases := v_cases + 1;
-    case_name := 'a second collection for one order, a collection for an order the supplier delivers, terms nobody knows, and a buyer without logistics.plan are each refused by name';
+    case_name := 'a second collection for one order, a collection for an order the supplier delivers, terms nobody knows, a weight of nothing, and a buyer without logistics.plan are each refused by name';
     passed := v_state is null
           and v_err like 'CLOVEERP_INBOUND_ALREADY_BOOKED:%'
           and v_err2 like 'CLOVEERP_ORDER_NOT_COLLECTED:%'
           and v_err3 like 'CLOVEERP_FREIGHT_TERMS_UNKNOWN:%'
-          and v_err4 like 'CLOVEERP_PERMISSION_DENIED: logistics.plan%';
-    detail := coalesce(v_state, left(format('%s | %s | %s | %s', v_err, v_err2, v_err3, v_err4), 700));
+          and v_err4 like 'CLOVEERP_PERMISSION_DENIED: logistics.plan%'
+          and v_err5 like 'CLOVEERP_SHIPMENT_WEIGHT_INVALID:%';
+    detail := coalesce(v_state, left(format('%s | %s | %s | %s | %s', v_err, v_err2, v_err3, v_err4, v_err5), 700));
     return next;
 
     -- ── 4. It arrives with its goods ────────────────────────────────────────

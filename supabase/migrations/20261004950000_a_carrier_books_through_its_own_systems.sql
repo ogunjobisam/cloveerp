@@ -1092,12 +1092,12 @@ begin
                                  array['logistics.read', 'logistics.plan']);
     perform erp.grant_role((res ->> 'app_user_id')::uuid, 'planner', null, null, 'books carriers');
     perform set_config('request.jwt.claims', json_build_object('sub', s_buy)::text, true);
-    v_ship := public.erp_ship_inbound(v_po, v_carrier, 'standard', 8000, null, null);
+    v_ship := public.erp_ship_inbound(v_po, v_carrier, 'standard', 8000, null, null, 2000);
     perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
     select c.* into v_cmd from erp.command c
      where c.tenant_id = rb.tenant_id and c.source_object_type = 'shipment' and c.source_object_id = (v_ship ->> 'shipment_id')::uuid;
     v_cases := v_cases + 1;
-    case_name := 'booking a collection with a linked carrier asks EasyPost for its label on the standing authority the account was connected with: one shipment.buy command, from the supplier''s address to the site, with the parcel, the carrier account, the service and the shipment''s number, even for a booker without administration.integrate';
+    case_name := 'booking a collection with a linked carrier asks EasyPost for its label on the standing authority the account was connected with: one shipment.buy command, from the supplier''s address to the site, with the parcel as weighed, the carrier account, the service and the shipment''s number, even for a booker without administration.integrate';
     passed := v_state is null
           and v_cmd.id is not null
           and v_cmd.operation_code = 'shipment.buy'
@@ -1105,6 +1105,7 @@ begin
           and v_cmd.payload ->> 'direction' = 'inbound'
           and v_cmd.payload #>> '{from_address,city}' = 'Paris'
           and v_cmd.payload #>> '{from_address,country}' = 'FR'
+          and (v_cmd.payload #>> '{parcel,weight_g}')::numeric = 2000
           and v_cmd.payload ->> 'carrier_account' = 'ca_suite_123'
           and v_cmd.payload ->> 'service' = 'standard'
           and v_cmd.payload ->> 'reference' = v_ship ->> 'document_number'
@@ -1323,7 +1324,10 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('Delivery failed'),
     ('Cancelled'),
     ('Not yet tracked'),
-    ('Leave empty when the carrier is booked through EasyPost: its label brings one.')
+    ('Leave empty when the carrier is booked through EasyPost: its label brings one.'),
+    ('Weight (g)'),
+    ('12500'),
+    ('The consignment as weighed. Leave empty to take the items'' own weights; a carrier booked through EasyPost needs one or the other.')
   ) as v(text)
 on conflict (key, locale) do nothing;
 
