@@ -49,6 +49,10 @@ set lock_timeout = '30s';
 --     delivered is delivered, by the system (a derived move,
 --     erp.shipment_delivered_by_carrier()). An inbound one still arrives with
 --     its goods.
+--   * A site has a postal address (erp_set_site_address, by an administrator,
+--     administration.configure), kept in erp.site.address and read by
+--     erp_sites: a carrier labels an outbound parcel from it and an inbound one
+--     to it. Until now nothing wrote it.
 --   * erp_carrier_account(): whether the organisation is connected, in which
 --     mode, and the address its webhook posts to.
 --   * Refusals, registered, and three events: carrier.connected,
@@ -120,6 +124,11 @@ select erp.register_refusal('CLOVEERP_CARRIER_KEY_MALFORMED',
   'Connecting a carrier account with something that is not one of the provider''s API keys.',
   'An EasyPost key begins EZTK for a test key or EZAK for a live one; anything else would fail every booking, and might be a secret pasted into the wrong box.',
   'Copy the API key from the provider''s dashboard, test or live, and paste it whole.');
+
+select erp.register_refusal('CLOVEERP_SITE_ADDRESS_INCOMPLETE',
+  'Giving a site an address with no street, town, postcode or country.',
+  'A carrier labels a parcel from the site''s address and delivers one to it; half an address is a parcel that goes nowhere.',
+  'Give the first line, the town, the postcode and the two-letter country code.');
 
 select erp.register_refusal('CLOVEERP_CARRIER_ACCOUNT_NOT_CONNECTED',
   'Linking a carrier to a provider the organisation has not connected.',
@@ -639,6 +648,91 @@ begin
 end
 $book$;
 
+-- A site's postal address: where an outbound parcel is labelled from and an
+-- inbound one is delivered to. erp.site.address has been a column since the
+-- first site and nothing wrote it.
+
+create or replace function erp.set_site_address(p_site_id uuid, p_line1 text, p_line2 text, p_city text,
+                                                p_region text, p_postcode text, p_country_code text)
+returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_tenant  uuid := erp.require_tenant_id();
+  v_country text := upper(btrim(coalesce(p_country_code, '')));
+  v_address jsonb;
+  st        erp.site%rowtype;
+begin
+  -- The site's postal address (20261004950000), whole or not at all: the
+  -- first line, the town, the postcode and the country. The site's country
+  -- follows the address's.
+  select x.* into st from erp.site x where x.tenant_id = v_tenant and x.id = p_site_id;
+  if st.id is null then
+    raise exception 'CLOVEERP_UNKNOWN_SITE: %', coalesce(p_site_id::text, 'nothing') using errcode = '23503';
+  end if;
+  perform erp.authorise('administration.configure', st.entity_id, st.id, null, 'site', st.id);
+  if nullif(btrim(coalesce(p_line1, '')), '') is null or nullif(btrim(coalesce(p_city, '')), '') is null
+     or nullif(btrim(coalesce(p_postcode, '')), '') is null or v_country !~ '^[A-Z]{2}$' then
+    raise exception 'CLOVEERP_SITE_ADDRESS_INCOMPLETE: % needs a first line, a town, a postcode and a two-letter country', st.code
+      using errcode = '23514', hint = 'Give the first line, the town, the postcode and the two-letter country code.';
+  end if;
+  v_address := jsonb_strip_nulls(jsonb_build_object(
+    'line1', btrim(p_line1), 'line2', nullif(btrim(coalesce(p_line2, '')), ''),
+    'city', btrim(p_city), 'region', nullif(btrim(coalesce(p_region, '')), ''),
+    'postcode', upper(btrim(p_postcode)), 'country_code', v_country));
+  update erp.site set address = v_address, country_code = v_country, updated_at = now()
+   where tenant_id = v_tenant and id = st.id;
+  return jsonb_build_object('site_id', st.id, 'code', st.code, 'address', v_address);
+end;
+$$;
+
+revoke all on function erp.set_site_address(uuid, text, text, text, text, text, text) from public, anon;
+
+comment on function erp.set_site_address(uuid, text, text, text, text, text, text) is
+  'Gives a site its postal address, whole: first line, town, postcode and country (20261004950000). '
+  'Authorises administration.configure at the site.';
+
+create or replace function public.erp_set_site_address(p_site_id uuid, p_line1 text, p_line2 text default null,
+                                                       p_city text default null, p_region text default null,
+                                                       p_postcode text default null, p_country_code text default null)
+returns jsonb
+language sql
+set search_path = ''
+as $$ select erp.set_site_address(p_site_id, p_line1, p_line2, p_city, p_region, p_postcode, p_country_code) $$;
+
+revoke all on function public.erp_set_site_address(uuid, text, text, text, text, text, text) from public, anon;
+grant execute on function public.erp_set_site_address(uuid, text, text, text, text, text, text) to authenticated, service_role;
+
+comment on function public.erp_set_site_address(uuid, text, text, text, text, text, text) is
+  'Gives a site its postal address, which carriers label parcels from and deliver to (20261004950000).';
+
+insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
+  ('erp_set_site_address', 'erp.set_site_address',
+   'Writes a site''s postal address and country; authorises administration.configure at the site.')
+on conflict (function_name) do update set gate = excluded.gate, rationale = excluded.rationale;
+
+select erp_meta.add_help_actions('/administration/organisation', array['erp_set_site_address']);
+
+-- The sites, now with their address. As 20260906090000 wrote it, and the address.
+create or replace function public.erp_sites()
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'site_id', s.id, 'code', s.code, 'name', s.name,
+           'site_type', s.site_type, 'entity_id', s.entity_id,
+           'entity_code', (select e.code from erp.entity e
+                            where e.tenant_id = s.tenant_id and e.id = s.entity_id),
+           'country_code', s.country_code, 'status', s.status,
+           'address', s.address)
+           order by s.code), '[]'::jsonb)
+    from erp.site s
+   where s.tenant_id = erp.current_tenant_id()
+$$;
+
 -- ═════════════════════════════════════════════════════════════════════════════
 -- F. What comes back
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -970,7 +1064,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  c_expected constant integer := 10;
+  c_expected constant integer := 11;
   v_cases  integer := 0;
   v_tag    text := substr(md5(gen_random_uuid()::text), 1, 6);
   a1       uuid := gen_random_uuid();
@@ -1161,9 +1255,41 @@ begin
     detail := coalesce(v_state, left(format('%s | %s | %s', v_trk, v_trk2, v_trk3), 600));
     return next;
 
-    -- ── 7. An outbound one is delivered by its carrier ──────────────────────
+    -- ── 7. A site has an address ────────────────────────────────────────────
+    v_step := 'half an address, a buyer, and every site given a whole one';
+    begin
+      perform public.erp_set_site_address(v_site, '1 Dock Road', null, null, null, 'E16 1AA', 'GB');
+      v_err := 'set';
+    exception when others then v_err := sqlerrm; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', s_buy)::text, true);
+    begin
+      perform public.erp_set_site_address(v_site, '1 Dock Road', null, 'London', null, 'E16 1AA', 'GB');
+      v_err2 := 'set';
+    exception when others then v_err2 := sqlerrm; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', a1)::text, true);
+    perform public.erp_set_site_address(x.id, '1 Dock Road', 'Unit 4', 'London', null, 'e16 1aa', 'gb')
+       from erp.site x where x.tenant_id = rb.tenant_id;
+    select x into v_acct from jsonb_array_elements(public.erp_sites()) x where (x ->> 'site_id')::uuid = v_site;
+    v_cases := v_cases + 1;
+    case_name := 'a site''s address is refused without its town, and to somebody without administration.configure; given whole, it is kept tidy, its country is the site''s, and the sites list reads it';
+    passed := v_state is null
+          and v_err like 'CLOVEERP_SITE_ADDRESS_INCOMPLETE:%'
+          and v_err2 like 'CLOVEERP_PERMISSION_DENIED: administration.configure%'
+          and v_acct #>> '{address,postcode}' = 'E16 1AA'
+          and v_acct #>> '{address,country_code}' = 'GB'
+          and v_acct ->> 'country_code' = 'GB'
+          and exists (select 1 from erp_meta.public_write_allowance a
+                       where a.function_name = 'erp_set_site_address' and a.gate = 'erp.set_site_address');
+    detail := coalesce(v_state, left(format('%s | %s | %s', v_err, v_err2, v_acct), 600));
+    return next;
+
+    -- ── 8. An outbound one is delivered by its carrier ──────────────────────
     v_step := 'deliveries shipped with the linked carrier, labelled, and reported delivered';
     v_fx := erp_test.despatch_fixture(rb.tenant_id, v_entity, v_tag, 1);
+    -- The fixture's despatch site is its own; it is given its address as any site is.
+    perform public.erp_set_site_address(x.id, '1 Dock Road', 'Unit 4', 'London', null, 'e16 1aa', 'gb')
+       from erp.site x where x.tenant_id = rb.tenant_id and x.address is distinct from
+            '{"line1": "1 Dock Road", "line2": "Unit 4", "city": "London", "postcode": "E16 1AA", "country_code": "GB"}'::jsonb;
     v_out := erp.ship_deliveries(array[(v_fx #>> '{deliveries,0}')::uuid], null, v_carrier, 'standard', 3000);
     select s.document_id into v_outdoc from erp.shipment s where s.id = v_out;
     select c.* into v_cmd from erp.command c
@@ -1171,16 +1297,22 @@ begin
     perform erp.apply_carrier_label(v_cmd.id, jsonb_build_object('tracking_code', 'EZ2000000002'));
     v_trk := erp.record_carrier_tracking('zzcar-' || v_tag, 'evt_9', 'EZ2000000002', 'delivered', now(), 'Left with neighbour');
     v_cases := v_cases + 1;
-    case_name := 'an outbound shipment with a linked carrier asks for its label from the site to the customer, and reported delivered by the carrier it is delivered by the system, its proof the carrier''s';
+    case_name := 'an outbound shipment with a linked carrier asks for its label from the site''s own address to the customer, and reported delivered by the carrier it is delivered by the system, its proof the carrier''s';
     passed := v_state is null
           and v_cmd.payload ->> 'direction' = 'outbound'
+          and v_cmd.payload #>> '{from_address,street1}' = '1 Dock Road'
+          and v_cmd.payload #>> '{from_address,street2}' = 'Unit 4'
+          and v_cmd.payload #>> '{from_address,city}' = 'London'
+          and v_cmd.payload #>> '{from_address,zip}' = 'E16 1AA'
+          and v_cmd.payload #>> '{from_address,country}' = 'GB'
           and (v_trk ->> 'delivered')::boolean
           and erp.object_current_state('document', v_outdoc) = 'delivered'
           and (select s.proof_of_delivery ->> 'by' from erp.shipment s where s.id = v_out) = 'the carrier';
-    detail := coalesce(v_state, left(format('%s; %s', v_trk, erp.object_current_state('document', v_outdoc)), 400));
+    detail := coalesce(v_state, left(format('%s; %s; from %s', v_trk, erp.object_current_state('document', v_outdoc),
+                                            v_cmd.payload -> 'from_address'), 500));
     return next;
 
-    -- ── 8. What tracking ignores ────────────────────────────────────────────
+    -- ── 9. What tracking ignores ────────────────────────────────────────────
     v_step := 'an organisation, a status and a tracking code nobody knows';
     v_trk := erp.record_carrier_tracking('zz-nobody', 'evt_x', 'EZ1000000001', 'in_transit', now(), null);
     v_trk2 := erp.record_carrier_tracking('zzcar-' || v_tag, 'evt_y', 'EZ1000000001', 'teleported', now(), null);
@@ -1194,7 +1326,7 @@ begin
     detail := coalesce(v_state, left(format('%s | %s | %s', v_trk, v_trk2, v_trk3), 500));
     return next;
 
-    -- ── 9. An unlinked carrier asks nothing; the account reads safely ───────
+    -- ── 10. An unlinked carrier asks nothing; the account reads safely ───────
     v_step := 'the carrier unlinked, a collection booked, and the account read';
     perform public.erp_link_carrier_provider(v_carrier, null, null);
     select count(*) into v_n from erp.command c where c.tenant_id = rb.tenant_id;
@@ -1267,8 +1399,8 @@ begin
     raise exception 'CLOVEERP_CARRIER_INTEGRATION_SUITE_FAILED: %/% case(s) failed%', v_failed, v_total, E'\n  ' || v_detail
       using hint = 'A shipment would be booked with nobody, or a key would leave the vault. Read the case that failed.';
   end if;
-  if v_total <> 10 then
-    raise exception 'CLOVEERP_CARRIER_INTEGRATION_SUITE_SHRANK: % case(s), expected 10', v_total
+  if v_total <> 11 then
+    raise exception 'CLOVEERP_CARRIER_INTEGRATION_SUITE_SHRANK: % case(s), expected 11', v_total
       using hint = 'A suite that loses a case reports success. Restore the case or re-pin the count.';
   end if;
   return format('carrier integration: %s/%s cases passed', v_total, v_total);
@@ -1327,7 +1459,25 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('Leave empty when the carrier is booked through EasyPost: its label brings one.'),
     ('Weight (g)'),
     ('12500'),
-    ('The consignment as weighed. Leave empty to take the items'' own weights; a carrier booked through EasyPost needs one or the other.')
+    ('The consignment as weighed. Leave empty to take the items'' own weights; a carrier booked through EasyPost needs one or the other.'),
+    ('Set a site''s address'),
+    ('The postal address carriers label parcels from and deliver to. A label cannot be bought for a site without one.'),
+    ('First line'),
+    ('1 Dock Road'),
+    ('Second line'),
+    ('Unit 4'),
+    ('Optional.'),
+    ('Town'),
+    ('London'),
+    ('County or state'),
+    ('Greater London'),
+    ('Optional, except where the country''s carriers need one.'),
+    ('Postcode'),
+    ('E16 1AA'),
+    ('Country'),
+    ('Address'),
+    ('No address yet'),
+    ('Incomplete')
   ) as v(text)
 on conflict (key, locale) do nothing;
 

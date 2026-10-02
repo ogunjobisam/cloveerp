@@ -7,10 +7,10 @@
   "definer_allowances": 212,
   "diagnostic_checks": 133,
   "diagnostic_checks_in_ci": 106,
-  "doors": 749,
+  "doors": 750,
   "doors_pending_screen": 4,
-  "doors_writing": 549,
-  "en_strings": 5877,
+  "doors_writing": 550,
+  "en_strings": 5894,
   "enums": 83,
   "erp_tables": 254,
   "erp_views": 16,
@@ -36,8 +36,8 @@
   "promotable_surfaces": 43,
   "ref_tables": 78,
   "spec_version": "v1.6",
-  "sql_lines": 409210,
+  "sql_lines": 409360,
   "suites": 307,
   "triggers": 839,
-  "write_allowances": 549
+  "write_allowances": 550
 }
