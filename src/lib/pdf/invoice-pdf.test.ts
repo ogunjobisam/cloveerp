@@ -7,6 +7,7 @@ import { expect, test } from "bun:test";
 import { PDFDocument } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
+  formatMinor,
   renderSalesInvoicePdf,
   sha256Blob,
   sha256Hex,
@@ -121,4 +122,10 @@ test("downloaded PDF bytes round-trip through Blob hashing unchanged", async () 
   const bytes = await renderSalesInvoicePdf(contract(4, "Buyer Ltd"));
   const downloaded = new Blob([bytes.slice().buffer], { type: "application/pdf" });
   expect(await sha256Blob(downloaded)).toBe(await sha256Hex(bytes));
+});
+
+test("an invoice's amounts are in their currency's own places", () => {
+  expect(formatMinor(12000, "JPY")).toBe("12,000 JPY");
+  expect(formatMinor(12500, "KWD")).toBe("12.500 KWD");
+  expect(formatMinor(1250, "GBP")).toBe("\u00A312.50");
 });

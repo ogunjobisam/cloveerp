@@ -30,6 +30,32 @@ export type Currency = { code: string; name: string; minor_units: number };
  */
 const DEFAULT_MINOR_UNITS = 2;
 
+const isoDigits = new Map<string, number>();
+
+/**
+ * A currency's decimal places by its ISO 4217 code, for code that has no
+ * `erp_currencies()` list to hand: the worker drawing an invoice, an email, a
+ * form whose currency is chosen in the form. Intl carries ISO 4217, which
+ * agrees with `erp_ref.currency.minor_units` for every currency the product
+ * seeds (checked 2 October 2026: JPY 0, KWD 3, the rest 2). A code Intl does
+ * not know takes the default.
+ */
+export function isoMinorUnits(code: string | null | undefined): number {
+  if (!code) return DEFAULT_MINOR_UNITS;
+  const known = isoDigits.get(code);
+  if (known !== undefined) return known;
+  let digits = DEFAULT_MINOR_UNITS;
+  try {
+    digits =
+      new Intl.NumberFormat("en-GB", { style: "currency", currency: code }).resolvedOptions()
+        .maximumFractionDigits ?? DEFAULT_MINOR_UNITS;
+  } catch {
+    // Not a currency Intl knows: two, as for any unknown.
+  }
+  isoDigits.set(code, digits);
+  return digits;
+}
+
 export function minorUnitsOf(currencies: Currency[] | undefined, code: string | null): number {
   if (!code) return DEFAULT_MINOR_UNITS;
   const found = currencies?.find((c) => c.code === code);

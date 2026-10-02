@@ -198,3 +198,12 @@ describe("words and defaults", () => {
     ).toBe("annual");
   });
 });
+
+describe("a quote's money in its own currency", () => {
+  test("a yen has no places, a dinar three, a pound two", () => {
+    expect(money(12000, "JPY")).toBe("12,000 JPY");
+    expect(money(12500, "KWD")).toBe("12.500 KWD");
+    expect(money(1250, "GBP")).toBe("£12.50");
+    expect(money(1200, "GBP")).toBe("£12");
+  });
+});

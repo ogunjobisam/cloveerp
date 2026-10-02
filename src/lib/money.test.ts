@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatFigure, formatMinor, minorUnitsOf, toMinor, type Currency } from "./money";
+import {
+  formatFigure,
+  formatMinor,
+  isoMinorUnits,
+  minorUnitsOf,
+  toMinor,
+  type Currency,
+} from "./money";
 
 /**
  * The first test in this repository's front end.
@@ -84,4 +91,22 @@ describe("input, which is the direction that writes to the ledger", () => {
   test("blank refuses instead of meaning zero", () => expect(toMinor("", 2)).toBeNull());
   test("and so does whitespace", () => expect(toMinor("   ", 2)).toBeNull());
   test("but a typed zero is a zero", () => expect(toMinor("0", 2)).toBe(0));
+});
+
+describe("a currency's places by its code", () => {
+  test("two for most, none for the yen, three for the dinar", () => {
+    expect(isoMinorUnits("GBP")).toBe(2);
+    expect(isoMinorUnits("JPY")).toBe(0);
+    expect(isoMinorUnits("KWD")).toBe(3);
+  });
+  test("a code nobody knows, or none, takes two", () => {
+    expect(isoMinorUnits("ZZZ")).toBe(2);
+    expect(isoMinorUnits("not a code")).toBe(2);
+    expect(isoMinorUnits(null)).toBe(2);
+  });
+  test("a typed price lands in the currency's own minor units", () => {
+    expect(toMinor("12000", isoMinorUnits("JPY"))).toBe(12000);
+    expect(toMinor("12.5", isoMinorUnits("KWD"))).toBe(12500);
+    expect(toMinor("12.5", isoMinorUnits("GBP"))).toBe(1250);
+  });
 });

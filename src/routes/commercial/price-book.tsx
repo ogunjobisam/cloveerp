@@ -10,6 +10,7 @@ import { Pill, Table } from "../../components/erp/panel";
 import { useErpSession } from "../../components/erp/session-context";
 import { ErpError, callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { isoMinorUnits, toMinor } from "../../lib/money";
 
 /**
  * The platform's price book. Specification v1.5 §17.5 and §17.6.
@@ -133,11 +134,17 @@ const TERMS = [
 
 function money(minor: number | null | undefined, currency?: string) {
   if (minor == null) return "—";
-  const major = minor / 100;
-  return `${major.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${
+  // In the currency's own places: a yen has none, a dinar three.
+  const places = isoMinorUnits(currency);
+  const major = minor / 10 ** places;
+  return `${major.toLocaleString(undefined, { minimumFractionDigits: places, maximumFractionDigits: places })}${
     currency ? ` ${currency}` : ""
   }`;
 }
+
+/** What was typed, in the chosen currency's minor units; blank is zero, as the cost model's door takes it. */
+const minorIn = (typed: string | undefined, currency: string | undefined): number =>
+  toMinor(typed ?? "", isoMinorUnits(currency)) ?? 0;
 
 function day(value: string | null) {
   return value ? new Date(value).toLocaleDateString() : "—";
@@ -531,7 +538,7 @@ function PriceBook() {
                       p_item_code: v["p_item_code"],
                       p_currency: v["p_currency"],
                       p_term_kind: v["p_term_kind"],
-                      p_amount_minor: Math.round(Number(v["p_amount"] ?? 0) * 100),
+                      p_amount_minor: toMinor(v["p_amount"] ?? "", isoMinorUnits(v["p_currency"])),
                     })}
                     invalidates={["erp_price_book"]}
                     submitLabel={ui("Set a rate")}
@@ -579,9 +586,9 @@ function PriceBook() {
                     mapArgs={(v) => ({
                       p_item_code: v["p_item_code"],
                       p_currency: v["p_currency"],
-                      p_infrastructure_minor: Math.round(Number(v["p_infrastructure"] ?? 0) * 100),
-                      p_support_minor: Math.round(Number(v["p_support"] ?? 0) * 100),
-                      p_pass_through_minor: Math.round(Number(v["p_pass_through"] ?? 0) * 100),
+                      p_infrastructure_minor: minorIn(v["p_infrastructure"], v["p_currency"]),
+                      p_support_minor: minorIn(v["p_support"], v["p_currency"]),
+                      p_pass_through_minor: minorIn(v["p_pass_through"], v["p_currency"]),
                       p_basis: v["p_basis"] || null,
                     })}
                     invalidates={["erp_price_book"]}
