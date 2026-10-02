@@ -1322,7 +1322,8 @@ select erp_ref.ui_key(v.text), 'en', v.text,
     ('Returning to sender'),
     ('Delivery failed'),
     ('Cancelled'),
-    ('Not yet tracked')
+    ('Not yet tracked'),
+    ('Leave empty when the carrier is booked through EasyPost: its label brings one.')
   ) as v(text)
 on conflict (key, locale) do nothing;
 

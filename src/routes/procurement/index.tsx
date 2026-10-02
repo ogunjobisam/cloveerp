@@ -591,7 +591,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         hint: "Leave empty to take the rate card's price.",
       },
       { kind: "date", name: "p_expected_arrival", label: "Expected arrival" },
-      { kind: "text", name: "p_tracking_reference", label: "Tracking reference" },
+      {
+        kind: "text",
+        name: "p_tracking_reference",
+        label: "Tracking reference",
+        hint: "Leave empty when the carrier is booked through EasyPost: its label brings one.",
+      },
     ],
     invalidates: ["erp_inbound_shipments", "erp_shipments", "erp_documents"],
   },
