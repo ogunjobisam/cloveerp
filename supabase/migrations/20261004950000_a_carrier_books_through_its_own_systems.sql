@@ -53,6 +53,10 @@ set lock_timeout = '30s';
 --     administration.configure), kept in erp.site.address and read by
 --     erp_sites: a carrier labels an outbound parcel from it and an inbound one
 --     to it. Until now nothing wrote it.
+--   * The demonstration's two sites have addresses: given when the
+--     demonstration creates them, and to the demonstration organisations that
+--     already exist. Illustrative addresses, in the United Kingdom only; a
+--     real organisation's own sites are never given one.
 --   * erp_carrier_account(): whether the organisation is connected, in which
 --     mode, and the address its webhook posts to.
 --   * Refusals, registered, and three events: carrier.connected,
@@ -714,6 +718,110 @@ on conflict (function_name) do update set gate = excluded.gate, rationale = excl
 
 select erp_meta.add_help_actions('/administration/organisation', array['erp_set_site_address']);
 
+-- The demonstration's sites, addressed (20261004950000). The addresses are
+-- illustrative: an estate and a park named for the product, for a company in
+-- the United Kingdom. Anywhere else the demonstration's sites stay without
+-- one, rather than be given a British address abroad.
+
+create or replace function erp.demo_site_address(p_site_code text, p_country_code text)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+  select case when upper(coalesce(p_country_code, '')) <> 'GB' then null
+              when p_site_code = 'MAIN-WH' then
+                '{"line1": "Unit 1, Clove Trading Estate", "line2": "Dock Road", "city": "London", "postcode": "E16 1AA", "country_code": "GB"}'::jsonb
+              when p_site_code = 'NORTH-DC' then
+                '{"line1": "Unit 7, Clove Distribution Park", "line2": "Ring Road", "city": "Leeds", "postcode": "LS11 5AA", "country_code": "GB"}'::jsonb
+         end
+$$;
+
+comment on function erp.demo_site_address(text, text) is
+  'The illustrative address of a demonstration site, MAIN-WH or NORTH-DC, for a company in the '
+  'United Kingdom; null otherwise (20261004950000).';
+
+create or replace function erp.address_demo_sites(p_tenant_id uuid)
+returns integer
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_n integer;
+begin
+  -- A demonstration organisation's two sites, given their addresses where they
+  -- have none (20261004950000). Only an organisation whose code marks it as
+  -- the product's own demonstration: a real one that seeded the demonstration
+  -- into its own sites keeps whatever it wrote, or nothing.
+  if not exists (select 1 from erp.tenant t where t.id = p_tenant_id and t.code like 'demo-%') then
+    return 0;
+  end if;
+  update erp.site s
+     set address = erp.demo_site_address(s.code, s.country_code), updated_at = now()
+   where s.tenant_id = p_tenant_id and s.code in ('MAIN-WH', 'NORTH-DC')
+     and s.address = '{}'::jsonb
+     and erp.demo_site_address(s.code, s.country_code) is not null;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+revoke all on function erp.address_demo_sites(uuid) from public, anon, authenticated;
+
+comment on function erp.address_demo_sites(uuid) is
+  'Gives a demo- organisation''s MAIN-WH and NORTH-DC their illustrative addresses where they have '
+  'none; does nothing to any other organisation (20261004950000).';
+
+-- When the demonstration makes a site, it is made with its address. Edited,
+-- not rewritten: two anchors over erp.ensure_demo_configuration() (md5
+-- 25c89eea…), each where the site has just been made.
+
+do $demo$
+declare
+  v_sig  constant text := 'erp.ensure_demo_configuration(uuid,uuid)';
+  v_src  text := (select p.prosrc from pg_catalog.pg_proc p where p.oid = v_sig::regprocedure);
+  v_def  text := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
+  v_old1 constant text := $o$    v_did := v_did || '"site MAIN-WH"'::jsonb;$o$;
+  v_new1 constant text := $n$    v_did := v_did || '"site MAIN-WH"'::jsonb;
+    -- With its address, where it has one (20261004950000).
+    update erp.site s set address = coalesce(erp.demo_site_address(s.code, s.country_code), s.address)
+     where s.id = v_site;$n$;
+  v_old2 constant text := $o$      v_did := v_did || '"site NORTH-DC"'::jsonb;$o$;
+  v_new2 constant text := $n$      v_did := v_did || '"site NORTH-DC"'::jsonb;
+      -- With its address, where it has one (20261004950000).
+      update erp.site s set address = coalesce(erp.demo_site_address(s.code, s.country_code), s.address)
+       where s.tenant_id = p_tenant_id and s.entity_id = v_entity and s.code = 'NORTH-DC';$n$;
+begin
+  if strpos(v_src, '20261004950000') > 0 then
+    raise notice '% already addresses its sites; left as it is', v_sig;
+    return;
+  end if;
+  if md5(v_src) <> '25c89eeafe80b352e7228c5e69a9d52e' then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+  end if;
+  if (length(v_def) - length(replace(v_def, v_old1, ''))) / length(v_old1) <> 1
+     or (length(v_def) - length(replace(v_def, v_old2, ''))) / length(v_old2) <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;
+  end if;
+  execute replace(replace(v_def, v_old1, v_new1), v_old2, v_new2);
+end
+$demo$;
+
+-- And the demonstration organisations there already are. None in a build from
+-- empty; production's, each in its own context as nobody.
+do $backfill$
+declare
+  t record;
+begin
+  for t in select tn.id, tn.code from erp.tenant tn where tn.code like 'demo-%' order by tn.code loop
+    perform set_config('erp.job_tenant_id', t.id::text, true);
+    perform set_config('erp.job_principal_id', '', true);
+    perform erp.address_demo_sites(t.id);
+  end loop;
+  perform set_config('erp.job_tenant_id', '', true);
+end
+$backfill$;
+
 -- The sites, now with their address. As 20260906090000 wrote it, and the address.
 create or replace function public.erp_sites()
 returns jsonb
@@ -1110,7 +1218,7 @@ begin
     -- ── 1. The registers ────────────────────────────────────────────────────
     v_step := 'the doors, the refusals, the events and the adapter';
     v_cases := v_cases + 1;
-    case_name := 'the three write doors are on the allow-list under their gates and on the Integrations screen''s help, the four refusals are registered with a next action, the three events are current in English and German, and EasyPost is an adapter with shipment.buy';
+    case_name := 'the three write doors are on the allow-list under their gates and on the Integrations screen''s help, the four refusals are registered with a next action, the three events are current in English and German, EasyPost is an adapter with shipment.buy, and the demonstration''s two sites were made with their addresses while no other organisation''s are given one';
     passed := v_state is null
           and (select count(*) from erp_meta.public_write_allowance a
                 where (a.function_name, a.gate) in (('erp_connect_carrier_account', 'erp.connect_carrier_account'),
@@ -1125,8 +1233,16 @@ begin
           and (select count(*) from erp_ref.resource x
                 where x.key in ('event.carrier.connected', 'event.shipment.labelled', 'event.shipment.tracked')
                   and x.locale in ('en', 'de')) = 6
-          and exists (select 1 from erp_ref.adapter_operation o where o.adapter_code = 'easypost' and o.code = 'shipment.buy');
-    detail := coalesce(v_state, 'registers read');
+          and exists (select 1 from erp_ref.adapter_operation o where o.adapter_code = 'easypost' and o.code = 'shipment.buy')
+          -- The demonstration made its sites with their addresses; an
+          -- organisation that is not a demo- one is never addressed by the backfill.
+          and (select x.address ->> 'line1' from erp.site x where x.tenant_id = rb.tenant_id and x.code = 'MAIN-WH')
+              = 'Unit 1, Clove Trading Estate'
+          and (select x.address ->> 'city' from erp.site x where x.tenant_id = rb.tenant_id and x.code = 'NORTH-DC') = 'Leeds'
+          and erp.address_demo_sites(rb.tenant_id) = 0
+          and erp.demo_site_address('MAIN-WH', 'FR') is null;
+    detail := coalesce(v_state, format('registers read; MAIN-WH %s',
+                       (select x.address from erp.site x where x.tenant_id = rb.tenant_id and x.code = 'MAIN-WH')));
     return next;
 
     -- ── 2. Connecting refuses what it must ──────────────────────────────────
