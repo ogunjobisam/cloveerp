@@ -41,7 +41,7 @@ export type DrainReport = {
   documentEmailFailed: number;
   /**
    * Labels bought from the carriers' own systems through the organisation's
-   * EasyPost account (worker/src/core/carrier.ts, 20261004950000).
+   * EasyPost account (worker/src/core/carrier.ts, 20261004960000).
    */
   labelsClaimed: number;
   labelsBought: number;

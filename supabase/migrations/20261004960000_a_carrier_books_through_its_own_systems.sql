@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261004950000  A carrier books through its own systems
+-- 20261004960000  A carrier books through its own systems
 -- -----------------------------------------------------------------------------
 -- The second half of inbound carriers (owner, 2 October 2026: both halves in
 -- one change), on top of freight coming in on our account (20261004945000).
@@ -105,14 +105,14 @@ begin
 end
 $cols$;
 
-comment on column erp.carrier.provider is 'The aggregator the carrier is booked through, where it is (20261004950000).';
-comment on column erp.carrier.provider_account is 'The carrier''s account at the provider, as the provider names it (20261004950000).';
-comment on column erp.shipment.label_url is 'The label the carrier''s system issued (20261004950000).';
-comment on column erp.shipment.carrier_shipment_ref is 'The provider''s own identifier of the shipment (20261004950000).';
-comment on column erp.shipment.label_rate_minor is 'What the provider charged for the label, beside the rate card''s price (20261004950000).';
-comment on column erp.shipment.tracking_status is 'The latest status the carrier reported, never moving backwards (20261004950000).';
+comment on column erp.carrier.provider is 'The aggregator the carrier is booked through, where it is (20261004960000).';
+comment on column erp.carrier.provider_account is 'The carrier''s account at the provider, as the provider names it (20261004960000).';
+comment on column erp.shipment.label_url is 'The label the carrier''s system issued (20261004960000).';
+comment on column erp.shipment.carrier_shipment_ref is 'The provider''s own identifier of the shipment (20261004960000).';
+comment on column erp.shipment.label_rate_minor is 'What the provider charged for the label, beside the rate card''s price (20261004960000).';
+comment on column erp.shipment.tracking_status is 'The latest status the carrier reported, never moving backwards (20261004960000).';
 comment on column erp.external_system_operation.standing_authority is
-  'The administrator who connected the system authorised this operation once, for every command the system raises of it (20261004950000).';
+  'The administrator who connected the system authorised this operation once, for every command the system raises of it (20261004960000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- B. The registers
@@ -185,7 +185,7 @@ begin
   if (select count(*) from erp_ref.event_type et
        where et.code in ('carrier.connected', 'shipment.labelled', 'shipment.tracked')
          and et.is_current and et.version = 1 and et.name_key = 'event.' || et.code) <> 3 then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: a carrier event is declared already, and not as 20261004950000 declares it';
+    raise exception 'CLOVEERP_ANCHOR_MOVED: a carrier event is declared already, and not as 20261004960000 declares it';
   end if;
 end
 $event$;
@@ -195,7 +195,7 @@ $event$;
 insert into erp_ref.adapter (code, version, name_key, description, direction, transport, connection_schema,
                              credential_contract, honours_idempotency, supports_dry_run, is_current)
 values ('easypost', 1, 'adapter.easypost.name',
-        'EasyPost, a multi-carrier aggregator: books a shipment with the carrier and buys its label, and posts tracking back to the carrier webhook (20261004950000).',
+        'EasyPost, a multi-carrier aggregator: books a shipment with the carrier and buys its label, and posts tracking back to the carrier webhook (20261004960000).',
         'bidirectional', 'http',
         '{"type":"object","required":["mode"],"properties":{"mode":{"type":"string","enum":["test","live"]},"webhook_secret_ref":{"type":"string"},"timeout_ms":{"type":"integer","minimum":100}},"additionalProperties":false}'::jsonb,
         '{"kind":"api_key","note":"The organisation''s EasyPost API key, kept in Supabase Vault and read by the dispatch worker at send time; sent as the Basic username.","fields":["api_key"]}'::jsonb,
@@ -225,7 +225,7 @@ declare
   v_tenant uuid := erp.require_tenant_id();
   v_id     uuid;
 begin
-  -- A secret of the organisation's, into Supabase Vault (20261004950000),
+  -- A secret of the organisation's, into Supabase Vault (20261004960000),
   -- named for the organisation, returned as the reference the external
   -- system keeps. Definer because only the vault's owner may write it; gated
   -- by the integration permission it serves. No vault, nothing kept.
@@ -245,7 +245,7 @@ revoke all on function erp.store_tenant_secret(text, text) from public, anon;
 
 comment on function erp.store_tenant_secret(text, text) is
   'Keeps one of the organisation''s secrets in Supabase Vault and returns its reference; refuses where '
-  'there is no vault (20261004950000). Definer, gated by administration.integrate.';
+  'there is no vault (20261004960000). Definer, gated by administration.integrate.';
 
 create or replace function erp.connect_carrier_account(p_provider text, p_api_key text, p_webhook_secret text default null)
 returns jsonb
@@ -261,7 +261,7 @@ declare
   v_hook     text;
   v_sys      uuid;
 begin
-  -- The organisation's own account at a carrier provider (20261004950000;
+  -- The organisation's own account at a carrier provider (20261004960000;
   -- owner: each organisation its own). The key and the webhook secret go to
   -- the vault; the external system keeps their references, and connecting
   -- gives shipment.buy its standing authority.
@@ -312,7 +312,7 @@ revoke all on function erp.connect_carrier_account(text, text, text) from public
 comment on function erp.connect_carrier_account(text, text, text) is
   'Connects the organisation''s account at a carrier provider: its key and webhook secret to the vault, '
   'an external system holding their references, and shipment.buy enabled with standing authority '
-  '(20261004950000). Authorises administration.integrate.';
+  '(20261004960000). Authorises administration.integrate.';
 
 create or replace function public.erp_connect_carrier_account(p_provider text, p_api_key text, p_webhook_secret text default null)
 returns jsonb
@@ -324,7 +324,7 @@ revoke all on function public.erp_connect_carrier_account(text, text, text) from
 grant execute on function public.erp_connect_carrier_account(text, text, text) to authenticated, service_role;
 
 comment on function public.erp_connect_carrier_account(text, text, text) is
-  'Connects the organisation''s own carrier provider account, its key kept in the vault (20261004950000).';
+  'Connects the organisation''s own carrier provider account, its key kept in the vault (20261004960000).';
 
 create or replace function erp.disconnect_carrier_account(p_provider text)
 returns jsonb
@@ -334,7 +334,7 @@ as $$
 declare
   v_tenant uuid := erp.require_tenant_id();
 begin
-  -- No more bookings through the provider (20261004950000): the system is
+  -- No more bookings through the provider (20261004960000): the system is
   -- inactive and its operation disabled. The vault keeps nothing it needs:
   -- connecting again stores a new key.
   perform erp.authorise('administration.integrate', null, null, null, 'external_system', null);
@@ -359,7 +359,7 @@ revoke all on function public.erp_disconnect_carrier_account(text) from public, 
 grant execute on function public.erp_disconnect_carrier_account(text) to authenticated, service_role;
 
 comment on function public.erp_disconnect_carrier_account(text) is
-  'Stops booking carriers through the provider (20261004950000).';
+  'Stops booking carriers through the provider (20261004960000).';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_connect_carrier_account', 'erp.connect_carrier_account',
@@ -375,7 +375,7 @@ stable
 set search_path = ''
 as $$
   -- Whether the organisation books carriers through a provider
-  -- (20261004950000), in which mode, since when, whether tracking can reach
+  -- (20261004960000), in which mode, since when, whether tracking can reach
   -- it, the address its webhook posts to, and whether the reader may connect.
   -- Never a key.
   select jsonb_build_object(
@@ -404,7 +404,7 @@ revoke all on function public.erp_carrier_account() from public, anon;
 grant execute on function public.erp_carrier_account() to authenticated, service_role;
 
 comment on function public.erp_carrier_account() is
-  'Whether the organisation books carriers through its own provider account, and how; never its key (20261004950000).';
+  'Whether the organisation books carriers through its own provider account, and how; never its key (20261004960000).';
 
 create or replace function erp.link_carrier_provider(p_carrier_code text, p_provider text, p_provider_account text)
 returns jsonb
@@ -417,7 +417,7 @@ declare
   v_id       uuid;
 begin
   -- A carrier of the rate card, linked to its account at the provider
-  -- (20261004950000), or unlinked with no provider.
+  -- (20261004960000), or unlinked with no provider.
   perform erp.authorise('administration.integrate', null, null, null, 'carrier', null);
   if v_provider is not null and v_provider <> 'easypost' then
     raise exception 'CLOVEERP_CARRIER_PROVIDER_UNKNOWN: the product books carriers through easypost, not %', p_provider
@@ -453,7 +453,7 @@ revoke all on function public.erp_link_carrier_provider(text, text, text) from p
 grant execute on function public.erp_link_carrier_provider(text, text, text) to authenticated, service_role;
 
 comment on function public.erp_link_carrier_provider(text, text, text) is
-  'Links a carrier to its account at the organisation''s provider (20261004950000).';
+  'Links a carrier to its account at the organisation''s provider (20261004960000).';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_link_carrier_provider', 'erp.link_carrier_provider',
@@ -474,7 +474,7 @@ stable
 set search_path = ''
 as $$
   -- Whether a command leaves on the authority its system was connected with
-  -- (20261004950000): the system named it immediately before
+  -- (20261004960000): the system named it immediately before
   -- (erp.standing_command), and the operation is marked so, enabled, on an
   -- active system. In every other case the gateway asks the caller.
   select coalesce(current_setting('erp.standing_command', true), '') = p_system_code || ':' || p_operation_code
@@ -498,18 +498,18 @@ declare
   v_new  constant text := $n$  --
   -- Or the administrator who connected the system authorised it once, for
   -- the one operation it named, and the system names it now
-  -- (20261004950000).
+  -- (20261004960000).
   if not erp.command_has_standing_authority(p_system_code, p_operation_code) then
     perform erp.authorise('administration.integrate', p_entity_id, p_site_id, null,
                           'command', null, p_correlation_id);
   end if;$n$;
 begin
-  if strpos(v_src, '20261004950000') > 0 then
+  if strpos(v_src, '20261004960000') > 0 then
     raise notice '% already honours standing authority; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> 'ceb96ad9d0841d72777c5d40d50bd355' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004960000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
     raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;
@@ -528,7 +528,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- A party's address as a carrier reads it (20261004950000): its default
+  -- A party's address as a carrier reads it (20261004960000): its default
   -- address, or its delivery one, or any, with its name.
   select jsonb_build_object(
            'name', p.name, 'company', coalesce(p.legal_name, p.name),
@@ -552,7 +552,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- A site's address as a carrier reads it (20261004950000), named for the
+  -- A site's address as a carrier reads it (20261004960000), named for the
   -- company that runs it.
   select jsonb_build_object(
            'name', s.name, 'company', coalesce(e.legal_name, e.name),
@@ -585,7 +585,7 @@ declare
   v_prev   text;
 begin
   -- A booked shipment with a carrier linked to the organisation's provider
-  -- asks the carrier's system for its label (20261004950000): shipment.buy,
+  -- asks the carrier's system for its label (20261004960000): shipment.buy,
   -- on the standing authority the provider was connected with, keyed by the
   -- shipment so a second booking asks once. Out: from the site to the
   -- customer. In: from the supplier to the site. Anything else asks nothing.
@@ -627,7 +627,7 @@ revoke all on function erp.request_carrier_label(uuid) from public, anon;
 
 comment on function erp.request_carrier_label(uuid) is
   'Asks the carrier''s system for a booked shipment''s label, when its carrier is linked to the '
-  'organisation''s connected provider (20261004950000).';
+  'organisation''s connected provider (20261004960000).';
 
 -- Booking asks for it. Edited, not rewritten: one anchor over
 -- erp.book_shipment() (md5 60370dc5…), after the document is booked.
@@ -644,15 +644,15 @@ declare
     perform erp.mirror_shipment_status(p_shipment_id);
   end if;
   -- And the carrier's own system is asked for the label, where the carrier
-  -- is booked through the organisation's provider (20261004950000).
+  -- is booked through the organisation's provider (20261004960000).
   perform erp.request_carrier_label(p_shipment_id);$n$;
 begin
-  if strpos(v_src, '20261004950000') > 0 then
+  if strpos(v_src, '20261004960000') > 0 then
     raise notice '% already asks the carrier for a label; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> '60370dc5508f8750d4e8c3d25ea3cb1c' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004960000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
     raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;
@@ -674,7 +674,7 @@ declare
   v_tenant uuid := erp.require_tenant_id();
   sh       erp.shipment%rowtype;
 begin
-  -- The consignment as weighed (20261004950000), on a shipment not yet booked.
+  -- The consignment as weighed (20261004960000), on a shipment not yet booked.
   -- Nothing given, nothing changed.
   if p_weight_g is null then
     return;
@@ -701,7 +701,7 @@ $$;
 revoke all on function erp.set_shipment_weight(uuid, bigint) from public, anon;
 
 comment on function erp.set_shipment_weight(uuid, bigint) is
-  'Sets an unbooked shipment''s weight as weighed, in grams; refuses a booked one (20261004950000). '
+  'Sets an unbooked shipment''s weight as weighed, in grams; refuses a booked one (20261004960000). '
   'Authorises logistics.plan at the shipment''s site.';
 
 -- Shipping deliveries takes the weight, and sets it between planning and
@@ -719,7 +719,7 @@ declare
   v_old  constant text := $o$  v_ship := erp.plan_shipment(v_site, p_delivery_ids, coalesce(p_planned_despatch, erp.local_today()));$o$;
   v_new  constant text := $n$  v_ship := erp.plan_shipment(v_site, p_delivery_ids, coalesce(p_planned_despatch, erp.local_today()));
   -- As weighed, where the planner weighed it, before any booking asks a
-  -- carrier for its label (20261004950000).
+  -- carrier for its label (20261004960000).
   perform erp.set_shipment_weight(v_ship, p_weight_g);$n$;
 begin
   if to_regprocedure('erp.ship_deliveries(uuid[],date,text,text,bigint,bigint)') is not null then
@@ -729,7 +729,7 @@ begin
   v_src := (select p.prosrc from pg_catalog.pg_proc p where p.oid = v_sig::regprocedure);
   v_def := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
   if md5(v_src) <> 'a6906cddae2bea2ae8c667d2ea300686' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004960000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1
      or (length(v_def) - length(replace(v_def, v_head, ''))) / length(v_head) <> 1 then
@@ -745,7 +745,7 @@ revoke all on function erp.ship_deliveries(uuid[], date, text, text, bigint, big
 
 comment on function erp.ship_deliveries(uuid[], date, text, text, bigint, bigint) is
   'Ships posted deliveries of one site to one customer in one press (20261002500000): opens the shipment '
-  'document, sets its weight where one is given (20261004950000), takes the carrier and service the rate '
+  'document, sets its weight where one is given (20261004960000), takes the carrier and service the rate '
   'card recommends unless others are named, and books it when a tariff or a cost is known; otherwise it is '
   'left planned. Returns the shipment.';
 
@@ -762,7 +762,7 @@ grant execute on function public.erp_ship_deliveries(uuid[], date, text, text, b
 
 comment on function public.erp_ship_deliveries(uuid[], date, text, text, bigint, bigint) is
   'Ship these deliveries (20261002500000): the Despatch strip''s first press, with the consignment''s weight '
-  'where it was weighed (20261004950000). erp.ship_deliveries() authorises logistics.plan at the deliveries'' site.';
+  'where it was weighed (20261004960000). erp.ship_deliveries() authorises logistics.plan at the deliveries'' site.';
 
 -- Booking a planned shipment takes the weight too.
 
@@ -783,12 +783,12 @@ grant execute on function public.erp_book_shipment(uuid, text, text, bigint, big
 
 comment on function public.erp_book_shipment(uuid, text, text, bigint, bigint) is
   'Books a planned shipment with a carrier, at the weight it was weighed at where one is given '
-  '(20261004950000). erp.set_shipment_weight() and erp.book_shipment() authorise logistics.plan at its site.';
+  '(20261004960000). erp.set_shipment_weight() and erp.book_shipment() authorise logistics.plan at its site.';
 
 update erp_meta.public_write_allowance
-   set rationale = rationale || ' Takes the consignment''s weight first (erp.set_shipment_weight, logistics.plan) (20261004950000).'
+   set rationale = rationale || ' Takes the consignment''s weight first (erp.set_shipment_weight, logistics.plan) (20261004960000).'
  where function_name in ('erp_ship_deliveries', 'erp_book_shipment')
-   and rationale not like '%(20261004950000)%';
+   and rationale not like '%(20261004960000)%';
 
 -- A site's postal address: where an outbound parcel is labelled from and an
 -- inbound one is delivered to. erp.site.address has been a column since the
@@ -806,7 +806,7 @@ declare
   v_address jsonb;
   st        erp.site%rowtype;
 begin
-  -- The site's postal address (20261004950000), whole or not at all: the
+  -- The site's postal address (20261004960000), whole or not at all: the
   -- first line, the town, the postcode and the country. The site's country
   -- follows the address's.
   select x.* into st from erp.site x where x.tenant_id = v_tenant and x.id = p_site_id;
@@ -832,7 +832,7 @@ $$;
 revoke all on function erp.set_site_address(uuid, text, text, text, text, text, text) from public, anon;
 
 comment on function erp.set_site_address(uuid, text, text, text, text, text, text) is
-  'Gives a site its postal address, whole: first line, town, postcode and country (20261004950000). '
+  'Gives a site its postal address, whole: first line, town, postcode and country (20261004960000). '
   'Authorises administration.configure at the site.';
 
 create or replace function public.erp_set_site_address(p_site_id uuid, p_line1 text, p_line2 text default null,
@@ -847,7 +847,7 @@ revoke all on function public.erp_set_site_address(uuid, text, text, text, text,
 grant execute on function public.erp_set_site_address(uuid, text, text, text, text, text, text) to authenticated, service_role;
 
 comment on function public.erp_set_site_address(uuid, text, text, text, text, text, text) is
-  'Gives a site its postal address, which carriers label parcels from and deliver to (20261004950000).';
+  'Gives a site its postal address, which carriers label parcels from and deliver to (20261004960000).';
 
 insert into erp_meta.public_write_allowance (function_name, gate, rationale) values
   ('erp_set_site_address', 'erp.set_site_address',
@@ -856,7 +856,7 @@ on conflict (function_name) do update set gate = excluded.gate, rationale = excl
 
 select erp_meta.add_help_actions('/administration/organisation', array['erp_set_site_address']);
 
--- The demonstration's sites, addressed (20261004950000). The addresses are
+-- The demonstration's sites, addressed (20261004960000). The addresses are
 -- illustrative: an estate and a park named for the product, for a company in
 -- the United Kingdom. Anywhere else the demonstration's sites stay without
 -- one, rather than be given a British address abroad.
@@ -877,7 +877,7 @@ $$;
 
 comment on function erp.demo_site_address(text, text) is
   'The illustrative address of a demonstration site, MAIN-WH or NORTH-DC, for a company in the '
-  'United Kingdom; null otherwise (20261004950000).';
+  'United Kingdom; null otherwise (20261004960000).';
 
 create or replace function erp.address_demo_sites(p_tenant_id uuid)
 returns integer
@@ -888,7 +888,7 @@ declare
   v_n integer;
 begin
   -- A demonstration organisation's two sites, given their addresses where they
-  -- have none (20261004950000). Only an organisation whose code marks it as
+  -- have none (20261004960000). Only an organisation whose code marks it as
   -- the product's own demonstration: a real one that seeded the demonstration
   -- into its own sites keeps whatever it wrote, or nothing.
   if not exists (select 1 from erp.tenant t where t.id = p_tenant_id and t.code like 'demo-%') then
@@ -908,7 +908,7 @@ revoke all on function erp.address_demo_sites(uuid) from public, anon, authentic
 
 comment on function erp.address_demo_sites(uuid) is
   'Gives a demo- organisation''s MAIN-WH and NORTH-DC their illustrative addresses where they have '
-  'none; does nothing to any other organisation (20261004950000).';
+  'none; does nothing to any other organisation (20261004960000).';
 
 -- When the demonstration makes a site, it is made with its address. Edited,
 -- not rewritten: two anchors over erp.ensure_demo_configuration() (md5
@@ -921,21 +921,21 @@ declare
   v_def  text := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
   v_old1 constant text := $o$    v_did := v_did || '"site MAIN-WH"'::jsonb;$o$;
   v_new1 constant text := $n$    v_did := v_did || '"site MAIN-WH"'::jsonb;
-    -- With its address, where it has one (20261004950000).
+    -- With its address, where it has one (20261004960000).
     update erp.site s set address = coalesce(erp.demo_site_address(s.code, s.country_code), s.address)
      where s.id = v_site;$n$;
   v_old2 constant text := $o$      v_did := v_did || '"site NORTH-DC"'::jsonb;$o$;
   v_new2 constant text := $n$      v_did := v_did || '"site NORTH-DC"'::jsonb;
-      -- With its address, where it has one (20261004950000).
+      -- With its address, where it has one (20261004960000).
       update erp.site s set address = coalesce(erp.demo_site_address(s.code, s.country_code), s.address)
        where s.tenant_id = p_tenant_id and s.entity_id = v_entity and s.code = 'NORTH-DC';$n$;
 begin
-  if strpos(v_src, '20261004950000') > 0 then
+  if strpos(v_src, '20261004960000') > 0 then
     raise notice '% already addresses its sites; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> '25c89eeafe80b352e7228c5e69a9d52e' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004960000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old1, ''))) / length(v_old1) <> 1
      or (length(v_def) - length(replace(v_def, v_old2, ''))) / length(v_old2) <> 1 then
@@ -996,7 +996,7 @@ declare
   v_value  text;
 begin
   -- The organisation's provider key, for the dispatch worker at send time
-  -- (20261004950000). Trusted connections only, the organisation's own secret
+  -- (20261004960000). Trusted connections only, the organisation's own secret
   -- only (its vault name says whose it is), and never logged.
   if not erp.session_is_trusted() then
     raise exception 'CLOVEERP_UNTRUSTED_CONTEXT_ASSERTION: role % may not read a carrier key', current_user
@@ -1018,7 +1018,7 @@ revoke all on function erp.carrier_api_key(text) from public, anon, authenticate
 
 comment on function erp.carrier_api_key(text) is
   'The organisation''s carrier provider key, from the vault, for the dispatch worker over a trusted '
-  'connection (20261004950000). UNGATED BY DESIGN for principals: it refuses every untrusted caller.';
+  'connection (20261004960000). UNGATED BY DESIGN for principals: it refuses every untrusted caller.';
 
 create or replace function erp.apply_carrier_label(p_command_id uuid, p_result jsonb)
 returns jsonb
@@ -1032,7 +1032,7 @@ declare
   v_number text;
   v_code   text := nullif(btrim(coalesce(p_result ->> 'tracking_code', '')), '');
 begin
-  -- What the carrier's system answered for a label (20261004950000): its
+  -- What the carrier's system answered for a label (20261004960000): its
   -- tracking code, the label, its own shipment and its rate, onto the
   -- shipment the command named. Trusted connections only: the dispatch worker
   -- reports it.
@@ -1071,7 +1071,7 @@ revoke all on function erp.apply_carrier_label(uuid, jsonb) from public, anon;
 
 comment on function erp.apply_carrier_label(uuid, jsonb) is
   'Keeps what the carrier''s system answered for a label on the shipment its command named: tracking '
-  'code, label, provider shipment and rate (20261004950000). Trusted connections only.';
+  'code, label, provider shipment and rate (20261004960000). Trusted connections only.';
 
 create or replace function erp.tracking_rank(p_status text)
 returns integer
@@ -1080,7 +1080,7 @@ immutable
 set search_path = ''
 as $$
   -- How far along a carrier status is, so a late event never moves a
-  -- shipment backwards (20261004950000).
+  -- shipment backwards (20261004960000).
   select case p_status
     when 'unknown' then 0 when 'pre_transit' then 10 when 'in_transit' then 20
     when 'available_for_pickup' then 25 when 'out_for_delivery' then 30 when 'delivered' then 40
@@ -1094,7 +1094,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- An outbound shipment its carrier reports delivered (20261004950000): the
+  -- An outbound shipment its carrier reports delivered (20261004960000): the
   -- fact its delivery is derived from.
   select exists (select 1 from erp.shipment s
                   where s.tenant_id = erp.current_tenant_id() and s.document_id = p_shipment_document
@@ -1119,7 +1119,7 @@ declare
   v_moved  boolean := false;
   v_delivered boolean := false;
 begin
-  -- Where the carrier says a shipment is (20261004950000), from the carrier
+  -- Where the carrier says a shipment is (20261004960000), from the carrier
   -- webhook over its own connection: the organisation by its code, the
   -- shipment by its tracking code. The status only moves forward. An outbound
   -- shipment reported delivered is delivered, by the system; an inbound one
@@ -1177,7 +1177,7 @@ revoke all on function erp.record_carrier_tracking(text, text, text, text, times
 
 comment on function erp.record_carrier_tracking(text, text, text, text, timestamptz, text) is
   'Keeps where the carrier says a shipment is, never moving backwards, and delivers an outbound one '
-  'reported delivered (20261004950000). Trusted connections only: the carrier webhook.';
+  'reported delivered (20261004960000). Trusted connections only: the carrier webhook.';
 
 create or replace function erp.carrier_webhook_secret(p_tenant_code text)
 returns text
@@ -1192,7 +1192,7 @@ declare
   v_value  text;
 begin
   -- The signing secret an organisation's carrier webhook is verified with
-  -- (20261004950000), from the vault, for the webhook over its own
+  -- (20261004960000), from the vault, for the webhook over its own
   -- connection. UNGATED BY DESIGN for principals: it refuses every untrusted
   -- caller.
   if not erp.session_is_trusted() then
@@ -1216,7 +1216,7 @@ revoke all on function erp.carrier_webhook_secret(text) from public, anon, authe
 
 comment on function erp.carrier_webhook_secret(text) is
   'The organisation''s carrier webhook signing secret, from the vault, for the webhook over a trusted '
-  'connection (20261004950000). UNGATED BY DESIGN for principals: it refuses every untrusted caller.';
+  'connection (20261004960000). UNGATED BY DESIGN for principals: it refuses every untrusted caller.';
 
 -- The fact the delivery is derived from. Edited, not rewritten: one anchor
 -- over erp.derived_move_fact() as 20261004945000 left it (md5 d35a7005…).
@@ -1230,7 +1230,7 @@ declare
          end$o$;
   v_new  constant text := $n$             then 'erp.inbound_shipment_is_received'
            -- An outbound shipment's delivery, once its carrier reports it
-           -- delivered (20261004950000), asked for by
+           -- delivered (20261004960000), asked for by
            -- erp.record_carrier_tracking().
            when dt.base_type_code = 'shipment' and p_transition_code = 'deliver'
             and erp.object_current_state('document', p_object_id) = 'booked'
@@ -1238,12 +1238,12 @@ declare
              then 'erp.shipment_delivered_by_carrier'
          end$n$;
 begin
-  if strpos(v_src, '20261004950000') > 0 then
+  if strpos(v_src, '20261004960000') > 0 then
     raise notice '% already derives a carrier''s delivery; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> 'd35a700531df0d45a99d8d038b7f9419' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004950000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261004960000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
     raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;
@@ -1277,7 +1277,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  -- A shipment as the carrier's system knows it (20261004950000): its weight,
+  -- A shipment as the carrier's system knows it (20261004960000): its weight,
   -- its label, its tracking code and status, and whether its carrier is booked through
   -- the organisation's provider.
   select jsonb_build_object(
@@ -1298,7 +1298,7 @@ revoke all on function public.erp_shipment_tracking(uuid) from public, anon;
 grant execute on function public.erp_shipment_tracking(uuid) to authenticated, service_role;
 
 comment on function public.erp_shipment_tracking(uuid) is
-  'A shipment as the carrier''s system knows it: label, tracking code and status (20261004950000).';
+  'A shipment as the carrier''s system knows it: label, tracking code and status (20261004960000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- G. The suite
@@ -1637,7 +1637,7 @@ $$;
 revoke all on function erp_test.carrier_integration_suite() from public, anon;
 
 comment on function erp_test.carrier_integration_suite() is
-  'A carrier books through its own systems (20261004950000): connecting refuses by name and keeps keys '
+  'A carrier books through its own systems (20261004960000): connecting refuses by name and keeps keys '
   'only in a vault; booking with a linked carrier raises shipment.buy on standing authority and nothing '
   'else does; the label comes back onto the shipment; tracking moves forward only and delivers an '
   'outbound shipment, not an inbound one; what nobody knows is ignored.';
@@ -1672,7 +1672,7 @@ revoke all on function erp_test.assert_carrier_integration_suite() from public, 
 
 comment on function erp_test.assert_carrier_integration_suite() is
   'Carriers are booked through the organisation''s own provider account, and tracking comes back, '
-  'without a key leaving the vault (20261004950000).';
+  'without a key leaving the vault (20261004960000).';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- H. The words the screens say
@@ -1680,7 +1680,7 @@ comment on function erp_test.assert_carrier_integration_suite() is
 
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key(v.text), 'en', v.text,
-       'A screen string, rendered through ui(). The carrier account and a shipment''s tracking (20261004950000).'
+       'A screen string, rendered through ui(). The carrier account and a shipment''s tracking (20261004960000).'
   from (values
     ('Carrier account'),
     ('Book carriers through your own EasyPost account: labels and tracking come from the carriers'' own systems. The key is kept in the vault, never on a screen.'),

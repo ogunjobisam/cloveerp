@@ -298,7 +298,7 @@ export type Field =
   | ({ kind: "text" } & FieldBase)
   /**
    * Text that is never shown as it is typed and never offered back by the
-   * browser: a key to somebody else's system (20261004950000). Sent verbatim.
+   * browser: a key to somebody else's system (20261004960000). Sent verbatim.
    */
   | ({ kind: "secret" } & FieldBase)
   | ({ kind: "number" } & FieldBase)

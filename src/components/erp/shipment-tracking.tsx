@@ -10,7 +10,7 @@ import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
 
 /**
- * A shipment's carriage, on its page (20261004950000): its weight, and as its
+ * A shipment's carriage, on its page (20261004960000): its weight, and as its
  * carrier's system knows it, the label the carrier issued, its tracking code
  * and the latest status the carrier reported. Drawn for a shipment with a
  * weight, one booked through the organisation's provider, or one with a

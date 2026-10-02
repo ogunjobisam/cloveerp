@@ -53,7 +53,7 @@ set lock_timeout = '30s';
 --   * erp.allocate_landed_cost() stays as it is: nothing in the product calls
 --     it, and freight now lands through the bill. Retiring it is a follow-up.
 --   * The carrier's own systems (booking, labels, tracking): the second half,
---     20261004950000.
+--     20261004960000.
 --   * Duty and customs: not freight, and out of scope.
 --
 -- Proved by erp_test.inbound_freight_suite.
@@ -249,7 +249,7 @@ begin
 
   -- The consignment's weight: as weighed, where it was, else what its items
   -- weigh. It is on the shipment before the booking, which is what asks a
-  -- carrier's system for the label (20261004950000).
+  -- carrier's system for the label (20261004960000).
   if p_weight_g is not null and p_weight_g <= 0 then
     raise exception 'CLOVEERP_SHIPMENT_WEIGHT_INVALID: % g is not a weight a carrier can carry', p_weight_g
       using errcode = '22023',

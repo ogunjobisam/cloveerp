@@ -9,7 +9,7 @@ import * as ts from "typescript";
  * turns a money field into minor units, a number into a number and a yes/no
  * into a boolean; with it, nothing does, and whatever mapArgs returns is all
  * that is sent. "Ship these deliveries" sent its cost as typed — "12.50", in
- * pounds, as text — to a pence parameter until 20261004950000.
+ * pounds, as text — to a pence parameter until 20261004960000.
  *
  * This reads every form in src that has a mapArgs beside its fields and
  * refuses one whose money, number or yes/no field (or row column) reaches the

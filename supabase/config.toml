@@ -88,7 +88,7 @@ import_map = "./functions/import_map.json"
 verify_jwt = false
 import_map = "./functions/import_map.json"
 
-# Where a carrier says a shipment is (20261004950000).
+# Where a carrier says a shipment is (20261004960000).
 #
 # verify_jwt is false for the reason resend_webhook has it false: EasyPost
 # sends no Authorization header. The gate is the signature — each organisation
