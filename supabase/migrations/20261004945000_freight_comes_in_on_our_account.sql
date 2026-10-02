@@ -94,12 +94,12 @@ comment on column erp.shipment.origin_party_id is
 select erp.register_refusal('CLOVEERP_FREIGHT_TERMS_UNKNOWN',
   'Setting freight terms other than the supplier delivering or us collecting.',
   'An order''s goods either come at the supplier''s cost, delivered, or at ours, collected; who books and pays the carrier follows.',
-  'Choose supplier_delivers or we_collect.');
+  'Choose "The supplier delivers" or "We collect".');
 
 select erp.register_refusal('CLOVEERP_ORDER_NOT_COLLECTED',
   'Booking an inbound shipment for an order the supplier delivers, or one that is not on its way.',
   'We book a carrier only for an order we collect, once the supplier has it; for an order the supplier delivers, the supplier books and pays the carrier.',
-  'Set the order''s freight terms to we_collect, send it to the supplier, then book the collection.');
+  'Set the order''s freight terms to "We collect", send it to the supplier, then book the collection.');
 
 select erp.register_refusal('CLOVEERP_SHIPMENT_WEIGHT_INVALID',
   'Booking a collection with a weight that is not a positive number of grams.',
@@ -174,13 +174,13 @@ begin
      or erp.object_current_state('document', d.id) in ('closed', 'cancelled') then
     raise exception 'CLOVEERP_ORDER_NOT_COLLECTED: % is not an open purchase order', coalesce(d.document_number, coalesce(p_order::text, 'nothing'))
       using errcode = '23514',
-            hint = 'Set the order''s freight terms to we_collect, send it to the supplier, then book the collection.';
+            hint = 'Set the order''s freight terms to "We collect", send it to the supplier, then book the collection.';
   end if;
   perform erp.authorise('procurement.order', d.entity_id, d.site_id, null, 'document', d.id);
   if v_terms not in ('supplier_delivers', 'we_collect') then
     raise exception 'CLOVEERP_FREIGHT_TERMS_UNKNOWN: an order''s goods are delivered by the supplier or collected by us, not %',
       coalesce(p_terms, 'nothing')
-      using errcode = '22023', hint = 'Choose supplier_delivers or we_collect.';
+      using errcode = '22023', hint = 'Choose "The supplier delivers" or "We collect".';
   end if;
   update erp.document x
      set attributes = coalesce(x.attributes, '{}'::jsonb) || jsonb_build_object('freight_terms', v_terms),
@@ -235,7 +235,7 @@ begin
     raise exception 'CLOVEERP_ORDER_NOT_COLLECTED: % is not an order we collect that the supplier has',
       coalesce(d.document_number, coalesce(p_order::text, 'nothing'))
       using errcode = '23514',
-            hint = 'Set the order''s freight terms to we_collect, send it to the supplier, then book the collection.';
+            hint = 'Set the order''s freight terms to "We collect", send it to the supplier, then book the collection.';
   end if;
   perform erp.authorise('logistics.plan', d.entity_id, d.site_id, null, 'document', d.id);
 
