@@ -17,11 +17,13 @@ import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { Samples } from "../../components/erp/samples";
 import { InboundShipments } from "../../components/erp/inbound-shipments";
+import { LandedCosts } from "../../components/erp/landed-costs";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow, type FlowSpec } from "../../components/erp/process-flow";
 import { unstagedActions } from "../../lib/flow-actions";
 import {
+  BILL_A_LANDED_COST,
   GOODS_IN_LIST,
   PURCHASING_KPIS,
   RECEIVE_AN_ORDER,
@@ -803,20 +805,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     ],
     invalidates: ["erp_supplier_qualification"],
   },
-  {
-    label: "Add delivery costs to the stock value",
-    permission: "procurement.match",
-    fn: "erp_allocate_landed_cost",
-    fields: [
-      pickFrom(
-        "erp_landed_costs",
-        "landed_cost_id",
-        ["charge_code", "description", "receipt"],
-        "p_landed_cost_id",
-        "Landed cost",
-      ),
-    ],
-  },
+  BILL_A_LANDED_COST,
 ];
 
 /**
@@ -1019,6 +1008,8 @@ function Procurement() {
       <ProcessFlow flow={PURCHASE_TO_PAY} actions={PURCHASING_VERBS} />
 
       <InboundShipments />
+
+      <LandedCosts />
 
       <Samples />
 
