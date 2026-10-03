@@ -950,6 +950,7 @@ const KEY_WORDS: Record<string, string> = {
   task_id: "Scan the task",
   allocation_id: "Scan the pick",
   receipt_id: "Scan the receipt",
+  sscc: "Scan the carton",
   order_line_id: "Scan the order line",
   original_document_id: "Scan the original document",
   shipment_id: "Scan the shipment",

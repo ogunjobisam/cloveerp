@@ -20,6 +20,18 @@ export type SupplierLine = {
   requiredDate: string | null;
   confirmedQuantity: number | null;
   confirmedDate: string | null;
+  /** What no notice still coming holds (20261005000000). */
+  openToNotify: number;
+};
+
+/** A notice the supplier sent, as their page shows it (20261005000000). */
+export type SupplierNotice = {
+  notice: string;
+  status: string;
+  shipDate: string | null;
+  expectedArrival: string | null;
+  carrier: string | null;
+  trackingReference: string | null;
 };
 
 export type SupplierOrder = {
@@ -30,6 +42,9 @@ export type SupplierOrder = {
   orderDate: string | null;
   status: ConfirmationStatus;
   canRespond: boolean;
+  /** Confirmed and still open: the supplier may say what is on its way. */
+  canNotify: boolean;
+  notices: SupplierNotice[];
   supplierReference: string | null;
   note: string | null;
   /** The buyer's note when they asked again. */
@@ -132,6 +147,15 @@ export function supplierOrder(result: unknown): SupplierOrder | null {
     orderDate: text(r["order_date"]),
     status: status(r["status"]),
     canRespond: r["can_respond"] === true,
+    canNotify: r["can_notify"] === true,
+    notices: list(r["notices"]).map((n) => ({
+      notice: text(n["notice"]) ?? "",
+      status: text(n["status"]) ?? "notified",
+      shipDate: text(n["ship_date"]),
+      expectedArrival: text(n["expected_arrival"]),
+      carrier: text(n["carrier"]),
+      trackingReference: text(n["tracking_reference"]),
+    })),
     supplierReference: text(r["supplier_reference"]),
     note: text(r["note"]),
     decisionNote: text(r["decision_note"]),
@@ -147,6 +171,7 @@ export function supplierOrder(result: unknown): SupplierOrder | null {
         requiredDate: text(l["required_date"]),
         confirmedQuantity: num(l["confirmed_quantity"]),
         confirmedDate: text(l["confirmed_date"]),
+        openToNotify: num(l["open_to_notify"]) ?? 0,
       }))
       .filter((l) => l.lineId !== ""),
   };
