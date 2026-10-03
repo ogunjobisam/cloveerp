@@ -37,6 +37,10 @@ export const ROUTES: readonly RouteUnderTest[] = [
   // function this suite's backend cannot answer, so it is rendered at an
   // address nobody holds: the route resolves and says 404 rather than throwing.
   { path: "/nobody-holds-this-address", kind: "public", file: "$address.tsx" },
+  // A purchase order email's "Confirm this order" lands here (20261004990000).
+  // With no link in the fragment, as this suite renders it, the page says the
+  // link answers no order.
+  { path: "/respond", kind: "public", file: "respond.tsx" },
 
   { path: "/help", kind: "desk", file: "help.tsx" },
   // An invitation's landing page: its own way in signed out, and straight on
