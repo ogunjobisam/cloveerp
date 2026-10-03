@@ -1,0 +1,266 @@
+/**
+ * Advance shipping notices (20261005000000): what a supplier, or the buyer for
+ * them, says is on its way against a sent order — when it left and arrives,
+ * with whom, what of each line it holds, and the cartons by their SSCC — and,
+ * once goods-in has received it, how what arrived differed.
+ *
+ * Read from public.erp_shipping_notices (goods-in's list) and
+ * public.erp_order_shipping_notices (an order's page); sent to
+ * public.erp_supplier_notify_shipment (the supplier's link) and
+ * public.erp_record_shipping_notice (the buyer).
+ */
+
+export type NoticeStatus = "notified" | "part_received" | "received" | "cancelled";
+
+export type NoticeLine = {
+  orderLineId: string;
+  lineNo: number;
+  description: string;
+  quantity: number;
+  receivedQuantity: number | null;
+};
+
+export type NoticeCarton = { sscc: string; receivedAt: string | null };
+
+export type NoticeDifference = {
+  orderLineId: string;
+  lineNo: number | null;
+  notified: number;
+  received: number;
+  kind: "short" | "over" | "not_notified";
+};
+
+export type ShippingNotice = {
+  noticeId: string;
+  notice: string;
+  orderId: string;
+  order: string;
+  supplier: string;
+  status: NoticeStatus;
+  shipDate: string | null;
+  expectedArrival: string | null;
+  late: boolean;
+  carrier: string | null;
+  trackingReference: string | null;
+  supplierReference: string | null;
+  note: string | null;
+  sentVia: "supplier" | "buyer";
+  receipt: string | null;
+  receiptId: string | null;
+  differences: NoticeDifference[];
+  lines: NoticeLine[];
+  cartons: NoticeCarton[];
+};
+
+/** What the supplier, or the buyer, says is on its way. */
+export type NoticePayload = {
+  ship_date?: string;
+  expected_arrival: string;
+  carrier?: string;
+  tracking_reference?: string;
+  supplier_reference?: string;
+  note?: string;
+  lines: { order_line_id: string; quantity: number }[];
+  cartons?: { sscc: string; contents: { order_line_id: string; quantity: number }[] }[];
+};
+
+type Row = Record<string, unknown>;
+
+const asRecord = (v: unknown): Row | null =>
+  typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Row) : null;
+
+const text = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+
+const num = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
+};
+
+const list = (v: unknown): Row[] =>
+  (Array.isArray(v) ? v : []).map(asRecord).filter((r): r is Row => r !== null);
+
+const STATUSES: readonly NoticeStatus[] = ["notified", "part_received", "received", "cancelled"];
+const KINDS: readonly NoticeDifference["kind"][] = ["short", "over", "not_notified"];
+
+/** One notice as the database writes it, or null for anything else. */
+export function shippingNotice(v: unknown): ShippingNotice | null {
+  const r = asRecord(v);
+  const noticeId = text(r?.["notice_id"]);
+  const orderId = text(r?.["order_id"]);
+  if (r === null || noticeId === null || orderId === null) return null;
+  const status = r["status"];
+  return {
+    noticeId,
+    notice: text(r["notice"]) ?? "",
+    orderId,
+    order: text(r["order"]) ?? "",
+    supplier: text(r["supplier"]) ?? "",
+    status: (STATUSES as readonly unknown[]).includes(status)
+      ? (status as NoticeStatus)
+      : "notified",
+    shipDate: text(r["ship_date"]),
+    expectedArrival: text(r["expected_arrival"]),
+    late: r["late"] === true,
+    carrier: text(r["carrier"]),
+    trackingReference: text(r["tracking_reference"]),
+    supplierReference: text(r["supplier_reference"]),
+    note: text(r["note"]),
+    sentVia: r["sent_via"] === "buyer" ? "buyer" : "supplier",
+    receipt: text(r["receipt"]),
+    receiptId: text(r["receipt_id"]),
+    differences: list(r["differences"]).map((d) => ({
+      orderLineId: text(d["order_line_id"]) ?? "",
+      lineNo: num(d["line_no"]),
+      notified: num(d["notified"]) ?? 0,
+      received: num(d["received"]) ?? 0,
+      kind: (KINDS as readonly unknown[]).includes(d["kind"])
+        ? (d["kind"] as NoticeDifference["kind"])
+        : "short",
+    })),
+    lines: list(r["lines"])
+      .map((l) => ({
+        orderLineId: text(l["order_line_id"]) ?? "",
+        lineNo: num(l["line_no"]) ?? 0,
+        description: text(l["description"]) ?? "",
+        quantity: num(l["quantity"]) ?? 0,
+        receivedQuantity: num(l["received_quantity"]),
+      }))
+      .filter((l) => l.orderLineId !== ""),
+    cartons: list(r["cartons"])
+      .map((c) => ({ sscc: text(c["sscc"]) ?? "", receivedAt: text(c["received_at"]) }))
+      .filter((c) => c.sscc !== ""),
+  };
+}
+
+/** Goods-in's list: the open notices, late first. */
+export function shippingNotices(result: unknown): ShippingNotice[] {
+  return (Array.isArray(result) ? result : [])
+    .map(shippingNotice)
+    .filter((n): n is ShippingNotice => n !== null);
+}
+
+/** An order's notices, newest first, and what of each line is still open. */
+export function orderNotices(result: unknown): {
+  notices: ShippingNotice[];
+  open: { orderLineId: string; lineNo: number; open: number }[];
+} {
+  const r = asRecord(result);
+  return {
+    notices: shippingNotices(r?.["notices"]),
+    open: list(r?.["open"])
+      .map((o) => ({
+        orderLineId: text(o["order_line_id"]) ?? "",
+        lineNo: num(o["line_no"]) ?? 0,
+        open: num(o["open"]) ?? 0,
+      }))
+      .filter((o) => o.orderLineId !== ""),
+  };
+}
+
+export const noticeOpen = (n: Pick<ShippingNotice, "status">): boolean =>
+  n.status === "notified" || n.status === "part_received";
+
+export function noticeWords(s: NoticeStatus): {
+  words: string;
+  tone: "ok" | "warn" | "bad" | "muted";
+} {
+  switch (s) {
+    case "notified":
+      return { words: "On its way", tone: "muted" };
+    case "part_received":
+      return { words: "Part received", tone: "warn" };
+    case "received":
+      return { words: "Received", tone: "ok" };
+    case "cancelled":
+      return { words: "Cancelled", tone: "bad" };
+  }
+}
+
+export function differenceWords(kind: NoticeDifference["kind"]): string {
+  switch (kind) {
+    case "short":
+      return "Short";
+    case "over":
+      return "Over";
+    case "not_notified":
+      return "Not notified";
+  }
+}
+
+/**
+ * The SSCC a scan or a typed label carries, as erp.sscc_of reads it: eighteen
+ * digits bare, or after the application identifier (00), with brackets,
+ * spaces and a scanner's symbology prefix ignored. Null for anything else.
+ */
+export function ssccOf(scan: string): string | null {
+  // FNC1, the group separator a GS1-128 scan may carry.
+  const gs = String.fromCharCode(29);
+  const digits = scan
+    .trim()
+    .replace(/^\][A-Za-z][0-9]/, "")
+    .split("")
+    .filter((ch) => ch !== "(" && ch !== ")" && ch !== gs && ch.trim() !== "")
+    .join("");
+  if (/^[0-9]{18}$/.test(digits)) return digits;
+  if (/^00[0-9]{18}$/.test(digits)) return digits.slice(2);
+  return null;
+}
+
+/** Whether eighteen digits end in their GS1 check digit, as erp.sscc_is_valid. */
+export function ssccIsValid(sscc: string): boolean {
+  if (!/^[0-9]{18}$/.test(sscc)) return false;
+  let sum = 0;
+  for (let i = 0; i < 17; i++) sum += Number(sscc[i]) * (i % 2 === 0 ? 3 : 1);
+  return (10 - (sum % 10)) % 10 === Number(sscc[17]);
+}
+
+/** What the supplier's form holds, as typed. */
+export type NoticeForm = {
+  shipDate: string;
+  expectedArrival: string;
+  carrier: string;
+  trackingReference: string;
+  supplierReference: string;
+  note: string;
+  /** Quantity sending now, by order line, as typed. */
+  quantities: Record<string, string>;
+  cartons: { sscc: string; quantities: Record<string, string> }[];
+};
+
+const positive = (s: string | undefined): number | null => {
+  const n = num(s ?? "");
+  return n !== null && n > 0 ? n : null;
+};
+
+/**
+ * The notice from what was typed: a line with no quantity is not in this
+ * shipment, a carton with no SSCC is left out, and the database refuses what
+ * does not add up.
+ */
+export function noticePayload(f: NoticeForm): NoticePayload {
+  const lines = Object.entries(f.quantities).flatMap(([id, q]) => {
+    const quantity = positive(q);
+    return quantity === null ? [] : [{ order_line_id: id, quantity }];
+  });
+  const cartons = f.cartons
+    .map((c) => ({
+      sscc: ssccOf(c.sscc) ?? c.sscc.trim(),
+      contents: Object.entries(c.quantities).flatMap(([id, q]) => {
+        const quantity = positive(q);
+        return quantity === null ? [] : [{ order_line_id: id, quantity }];
+      }),
+    }))
+    .filter((c) => c.sscc !== "");
+  const opt = (k: keyof NoticePayload, v: string) => (v.trim() === "" ? {} : { [k]: v.trim() });
+  return {
+    ...opt("ship_date", f.shipDate),
+    expected_arrival: f.expectedArrival.trim(),
+    ...opt("carrier", f.carrier),
+    ...opt("tracking_reference", f.trackingReference),
+    ...opt("supplier_reference", f.supplierReference),
+    ...opt("note", f.note),
+    lines,
+    ...(cartons.length > 0 ? { cartons } : {}),
+  };
+}

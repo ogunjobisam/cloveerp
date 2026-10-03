@@ -7,6 +7,7 @@ import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { OrderPrepayment } from "../../components/erp/order-prepayment";
 import { PurchaseOrderSends } from "../../components/erp/purchase-order-sends";
 import { ShipmentTracking } from "../../components/erp/shipment-tracking";
+import { OrderShippingNotices } from "../../components/erp/shipping-notices";
 import { SupplierConfirmation } from "../../components/erp/supplier-confirmation";
 import { SupplierReturn } from "../../components/erp/supplier-return";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
@@ -310,6 +311,15 @@ function Document() {
           (20261004990000). Drawn only where the order has been sent. */}
       {doc.document_type === "purchase_order" ? (
         <SupplierConfirmation
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
+
+      {/* What the supplier said is on its way, and how it arrived
+          (20261005000000). Drawn once there is a notice or the order is open. */}
+      {doc.document_type === "purchase_order" ? (
+        <OrderShippingNotices
           documentId={documentId}
           context={`${doc.document_number} · ${doc.party ?? "no party"}`}
         />

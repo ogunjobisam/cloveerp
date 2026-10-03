@@ -73,3 +73,46 @@ export const respondToOrder = createServerFn({ method: "POST" })
     const words = error.message.replace(/^CLOVEERP_[A-Z_]+:\s*/, "");
     return { ok: false, message: words || "The answer could not be recorded." };
   });
+
+const quantityOfLine = z.object({
+  order_line_id: z.string().uuid(),
+  quantity: z.number().positive(),
+});
+
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+const notice = z.object({
+  ship_date: day.optional(),
+  expected_arrival: day,
+  carrier: z.string().max(80).optional(),
+  tracking_reference: z.string().max(120).optional(),
+  supplier_reference: z.string().max(80).optional(),
+  note: z.string().max(1000).optional(),
+  lines: z.array(quantityOfLine).min(1).max(500),
+  cartons: z
+    .array(
+      z.object({
+        sscc: z.string().max(40),
+        contents: z.array(quantityOfLine).max(500),
+      }),
+    )
+    .max(500)
+    .optional(),
+});
+
+/**
+ * What the supplier says is on its way, once the order is confirmed
+ * (20261005000000); a refusal comes back in its own words.
+ */
+export const notifyShipment = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ token, notice }).parse(data))
+  .handler(async ({ data }): Promise<SupplierRespondResult> => {
+    const call = await rpc();
+    const { error } = await call("erp_supplier_notify_shipment", {
+      p_token: data.token,
+      p_notice: data.notice,
+    });
+    if (!error) return { ok: true };
+    const words = error.message.replace(/^CLOVEERP_[A-Z_]+:\s*/, "");
+    return { ok: false, message: words || "The notice could not be recorded." };
+  });

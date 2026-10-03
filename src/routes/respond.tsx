@@ -4,13 +4,18 @@ import { useEffect, useState } from "react";
 
 import { Centred } from "../components/erp/gate";
 import { formatMinor, isoMinorUnits } from "../lib/money";
+import { noticePayload, ssccIsValid, ssccOf, type NoticeForm } from "../lib/shipping-notices";
 import {
   supplierAnswer,
   tokenFromFragment,
   type LineEdit,
   type SupplierOrder,
 } from "../lib/supplier-confirmation";
-import { respondToOrder, supplierOrderByLink } from "../lib/supplier-response.functions";
+import {
+  notifyShipment,
+  respondToOrder,
+  supplierOrderByLink,
+} from "../lib/supplier-response.functions";
 
 /**
  * Where a purchase order email's "Confirm this order" button lands
@@ -25,6 +30,9 @@ import { respondToOrder, supplierOrderByLink } from "../lib/supplier-response.fu
  *
  * The supplier confirms the order as it stands, changes the quantity or date
  * of any line, or declines it with a reason. A change waits for the buyer.
+ * Once the order is confirmed, the same page takes what is on its way: when it
+ * leaves and arrives, with whom, how much of each line, and the cartons by
+ * the SSCC on their labels (20261005000000).
  */
 
 export const Route = createFileRoute("/respond")({
@@ -306,7 +314,300 @@ function Answer({ token, order }: { token: string; order: SupplierOrder }) {
           </div>
         </form>
       ) : null}
+
+      {order.notices.length > 0 ? <Notices order={order} /> : null}
+
+      {order.canNotify ? <OnItsWay token={token} order={order} /> : null}
     </main>
+  );
+}
+
+function Notices({ order }: { order: SupplierOrder }) {
+  const words: Record<string, string> = {
+    notified: "On its way",
+    part_received: "Part received",
+    received: "Received",
+  };
+  return (
+    <section className="mt-8">
+      <h2 className="text-base font-semibold">What you told us is on its way</h2>
+      <ul className="mt-2 flex flex-col divide-y divide-border rounded-xl border border-border text-sm">
+        {order.notices.map((n) => (
+          <li key={n.notice} className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2">
+            <span className="font-medium">{n.notice}</span>
+            <span>{words[n.status] ?? n.status}</span>
+            {n.expectedArrival ? <span>Arriving {n.expectedArrival}</span> : null}
+            {n.carrier ? (
+              <span className="text-muted-foreground">
+                {n.carrier}
+                {n.trackingReference ? ` ${n.trackingReference}` : ""}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const EMPTY_NOTICE: NoticeForm = {
+  shipDate: "",
+  expectedArrival: "",
+  carrier: "",
+  trackingReference: "",
+  supplierReference: "",
+  note: "",
+  quantities: {},
+  cartons: [],
+};
+
+function OnItsWay({ token, order }: { token: string; order: SupplierOrder }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<NoticeForm>(EMPTY_NOTICE);
+  const lines = order.lines.filter((l) => l.openToNotify > 0);
+
+  const send = useMutation({
+    mutationFn: () => notifyShipment({ data: { token, notice: noticePayload(form) } }),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setForm(EMPTY_NOTICE);
+        void queryClient.invalidateQueries({ queryKey: ["supplier_order_by_link", token] });
+      }
+    },
+  });
+  const refused = send.data && !send.data.ok ? send.data.message : null;
+  const set = (field: Exclude<keyof NoticeForm, "quantities" | "cartons">, value: string) =>
+    setForm((f) => ({ ...f, [field]: value }));
+  const setCarton = (i: number, change: Partial<NoticeForm["cartons"][number]>) =>
+    setForm((f) => ({
+      ...f,
+      cartons: f.cartons.map((c, j) => (j === i ? { ...c, ...change } : c)),
+    }));
+  const badLabel = form.cartons.some((c) => {
+    const sscc = ssccOf(c.sscc);
+    return c.sscc.trim() !== "" && (sscc === null || !ssccIsValid(sscc));
+  });
+
+  if (lines.length === 0) {
+    return (
+      <p className="mt-8 text-sm text-muted-foreground">
+        Everything on this order is received or on its way.
+      </p>
+    );
+  }
+
+  return (
+    <form
+      className="mt-8 flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        send.mutate();
+      }}
+    >
+      <div>
+        <h2 className="text-base font-semibold">Tell us it&apos;s on its way</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          One notice for each delivery. Give what is in it; leave a line empty if it is not.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Sent on</span>
+          <input
+            type="date"
+            value={form.shipDate}
+            onChange={(e) => set("shipDate", e.target.value)}
+            className="h-11 rounded-md border border-input bg-background px-2"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Arrives on</span>
+          <input
+            type="date"
+            required
+            value={form.expectedArrival}
+            onChange={(e) => set("expectedArrival", e.target.value)}
+            className="h-11 rounded-md border border-input bg-background px-2"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Carrier</span>
+          <input
+            type="text"
+            maxLength={80}
+            placeholder="DHL"
+            value={form.carrier}
+            onChange={(e) => set("carrier", e.target.value)}
+            className="h-11 rounded-md border border-input bg-background px-2"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Tracking number</span>
+          <input
+            type="text"
+            maxLength={120}
+            value={form.trackingReference}
+            onChange={(e) => set("trackingReference", e.target.value)}
+            className="h-11 rounded-md border border-input bg-background px-2"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Your delivery note number</span>
+          <input
+            type="text"
+            maxLength={80}
+            placeholder="DN-1234"
+            value={form.supplierReference}
+            onChange={(e) => set("supplierReference", e.target.value)}
+            className="h-11 rounded-md border border-input bg-background px-2"
+          />
+        </label>
+      </div>
+
+      <div className="w-full overflow-x-auto rounded-xl border border-border">
+        <table className="w-full min-w-[28rem] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <th scope="col" className="px-3 py-2 font-medium">
+                Line
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Item
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Still to send
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                In this delivery
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.lineId} className="border-b border-border/60 last:border-0">
+                <td className="px-3 py-2 tabular-nums">{l.lineNo}</td>
+                <td className="px-3 py-2">{l.description}</td>
+                <td className="px-3 py-2 tabular-nums">
+                  {l.openToNotify} {l.uom}
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={l.openToNotify}
+                    step="any"
+                    aria-label={`Quantity in this delivery for line ${l.lineNo}`}
+                    value={form.quantities[l.lineId] ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        quantities: { ...f.quantities, [l.lineId]: e.target.value },
+                      }))
+                    }
+                    className="h-11 w-24 rounded-md border border-input bg-background px-2"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">
+          Optional: if your cartons carry an SSCC label, list each one and what is in it. We receive
+          a carton by scanning its label. Together they must hold what the lines say.
+        </p>
+        {form.cartons.map((c, i) => (
+          <fieldset key={i} className="rounded-lg border border-border p-3">
+            <legend className="px-1 text-sm font-medium">Carton {i + 1}</legend>
+            <label className="flex flex-col gap-1 text-sm">
+              <span>SSCC</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={40}
+                placeholder="(00)350123451234567894"
+                value={c.sscc}
+                onChange={(e) => setCarton(i, { sscc: e.target.value })}
+                className="h-11 rounded-md border border-input bg-background px-2"
+              />
+            </label>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {lines.map((l) => (
+                <label key={l.lineId} className="flex flex-col gap-1 text-sm">
+                  <span>Line {l.lineNo}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={c.quantities[l.lineId] ?? ""}
+                    onChange={(e) =>
+                      setCarton(i, { quantities: { ...c.quantities, [l.lineId]: e.target.value } })
+                    }
+                    className="h-11 w-24 rounded-md border border-input bg-background px-2"
+                  />
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setForm((f) => ({ ...f, cartons: f.cartons.filter((_, j) => j !== i) }))
+              }
+              className="mt-2 h-11 rounded-md border border-input px-4 text-sm"
+            >
+              Remove this carton
+            </button>
+          </fieldset>
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            setForm((f) => ({ ...f, cartons: [...f.cartons, { sscc: "", quantities: {} }] }))
+          }
+          className="h-11 self-start rounded-md border border-input px-4 text-sm font-medium"
+        >
+          Add a carton
+        </button>
+        {badLabel ? (
+          <p role="alert" className="text-sm text-destructive">
+            A carton&apos;s SSCC is eighteen digits ending in its check digit. Check the label.
+          </p>
+        ) : null}
+      </div>
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium">A note for goods-in</span>
+        <textarea
+          rows={2}
+          maxLength={1000}
+          placeholder="Optional"
+          value={form.note}
+          onChange={(e) => set("note", e.target.value)}
+          className="rounded-md border border-input bg-background px-2 py-2"
+        />
+      </label>
+      {refused ? (
+        <p role="alert" className="text-sm text-destructive">
+          {refused}
+        </p>
+      ) : null}
+      {send.data?.ok ? (
+        <p role="status" className="text-sm">
+          Thank you. The buyer has been told it is on its way.
+        </p>
+      ) : null}
+      <button
+        type="submit"
+        disabled={send.isPending || badLabel}
+        className="h-11 self-start rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground"
+      >
+        Send the notice
+      </button>
+    </form>
   );
 }
 
