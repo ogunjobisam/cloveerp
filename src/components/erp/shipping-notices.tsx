@@ -247,7 +247,12 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
     { kind: "date", name: "ship_date", label: "Sent on" },
     { kind: "date", name: "expected_arrival", label: "Arrives on", required: true },
     { kind: "text", name: "carrier", label: "Carrier", placeholder: "DHL" },
-    { kind: "text", name: "tracking_reference", label: "Tracking number" },
+    {
+      kind: "text",
+      name: "tracking_reference",
+      label: "Tracking number",
+      hint: "Optional. The consignment or tracking number.",
+    },
     {
       kind: "text",
       name: "supplier_reference",
