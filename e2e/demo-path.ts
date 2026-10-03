@@ -398,6 +398,8 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/help": "Guidance about the screens, not one of them.",
   "/join":
     "Where an invitation is accepted. The demonstration organisation already has its people.",
+  "/respond":
+    "Where a supplier answers a purchase order from the link in its email. The supplier is outside the organisation, and the demonstration sends no email, so neither flow passes through it.",
   "/act":
     "Where an Approve or Reject link out of an email lands. Approvals on the demo path are decided on the step that raised them, so no email is needed to finish either flow.",
   "/profile": "Your own account, your language and how the desk is set up for you.",

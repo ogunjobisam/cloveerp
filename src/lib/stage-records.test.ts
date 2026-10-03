@@ -420,7 +420,7 @@ describe("a move another document makes is never a button", () => {
   test("the list is the moves a receipt, a conversion, a pick, a despatch, an invoice, a payment, a credit note, the cash, a payment run or a VAT period makes", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
       requisition: ["order"],
-      purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
+      purchase_order: ["inherit_approval", "receive_partial", "receive_all", "cancel_sent"],
       quotation: ["accept"],
       sales_order: [
         "pick",
@@ -438,6 +438,7 @@ describe("a move another document makes is never a button", () => {
       cash_receipt: ["post"],
       cash_payment: ["post"],
       vat_return: ["finalise"],
+      shipment: ["book", "deliver", "cancel", "cancel_booked"],
     });
   });
 
@@ -610,13 +611,26 @@ describe("a move another document makes is never a button", () => {
     const register = readFileSync(join(migrations, newest ?? ""), "utf8");
     const start = register.indexOf("from (values", register.indexOf(definer));
     const body = register.slice(start, register.indexOf("as x(machine_code", start));
+    // And every row a later migration added to it by anchor, as
+    // 20261002500000 added the shipment's and 20261004990000 cancel_sent:
+    // the register the database holds, not only the last one restated
+    // whole. Without these the shipment's four routine moves were drawn as
+    // buttons, and nothing here could see it.
+    const later = readdirSync(migrations)
+      .filter((f) => f.endsWith(".sql") && f > (newest ?? ""))
+      .sort()
+      .map((f) => readFileSync(join(migrations, f), "utf8"))
+      .filter((sql) => sql.includes("'erp.transition_driver_register()'"));
     const registered: Record<string, string[]> = {};
-    for (const match of body.matchAll(
-      /\('([a-z_]+)'(?:::text)?,\s*'([a-z_]+)'(?:::text)?,\s*'(screen|routine|undriven)'/g,
-    )) {
-      const [, machine, code, driver] = match;
-      if (!machine || !code || driver === "screen") continue;
-      (registered[machine] ??= []).push(code);
+    const tuple =
+      /\('([a-z_]+)'(?:::text)?,\s*'([a-z_]+)'(?:::text)?,\s*'(screen|routine|undriven)'/g;
+    for (const text of [body, ...later]) {
+      for (const match of text.matchAll(tuple)) {
+        const [, machine, code, driver] = match;
+        if (!machine || !code || driver === "screen") continue;
+        const codes = (registered[machine] ??= []);
+        if (!codes.includes(code)) codes.push(code);
+      }
     }
     const sorted = (list: readonly string[]) => [...list].sort();
     const shape = (byType: Record<string, readonly string[]>) =>
@@ -645,8 +659,20 @@ describe("a move another document makes is never a button", () => {
       const next = /'kind',\s*'[a-z_]+',\s*'key',/.exec(rest);
       const machine =
         start < 0 ? "" : source.slice(start, next ? start + 1 + next.index : undefined);
+      // And a move a later migration adds to that machine by anchor, which
+      // names the machine as its upgrade item does, ('state_machine', type):
+      // 20261004990000 adds cancel_sent to the purchase order that way.
+      const extended = new RegExp(`\\('state_machine',\\s*'${type}'\\)`);
+      const additions = files
+        .slice(files.indexOf(source) + 1)
+        .filter((f) => extended.test(f))
+        .join("\n");
       return list
-        .filter((c) => !machine.includes(`'code','${c}','name'`))
+        .filter(
+          (c) =>
+            !machine.includes(`'code','${c}','name'`) &&
+            !additions.includes(`'code','${c}','name'`),
+        )
         .map((c) => `${type}.${c}`);
     });
     expect(missing).toEqual([]);

@@ -16,6 +16,7 @@ import {
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { Samples } from "../../components/erp/samples";
+import { AwaitingConfirmations } from "../../components/erp/awaiting-confirmations";
 import { InboundShipments } from "../../components/erp/inbound-shipments";
 import { LandedCosts } from "../../components/erp/landed-costs";
 import { KpiRow } from "../../components/erp/kpi";
@@ -1006,6 +1007,8 @@ function Procurement() {
       <KpiRow kpis={PURCHASING_KPIS} />
 
       <ProcessFlow flow={PURCHASE_TO_PAY} actions={PURCHASING_VERBS} />
+
+      <AwaitingConfirmations />
 
       <InboundShipments />
 

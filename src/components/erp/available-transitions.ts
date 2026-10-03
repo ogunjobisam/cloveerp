@@ -124,7 +124,9 @@ export function useAvailableTransitions(
  */
 export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
   requisition: ["order"],
-  purchase_order: ["inherit_approval", "receive_partial", "receive_all"],
+  // Cancelled once sent only by "Cancel this order", which checks nothing
+  // was received and withdraws the supplier's answer (20261004990000).
+  purchase_order: ["inherit_approval", "receive_partial", "receive_all", "cancel_sent"],
   // Accepted because an order was raised from it (20260923400000).
   quotation: ["accept"],
   // Part despatched and the rest are the delivery's (20260923800000).
@@ -162,6 +164,11 @@ export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> 
   // Finalised by "Finalise" on its period, which opens it with its boxes
   // computed, in the same press (20261001100000).
   vat_return: ["finalise"],
+  // Booked, delivered and cancelled by their doors on Despatch: Book a
+  // shipment, Record proof of delivery and Cancel a shipment
+  // (20261002500000). Drawn as buttons until 20261004990000, because the
+  // test below read only the register's last full restatement.
+  shipment: ["book", "deliver", "cancel", "cancel_booked"],
 };
 
 /**

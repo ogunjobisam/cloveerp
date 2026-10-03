@@ -20,6 +20,7 @@ import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as RespondRouteImport } from './routes/respond'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SigninRouteImport } from './routes/signin'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
@@ -130,6 +131,11 @@ const ProductRoute = ProductRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RespondRoute = RespondRouteImport.update({
+  id: '/respond',
+  path: '/respond',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -436,6 +442,7 @@ export interface FileRoutesByFullPath {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
+  '/respond': typeof RespondRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -505,6 +512,7 @@ export interface FileRoutesByTo {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
+  '/respond': typeof RespondRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -575,6 +583,7 @@ export interface FileRoutesById {
   '/platform': typeof PlatformRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
+  '/respond': typeof RespondRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -646,6 +655,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/profile'
+    | '/respond'
     | '/settings'
     | '/signin'
     | '/sitemap.xml'
@@ -715,6 +725,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/profile'
+    | '/respond'
     | '/settings'
     | '/signin'
     | '/sitemap.xml'
@@ -784,6 +795,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/product'
     | '/profile'
+    | '/respond'
     | '/settings'
     | '/signin'
     | '/sitemap.xml'
@@ -854,6 +866,7 @@ export interface RootRouteChildren {
   PlatformRoute: typeof PlatformRoute
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
+  RespondRoute: typeof RespondRoute
   SettingsRoute: typeof SettingsRoute
   SigninRoute: typeof SigninRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -989,6 +1002,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/respond': {
+      id: '/respond'
+      path: '/respond'
+      fullPath: '/respond'
+      preLoaderRoute: typeof RespondRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -1398,6 +1418,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformRoute: PlatformRoute,
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
+  RespondRoute: RespondRoute,
   SettingsRoute: SettingsRoute,
   SigninRoute: SigninRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,

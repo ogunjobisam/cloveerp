@@ -7,6 +7,7 @@ import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { OrderPrepayment } from "../../components/erp/order-prepayment";
 import { PurchaseOrderSends } from "../../components/erp/purchase-order-sends";
 import { ShipmentTracking } from "../../components/erp/shipment-tracking";
+import { SupplierConfirmation } from "../../components/erp/supplier-confirmation";
 import { SupplierReturn } from "../../components/erp/supplier-return";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
@@ -304,6 +305,15 @@ function Document() {
       {/* A shipment as its carrier's own system knows it: the label and the
           latest tracking (20261004965000). */}
       {base === "shipment" ? <ShipmentTracking documentId={documentId} /> : null}
+
+      {/* The supplier's answer to a sent order, and the buyer's moves on it
+          (20261004990000). Drawn only where the order has been sent. */}
+      {doc.document_type === "purchase_order" ? (
+        <SupplierConfirmation
+          documentId={documentId}
+          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+        />
+      ) : null}
 
       {doc.document_type === "purchase_order" ? (
         <OrderPrepayment
