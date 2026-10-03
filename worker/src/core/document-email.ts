@@ -111,19 +111,23 @@ type Fetch = (input: string, init: RequestInit) => Promise<Response>;
  */
 export async function sendDocumentEmail(
   row: ClaimedDocumentEmail,
-  cfg: Pick<WorkerConfig, "supabaseUrl" | "supabaseServiceRoleKey" | "httpTimeoutMs">,
+  cfg: Pick<WorkerConfig, "supabaseUrl" | "supabaseServiceRoleKey" | "httpTimeoutMs" | "appOrigin">,
   apiKey: string,
   deps: { send?: Send; fetch?: Fetch; load?: () => Promise<{ po: Renderer; kit: Kit }> } = {},
 ): Promise<SentDocumentEmail> {
   const send = deps.send ?? sendViaResend;
   // An email that cannot be written fails before any document is made.
-  composePurchaseOrderEmail(row);
+  composePurchaseOrderEmail(row, { appOrigin: cfg.appOrigin });
 
   const doc = await makePurchaseOrderDocument(row, deps.load);
   const problems: string[] = doc.ok ? [] : [doc.problem];
 
   const envelope = (attached: string | null): EmailRow => {
-    const message = composePurchaseOrderEmail(row, { attachment: attached });
+    // The supplier's "Confirm this order" link (20261004990000).
+    const message = composePurchaseOrderEmail(row, {
+      attachment: attached,
+      appOrigin: cfg.appOrigin,
+    });
     return {
       id: row.id,
       to_address: row.to_address,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { purchaseOrderPayload } from "../pdf/test-fixtures.ts";
 import {
+  respondUrl,
   DocumentEmailError,
   composePurchaseOrderEmail,
   namedSender,
@@ -73,5 +74,30 @@ describe("the email a supplier receives with a purchase order", () => {
     );
     expect(namedSender('Bad "Name" <x>', "a@b.example")).toBe('"Bad Name x" <a@b.example>');
     expect(namedSender(null, "a@b.example")).toBe("a@b.example");
+  });
+});
+
+describe("the supplier's answer link (20261004990000)", () => {
+  const token = "c".repeat(64);
+
+  test("with a token and the site's address, the email's button confirms the order and reply is second", () => {
+    const email = composePurchaseOrderEmail(row({ response_token: token }), {
+      appOrigin: "https://cloveerp.com/",
+    });
+    expect(email.html).toContain(`https://cloveerp.com/respond#t=${token}`);
+    expect(email.html).toContain("Confirm this order");
+    expect(email.html).toContain("Reply about this order");
+    expect(email.text).toContain("No account is needed.");
+  });
+
+  test("without a token, or with one that is not one, the email is as it was", () => {
+    const plain = composePurchaseOrderEmail(row(), { appOrigin: "https://cloveerp.com" });
+    expect(plain.html).not.toContain("/respond#t=");
+    expect(plain.html).not.toContain("Confirm this order");
+    expect(respondUrl("https://cloveerp.com", "short")).toBeNull();
+    expect(respondUrl(null, token)).toBeNull();
+    expect(respondUrl("https://cloveerp.com", token)).toBe(
+      `https://cloveerp.com/respond#t=${token}`,
+    );
   });
 });

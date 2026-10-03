@@ -31,6 +31,11 @@ export type ClaimedDocumentEmail = {
   issued_number: string;
   organisation_name: string | null;
   payload: unknown;
+  /**
+   * The token of the link the supplier answers through (20261004990000), the
+   * only copy there is; null for a send claimed before links existed.
+   */
+  response_token?: string | null;
 };
 
 export type DocumentEmail = { subject: string; text: string; html: string };
@@ -91,9 +96,23 @@ export function namedSender(name: string | null, address: string): string {
  * gives the order's figures, so a supplier is never pointed at a file that is
  * not there.
  */
+/**
+ * Where the supplier answers the order: /respond, with the token in the
+ * fragment so no server, log or link scanner receives it (20261004990000).
+ * Null without an origin or a well-formed token.
+ */
+export function respondUrl(
+  origin: string | null | undefined,
+  token: string | null | undefined,
+): string | null {
+  const base = origin?.trim().replace(/\/+$/, "") ?? "";
+  if (base === "" || !token || !/^[0-9a-f]{64}$/.test(token)) return null;
+  return `${base}/respond#t=${token}`;
+}
+
 export function composePurchaseOrderEmail(
   row: ClaimedDocumentEmail,
-  options: { attachment?: string | null } = {},
+  options: { attachment?: string | null; appOrigin?: string | null } = {},
 ): DocumentEmail {
   if (row.document_kind !== "purchase_order") {
     throw new DocumentEmailError(`${row.document_kind} is not a purchase order`);
@@ -121,6 +140,7 @@ export function composePurchaseOrderEmail(
   const lines = Array.isArray(payload["lines"]) ? payload["lines"].length : 0;
   const total = formatMinor(Number(totals["gross_minor"] ?? totals["net_minor"] ?? 0), currency, 2);
   const required = day(header?.["required_date"]);
+  const respond = respondUrl(options.appOrigin, row.response_token);
 
   const subject = reason
     ? `Purchase order ${oneLine(number, 40)}, sent again`
@@ -153,17 +173,28 @@ export function composePurchaseOrderEmail(
       attachment
         ? `The order is attached as a PDF, ${attachment}, with every line, price and the delivery address.`
         : "The order's figures are below. Reply if you need it as a PDF.",
+      respond
+        ? "Please confirm it, or tell us what you can send and when, with the button below. No account is needed."
+        : null,
       `Please quote ${number} on your delivery note and your invoice.`,
-    ],
+    ].filter((line): line is string => line !== null),
     details,
     quote: text(row.message),
-    primary: replyTo
-      ? {
-          label: "Reply about this order",
-          url: `mailto:${replyTo}?subject=${encodeURIComponent(`Order ${number}`)}`,
-        }
-      : { label: "Visit cloveerp.com", url: "https://cloveerp.com" },
-    secondary: null,
+    primary: respond
+      ? { label: "Confirm this order", url: respond }
+      : replyTo
+        ? {
+            label: "Reply about this order",
+            url: `mailto:${replyTo}?subject=${encodeURIComponent(`Order ${number}`)}`,
+          }
+        : { label: "Visit cloveerp.com", url: "https://cloveerp.com" },
+    secondary:
+      respond && replyTo
+        ? {
+            label: "Reply about this order",
+            url: `mailto:${replyTo}?subject=${encodeURIComponent(`Order ${number}`)}`,
+          }
+        : null,
     reason: `You are receiving this because ${buyerCompany} sent you a purchase order from Clove ERP, the system they buy through.`,
     mandatory: "This email is the order itself, so it is sent whatever your email preferences say.",
     footer: `Sent for ${buyerCompany} by Clove ERP.`,
