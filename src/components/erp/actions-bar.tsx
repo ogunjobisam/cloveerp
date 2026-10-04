@@ -1,9 +1,11 @@
+import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import { useT } from "../../lib/i18n";
+import { doneProps } from "../../lib/flow-actions";
 import { describeWarehouseTask } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, type Field } from "./action";
 import { Prose, TOUCH } from "./page";
@@ -65,6 +67,12 @@ export type ActionSpec = {
     picked?: { lists: Record<string, string[]>; rows: Record<string, Record<string, string>[]> },
   ) => Record<string, unknown>;
   submitLabel?: string;
+  /**
+   * What follows once the action has worked, given the door's answer and a way
+   * to open a document. Converting a quotation from the strip goes to the order
+   * it made, as the quotation's own page does (J-77).
+   */
+  onDone?: (result: unknown, openDocument: (documentId: string) => void) => void;
 };
 
 /**
@@ -158,6 +166,9 @@ export function ActionBar({
 export function ActionButtons({ actions }: { actions: ActionSpec[] }) {
   const { ui } = useT();
   const formsOnly = useContext(FormsOnly);
+  const navigate = useNavigate();
+  const openDocument = (documentId: string) =>
+    void navigate({ to: "/documents/$documentId", params: { documentId } });
   return (
     <>
       {actions.map((a) => (
@@ -180,6 +191,7 @@ export function ActionButtons({ actions }: { actions: ActionSpec[] }) {
           {...(a.emptyNote ? { emptyNote: a.emptyNote } : {})}
           invalidates={a.invalidates ?? []}
           submitLabel={a.submitLabel ?? a.label}
+          {...doneProps(a, openDocument)}
         />
       ))}
     </>
@@ -272,7 +284,7 @@ export const pickParty = (
   name = "p_party_id",
   label = "Business partner",
   required = true,
-): Field => ({
+): Extract<Field, { kind: "select" }> => ({
   kind: "select",
   name,
   label,
@@ -285,7 +297,11 @@ export const pickParty = (
   },
 });
 
-export const pickSite = (name = "p_site_id", label = "Site", required = true): Field => ({
+export const pickSite = (
+  name = "p_site_id",
+  label = "Site",
+  required = true,
+): Extract<Field, { kind: "site" }> => ({
   kind: "site",
   name,
   label,

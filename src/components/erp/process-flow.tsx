@@ -1,14 +1,14 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
-import { actionKey, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
+import { actionKey, doneProps, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
-import { article } from "../../lib/plain-words";
+import { article, transitionTone } from "../../lib/plain-words";
 import {
   DOCUMENT_READ,
   describeLine,
@@ -318,6 +318,9 @@ function StageAction({
   settled?: string | null;
 }) {
   const { ui } = useT();
+  const navigate = useNavigate();
+  const openDocument = (documentId: string) =>
+    void navigate({ to: "/documents/$documentId", params: { documentId } });
 
   // Not drawn where it cannot be completed (20260923600000): the database
   // refuses it regardless.
@@ -334,9 +337,17 @@ function StageAction({
       </ActionButton>
     );
 
+  // A verb that moves the record on is the way forward, drawn as the document
+  // page draws it: Convert to a sales order beside Decline and Expire was the
+  // plain button of the three (J-76).
+  const forward =
+    action.transition !== undefined && transitionTone({ code: action.transition }) === "forward";
+
   return (
     <ActionDialog
-      trigger={<ActionButton variant="secondary">{ui(action.label)}</ActionButton>}
+      trigger={
+        <ActionButton variant={forward ? "primary" : "secondary"}>{ui(action.label)}</ActionButton>
+      }
       title={action.title ?? action.label}
       {...(action.description ? { description: action.description } : {})}
       {...(action.permission ? { permission: action.permission } : {})}
@@ -347,9 +358,9 @@ function StageAction({
       prefill={prefill}
       {...(preselect && Object.keys(preselect).length > 0 ? { preselect } : {})}
       {...(context ? { context } : {})}
-
       invalidates={action.invalidates ?? []}
       submitLabel={action.submitLabel ?? action.label}
+      {...doneProps(action, openDocument)}
     />
   );
 }

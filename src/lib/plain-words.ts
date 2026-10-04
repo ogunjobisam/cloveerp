@@ -202,6 +202,15 @@ export function documentOutcome(result: unknown): string | null {
   return `${number} created${from ? ` from ${from}` : ""}${moved ? ` and ${moved}` : ""}.`;
 }
 
+/**
+ * The document a door made, from its answer: what the screen opens next.
+ * Converting a quotation answers with the order it raised.
+ */
+export function madeDocumentId(result: unknown): string | null {
+  const id = asRecord(result)?.["document_id"];
+  return typeof id === "string" && id !== "" ? id : null;
+}
+
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /**
@@ -613,7 +622,10 @@ export function documentIdInPath(pathname: string): string | null {
 export type TransitionTone = "forward" | "back" | "out";
 
 const WAY_OUT = /^(cancel|void|withdraw|abandon|discard|scrap|terminate|write_?off)/;
-const WAY_BACK = /^(reject|decline|refuse|return|send_back|reopen|revert|recall|dispute|hold)/;
+// Expire is how a quotation ends unanswered: beside Convert to a sales order it
+// was drawn as the dark button, as if it were the way on (J-76).
+const WAY_BACK =
+  /^(reject|decline|refuse|return|send_back|reopen|revert|recall|dispute|hold|expire)/;
 const OUT_STATES = new Set([
   "cancelled",
   "canceled",
@@ -624,7 +636,15 @@ const OUT_STATES = new Set([
   "discarded",
   "terminated",
 ]);
-const BACK_STATES = new Set(["rejected", "declined", "refused", "returned", "disputed", "on_hold"]);
+const BACK_STATES = new Set([
+  "rejected",
+  "declined",
+  "refused",
+  "returned",
+  "disputed",
+  "on_hold",
+  "expired",
+]);
 
 /**
  * Cancel sat beside Submit as a second dark primary button. A way out is
