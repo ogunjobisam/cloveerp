@@ -209,7 +209,9 @@ export const EXPLAINED_MOVE_READS_AGAIN: readonly string[] = [
  * test below holds the two lists to each other.
  */
 export const DOOR_ONLY_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
-  requisition: ["order"],
+  // Approved again when the order raised from it is cancelled, or loses a
+  // line ordered from it (20261006111000).
+  requisition: ["order", "reopen"],
   // Cancelled once sent only by "Cancel this order", which checks nothing
   // was received and withdraws the supplier's answer (20261004990000).
   purchase_order: ["inherit_approval", "receive_partial", "receive_all", "cancel_sent"],
@@ -332,6 +334,9 @@ export const HELD_BECAUSE: Readonly<Record<string, string>> = {
   CLOVEERP_DOCUMENT_SELF_APPROVAL: "You asked for this approval, so somebody else gives it.",
   CLOVEERP_PERMISSION_DENIED:
     "This step is for somebody who may approve discounts or release credit.",
+  // An order approved with its requisition and changed since (20261006110000).
+  CLOVEERP_CARRIED_ORDER_CHANGED:
+    "Changed since it was approved with its requisition. Take it back to draft and submit it for its own approval.",
 };
 
 /** Said once when a move is held on its guard rather than on a refusal. */
