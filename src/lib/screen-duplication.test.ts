@@ -45,12 +45,9 @@ function stageDoors(module: (typeof MODULES)[number]): Set<string> {
  * without the duplicate removed, fails the test — which is the point.
  */
 const STILL_REPEATING: Readonly<Record<string, string>> = {
-  "/finance":
-    "The Periods report reads erp_fiscal_periods, which the Close step lists. Another agent is working on that screen.",
   "/planning": "The Planned orders report reads erp_planned_orders, which the Release step lists.",
   "/production":
-    "Both the Works orders worklist and the Works order register report read erp_works_orders, which every step of its chain lists.",
-  "/quality": "The Quality events worklist reads erp_quality_events, which its own steps list.",
+    "The Works order register report reads erp_works_orders, which every step of its chain lists. It is the only report on that tab, and the one table of every order, closed ones included.",
 };
 
 describe("a module's panels do not restate its own steps", () => {
@@ -99,5 +96,35 @@ describe("the two screens this pass cut", () => {
     expect(despatch.worklists.map((w) => w.fn)).toEqual(["erp_shipment_exceptions"]);
     expect(stageDoors(despatch)).toContain("erp_shipments");
     expect(stageDoors(despatch)).not.toContain("erp_shipment_exceptions");
+  });
+});
+
+/**
+ * Three more, cut after those. `/finance` and `/quality` are off the list
+ * above, so the first test holds them to nothing repeated. `/production` is
+ * still on it for its register, which would let the worklist come back
+ * unnoticed; this says which of the two is the one that stays.
+ */
+describe("the screens cut after them", () => {
+  const moduleAt = (path: string) => MODULES.find((m) => m.path === path)!;
+
+  test("/finance lists its periods on the Close step, counts them on a tile, and has no table of them", () => {
+    const finance = moduleAt("/finance");
+    expect(stageDoors(finance)).toContain("erp_fiscal_periods");
+    expect(finance.reports.map((r) => r.fn)).not.toContain("erp_fiscal_periods");
+    expect(finance.kpis.map((k) => k.fn)).toContain("erp_fiscal_periods");
+  });
+
+  test("/production keeps the register and no longer restates its steps on the Dashboard", () => {
+    const making = moduleAt("/production");
+    expect(making.worklists.map((w) => w.fn)).toEqual(["erp_boms"]);
+    expect(making.reports.map((r) => r.fn)).toEqual(["erp_works_orders"]);
+    expect(stageDoors(making)).toContain("erp_works_orders");
+  });
+
+  test("/quality keeps Recalls and lists its events on the steps", () => {
+    const quality = moduleAt("/quality");
+    expect(quality.worklists.map((w) => w.fn)).toEqual(["erp_recalls"]);
+    expect(stageDoors(quality)).toContain("erp_quality_events");
   });
 });

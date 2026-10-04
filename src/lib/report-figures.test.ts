@@ -57,11 +57,12 @@ describe("receivables ageing", () => {
     for (const c of money) expect(cellText(c.cell, ageingRow)).not.toBe("—");
   });
 
-  test("the panel is the report the tab shows, and the chart labels each customer", () => {
+  // The chart that stood over it read the same door under the same title and
+  // is gone; the report is the one place the tab shows the ageing.
+  test("the panel is the report the tab shows", () => {
     const panel = FINANCE.reports.find((r) => r.fn === "erp_receivables_ageing");
     expect(panel?.columns).toBe(RECEIVABLES_AGEING_COLUMNS);
-    expect(FINANCE.chart?.label(ageingRow)).toBe("Harbour Engineering");
-    expect(FINANCE.chart?.money?.(ageingRow)).toBe("GBP");
+    expect(FINANCE.chart).toBeUndefined();
   });
 });
 

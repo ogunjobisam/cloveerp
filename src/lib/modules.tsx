@@ -1810,22 +1810,9 @@ export const FINANCE: ModuleDef = {
         ),
       ],
     },
-    {
-      label: "Preview a document's dimensions",
-      description:
-        "What each journal line would be stamped with when this document posts, and whether the combination rules let it through.",
-      permission: "finance.read",
-      fn: "erp_preview_dimensions",
-      fields: [
-        pickFrom(
-          "erp_documents",
-          "document_id",
-          ["document_number", "document_type", "state"],
-          "p_document_id",
-          "Document",
-        ),
-      ],
-    },
+    // Previewing the dimensions of a document is asked on Extra reporting tags
+    // (routes/finance/dimensions.tsx), beside the rules it previews: the same
+    // door, field and permission stood here a second time.
     {
       label: "Credit position",
       description: "Limit, exposure and what is left for one customer.",
@@ -2218,18 +2205,9 @@ export const FINANCE: ModuleDef = {
       }),
     },
   ],
-  chart: {
-    title: "Receivables ageing",
-    description: "Outstanding balance by age band.",
-    fn: "erp_receivables_ageing",
-    empty:
-      "Nothing outstanding to profile. Customer invoices land here as they are posted, banded by how overdue they are.",
-    // erp_receivables_ageing names the customer party_name. Read as party, every
-    // customer fell under one bar labelled with a dash.
-    label: (r) => String(r["party_name"] ?? "—"),
-    value: (r) => num(r["total_minor"]),
-    money: (r) => String(r["currency"] ?? "GBP"),
-  },
+  // A chart stood here under the same title as the Receivables ageing report
+  // below it on the same tab, reading the same door: one bar per customer for
+  // the total the last column of the report already gives, beside every band.
   worklists: [
     {
       title: "Supplier balances",
@@ -2526,23 +2504,9 @@ export const FINANCE: ModuleDef = {
         pill("status"),
       ],
     },
-    {
-      title: "Periods",
-      description: "The fiscal calendar and where it is open.",
-      fn: "erp_fiscal_periods",
-      empty:
-        "No fiscal calendar yet. Installing Financials creates one, and nothing can be posted to a period until it exists.",
-      emptyAction: { label: "Open Configuration", to: "/administration/configuration" },
-      rowKey: (r, i) => String(r["code"] ?? i),
-      columns: [
-        { header: "Period", cell: "code" },
-        { header: "Ledger", cell: "ledger" },
-        { header: "Year", cell: "fiscal_year", numeric: true },
-        date("Starts", "starts_on"),
-        date("Ends", "ends_on"),
-        pill("status"),
-      ],
-    },
+    // A Periods table stood here reading erp_fiscal_periods, which the Close
+    // step lists: every period and its status, the future and finished ones
+    // behind its own toggle, and every field of the chosen period beside it.
   ],
 };
 
@@ -3521,24 +3485,9 @@ export const PRODUCTION: ModuleDef = {
         pill("status"),
       ],
     },
-    {
-      title: "Works orders",
-      description: "Everything started, with progress against the ordered quantity.",
-      fn: "erp_works_orders",
-      empty: "No works orders yet. Start one from Actions.",
-      rowKey: (r, i) => String(r["works_order_id"] ?? r["order_number"] ?? i),
-      columns: [
-        { header: "Number", cell: "order_number" },
-        { header: "Product", cell: "item" },
-        { header: "Site", cell: "site" },
-        { header: "Kind", cell: "kind" },
-        { header: "Ordered", cell: "quantity", numeric: true },
-        { header: "Completed", cell: "completed", numeric: true },
-        { header: "Scrapped", cell: "scrapped", numeric: true },
-        date("Due", "planned_end"),
-        pill("status"),
-      ],
-    },
+    // A Works orders table stood here, directly under a strip whose every step
+    // lists erp_works_orders with search, paging and Show finished. The
+    // register on Reports keeps every order in one table, closed ones included.
   ],
   reports: [
     {
@@ -3991,24 +3940,10 @@ export const QUALITY: ModuleDef = {
     label: (r) => String(r["kind"] ?? "—"),
     value: () => 1,
   },
+  // A Quality events table stood first here reading erp_quality_events, the
+  // door four steps of the strip above already list, with search, paging and
+  // Show finished, and every field of the chosen event beside them.
   worklists: [
-    {
-      title: "Quality events",
-      description:
-        "Non-conformances, complaints, things that did not go to plan, and their investigations.",
-      fn: "erp_quality_events",
-      empty: "No quality events open. Report one from Actions when something needs investigating.",
-      rowKey: (r, i) => String(r["quality_event_id"] ?? i),
-      columns: [
-        { header: "Reference", cell: "reference" },
-        { header: "Kind", cell: "kind" },
-        { header: "Severity", cell: (r) => <StatusPill value={r["severity"]} /> },
-        { header: "Title", cell: "title" },
-        { header: "Product", cell: "item" },
-        date("Due", "due_at"),
-        pill("status"),
-      ],
-    },
     {
       title: "Recalls",
       description: "Scope, clock and progress. The deadline is a configured regulatory clock.",
@@ -4626,17 +4561,9 @@ export const LOGISTICS: ModuleDef = {
           : { value: String(sum(rows, "shipments")), hint: "shipments delivered, ninety days" },
     },
   ],
-  chart: {
-    title: "On time by carrier",
-    description: "Delivered on or before the planned arrival, last ninety days.",
-    fn: "erp_delivery_performance",
-    args: { p_days: 90 },
-    empty:
-      "No shipment delivered in the window. On time is measured from proof of delivery against the planned arrival, so this fills once shipments are signed for.",
-    label: (r) => String(r["carrier_name"] ?? r["carrier_code"] ?? "—"),
-    value: (r) => num(r["on_time_pct"]),
-    unit: "%",
-  },
+  // A chart of on time by carrier stood here: the Delivery performance report
+  // on the same tab asks erp_delivery_performance for the same ninety days and
+  // has an On time % column for every carrier.
   // A Shipments table stood here reading erp_shipments — the same door three of
   // the four steps above already list, and the only door this module has. It
   // showed seven columns of every shipment; the steps show the same rows with
