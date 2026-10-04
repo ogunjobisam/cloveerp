@@ -7,6 +7,7 @@ import {
   emptyReason,
   optionArgs,
   optionList,
+  pickerOptions,
   seedBlocksAdding,
   seededRows,
 } from "./dependent-options";
@@ -239,5 +240,54 @@ describe("seedBlocksAdding", () => {
 
   test("and yes when the door refused, because a hand-typed line is all that is left", () => {
     expect(seedBlocksAdding({ ...seed, error: new Error("refused") }, 0)).toBeNull();
+  });
+});
+
+/**
+ * "Start making something" offers what can be made, from erp_boms, which
+ * answers a row per bill of materials: a product with two versions, or one per
+ * site, came back twice. A picker offers each value once.
+ */
+describe("what a picker offers", () => {
+  const boms = {
+    value: "item_id",
+    label: ["item", "item_name"],
+    keep: (row: Record<string, unknown>) => row["status"] === "active",
+  };
+  const answer = [
+    { item_id: "i1", item: "FG-1", item_name: "Widget", version: 2, status: "active" },
+    { item_id: "i1", item: "FG-1", item_name: "Widget", version: 1, status: "active" },
+    { item_id: "i2", item: "FG-2", item_name: "Gadget", version: 1, status: "draft" },
+    { item_id: "i3", item: "FG-3", item_name: "Sprocket", version: 1, status: "active" },
+  ];
+
+  test("each value once, the first row for it, in the door's order", () => {
+    const options = pickerOptions(boms, answer);
+    expect(options.map((o) => o.value)).toEqual(["i1", "i3"]);
+    expect(options[0]?.label).toBe("FG-1 — Widget");
+    expect(options[0]?.record?.["version"]).toBe(2);
+  });
+
+  test("only the rows the source keeps", () => {
+    expect(pickerOptions({ value: "item_id", label: ["item"] }, answer)).toHaveLength(3);
+    expect(pickerOptions(boms, answer).some((o) => o.value === "i2")).toBe(false);
+  });
+
+  test("plain strings are their own value and label, once each", () => {
+    expect(pickerOptions({ value: "x", label: [] }, ["UTC", "UTC", "Europe/London"])).toEqual([
+      { value: "UTC", label: "UTC" },
+      { value: "Europe/London", label: "Europe/London" },
+    ]);
+  });
+
+  test("a described row reads as described, and an unlabelled one as its value", () => {
+    const describe = (row: Record<string, unknown>) => `task ${String(row["n"])}`;
+    expect(pickerOptions({ value: "n", label: [], describe }, [{ n: 1 }])[0]?.label).toBe("task 1");
+    expect(pickerOptions({ value: "n", label: ["missing"] }, [{ n: 7 }])[0]?.label).toBe("7");
+  });
+
+  test("nothing, when the door answered with no list", () => {
+    expect(pickerOptions(boms, null)).toEqual([]);
+    expect(pickerOptions(boms, { lines: [] })).toEqual([]);
   });
 });

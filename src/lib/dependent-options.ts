@@ -1,3 +1,5 @@
+import { firstPerValue } from "./combo-options";
+
 /**
  * A picker whose list follows another choice on the same form.
  *
@@ -130,6 +132,59 @@ export function optionList(
     .find((row) => row !== null && String(row[key] ?? "") === chosen);
   const inner = holder?.[path];
   return chosen !== "" && Array.isArray(inner) ? inner : [];
+}
+
+/** What a picker offers for one record: what is sent, what is shown, and the record. */
+export type PickerOption = { value: string; label: string; record?: Record<string, unknown> };
+
+/** The parts of a picker's source that decide how each record reads. */
+export type OptionShape = {
+  value: string;
+  label: string[];
+  describe?: (row: Record<string, unknown>) => string;
+  keep?: (row: Record<string, unknown>) => boolean;
+};
+
+/** The label a picker shows for one row of its source. */
+function optionLabel(row: Record<string, unknown>, keys: string[]): string {
+  return keys
+    .map((k) => row[k])
+    .filter((x) => x !== null && x !== undefined && x !== "")
+    .join(" — ");
+}
+
+/**
+ * The options a picker offers from the list its door answered with, each
+ * value once.
+ *
+ * Most reference reads return a row per option. A few — the time zone list is
+ * one — return plain strings, which are their own value and their own label. A
+ * row keeps its record, so a picker can say more than its label about what was
+ * chosen.
+ *
+ * Each value is offered once, the first row for it: "Start making something"
+ * reads erp_boms, which answers a row per bill of materials, so a product with
+ * two versions, or one per site, was offered twice — and React was handed two
+ * options with the same key. The value is what is sent, so which of its rows
+ * it came from does not matter.
+ */
+export function pickerOptions(shape: OptionShape, list: unknown): PickerOption[] {
+  const rows = Array.isArray(list) ? (list as unknown[]) : [];
+  const options = rows.flatMap((row): PickerOption[] => {
+    if (typeof row === "string" || typeof row === "number")
+      return [{ value: String(row), label: String(row) }];
+    const record = asRecord(row);
+    if (!record || (shape.keep && !shape.keep(record))) return [];
+    const value = String(record[shape.value] ?? "");
+    return [
+      {
+        value,
+        label: shape.describe?.(record) || optionLabel(record, shape.label) || value,
+        record,
+      },
+    ];
+  });
+  return firstPerValue(options);
 }
 
 /**
