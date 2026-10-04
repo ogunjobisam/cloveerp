@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
@@ -68,6 +68,15 @@ export type ActionSpec = {
 };
 
 /**
+ * Whether the bar is being drawn inside the header's panel.
+ *
+ * Set by HeaderActions and read by ActionBar. The panel is already a surface
+ * with a border and a title, so a bar inside it drawn as a card was a card
+ * inside a panel: two borders round the same buttons.
+ */
+const InPanel = createContext(false);
+
+/**
  * A bar of actions, under a heading that says what they act on.
  *
  * The heading used to be the literal word "Actions", on every one of these.
@@ -89,26 +98,35 @@ export function ActionBar({
 }: {
   actions: ActionSpec[];
   /**
-   * Omitted only where the card around this one already carries the heading —
-   * administration/tenant's "Encryption keys" is the one such place. Anywhere
-   * else, leaving it out is a card with no name, which is the fault this
-   * parameter exists to fix. It is not a fallback to "Actions".
+   * Omitted only where what is around this one already carries the heading —
+   * administration/tenant's "Encryption keys" card, and the Actions panel of
+   * a module page when it holds one group, which the panel title names.
+   * Anywhere else, leaving it out is a card with no name, which is the fault
+   * this parameter exists to fix. It is not a fallback to "Actions".
    */
   title?: string;
   note?: string;
 }) {
   const { ui } = useT();
+  const inPanel = useContext(InPanel);
   if (actions.length === 0) return null;
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
+    <section
+      className={
+        inPanel
+          ? // No card: the panel is the surface. A rule keeps two groups apart.
+            "min-w-0 py-4 first:pt-0 last:pb-0"
+          : "min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5"
+      }
+    >
       {title ? <h2 className="text-sm font-semibold">{ui(title)}</h2> : null}
       {note ? (
         <Prose className={`${title ? "mt-0.5" : ""} text-xs text-muted-foreground`}>
           {ui(note)}
         </Prose>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className={`${inPanel && !title && !note ? "" : "mt-3 "}flex flex-wrap gap-2`}>
         <ActionButtons actions={actions} />
       </div>
     </section>
@@ -190,7 +208,9 @@ export function HeaderActions({ children, label }: { children: ReactNode; label?
           className="flex w-[92vw] max-w-lg flex-col gap-4 overflow-y-auto"
         >
           <SheetTitle className="text-base">{name}</SheetTitle>
-          {children}
+          <InPanel.Provider value={true}>
+            <div className="flex min-w-0 flex-col divide-y divide-border">{children}</div>
+          </InPanel.Provider>
         </SheetContent>
       </Sheet>
     </>

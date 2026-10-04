@@ -119,8 +119,10 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
                   <ActionBar actions={behind} title="Less often" />
                 </HeaderActions>
               ) : (
+                // One group, and the panel is already titled "Actions": a
+                // second heading over the same buttons said it twice.
                 <HeaderActions>
-                  <ActionBar actions={behind} title="What you can do here" />
+                  <ActionBar actions={behind} />
                 </HeaderActions>
               )
             ) : null}

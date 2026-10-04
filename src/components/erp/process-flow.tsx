@@ -154,7 +154,6 @@ export type FlowSpec = {
    */
   code: string;
   title: string;
-  note?: string;
   stages: Stage[];
 };
 
@@ -391,6 +390,12 @@ function StageList({
   const pages = Math.max(1, Math.ceil(matches.length / PER_PAGE));
   const current = Math.min(page, pages - 1);
   const shown = matches.slice(current * PER_PAGE, current * PER_PAGE + PER_PAGE);
+  // A search box over three records, and "Page 1 of 1" under them, are controls
+  // with nothing to do. Search is drawn once the step holds more than a page,
+  // or the read stopped at its cap, or a term is already typed (so it can be
+  // cleared); the pager once there is a second page to go to.
+  const searchable = rows.length > PER_PAGE || capped || search !== "";
+  const hasFinishedToggle = Boolean(stage.states && stage.states.length > 0);
 
   if (!source)
     return (
@@ -425,42 +430,48 @@ function StageList({
 
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-3 border-b border-border px-4 py-2 sm:px-5">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
-          aria-label={`Search ${source.nounPlural}`}
-          placeholder={`Search ${source.nounPlural}…`}
-          className="w-full min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
-        />
-        {/* History, on request. The step lists what is waiting there; the
-            finished ones are a press away rather than in the way. */}
-        {stage.states && stage.states.length > 0 ? (
-          <label
-            htmlFor={finishedId}
-            className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
-          >
-            {/* Named twice over — by the label it sits in and by the id the
-                label points at — because a reader that walked the tree reported
-                this box as "on", its value, and a checkbox named after its
-                value is a checkbox nobody can find. */}
+      {searchable || hasFinishedToggle ? (
+        // The tickbox stays at the right-hand end whether or not the search box
+        // is beside it, so ticking it cannot move it from under the pointer.
+        <div className="flex items-center justify-end gap-3 border-b border-border px-4 py-2 sm:px-5">
+          {searchable ? (
             <input
-              id={finishedId}
-              type="checkbox"
-              checked={showFinished}
+              type="search"
+              value={search}
               onChange={(e) => {
-                onShowFinished(e.target.checked);
+                setSearch(e.target.value);
                 setPage(0);
               }}
+              aria-label={`Search ${source.nounPlural}`}
+              placeholder={`Search ${source.nounPlural}…`}
+              className="w-full min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
             />
-            {stage.showFinishedLabel ? ui(stage.showFinishedLabel) : ui("Show finished")}
-          </label>
-        ) : null}
-      </div>
+          ) : null}
+          {/* History, on request. The step lists what is waiting there; the
+              finished ones are a press away rather than in the way. */}
+          {hasFinishedToggle ? (
+            <label
+              htmlFor={finishedId}
+              className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              {/* Named twice over — by the label it sits in and by the id the
+                  label points at — because a reader that walked the tree reported
+                  this box as "on", its value, and a checkbox named after its
+                  value is a checkbox nobody can find. */}
+              <input
+                id={finishedId}
+                type="checkbox"
+                checked={showFinished}
+                onChange={(e) => {
+                  onShowFinished(e.target.checked);
+                  setPage(0);
+                }}
+              />
+              {stage.showFinishedLabel ? ui(stage.showFinishedLabel) : ui("Show finished")}
+            </label>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="min-h-[12rem]">
         {isPending ? (
@@ -520,29 +531,31 @@ function StageList({
           {matches.length} {matches.length === 1 ? source.noun : source.nounPlural}
           {capped ? ` — the first ${CAP}. Search to reach the rest.` : ""}
         </span>
-        <span className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setPage(Math.max(0, current - 1))}
-            disabled={current === 0}
-            aria-label="Previous page"
-            className="rounded-md border border-input px-2 py-0.5 disabled:opacity-40"
-          >
-            ←
-          </button>
-          <span className="tabular-nums">
-            Page {current + 1} of {pages}
+        {pages > 1 ? (
+          <span className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(0, current - 1))}
+              disabled={current === 0}
+              aria-label="Previous page"
+              className="rounded-md border border-input px-2 py-0.5 disabled:opacity-40"
+            >
+              ←
+            </button>
+            <span className="tabular-nums">
+              Page {current + 1} of {pages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(Math.min(pages - 1, current + 1))}
+              disabled={current >= pages - 1}
+              aria-label="Next page"
+              className="rounded-md border border-input px-2 py-0.5 disabled:opacity-40"
+            >
+              →
+            </button>
           </span>
-          <button
-            type="button"
-            onClick={() => setPage(Math.min(pages - 1, current + 1))}
-            disabled={current >= pages - 1}
-            aria-label="Next page"
-            className="rounded-md border border-input px-2 py-0.5 disabled:opacity-40"
-          >
-            →
-          </button>
-        </span>
+        ) : null}
       </div>
     </div>
   );
@@ -885,9 +898,9 @@ function StageWorkbench({
  * One step of the chain, drawn as an arrow pointing at the next one.
  *
  * The step used to be a card carrying its own hint, which made the strip three
- * lines tall and the chain hard to read as a chain. The hint now sits under the
- * strip for the step you are on — the only one it describes — and the arrows
- * say the rest.
+ * lines tall and the chain hard to read as a chain. The hint is said once, for
+ * the step you are on, as the subtitle of the record pane below; each step also
+ * keeps it as its tooltip and its description for a screen reader.
  */
 function StageTab({
   stage,
@@ -1045,7 +1058,6 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
     <section className="min-w-0 rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
       <div className="p-4 sm:p-5">
         <h2 className="text-sm font-semibold">{ui(flow.title)}</h2>
-        {flow.note ? <p className="mt-0.5 text-xs text-muted-foreground">{ui(flow.note)}</p> : null}
         {/* Rows rather than an edge. Purchasing's eight steps ran off a
             1512px screen with the last one — Payment — out of sight and
             nothing to say it was there. Every step is now always on screen;
@@ -1068,7 +1080,6 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
             ))}
           </ol>
         </div>
-        {stage ? <p className="mt-2 text-xs text-muted-foreground">{ui(stage.hint)}</p> : null}
       </div>
 
       {stage ? (
