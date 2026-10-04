@@ -537,6 +537,7 @@ function DeviceClient() {
             devices={(devices.data ?? []).filter((d) => d.status === "active")}
             loading={devices.isPending}
             error={devices.error}
+            canRegister={hasPermission(session, "administration.configure")}
             onPick={(code) => {
               setDeviceCode(code);
               setStage({ kind: "session" });
@@ -676,11 +677,15 @@ function DevicePick({
   devices,
   loading,
   error,
+  canRegister,
   onPick,
 }: {
   devices: Device[];
   loading: boolean;
   error: unknown;
+  /** Whether the reader may register one (administration.configure, which
+   *  erp.register_device authorises), so the empty list says where (J-47). */
+  canRegister: boolean;
   onPick: (code: string) => void;
 }) {
   const { ui } = useT();
@@ -696,6 +701,11 @@ function DevicePick({
         <p className="text-base">
           {ui("No active device is registered. Ask an administrator to register one.")}
         </p>
+      ) : null}
+      {!loading && devices.length === 0 && canRegister ? (
+        <Link to="/operations/devices" className={`${SMALL} inline-flex items-center self-start`}>
+          {ui("Register a device")}
+        </Link>
       ) : null}
       <div className="mt-2 flex flex-col gap-3">
         {devices.map((d) => (
