@@ -74,8 +74,13 @@ export function resolvedPrice(
   noteKey: string | undefined,
   documentCurrency: string | undefined,
 ): ResolvedPrice {
-  if (!answer || typeof answer !== "object") return { minor: null, note: null };
-  const held = answer as Record<string, unknown>;
+  // erp_resolve_price answers a list of one price, or an empty one, where
+  // erp_resolve_purchase_price answers the price itself. Read as an object,
+  // the list held no amount, so a quotation's lines said "No agreed price"
+  // beside a price the record then took (found on live, 4 October 2026).
+  const one: unknown = Array.isArray(answer) ? answer[0] : answer;
+  if (!one || typeof one !== "object") return { minor: null, note: null };
+  const held = one as Record<string, unknown>;
 
   const answered = held["currency"];
   if (

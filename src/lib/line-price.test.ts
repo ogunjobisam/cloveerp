@@ -110,6 +110,26 @@ describe("what the form may show of the answer", () => {
     expect(held.note).toContain("GBP");
   });
 
+  test("a sales price arrives as a list of one, and an empty list is no price", () => {
+    // erp_resolve_price answers [{…}] or []; the purchase door answers {…}.
+    expect(
+      resolvedPrice(
+        [
+          {
+            amount_minor: 4950,
+            currency: "GBP",
+            price_kind: "sales_list",
+            source: "the sales list",
+          },
+        ],
+        "amount_minor",
+        "source",
+        "GBP",
+      ),
+    ).toEqual({ minor: 4950, note: "the sales list" });
+    expect(resolvedPrice([], "amount_minor", "source", "GBP")).toEqual({ minor: null, note: null });
+  });
+
   test("an answer that has not arrived yet is not a refusal", () => {
     expect(resolvedPrice(undefined, "amount_minor", "source", "GBP")).toEqual({
       minor: null,
