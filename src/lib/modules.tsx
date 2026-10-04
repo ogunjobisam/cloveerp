@@ -52,9 +52,34 @@ const QUALITY_EVENT_LIST: StageList = {
 };
 
 /**
+ * Inspections, listed the same way at the two steps that act on one.
+ *
+ * Inspect and Decide listed quality events, though the doors they open take an
+ * inspection: the event chosen was never carried in, and the same events sat
+ * at every step. An inspection is of a batch, so it reads as the product and
+ * the batch, and the works order where the floor raised it.
+ */
+const INSPECTION_LIST: StageList = {
+  fn: "erp_inspections",
+  args: { p_limit: 200 },
+  id: "inspection_id",
+  title: ["item", "batch"],
+  subtitle: ["works_order"],
+  status: "status",
+  noun: "inspection",
+  nounPlural: "inspections",
+};
+
+/**
+ * An inspection's states before it is decided. erp.disposition_inspection
+ * refuses one that is complete or cancelled.
+ */
+const INSPECTION_OPEN = ["planned", "sampling", "testing"];
+
+/**
  * An event's states before it is closed. Nothing but closing moves an event
- * between them today, so every quality step lists the same open events rather
- * than guessing which of them has been inspected.
+ * between them today, so the Event and Close steps list the same open events
+ * rather than guessing which of them has been answered.
  */
 const QUALITY_EVENT_OPEN = ["open", "investigating", "action", "verification"];
 
@@ -711,7 +736,7 @@ export const RAISE_STOCK_ADJUSTMENT: ActionSpec = {
   fn: "erp_raise_stock_adjustment",
   fields: [
     {
-      ...pickSite("p_site_id", "Which shelf"),
+      ...pickSite("p_site_id", "Site"),
       hint: "The site whose stock the count was taken at.",
     },
     // A combo, not a select: the register is offered, and a reason of the
@@ -725,10 +750,13 @@ export const RAISE_STOCK_ADJUSTMENT: ActionSpec = {
       // COUNT_VARIANCE is the count's own (20260928500000).
       placeholder: "DAMAGE_STORAGE",
       hint: "Pick a reason from the register, or type one of your own. Some reasons are set up to need a note beside them.",
+      // Stock adjustment reasons only: the register also holds the reasons
+      // for returns, which say nothing about a count.
       options: {
         fn: "erp_reason_codes",
+        args: { p_category: "STOCK_ADJUSTMENT" },
         value: "code",
-        label: ["category", "code", "name"],
+        label: ["code", "name"],
       },
     },
     {
@@ -751,6 +779,20 @@ export const RAISE_STOCK_ADJUSTMENT: ActionSpec = {
           label: "Product",
           kind: "select",
           options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+        },
+        // Where on the site the stock was counted. The door keeps it on the
+        // line (erp.raise_stock_adjustment reads location_id); left empty, the
+        // line is the site's as before.
+        {
+          name: "location_id",
+          label: "Location",
+          kind: "select",
+          options: {
+            fn: "erp_locations",
+            argsFrom: { p_site_id: "p_site_id" },
+            value: "location_id",
+            label: ["code", "name"],
+          },
         },
         { name: "quantity", label: "Change", kind: "number", placeholder: "-2" },
       ],
@@ -3178,7 +3220,22 @@ export const PRODUCTION: ModuleDef = {
       permission: "production.order",
       fn: "erp_raise_works_order",
       fields: [
-        pickItem(),
+        // Only what can be made: erp.raise_works_order refuses a product with
+        // no active bill of materials (CLOVEERP_NO_BILL_OF_MATERIALS), so
+        // offering every product was offering that refusal. erp_boms lists a
+        // row per version and site; the picker shows each product once.
+        {
+          kind: "select",
+          name: "p_item_id",
+          label: "Product",
+          required: true,
+          options: {
+            fn: "erp_boms",
+            value: "item_id",
+            label: ["item", "item_name"],
+            keep: (row) => row["status"] === "active",
+          },
+        },
         pickSite(),
         { kind: "number", name: "p_quantity", label: "Quantity", required: true },
         {
@@ -3549,16 +3606,18 @@ export const QUALITY: ModuleDef = {
         fedBy:
           "Inspections appear here once a receipt needs inspecting, or when one is asked for from the actions.",
 
-        list: QUALITY_EVENT_LIST,
-        states: QUALITY_EVENT_OPEN,
-        createFn: "erp_record_inspection_result",
+        list: INSPECTION_LIST,
+        states: INSPECTION_OPEN,
+        recordArg: "p_inspection_id",
+        actionFn: "erp_record_inspection_result",
       },
       {
         label: "Decide",
         hint: "Release, reject, rework or scrap. This is the decision the audit reads.",
-        list: QUALITY_EVENT_LIST,
-        states: QUALITY_EVENT_OPEN,
-        createFn: "erp_disposition_inspection",
+        list: INSPECTION_LIST,
+        states: INSPECTION_OPEN,
+        recordArg: "p_inspection_id",
+        actionFn: "erp_disposition_inspection",
       },
       {
         label: "Close",
