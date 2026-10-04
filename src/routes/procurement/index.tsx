@@ -407,6 +407,8 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   RECEIVE_AN_ORDER,
   {
     label: "Receive against an order",
+    description:
+      "Adds a line to a goods receipt still in draft, against a line of an order sent to the same supplier. Each line shows what is left to receive on it.",
     permission: "procurement.receive",
     fn: "erp_receive_against",
     fields: [
@@ -419,13 +421,25 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         // A goods receipt still being built: not another kind of document.
         { p_type_code: "goods_receipt", p_limit: 100, p_actionable: true },
       ),
-      // Open lines on orders sent to the supplier: the database refuses a
+      // The open lines of orders sent to the chosen receipt's own supplier,
+      // each with what is left to receive (J-10). This listed every
+      // supplier's open lines by the quantity ordered. The database refuses a
       // receipt against a draft, an order waiting on approval, or one approved
       // and not sent, and against one already received in full.
-      pickLine("purchase_order", "p_order_line_id", "Order line", {
-        openOnly: true,
-        states: ["sent", "partially_received"],
-      }),
+      {
+        kind: "select",
+        name: "p_order_line_id",
+        label: "Order line",
+        required: true,
+        options: {
+          fn: "erp_receipt_order_lines",
+          argsFrom: { p_receipt_id: "p_receipt_id" },
+          value: "line_id",
+          label: ["document_number", "item", "open_quantity"],
+          empty:
+            "Nothing is left to receive from this receipt's supplier: every line of their sent orders has been received, or is on a goods receipt already.",
+        },
+      },
       { kind: "number", name: "p_quantity", label: "Quantity", required: true },
       pickBatch(),
     ],

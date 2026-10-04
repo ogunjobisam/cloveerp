@@ -335,6 +335,15 @@ export type Database = {
         Returns: string
       }
       erp_capabilities: { Args: never; Returns: Json }
+      erp_change_document_line: {
+        Args: {
+          p_description?: string
+          p_line_id: string
+          p_quantity: number
+          p_unit_price_minor?: number
+        }
+        Returns: Json
+      }
       erp_change_requests: { Args: { p_object_type?: string }; Returns: Json }
       erp_change_set_items: { Args: { p_change_set_id: string }; Returns: Json }
       erp_change_sets: { Args: never; Returns: Json }
@@ -2024,6 +2033,7 @@ export type Database = {
       erp_recall_evidence: { Args: { p_recall_id: string }; Returns: Json }
       erp_recall_readiness: { Args: { p_recall_id?: string }; Returns: Json }
       erp_recalls: { Args: never; Returns: Json }
+      erp_receipt_order_lines: { Args: { p_receipt_id: string }; Returns: Json }
       erp_receivable_lines: { Args: { p_order_id: string }; Returns: Json }
       erp_receivables_ageing: { Args: { p_as_at?: string }; Returns: Json }
       erp_receive_against: {
@@ -2190,6 +2200,7 @@ export type Database = {
           | "closed"
           | "cancelled"
       }
+      erp_remove_document_line: { Args: { p_line_id: string }; Returns: Json }
       erp_remove_principal: {
         Args: { p_app_user_id: string; p_reason?: string }
         Returns: Json
