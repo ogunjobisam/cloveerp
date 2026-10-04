@@ -59,6 +59,9 @@ type Backlog = {
   suggested_action: string;
 };
 
+/** The states erp.cancel_command takes; any other it refuses as terminal or in flight. */
+const CANCELLABLE = ["drafted", "pending_approval", "approved", "queued", "failed"];
+
 function Integrations() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -108,12 +111,20 @@ function Integrations() {
                   fn: "erp_reconcile_ambiguous_command",
                   fields: [
                     {
-                      kind: "text",
+                      // Chosen, not typed: the form said to copy the id from the
+                      // backlog, which shows none. The backlog's `reference` is
+                      // the command's id, and only an ambiguous command is
+                      // reconciled, so those are the ones offered.
+                      kind: "select",
                       name: "p_command_id",
                       label: "Command id",
                       required: true,
-                      placeholder: "0f9c1a2e-…",
-                      hint: "Copy the id from the message shown in the backlog below.",
+                      options: {
+                        fn: "erp_integration_backlog",
+                        value: "reference",
+                        label: ["system_code", "operation", "status", "reference"],
+                        keep: (row) => row["kind"] === "command" && row["status"] === "ambiguous",
+                      },
                     },
                     {
                       kind: "choice",
@@ -142,12 +153,23 @@ function Integrations() {
                   fn: "erp_cancel_command",
                   fields: [
                     {
-                      kind: "text",
+                      // A combo, not a select: the form said to copy the id from
+                      // the backlog, which shows none, so the commands it lists
+                      // that the door will still cancel are offered. One still
+                      // drafted, approved or queued is never in the backlog, so
+                      // an id may still be typed.
+                      kind: "combo",
                       name: "p_command_id",
                       label: "Command id",
                       required: true,
                       placeholder: "0f9c1a2e-…",
-                      hint: "Copy the id from the message shown in the backlog below.",
+                      options: {
+                        fn: "erp_integration_backlog",
+                        value: "reference",
+                        label: ["system_code", "operation", "status"],
+                        keep: (row) =>
+                          row["kind"] === "command" && CANCELLABLE.includes(String(row["status"])),
+                      },
                     },
                     {
                       kind: "text",

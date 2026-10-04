@@ -2253,3 +2253,96 @@ test.describe("a header says one thing", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a command is chosen from the backlog", () => {
+  // Reconcile and Cancel asked for a command id typed out of a backlog that
+  // shows none. The backlog's own read carries it as `reference`, so Reconcile
+  // offers the ambiguous commands, which are the only ones its door takes, and
+  // Cancel offers the ones its door still cancels. Cancel also takes an id
+  // typed, because a command still queued is never in the backlog.
+  const AMBIGUOUS = "00000000-0000-4000-8000-00000000c001";
+  const WAITING = "00000000-0000-4000-8000-00000000c002";
+  const DEAD = "00000000-0000-4000-8000-00000000c003";
+  const QUEUED = "00000000-0000-4000-8000-00000000c004";
+
+  // A row as erp.integration_backlog answers it.
+  const row = (kind: string, reference: string, status: string, operation: string) => ({
+    kind,
+    reference,
+    system_code: "WMS",
+    operation,
+    status,
+    waiting_for: "01:00:00",
+    attempts: 1,
+    last_error: null,
+    suggested_action: "an approver must decide",
+  });
+
+  test.beforeEach(async ({ page, backend }) => {
+    backend.rpc("erp_integration_backlog", [
+      row("command", AMBIGUOUS, "ambiguous", "despatch.confirm"),
+      row("command", WAITING, "pending_approval", "stock.adjust"),
+      row("command", DEAD, "dead", "despatch.confirm"),
+      row("message", "4711", "dead", "order.created"),
+    ]);
+    await page.goto("/operations/integrations");
+    await page.getByRole("button", { name: "Actions" }).click({ timeout: 20_000 });
+  });
+
+  test("Reconcile offers the ambiguous commands and sends the one chosen", async ({
+    page,
+    backend,
+  }) => {
+    const panel = page.getByRole("dialog", { name: "Actions" });
+    await panel
+      .getByRole("button", { name: "Reconcile an ambiguous command", exact: true })
+      .click();
+    const form = page.getByRole("dialog", { name: "Reconcile an ambiguous command" });
+    const command = form.getByLabel("Command id", { exact: true });
+
+    // Choose…, and the one ambiguous command: not the one waiting for an
+    // approver, not the dead one, and not the message.
+    await expect(command.locator("option")).toHaveCount(2);
+    await expect(command.locator("option").nth(1)).toHaveText(
+      `WMS — despatch.confirm — ambiguous — ${AMBIGUOUS}`,
+    );
+    await command.selectOption(AMBIGUOUS);
+    await form.getByLabel("What happened").selectOption("succeeded");
+    await form.getByLabel("Evidence").fill("Their portal shows the despatch as confirmed");
+    const sent = page.waitForRequest(/rpc\/erp_reconcile_ambiguous_command$/);
+    await form.getByRole("button", { name: "Reconcile an ambiguous command" }).click();
+    expect((await sent).postDataJSON()).toEqual({
+      p_command_id: AMBIGUOUS,
+      p_outcome: "succeeded",
+      p_evidence: "Their portal shows the despatch as confirmed",
+    });
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("Cancel offers the commands its door still takes, and an id may still be typed", async ({
+    page,
+    backend,
+  }) => {
+    const panel = page.getByRole("dialog", { name: "Actions" });
+    await panel.getByRole("button", { name: "Cancel a queued command", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Cancel a queued command" });
+    const command = form.getByLabel("Command id", { exact: true });
+
+    // The one waiting for an approver can be cancelled; an ambiguous or dead
+    // command cannot, and a message is not a command.
+    const offered = form.locator("datalist option");
+    await expect(offered).toHaveCount(1);
+    await expect(offered).toHaveAttribute("value", WAITING);
+
+    // A queued command is in no list on this screen, so its id is typed.
+    await command.fill(QUEUED);
+    await form.getByLabel("Reason").fill("Confirmed by phone that nothing was despatched");
+    const sent = page.waitForRequest(/rpc\/erp_cancel_command$/);
+    await form.getByRole("button", { name: "Cancel a queued command" }).click();
+    expect((await sent).postDataJSON()).toEqual({
+      p_command_id: QUEUED,
+      p_reason: "Confirmed by phone that nothing was despatched",
+    });
+    expect(backend.crashes).toEqual([]);
+  });
+});

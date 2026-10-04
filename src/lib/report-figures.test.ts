@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { isValidElement } from "react";
 
 import type { Column } from "../components/erp/auto";
-import { FINANCE, RECEIVABLES_AGEING_COLUMNS, type Row } from "./modules";
+import { FINANCE, LOGISTICS, RECEIVABLES_AGEING_COLUMNS, type Row } from "./modules";
 import { chartBars, statementCurrency } from "./report-figures";
 
 /**
@@ -88,6 +88,28 @@ describe("the trial balance", () => {
     expect(shown["Debit"]).toContain("£1,959.14");
     expect(shown["Balance"]).toContain("£1,959.14");
     expect(panel?.rowKey(row, 0)).toBe("ACME-GL-1100-GBP");
+  });
+});
+
+describe("delivery performance", () => {
+  test("shows a carrier's freight as money, not as a count of pence", () => {
+    const panel = LOGISTICS.reports.find((r) => r.fn === "erp_delivery_performance");
+    // A row as erp.delivery_performance answers it: no currency among them.
+    const row: Row = {
+      carrier_code: "DPD",
+      carrier_name: "DPD Local",
+      shipments: 12,
+      on_time: 11,
+      on_time_pct: 91.67,
+      avg_days_late: 0.08,
+      freight_minor: 14250,
+    };
+    const shown = Object.fromEntries(
+      (panel?.columns ?? []).map((c) => [c.header, cellText(c.cell, row)]),
+    );
+    expect(shown["Carrier"]).toBe("DPD Local");
+    expect(shown["Shipments"]).toBe("12");
+    expect(shown["Freight"]).toContain("£142.50");
   });
 });
 
