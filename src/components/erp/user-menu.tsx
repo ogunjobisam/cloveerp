@@ -37,8 +37,13 @@ function initials(name: string): string {
  * These three questions were answered in three different places: a display
  * name in the header's right margin, a tenant select beside the scope
  * selects, and a sign-out link that looked like body text. One menu is the
- * conventional answer in every ERP shell worth copying, and it also gives
- * tenant settings a home that is not the navigation rail.
+ * conventional answer in every ERP shell worth copying.
+ *
+ * It is also where the screens every account may open live — the profile, the
+ * notifications, the help and the accessibility statement — so none of them
+ * takes a place in a rail that is otherwise only what this account works on.
+ * A settings screen is not repeated here: the Settings rail lists each one
+ * under its own name, and this menu carries the one way in.
  */
 export function UserMenu({
   session,
@@ -140,6 +145,11 @@ export function UserMenu({
             {t("nav.help", "Help and guides")}
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/administration/accessibility" onClick={onNavigate}>
+            {t("nav.administration_accessibility", "Accessibility")}
+          </Link>
+        </DropdownMenuItem>
 
         {switchable ? (
           <>
@@ -173,16 +183,6 @@ export function UserMenu({
             <DropdownMenuItem asChild>
               <Link to="/settings" onClick={onNavigate}>
                 {t("nav.settings", "Settings")}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/administration/tenant" onClick={onNavigate}>
-                {t("nav.tenant_settings", "Organisation settings")}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/administration/terminology" onClick={onNavigate}>
-                {t("nav.terminology", "Terminology & branding")}
               </Link>
             </DropdownMenuItem>
           </>

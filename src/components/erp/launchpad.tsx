@@ -1,19 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Settings2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
-import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { usePlatformOrganisation } from "../../lib/platform-organisation";
 import { GROUP_BLURBS, iconFor } from "../../lib/module-icons";
-import {
-  GROUP_LABELS,
-  SETTINGS_GROUPS,
-  allTiles,
-  type TileDef,
-  type TileGroup,
-} from "../../lib/modules";
+import { GROUP_LABELS, SETTINGS_GROUPS, type TileDef, type TileGroup } from "../../lib/modules";
 import { TOUCH } from "./page";
-import { useErpSession } from "./session-context";
+import { useVisibleTiles } from "./visible-tiles";
 
 /**
  * The two launchpads.
@@ -22,10 +14,12 @@ import { useErpSession } from "./session-context";
  * and the records it runs on. Settings lists the sections that shape the
  * organisation rather than run it. Neither shows the other's tiles: a person
  * opening Work to receive a delivery is not offered the audit log on the way,
- * and the one link between the areas is a single, clearly labelled card.
+ * and the way between the areas is the shell's own switch, which is on every
+ * screen rather than only on this one.
  *
  * A tile is offered only when the permission behind it is held; the database
- * is what enforces that, the tile is only a courtesy.
+ * is what enforces that, the tile is only a courtesy. The tiles are the ones
+ * the rail lists, from the same hook, less those kept off the rail.
  */
 
 const JOURNEY: TileGroup[] = ["plan", "source", "make", "move", "sell", "settle"];
@@ -87,13 +81,9 @@ function Section({
 }
 
 function useTiles() {
-  const { session } = useErpSession();
-  const platform = usePlatformOrganisation(Boolean(session?.tenant_id));
-  const tiles = allTiles().filter(
-    (x) => (!x.permission || hasPermission(session, x.permission)) && (!x.platformOnly || platform),
-  );
-  const inGroup = (g: TileGroup) => tiles.filter((x) => x.group === g);
-  return { tiles, inGroup };
+  const tiles = useVisibleTiles();
+  const inGroup = (g: TileGroup) => tiles.filter((x) => x.group === g && !x.offRail);
+  return { inGroup };
 }
 
 /** The Work launchpad: the flow, then the records. */
@@ -103,9 +93,8 @@ export function Launchpad() {
 
   const journey = JOURNEY.filter((g) => inGroup(g).length > 0);
   const records = inGroup("records");
-  const settingsCount = SETTINGS_GROUPS.reduce((n, g) => n + inGroup(g).length, 0);
 
-  if (journey.length === 0 && records.length === 0 && settingsCount === 0) return null;
+  if (journey.length === 0 && records.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -150,26 +139,6 @@ export function Launchpad() {
       ) : null}
 
       {records.length > 0 ? <Section group="records" tiles={records} /> : null}
-
-      {settingsCount > 0 ? (
-        <Link
-          to="/settings"
-          className={`${TOUCH} group flex items-center gap-3 rounded-2xl border border-dashed border-border bg-muted/30 p-4 transition-colors hover:border-accent/50 sm:p-5`}
-        >
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
-            <Settings2 className="size-4.5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold">{ui("Settings")}</span>
-            <span className="block text-xs text-muted-foreground">
-              {ui(
-                "People, system setup, products and places, finance setup, connections and compliance — in their own area, out of the way of the work.",
-              )}
-            </span>
-          </span>
-          <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-        </Link>
-      ) : null}
     </div>
   );
 }

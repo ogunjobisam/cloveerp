@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 
-import { callErp, hasPermission } from "../../lib/erp";
+import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { GROUP_LABELS, allTiles, type TileDef } from "../../lib/modules";
+import { GROUP_LABELS } from "../../lib/modules";
 import { GLOSSARY_DESTINATION } from "../../lib/modules";
-import { useErpSession } from "./session-context";
 import { TOUCH } from "./page";
+import { useVisibleTiles } from "./visible-tiles";
 
 /**
  * Go anywhere by typing what you call it.
@@ -28,8 +28,10 @@ import { TOUCH } from "./page";
  * corrected the word would teach nothing; one that says "Inventory is called
  * Stock here" teaches it once.
  *
- * Permission-filtered like the rail: a screen the account cannot open is not
- * offered, because an entry that leads to a refusal is worse than no entry.
+ * Filtered like the rail, by the same hook: a screen the account cannot open
+ * is not offered, because an entry that leads to a refusal is worse than no
+ * entry. It is also where the screens kept off the rail are still found —
+ * search is over everything the account may open, not over one area of it.
  */
 
 type GlossaryTerm = {
@@ -91,7 +93,6 @@ function setPaletteOpen(next: boolean | ((previous: boolean) => boolean)) {
 }
 
 export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field" }) {
-  const { session } = useErpSession();
   const { t, ui } = useT();
   const navigate = useNavigate();
   const open = useSyncExternalStore(subscribePalette, readPalette, readPaletteOnServer);
@@ -144,13 +145,7 @@ export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field
     return undefined;
   }, [open]);
 
-  const tiles = useMemo(
-    () =>
-      allTiles().filter(
-        (tile: TileDef) => !tile.permission || hasPermission(session, tile.permission),
-      ),
-    [session],
-  );
+  const tiles = useVisibleTiles();
 
   const hits = useMemo<Hit[]>(() => {
     const query = q.trim().toLowerCase();
@@ -231,7 +226,7 @@ export function CommandPalette({ variant = "icon" }: { variant?: "icon" | "field
       {open && variant === "icon" && typeof document !== "undefined"
         ? createPortal(
             /*
-             * Into the body, for the same reason the main menu is.
+             * Into the body rather than where it is written.
              *
              * This button lives in the shell's header, and that header carries
              * backdrop-blur. A backdrop filter makes an element a containing

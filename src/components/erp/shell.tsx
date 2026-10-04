@@ -7,9 +7,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import type { ErpSession } from "../../lib/erp";
 import { ScopeUsageContext } from "./session-context";
-import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { usePlatformOrganisation } from "../../lib/platform-organisation";
 import {
   AREA_HOME,
   GROUP_LABELS,
@@ -18,13 +16,13 @@ import {
   allTiles,
   areaOf,
   type Area,
+  type TileDef,
   type TileGroup,
 } from "../../lib/modules";
 import { iconFor } from "../../lib/module-icons";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { ApprovalsWaitingBadge } from "./approvals-waiting";
 import { CommandPalette } from "./command-palette";
-import { MainMenu } from "./menu";
 import { ServiceBanner } from "./service-banner";
 import { ContextHelp, ContextHelpSheet } from "./context-help";
 import { BrandMark } from "./logo";
@@ -34,6 +32,7 @@ import { WalkthroughButton } from "./walkthrough";
 import { TOUCH } from "./page";
 import { HelpContext, PageHeaderExtras, type ScreenDetail } from "./page-extras";
 import { UserMenu } from "./user-menu";
+import { useVisibleTiles } from "./visible-tiles";
 
 /**
  * The application shell.
@@ -64,43 +63,47 @@ type NavItem = {
   /** Resource key; `label` is the fallback used until the key resolves. */
   labelKey: string;
   label: string;
-  /** Absent means always visible; a list is any of them. */
-  permission?: string | readonly string[];
-  /** Offered only inside the platform's own organisation. */
-  platformOnly?: boolean;
   group: "home" | TileGroup;
   area: Area;
 };
 
-/**
- * The rail, derived from the module registry: each area's home, then the same
- * tiles the launchpads render, in the same groups, so the navigations cannot
- * disagree about what exists or where it lives.
- */
-const NAV: NavItem[] = [
+/** Each area's home. Neither needs a permission: the rail shows the one for the area you are in. */
+const HOMES: NavItem[] = [
   { to: "/", labelKey: "nav.overview", label: "Home", group: "home", area: "work" },
   { to: "/settings", labelKey: "nav.settings", label: "Settings", group: "home", area: "settings" },
-  ...allTiles().map((tile) => ({
+];
+
+/**
+ * A rail entry, derived from the module registry: the same tiles the
+ * launchpads render, in the same groups, filtered by the same hook, so the
+ * navigations cannot disagree about what exists or where it lives.
+ */
+function railItem(tile: TileDef): NavItem {
+  return {
     to: tile.path,
     labelKey: tile.titleKey,
     label: tile.title,
-    ...(tile.permission ? { permission: tile.permission } : {}),
-    ...(tile.platformOnly ? { platformOnly: true } : {}),
     group: tile.group,
     area: areaOf(tile.group),
-  })),
-];
+  };
+}
 
 const AREA_GROUPS: Record<Area, NavItem["group"][]> = {
   work: ["home", ...WORK_GROUPS],
   settings: ["home", ...SETTINGS_GROUPS],
 };
 
-/** Which area a path is in: the longest tile prefix decides; Settings home is its own. */
+/**
+ * Which area a path is in: the longest tile prefix decides; Settings home is
+ * its own. A tile kept off the rail decides nothing. It is reached from the
+ * account menu by every account, like the profile and the help, and an
+ * operative who opens the accessibility statement must not land in a Settings
+ * area holding nothing they can open and no switch to leave it by.
+ */
 function areaOfPath(pathname: string): Area {
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return "settings";
   const match = allTiles()
-    .filter((t) => pathname === t.path || pathname.startsWith(`${t.path}/`))
+    .filter((t) => !t.offRail && (pathname === t.path || pathname.startsWith(`${t.path}/`)))
     .sort((a, b) => b.path.length - a.path.length)[0];
   return match ? areaOf(match.group) : "work";
 }
@@ -143,25 +146,27 @@ export type Scope = { entityId: string; siteId: string };
 const MAIN_AREA = "mx-auto min-w-0 max-w-[100rem] px-4 py-6 outline-none md:px-6";
 
 /**
- * The switch between the two areas. Offered only when the account can open
- * something in both; an operative with no settings at all sees no switch and
+ * The switch between the two areas. Offered whenever the account has a screen
+ * in the Settings rail: Home is always there, so Settings is the only half
+ * that can be missing. An operative with no settings at all sees no switch and
  * no mention of an area they cannot enter.
  */
 function AreaSwitch({
   area,
-  counts,
+  offered,
   onNavigate,
   className = "",
   tone = "light",
 }: {
   area: Area;
-  counts: Record<Area, number>;
+  /** Whether the account has anything in the Settings rail. */
+  offered: boolean;
   onNavigate?: () => void;
   className?: string;
   tone?: "light" | "dark";
 }) {
   const { t } = useT();
-  if (counts.settings === 0 || counts.work === 0) return null;
+  if (!offered) return null;
 
   const dark = tone === "dark";
   const items: { area: Area; labelKey: string; label: string; icon: typeof Briefcase }[] = [
@@ -214,14 +219,12 @@ function NavList({
   items,
   area,
   pathname,
-  hidden,
   onNavigate,
   tone = "light",
 }: {
   items: NavItem[];
   area: Area;
   pathname: string;
-  hidden: number;
   onNavigate?: () => void;
   tone?: "light" | "dark";
 }) {
@@ -230,6 +233,21 @@ function NavList({
 
   const groupLabel = dark ? "text-sidebar-muted/80" : "text-muted-foreground";
   const quiet = dark ? "text-sidebar-muted" : "text-muted-foreground";
+
+  /*
+   * One entry is the page you are on: the deepest one the path sits under.
+   *
+   * Site transfers lives at /inventory/transfers, which is also under Stock's
+   * /inventory, and marking every match lit both and told a screen reader
+   * there were two current pages. A home is current only on its own path;
+   * anything else is current on its path and whatever is below it, unless a
+   * longer entry claims that.
+   */
+  const current = items
+    .filter((i) =>
+      i.group === "home" ? pathname === i.to : pathname === i.to || pathname.startsWith(`${i.to}/`),
+    )
+    .sort((a, b) => b.to.length - a.to.length)[0]?.to;
 
   /*
    * Settings folds; work does not.
@@ -279,16 +297,20 @@ function NavList({
             )}
             <ul className={`flex flex-col gap-0.5 ${shown ? "" : "hidden"}`}>
               {inGroup.map((item) => {
-                const active =
-                  item.group === "home"
-                    ? pathname === item.to
-                    : pathname === item.to || pathname.startsWith(`${item.to}/`);
+                const active = item.to === current;
                 const Icon = iconFor(item.to);
                 return (
                   <li key={item.to}>
                     <Link
                       to={item.to}
                       onClick={onNavigate}
+                      // The router marks a link current by itself, and by
+                      // prefix unless told otherwise: it wrote
+                      // aria-current="page" on Stock for every screen under
+                      // /inventory, over whatever is said on the next line.
+                      // Exact leaves it agreeing with `active` on the screen
+                      // itself and silent everywhere below it.
+                      activeOptions={{ exact: true }}
                       aria-current={active ? "page" : undefined}
                       className={[
                         TOUCH,
@@ -315,14 +337,6 @@ function NavList({
           </div>
         );
       })}
-
-      {hidden > 0 ? (
-        <p className={`mt-4 px-3 text-xs ${quiet}`}>
-          {ui(
-            "Some sections are not shown because this account does not hold the permissions they require.",
-          )}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -472,16 +486,15 @@ export function Shell({
     ? session.sites.filter((s) => s.entity_id === scope.entityId)
     : session.sites;
 
-  const platform = usePlatformOrganisation(Boolean(session.tenant_id));
-  const visible = NAV.filter(
-    (n) => (!n.permission || hasPermission(session, n.permission)) && (!n.platformOnly || platform),
+  // The same tiles the launchpads and the palette offer, less the ones that
+  // are reached from the account menu instead of the rail.
+  const tiles = useVisibleTiles();
+  const rail = useMemo(
+    () => [...HOMES, ...tiles.filter((tile) => !tile.offRail).map(railItem)],
+    [tiles],
   );
-  const hidden = NAV.length - visible.length;
   const area = areaOfPath(pathname);
-  const counts: Record<Area, number> = {
-    work: visible.filter((n) => n.area === "work" && n.group !== "home").length,
-    settings: visible.filter((n) => n.area === "settings" && n.group !== "home").length,
-  };
+  const hasSettings = rail.some((n) => n.area === "settings" && n.group !== "home");
 
   return (
     // overflow-x-hidden is the backstop, not the fix: everything inside is
@@ -522,17 +535,11 @@ export function Shell({
             </Link>
 
             <nav aria-label="Sections" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-              <NavList
-                items={visible}
-                area={area}
-                pathname={pathname}
-                hidden={hidden}
-                tone="dark"
-              />
+              <NavList items={rail} area={area} pathname={pathname} tone="dark" />
             </nav>
 
             <div className="shrink-0 px-3 py-3">
-              <AreaSwitch area={area} counts={counts} tone="dark" />
+              <AreaSwitch area={area} offered={hasSettings} tone="dark" />
             </div>
           </aside>
 
@@ -568,14 +575,18 @@ export function Shell({
                   header it always was. */}
                 <ApprovalsWaitingBadge />
 
+                {/* Below md the search is an icon beside the help. This is also
+                  the instance that owns Cmd/Ctrl-K and draws the palette's
+                  dialog at every width, so it stays mounted when it is hidden. */}
                 <div className="ml-auto flex shrink-0 items-center rounded-md border border-input md:hidden">
                   <CommandPalette />
-                  <MainMenu />
                   <ContextHelp />
                 </div>
 
-                <div className="ml-auto hidden shrink-0 items-center rounded-md border border-input md:flex">
-                  <MainMenu />
+                {/* From md the search is the field above, so the help stands
+                  alone and needs neither the divider nor the half-rounding it
+                  wears beside a neighbour. */}
+                <div className="ml-auto hidden shrink-0 items-center rounded-md border border-input md:flex [&>button]:rounded-md [&>button]:border-l-0">
                   <ContextHelp />
                 </div>
 
@@ -601,14 +612,17 @@ export function Shell({
               >
                 <SheetTitle className="text-base">{session.tenant?.name ?? "No tenant"}</SheetTitle>
 
-                <AreaSwitch area={area} counts={counts} onNavigate={() => setDrawerOpen(false)} />
+                <AreaSwitch
+                  area={area}
+                  offered={hasSettings}
+                  onNavigate={() => setDrawerOpen(false)}
+                />
 
                 <nav aria-label="Sections">
                   <NavList
-                    items={visible}
+                    items={rail}
                     area={area}
                     pathname={pathname}
-                    hidden={hidden}
                     onNavigate={() => setDrawerOpen(false)}
                   />
                 </nav>
