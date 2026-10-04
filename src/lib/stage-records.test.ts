@@ -885,3 +885,26 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     ]);
   });
 });
+
+describe("a purchasing step names its party a supplier (J-144)", () => {
+  test("every step of purchase to pay that lists documents says whose side they are on", () => {
+    const src = readFileSync(join(ROOT, "src", "routes", "procurement", "index.tsx"), "utf8");
+    const start = src.indexOf("const PURCHASE_TO_PAY: FlowSpec = {");
+    expect(start).toBeGreaterThan(-1);
+    const flow = src.slice(start, src.indexOf("\n};\n", start));
+    const stages = flow.split(/\n {4}\{\n {6}label: /).slice(1);
+    expect(stages.length).toBeGreaterThan(5);
+    const documentary = stages.filter(
+      (s) => s.includes("typeCode:") || s.includes('fn: "erp_documents"'),
+    );
+    // Requisition, Approval, Purchase order, Goods receipt, Supplier bill.
+    expect(documentary.map((s) => s.slice(0, s.indexOf(",")))).toEqual([
+      '"Requisition"',
+      '"Approval"',
+      '"Purchase order"',
+      '"Goods receipt"',
+      '"Supplier bill"',
+    ]);
+    for (const s of documentary) expect(s).toContain('partyRole: "supplier"');
+  });
+});

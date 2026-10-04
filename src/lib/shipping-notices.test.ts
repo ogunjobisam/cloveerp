@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
+import { seededRows } from "./dependent-options";
+import { missingRequired } from "./required-fields";
 import {
+  noticeLineSummary,
+  noticeLinesTyped,
   noticeOpen,
   noticePayload,
+  recordNoticeSeed,
   orderNotices,
   shippingNotice,
   shippingNotices,
@@ -129,5 +136,84 @@ describe("the notice a supplier sends", () => {
 
   test("sends no cartons when none is labelled", () => {
     expect(noticePayload({ ...form, cartons: [] })).not.toHaveProperty("cartons");
+  });
+});
+
+describe("goods-in's row says which notice and what it holds (J-57)", () => {
+  const lines = shippingNotice(NOTICE)?.lines ?? [];
+
+  test("the first two lines as quantity and product", () => {
+    expect(noticeLineSummary(lines)).toBe("6 × Coat, 10 × Scarf");
+  });
+
+  test("and a count of the rest", () => {
+    const more = [
+      ...lines,
+      { ...lines[1]!, orderLineId: "l3", description: "Hat", quantity: 2.5 },
+      { ...lines[1]!, orderLineId: "l4", description: "Belt", quantity: 1 },
+    ];
+    expect(noticeLineSummary(more)).toBe("6 × Coat, 10 × Scarf +2");
+    expect(noticeLineSummary(more, 3)).toBe("6 × Coat, 10 × Scarf, 2.5 × Hat +1");
+  });
+
+  test("nothing for a notice with no lines, and a quantity alone for a line with no name", () => {
+    expect(noticeLineSummary([])).toBe("");
+    expect(noticeLineSummary([{ ...lines[0]!, description: "" }])).toBe("6");
+  });
+
+  test("the row draws the notice's number and the summary", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "shipping-notices.tsx"),
+      "utf8",
+    );
+    const row = src.slice(src.indexOf("export function OnItsWay"));
+    expect(row).toContain("{n.notice}</span>");
+    expect(row).toContain("noticeLineSummary(n.lines)");
+  });
+});
+
+/** The order's notices as erp_order_shipping_notices answers (20261005000000). */
+const ORDER = {
+  order_id: "o1",
+  notices: [NOTICE],
+  open: [
+    { order_line_id: "l1", line_no: 10, open: 0 },
+    { order_line_id: "l2", line_no: 20, open: 4 },
+  ],
+};
+
+describe("a notice the buyer records holds lines (J-60)", () => {
+  test("the editor arrives holding every line at what is still open", () => {
+    expect(seededRows(recordNoticeSeed("o1"), ORDER, {})).toEqual([
+      { order_line_id: "l1", quantity: "0" },
+      { order_line_id: "l2", quantity: "4" },
+    ]);
+  });
+
+  test("a line at nought, or with no line chosen, is not sent", () => {
+    expect(
+      noticeLinesTyped([
+        { order_line_id: "l1", quantity: "0" },
+        { order_line_id: "l2", quantity: "4" },
+        { order_line_id: "", quantity: "2" },
+        { order_line_id: "l3", quantity: "" },
+        { order_line_id: "l4", quantity: "-1" },
+      ]),
+    ).toEqual([{ order_line_id: "l2", quantity: 4 }]);
+  });
+
+  test("the lines are required, so an empty notice never reaches the door", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "shipping-notices.tsx"),
+      "utf8",
+    );
+    const record = src.slice(src.indexOf("function RecordNotice"));
+    expect(record).toMatch(
+      /label: "What is on its way",[\s\S]{0,300}required: true,\s*seed: recordNoticeSeed\(orderId\)/,
+    );
+    expect(record).toContain("noticeLinesTyped(");
+    expect(
+      missingRequired([{ name: "lines", kind: "rows", required: true }], {}, { lines: [] }),
+    ).toEqual(["lines"]);
   });
 });

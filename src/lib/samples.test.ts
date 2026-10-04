@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { canSettle, quantityWords, sample } from "./samples";
 
@@ -63,5 +65,26 @@ describe("a supplier's sample", () => {
     expect(quantityWords(3)).toBe("3");
     expect(quantityWords(2.5)).toBe("2.5");
     expect(quantityWords(1 / 3)).toBe("0.3333");
+  });
+});
+
+describe("samples are received from the card that lists them (J-68)", () => {
+  const ROOT = join(import.meta.dir, "..");
+  const card = readFileSync(join(ROOT, "components", "erp", "samples.tsx"), "utf8");
+  const screen = readFileSync(join(ROOT, "routes", "procurement", "index.tsx"), "utf8");
+
+  test("the Samples card offers Receive samples, gated as it was", () => {
+    const dialog = card.slice(card.indexOf("function ReceiveSamples"));
+    expect(dialog).toContain('title="Receive samples"');
+    expect(dialog).toContain('permission="procurement.receive"');
+    expect(dialog).toContain('fn="erp_receive_samples"');
+    // Drawn in the card's header, and for whoever may receive though not read.
+    expect(card).toMatch(/\{ui\("Samples"\)\}<\/h2>\s*<ReceiveSamples \/>/);
+    expect(card).toContain("if (!mayRead && !mayReceive) return null;");
+  });
+
+  test("and the header's sheet no longer offers it a second time", () => {
+    expect(screen).not.toContain('label: "Receive samples"');
+    expect(screen).not.toContain('"erp_receive_samples"');
   });
 });
