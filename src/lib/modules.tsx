@@ -26,6 +26,7 @@ import {
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
+import type { InstallableModule } from "./installed-modules";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -306,6 +307,11 @@ export type ModuleDef = {
    */
   howItWorks?: string;
   permission?: string;
+  /**
+   * The module the organisation must have installed. Offered only once it is
+   * installed; the database refuses its verbs before then regardless.
+   */
+  module?: InstallableModule;
   group: TileGroup;
   kpis: Kpi[];
   chart?: Chart;
@@ -2761,6 +2767,7 @@ export const PLANNING: ModuleDef = {
     },
   ],
   key: "planning",
+  module: "planning",
   path: "/planning",
   titleKey: "module.planning",
   title: "Planning",
@@ -3177,6 +3184,7 @@ export const PRODUCTION: ModuleDef = {
     },
   ],
   key: "production",
+  module: "production",
   path: "/production",
   titleKey: "module.production",
   title: "Manufacturing",
@@ -3672,6 +3680,7 @@ export const QUALITY: ModuleDef = {
     },
   ],
   key: "quality",
+  module: "quality",
   path: "/quality",
   titleKey: "module.quality",
   title: "Quality control",
@@ -4971,6 +4980,11 @@ export type TileDef = {
    */
   platformOnly?: boolean;
   /**
+   * The module the organisation must have installed. Offered only once it is
+   * installed; the database refuses its verbs before then regardless.
+   */
+  module?: InstallableModule;
+  /**
    * Reached from the account menu and the palette rather than filed in an
    * area: kept out of the rail, the launchpads and the area counts. A screen
    * every account may open would otherwise put an entry in every rail and,
@@ -5456,6 +5470,7 @@ export function allTiles(): TileDef[] {
     title: m.title,
     blurb: m.blurb,
     ...(m.permission ? { permission: m.permission } : {}),
+    ...(m.module ? { module: m.module } : {}),
     group: m.group,
   }));
   return [...fromModules, ...EXTRA_TILES];

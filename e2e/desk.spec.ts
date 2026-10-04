@@ -86,6 +86,77 @@ test.describe("the command palette", () => {
   });
 });
 
+test.describe("a module the organisation has not installed", () => {
+  // The session names the modules in force (erp_session's `modules`). This one
+  // has not installed Manufacturing, Planning or Quality, as the demonstration
+  // has not (J-05, J-89).
+  test.use({
+    session: {
+      ...DEMO_SESSION,
+      modules: ["finance", "inventory", "logistics", "master_data", "procurement", "sales"],
+    },
+  });
+
+  test("is not offered by the rail, the home page or the palette", async ({ page, backend }) => {
+    await page.goto("/");
+    const sections = page.getByRole("navigation", { name: "Sections" }).first();
+    await expect(sections.getByRole("link", { name: "Sales" }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    for (const name of ["Manufacturing", "Planning", "Quality control"]) {
+      await expect(sections.getByRole("link", { name, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole("heading", { name: "The flow" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Make", exact: true })).toHaveCount(0);
+
+    await page.keyboard.press("ControlOrMeta+k");
+    const dialog = page.getByRole("dialog", { name: "Search screens" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("textbox").first().fill("works order");
+    await expect(dialog.getByRole("listitem").filter({ hasText: "Manufacturing" })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("says so at its address, and where to install it", async ({ page, backend }) => {
+    const reads: string[] = [];
+    page.on("request", (r) => {
+      const m = /rpc\/(erp_[a-z_]+)$/.exec(r.url());
+      if (m) reads.push(m[1]!);
+    });
+    await page.goto("/production");
+    await expect(page.getByText("This module is not installed in this organisation.")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("heading", { name: "Manufacturing", level: 1 })).toBeVisible();
+    const open = page.getByRole("link", { name: "Open Configuration" });
+    await expect(open).toHaveAttribute("href", "/administration/configuration");
+    await expect(page.getByRole("button", { name: "Start making something" })).toHaveCount(0);
+    expect(reads.filter((fn) => fn.startsWith("erp_works_order"))).toEqual([]);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("to somebody who may not configure the organisation", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "administration.configure"),
+        modules: ["finance", "inventory", "procurement", "sales"],
+      },
+    });
+
+    test("says whom to ask instead", async ({ page, backend }) => {
+      await page.goto("/quality");
+      await expect(
+        page.getByText(
+          "Ask an administrator to install it on the Configuration screen if you need it.",
+        ),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("link", { name: "Open Configuration" })).toHaveCount(0);
+      expect(backend.crashes).toEqual([]);
+    });
+  });
+});
+
 test.describe("the record browser", () => {
   /**
    * Products, with rows. The default answer everywhere else is empty, which is
