@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
-import { byTone, transitionTone } from "../../lib/plain-words";
+import { byTone, transitionOutcome, transitionTone } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "./action";
 import {
   heldReasons,
@@ -87,6 +87,7 @@ const EXPLAINED_MOVES: Readonly<Record<string, Readonly<Record<string, Explained
  */
 export function DocumentTransitions({
   documentId,
+  documentNumber = null,
   documentType,
   transitions,
   committed,
@@ -94,6 +95,8 @@ export function DocumentTransitions({
   quiet = false,
 }: {
   documentId: string;
+  /** The document's number, which the sentence after a move names. */
+  documentNumber?: string | null;
   /** The document's type code, which decides the moves only a door makes. */
   documentType: string | null;
   transitions: Transition[];
@@ -111,6 +114,19 @@ export function DocumentTransitions({
       "erp_document_approval_chain",
       "erp_my_approvals",
     ],
+    // A move said nothing once it was made (J-122): "PO-000143 is now
+    // approved." An approval still waiting on somebody else's decision says so
+    // below instead, and the document is not "now" anything new.
+    outcome: (result, args) => {
+      const state =
+        typeof result === "object" && result !== null
+          ? (result as Record<string, unknown>)["state"]
+          : undefined;
+      const waiting =
+        args["p_transition_code"] === "approve" &&
+        state !== transitions.find((t) => t.code === "approve")?.to_state;
+      return waiting ? null : transitionOutcome(documentNumber, result);
+    },
   });
   // An approver who holds a task on the document approves in one press
   // (20260923200000). When somebody else's decision is still needed, theirs is

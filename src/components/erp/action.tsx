@@ -1,4 +1,10 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -39,7 +45,9 @@ import {
   documentOutcome,
   paymentRunOutcome,
   lookupOutcome,
+  namedOutcome,
   planningOutcome,
+  qualityEventOutcome,
   receiptIds,
   receiptOutcome,
   OUTCOME_LINGER_MS,
@@ -1069,7 +1077,86 @@ const FOLLOW_UP_BY_FN: Record<
   // What a supplier's credit note paid, on which bill, and what of it is
   // still to use (20261004910000).
   erp_allocate_supplier_credit: (result) => Promise.resolve(supplierCreditOutcome(result)),
+  // An invoice from a delivery answers with its id alone, and "Invoice a
+  // delivery — done." named neither it nor the delivery (R-03). Both numbers
+  // are read, and the invoice is a link.
+  erp_invoice_from_delivery: async (result, args) => {
+    if (typeof result !== "string") return null;
+    const [invoice, delivery] = await Promise.all([
+      documentNumber(result),
+      documentNumber(args["p_delivery_id"]),
+    ]);
+    const message = documentOutcome({
+      document_id: result,
+      document_number: invoice,
+      source_document_number: delivery,
+    });
+    return message && invoice
+      ? { message, documents: [{ documentId: result, number: invoice }] }
+      : null;
+  },
+  // A problem reported answers with its id; its reference is on its row
+  // (J-124).
+  erp_raise_quality_event: async (result) => {
+    if (typeof result !== "string") return null;
+    const events = await callErp<unknown>("erp_quality_events", { p_limit: 20 });
+    const row = Array.isArray(events)
+      ? (events as unknown[]).find(
+          (r) =>
+            typeof r === "object" &&
+            r !== null &&
+            (r as Record<string, unknown>)["quality_event_id"] === result,
+        )
+      : undefined;
+    return qualityEventOutcome(row);
+  },
 };
+
+/** A document's number, read from its page; null when it cannot be read. */
+function documentNumber(id: unknown): Promise<string | null> {
+  if (typeof id !== "string" || id === "") return Promise.resolve(null);
+  return callErp<{ document: { document_number?: string } | null }>("erp_document", {
+    p_document_id: id,
+  }).then(
+    (p) => p.document?.document_number ?? null,
+    () => null,
+  );
+}
+
+/**
+ * Reads again what an action changed, and settles once they are read (J-123).
+ *
+ * The press stays busy until then. It used to stop being busy the moment the
+ * door answered, so the buttons came back over the old state while the list,
+ * the document and its moves were still being read, three to nine seconds
+ * live, and a form closed before its list held the new row. A read that fails
+ * still settles, so it cannot hold a button for ever.
+ */
+function readAgain(queryClient: QueryClient, keys: readonly string[]): Promise<unknown> {
+  return Promise.all(keys.map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+}
+
+/**
+ * Says what an action did. Named documents are the outcome's second line, each
+ * a link, and it stays long enough to follow one; otherwise the line saying
+ * what the form acted on, when there is one.
+ */
+function sayOutcome(
+  message: string | Outcome,
+  also: { description?: string; linger?: boolean } = {},
+) {
+  if (typeof message !== "string" && message.documents.length > 0) {
+    toast(message.message, {
+      description: <OutcomeLinks documents={message.documents} />,
+      duration: OUTCOME_LINGER_MS,
+    });
+    return;
+  }
+  toast(typeof message === "string" ? message : message.message, {
+    ...(also.description ? { description: also.description } : {}),
+    ...(also.linger ? { duration: OUTCOME_LINGER_MS } : {}),
+  });
+}
 
 /** The documents an outcome names, each a link to its page. */
 function OutcomeLinks({ documents }: { documents: Outcome["documents"] }) {
@@ -1306,8 +1393,10 @@ export function ActionDialog({
       const args = buildArgs(extra);
       return { result: await callErp<unknown>(fn, args), args };
     },
-    onSuccess: ({ result, args }) => {
-      invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+    // The form stays open, its button saying it is working, until the lists it
+    // changed hold what it did (J-123).
+    onSuccess: async ({ result, args }) => {
+      await readAgain(queryClient, invalidates);
       setValues(opening);
       setLists({});
       setRows({});
@@ -1316,22 +1405,17 @@ export function ActionDialog({
       setAttempted(false);
       setOpen(false);
 
-      // A toast that names the document it made needs no second line saying
-      // what the form acted on.
+      // A toast that names the record it made or acted on needs no second line
+      // saying what the form acted on: that line was written before the press
+      // (J-124).
       const plain = outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn], fn);
+      const names = documentOutcome(result) !== null || namedOutcome(fn, result) !== null;
       const say = (message: string | Outcome) =>
-        typeof message !== "string" && message.documents.length > 0
-          ? // Named documents are the outcome's second line, each a link, and
-            // it stays long enough to follow one.
-            toast(message.message, {
-              description: <OutcomeLinks documents={message.documents} />,
-              duration: OUTCOME_LINGER_MS,
-            })
-          : toast(typeof message === "string" ? message : message.message, {
-              ...(context && documentOutcome(result) === null ? { description: context } : {}),
-              // A lookup's answer is the point of asking: it stays to be read.
-              ...(lookupOutcome(fn, "", result) !== null ? { duration: OUTCOME_LINGER_MS } : {}),
-            });
+        sayOutcome(message, {
+          ...(context && !names ? { description: context } : {}),
+          // A lookup's answer is the point of asking: it stays to be read.
+          linger: lookupOutcome(fn, "", result) !== null,
+        });
       const followUp = FOLLOW_UP_BY_FN[fn];
       if (followUp)
         void followUp(result, args, ui(title)).then(
@@ -1713,18 +1797,35 @@ export function ActionDialog({
 export function useErpAction({
   fn,
   invalidates,
+  onAnswered,
+  outcome,
   onDone,
 }: {
   fn: string;
   invalidates: string[];
+  /**
+   * When the door has answered, before the lists are read again: for a
+   * screen whose next step does not wait on them, such as the counter's next
+   * place.
+   */
+  onAnswered?: (result: unknown) => void;
+  /**
+   * What the press did, in a sentence, said once the lists hold it. A press
+   * with no form said nothing at all (J-122). Null says nothing.
+   */
+  outcome?: (result: unknown, args: Record<string, unknown>) => string | Outcome | null;
   onDone?: (result: unknown) => void;
 }) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (args: Record<string, unknown> = {}) => callErp<unknown>(fn, args),
-    onSuccess: (result) => {
-      invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+    // Busy until what the press changed has been read again (J-123).
+    onSuccess: async (result, args) => {
+      onAnswered?.(result);
+      await readAgain(queryClient, invalidates);
+      const said = outcome?.(result, args);
+      if (said) sayOutcome(said);
       onDone?.(result);
     },
   });

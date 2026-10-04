@@ -1,5 +1,6 @@
 import { prettifyField } from "./friendly";
 import { formatMinor } from "./money";
+import { quantityWords } from "./samples";
 
 /**
  * Words a customer reads, made from words the database wrote.
@@ -204,6 +205,145 @@ export function documentOutcome(result: unknown): string | null {
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /**
+ * What a door did to a document that was already there, by the door (J-83).
+ *
+ * Despatching and receiving a transfer, and posting a stock adjustment, answer
+ * with the document's id and number, which documentOutcome() reads as a
+ * document made: both ends of a transfer said "TRF-000026 created.".
+ */
+const MOVED_BY_FN: Readonly<Record<string, string>> = {
+  erp_despatch_transfer: "despatched",
+  erp_receive_transfer: "received",
+  erp_post_stock_adjustment: "posted",
+};
+
+/** "TRF-000026 despatched." — or null for a door that makes what it names. */
+export function movedDocumentOutcome(fn: string | undefined, result: unknown): string | null {
+  const word = fn ? MOVED_BY_FN[fn] : undefined;
+  const r = asRecord(result);
+  if (!word || !r) return null;
+  const number = text(r, "document_number");
+  return number ? `${number} ${word}.` : null;
+}
+
+/** Who brings an order's goods, as the form offered it (20261004955000). */
+const FREIGHT_TERMS: Readonly<Record<string, string>> = {
+  supplier_delivers: "the supplier delivers the goods",
+  we_collect: "we collect the goods",
+};
+
+/** "PO-000143: we collect the goods." from erp_set_freight_terms (J-124). */
+export function freightTermsOutcome(result: unknown): string | null {
+  const r = asRecord(result);
+  if (!r) return null;
+  const number = text(r, "order_number");
+  const terms = FREIGHT_TERMS[text(r, "freight_terms") ?? ""];
+  return number && terms ? `${number}: ${terms}.` : null;
+}
+
+/**
+ * What settling a sample did, from erp_settle_samples (J-124): how many went
+ * which way, the receipt they came in on, and how many are still held.
+ * "GRN-000012: 3 returned to the supplier, 2 still held."
+ */
+export function samplesOutcome(result: unknown): string | null {
+  const r = asRecord(result);
+  if (!r) return null;
+  const receipt = text(r, "receipt_number");
+  const quantity = Number(r["quantity"]);
+  const held = Number(r["held"]);
+  if (!receipt || !Number.isFinite(quantity)) return null;
+  const price = Number(r["price_minor"]);
+  const outcome = text(r, "outcome");
+  const done =
+    outcome === "return"
+      ? "returned to the supplier"
+      : outcome === "keep"
+        ? "kept free"
+        : outcome === "buy"
+          ? Number.isFinite(price)
+            ? `bought at ${formatMinor(price, text(r, "currency") ?? "GBP")} each`
+            : "bought"
+          : null;
+  if (!done) return null;
+  const left = Number.isFinite(held)
+    ? held > 0
+      ? `, ${quantityWords(held)} still held`
+      : ", none still held"
+    : "";
+  return `${receipt}: ${quantityWords(quantity)} ${done}${left}.`;
+}
+
+/**
+ * A sentence a door's own answer makes, naming the record it acted on — or
+ * null. A toast that names its record needs no second line saying what the
+ * form acted on: that line was written before the press and said what was
+ * held before it (J-124).
+ */
+export function namedOutcome(fn: string | undefined, result: unknown): string | null {
+  if (fn === "erp_set_freight_terms") return freightTermsOutcome(result);
+  if (fn === "erp_settle_samples") return samplesOutcome(result);
+  return movedDocumentOutcome(fn, result);
+}
+
+/**
+ * A problem reported, by its reference, from its row in erp_quality_events
+ * (J-124): the door answers with the event's id alone.
+ */
+export function qualityEventOutcome(row: unknown): string | null {
+  const r = asRecord(row);
+  const reference = r ? text(r, "reference") : null;
+  return reference ? `${reference} reported.` : null;
+}
+
+/**
+ * A journal reversal is raised and submitted for somebody else to approve, and
+ * answers with the journal's state, not a document (J-151). "Reverse the
+ * journal — done." said nothing of the approval it waits for.
+ */
+function journalOutcome(fn: string | undefined, result: unknown): string | null {
+  if (fn !== "erp_reverse_journal") return null;
+  const r = asRecord(result);
+  return r && text(r, "state") === "submitted" ? "Submitted for approval." : null;
+}
+
+/**
+ * What a move on a document's page did to it, from the state the door answers
+ * (J-122): "PO-000143 is now approved." Null when the answer has no state.
+ */
+export function transitionOutcome(
+  number: string | null | undefined,
+  result: unknown,
+): string | null {
+  const r = asRecord(result);
+  const state = r ? text(r, "state") : null;
+  if (!state) return null;
+  return `${number && number.trim() !== "" ? number.trim() : "This document"} is now ${prettifyField(state).toLowerCase()}.`;
+}
+
+/**
+ * What a press on the counter's worklist did (J-122), by its door and what it
+ * answered: a count recorded says whether it posted or what it waits for.
+ */
+export function countOutcome(place: string, fn: string, result: unknown): string {
+  const at = place.trim() !== "" ? place.trim() : "The count";
+  if (fn === "erp_post_count") return `${at}: posted.`;
+  if (fn === "erp_recount_task") return `${at}: to be counted again.`;
+  switch (result) {
+    case "posted":
+      return `${at}: counted and posted.`;
+    case "approved":
+      return `${at}: counted and approved.`;
+    case "pending_approval":
+      return `${at}: counted, and waiting for approval.`;
+    case "counted":
+      return `${at}: counted, and waiting to be posted.`;
+    default:
+      return `${at}: counted.`;
+  }
+}
+
+/**
  * A lookup's answer, in a sentence.
  *
  * "Find a price" and "Promise a date" ask a question and change nothing. The
@@ -264,6 +404,11 @@ export function actionOutcome(
   emptyNote?: string,
   fn?: string,
 ): string {
+  // A door that acted on a record it names says what it did to it, before an
+  // answer holding a document's number is read as a document made.
+  const named = namedOutcome(fn, result) ?? journalOutcome(fn, result);
+  if (named) return named;
+
   const made = documentOutcome(result);
   if (made) return made;
 
@@ -611,6 +756,24 @@ export function approvalSubject(row: Row): string {
   if (number) return type ? `${number} · ${type}` : number;
   const kind = text(row, "object_type");
   return kind ? prettifyField(kind) : "—";
+}
+
+/**
+ * An approval waiting on me, as its picker offers it: what it is for, who it is
+ * with, what it is worth, and who asked — "PO-000143 · Purchase order — Anchor
+ * Fasteners — £108.60 — Samuel Ogunjobi". The amount is what the approver
+ * decides on, and the picker left it out (J-56).
+ */
+export function approvalChoice(row: Row): string {
+  const value = text(row, "value_minor");
+  const currency = text(row, "currency");
+  const amount =
+    value !== null && Number.isFinite(Number(value)) && currency
+      ? formatMinor(Number(value), currency)
+      : null;
+  return [approvalSubject(row), text(row, "partner"), amount, text(row, "requested_by")]
+    .filter((x): x is string => x !== null && x !== "" && x !== "—")
+    .join(" — ");
 }
 
 /** The step of an approval, by its name, and by its code only as words. */

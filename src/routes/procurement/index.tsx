@@ -30,7 +30,7 @@ import {
   RECEIVE_THIS_ORDER,
 } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
-import { approvalSubject } from "../../lib/plain-words";
+import { approvalChoice } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/procurement/")({
   head: () => ({
@@ -186,15 +186,13 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         name: "p_task_id",
         label: "Approval waiting on me",
         required: true,
-        // "PO-000057 · Purchase order — Northwind — Sam", not "document — Sam".
+        // "PO-000057 · Purchase order — Northwind — £108.60 — Sam", not
+        // "document — Sam": the amount is what the approver decides on.
         options: {
           fn: "erp_my_approvals",
           value: "task_id",
           label: ["document_number", "partner", "requested_by"],
-          describe: (row) =>
-            [approvalSubject(row), row["partner"], row["requested_by"]]
-              .filter((x) => typeof x === "string" && x !== "" && x !== "—")
-              .join(" — "),
+          describe: approvalChoice,
         },
       },
       {

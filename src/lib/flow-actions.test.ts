@@ -403,3 +403,29 @@ describe("a module's daily verbs and the rest (PR11 M6)", () => {
     expect(staged.has("erp_write_off_stock")).toBe(true);
   });
 });
+
+/**
+ * A step's verb reads its step again (R-03).
+ *
+ * "Invoice a delivery" on Financials' Invoice step made the invoice and left
+ * the step's list as it was, because the action read again only the ageing and
+ * the trial balance. Every verb a step opens refreshes the read that step lists
+ * from: the documents of its type, or its own list.
+ */
+describe("a step's verb reads its step again", () => {
+  for (const mod of MODULES.filter((m) => m.flow)) {
+    const flow = mod.flow as FlowSpec;
+    const byKey = new Map(moduleActions(mod).map((a) => [actionKey(a), a]));
+    for (const stage of flow.stages) {
+      const read = stage.list?.fn ?? (stage.typeCode ? "erp_documents" : undefined);
+      if (!read) continue;
+      for (const key of stageActionKeys(stage)) {
+        const action = byKey.get(key);
+        if (!action) continue;
+        test(`${mod.key}: "${action.label}" on ${stage.label} reads ${read} again`, () => {
+          expect(action.invalidates ?? []).toContain(read);
+        });
+      }
+    }
+  }
+});
