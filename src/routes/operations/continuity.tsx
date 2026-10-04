@@ -429,11 +429,12 @@ function IncidentHistory() {
 function Continuity() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Backups and outages">
+      <PageHeader
+        title="Backups and outages"
+        howItWorks="Every row is read live from the registers the assertions police — a commitment reads as proved only when a drill actually restored and ran the invariant checks against the restored data."
+      >
         What this platform has promised about staying up and getting back, and what has happened
-        when it did not. Every row is read live from the registers the assertions police — a
-        commitment reads as proved only when a drill actually restored and ran the invariant checks
-        against the restored data.
+        when it did not.
       </PageHeader>
 
       <ServiceNotices />

@@ -151,9 +151,11 @@ function HelpSheet({
                 {ui("How this works")}
               </h3>
               <div className="mt-1 flex flex-col gap-2 text-sm">
-                {/* Already in the reader's words: each page passes its
-                    paragraphs through ui() where it writes them, which is
-                    where supabase/ci/screen_strings.sh looks for them. */}
+                {/* Drawn as handed over. A page whose paragraph a tenant can
+                    rename passes it through ui() where it writes it, which is
+                    where supabase/ci/screen_strings.sh looks for it; one that
+                    hands over what was plain text under its title hands it
+                    over plain, as it was. */}
                 {detail.paragraphs.map((p, i) => (
                   <p key={i}>{p}</p>
                 ))}

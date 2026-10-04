@@ -111,12 +111,11 @@ function Erasure() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Personal data and erasure">
-        Events carry references, never personal data. When a person must be erased, the reference
-        stays and the referent is destroyed: their name and details are overwritten from a register
-        of every column that holds them, and the copies the ledger kept are redacted in place. The
-        ledger still adds up and still says who, by id, did what; the person is no longer
-        identifiable. A request is executed by somebody other than the person who made it.
+      <PageHeader
+        title="Personal data and erasure"
+        howItWorks="When a person must be erased, the reference stays and the referent is destroyed: their name and details are overwritten from a register of every column that holds them, and the copies the ledger kept are redacted in place. The ledger still adds up and still says who, by id, did what; the person is no longer identifiable. A request is executed by somebody other than the person who made it."
+      >
+        Events carry references, never personal data.
       </PageHeader>
 
       <ActionBar

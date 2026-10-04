@@ -179,6 +179,7 @@ function Cutover() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Moving your old data in"
+        howItWorks="After loading, the product says per check what it expected and what it found. A parallel run records what the old system said against what this one computes. A domain is cut over only on that evidence, by somebody other than the person who loaded it."
         actions={
           <HeaderActions>
             <ActionBar
@@ -340,9 +341,7 @@ function Cutover() {
       >
         Opening balances arrive as a batch with the control total the legacy extract was taken with,
         dated as at one day, and load through the same movement and journal tables everything else
-        posts to. After loading, the product says per check what it expected and what it found. A
-        parallel run records what the old system said against what this one computes. A domain is
-        cut over only on that evidence, by somebody other than the person who loaded it.
+        posts to.
       </PageHeader>
 
       <FileImport profiles={OPENING_PROFILES} currency={base} />

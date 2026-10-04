@@ -73,10 +73,12 @@ function Adoption() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Guidance and adoption">
+      <PageHeader
+        title="Guidance and adoption"
+        howItWorks="This screen holds the rest of Part 22: the signals that say where adoption is stalling, and training scenarios practised where nothing is real."
+      >
         Refusals teach, help sits beside every screen, and first steps are offered per role from
-        Home. This screen holds the rest of Part 22: the signals that say where adoption is
-        stalling, and training scenarios practised where nothing is real.
+        Home.
       </PageHeader>
 
       <DataPanel<Signal>

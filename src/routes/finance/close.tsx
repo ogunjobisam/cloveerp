@@ -116,10 +116,11 @@ function Close() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_close", "Closing the month")}>
-        Two presses. Opening the close runs every task&rsquo;s check and completes each one that
-        passes; closing asks the checks again and closes the month on every ledger that closes with
-        it. What fails is shown with what its check said, for you to fix or waive with a reason.
+      <PageHeader
+        title={t("nav.finance_close", "Closing the month")}
+        howItWorks="Opening the close runs every task’s check and completes each one that passes; closing asks the checks again and closes the month on every ledger that closes with it. What fails is shown with what its check said, for you to fix or waive with a reason."
+      >
+        Two presses.
       </PageHeader>
 
       <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 sm:px-5">

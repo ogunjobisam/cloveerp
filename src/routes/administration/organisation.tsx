@@ -376,7 +376,6 @@ function Organisation() {
           <HeaderActions>
             <ActionBar
               title="Departments and membership"
-              note="Departments and membership. A person's primary department at capture is the one that routes their request."
               actions={[
                 {
                   label: "Create a company",
@@ -939,7 +938,6 @@ function Organisation() {
 
             <ActionBar
               title="Cover while somebody is away"
-              note="Cover while somebody is away. A delegation keeps the approver of record and records who acted; a substitution replaces them outright."
               actions={[
                 {
                   label: "Delegate approvals",
@@ -1012,7 +1010,6 @@ function Organisation() {
                 raised until one exists. */}
             <ActionBar
               title="Sites"
-              note="Sites — the places this organisation works from. Stock, receipts and despatches all happen at one."
               actions={[
                 {
                   label: "Add a site",
@@ -1116,7 +1113,6 @@ function Organisation() {
                 given a standard set; this is how a further one is added. */}
             <ActionBar
               title="Locations"
-              note="Locations — the places within a site where stock actually stands."
               actions={[
                 {
                   label: "Add a location",

@@ -63,11 +63,11 @@ function PacksScreen() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("module.packs", "Features and content")}>
-        Content arrives switched off until it is wanted. A feature decides three things at once —
-        the navigation somebody sees, the fields a form shows, and the rules the engine evaluates —
-        so switching one off is not merely hiding it: its rules stop running. That is why one with
-        live data behind it cannot be switched off at all.
+      <PageHeader
+        title={t("module.packs", "Features and content")}
+        howItWorks="A feature decides three things at once — the navigation somebody sees, the fields a form shows, and the rules the engine evaluates — so switching one off is not merely hiding it: its rules stop running. That is why one with live data behind it cannot be switched off at all."
+      >
+        Content arrives switched off until it is wanted.
       </PageHeader>
 
       {mayConfigure ? null : <PermissionNote code="administration.configure" />}

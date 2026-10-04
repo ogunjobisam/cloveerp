@@ -365,11 +365,7 @@ function Sales() {
           // Every verb the strip does not carry, one press away rather than in
           // the middle of the page. Grouped and worded exactly as before.
           <HeaderActions>
-            <ActionBar
-              title="The rest of selling"
-              note="Work beside the steps: stock reservations, credit limits and holds, and customer returns."
-              actions={BESIDE_THE_CHAIN}
-            />
+            <ActionBar title="The rest of selling" actions={BESIDE_THE_CHAIN} />
 
             <ActionBar
               title="Orders that are fulfilled elsewhere"
@@ -443,10 +439,7 @@ function Sales() {
             />
           </HeaderActions>
         }
-      >
-        Selling something and being paid for it: quote a customer, take the order, pick and deliver
-        the goods, invoice what actually went, and apply the cash against it.
-      </PageHeader>
+      />
 
       <KpiRow kpis={SALES_KPIS} />
 

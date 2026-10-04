@@ -65,11 +65,11 @@ function Governance() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title={t("module.governance", "Change requests and approvals")}
+        howItWorks="A change is proposed against a specific record, shown as a before-and-after, approved by whoever the rule names, and only then applied — with the whole sequence kept."
         actions={
           <HeaderActions>
             <ActionBar
               title="Proposing a change"
-              note="Proposing a change, and the mass change that proposes the same edit against many records."
               actions={[
                 {
                   label: "Preview a mass change",
@@ -211,9 +211,7 @@ function Governance() {
           </HeaderActions>
         }
       >
-        Master data does not change because somebody typed into a form. A change is proposed against
-        a specific record, shown as a before-and-after, approved by whoever the rule names, and only
-        then applied — with the whole sequence kept.
+        Master data does not change because somebody typed into a form.
       </PageHeader>
 
       <AutoPanel

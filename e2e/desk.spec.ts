@@ -2172,3 +2172,84 @@ test.describe("a page opens on its records", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a header says one thing", () => {
+  // A screen says one sentence under its title, and what it used to say after
+  // that is in the help sheet, under "How this works". A header that only
+  // narrated the strip drawn under it says nothing, and a group in the Actions
+  // panel is its name and its buttons.
+
+  test("what a long header said after its first sentence is behind How this works", async ({
+    page,
+    backend,
+  }) => {
+    // erp_help_topic as the database answers a path with no topic of its own.
+    backend.rpc("erp_help_topic", null);
+    const rest =
+      "What fails is shown with what its check said, for you to fix or waive with a reason.";
+
+    await page.goto("/finance/close");
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toBeVisible({ timeout: 20_000 });
+    const header = title.locator("xpath=..");
+    await expect(header.locator("p")).toHaveText("Two presses.");
+    await expect(page.getByText(rest, { exact: false })).toHaveCount(0);
+
+    // From the link under the sentence.
+    await header.getByRole("button", { name: "How this works" }).click();
+    const help = page.getByRole("dialog", { name: "Help for this screen" });
+    await expect(help.getByRole("heading", { name: "How this works" })).toBeVisible();
+    await expect(help.getByText(rest, { exact: false })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(help).toBeHidden();
+
+    // And from the help icon, which every screen has.
+    await page.locator('button[aria-label="Help for this screen"]:visible').click();
+    await expect(help.getByText(rest, { exact: false })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // A header that names the organisation keeps the sentence that does.
+    await page.goto("/administration/tenant");
+    await expect(title).toBeVisible({ timeout: 20_000 });
+    await expect(header.locator("p")).toContainText(
+      `Everything here acts on ${DEMO_SESSION.tenant?.name}`,
+    );
+    await expect(page.getByText("An organisation is not only rows", { exact: false })).toHaveCount(
+      0,
+    );
+    await header.getByRole("button", { name: "How this works" }).click();
+    await expect(
+      help.getByText("An organisation is not only rows", { exact: false }),
+    ).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("Purchasing and Sales open on their strip, and a group behind Actions is its name and its buttons", async ({
+    page,
+    backend,
+  }) => {
+    for (const [path, group] of [
+      ["/procurement", "The rest of buying"],
+      ["/sales", "The rest of selling"],
+    ] as const) {
+      await page.goto(path);
+      const title = page.getByRole("heading", { level: 1 });
+      await expect(title).toBeVisible({ timeout: 20_000 });
+      // Nothing between the title and the strip: no sentence, so no link to more.
+      const header = title.locator("xpath=..");
+      await expect(header.locator("p")).toHaveCount(0);
+      await expect(header.getByRole("button", { name: "How this works" })).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Actions" }).click();
+      const panel = page.getByRole("dialog", { name: "Actions" });
+      const bar = panel.locator("section", {
+        has: page.getByRole("heading", { name: group, exact: true }),
+      });
+      await expect(bar).toHaveCount(1);
+      await expect(bar.locator("p")).toHaveCount(0);
+      expect(await bar.getByRole("button").count()).toBeGreaterThan(1);
+      await page.keyboard.press("Escape");
+    }
+    expect(backend.crashes).toEqual([]);
+  });
+});

@@ -53,7 +53,10 @@ function TenantLifecycle() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("module.tenant_lifecycle", "Going live and closing down")}>
+      <PageHeader
+        title={t("module.tenant_lifecycle", "Going live and closing down")}
+        howItWorks="An organisation is not only rows: it starts (go-live), it can leave (export), and it can end — and each of those is an operation with a record rather than a support request."
+      >
         Everything here acts on{" "}
         <strong className="font-semibold text-foreground">
           {session.tenant?.name ?? "the organisation you are signed in to"}
@@ -62,8 +65,7 @@ function TenantLifecycle() {
           <span className="font-mono text-xs text-muted-foreground"> ({session.tenant.code})</span>
         ) : null}{" "}
         and nothing else — every other organisation on this deployment is reached from the platform
-        console. An organisation is not only rows: it starts (go-live), it can leave (export), and
-        it can end — and each of those is an operation with a record rather than a support request.
+        console.
       </PageHeader>
 
       {mayAdminister ? null : <PermissionNote code="administration.configure" />}

@@ -135,6 +135,7 @@ function Devices() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Devices and scanning"
+        howItWorks="What the client reads at each step is a scan rule: which symbologies a step accepts, which identifiers a barcode must carry, and what happens when one is missing."
         actions={
           <HeaderActions>
             <ActionBar
@@ -249,9 +250,7 @@ function Devices() {
         }
       >
         The warehouse client is a device with a session, sending actions that are received first and
-        applied second, so a pick captured offline arrives whole and in order. What the client reads
-        at each step is a scan rule: which symbologies a step accepts, which identifiers a barcode
-        must carry, and what happens when one is missing.
+        applied second, so a pick captured offline arrives whole and in order.
       </PageHeader>
 
       <DataPanel<Finding>
