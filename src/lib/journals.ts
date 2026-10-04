@@ -97,11 +97,57 @@ export function stateTone(state: JournalState): "ok" | "warn" | "bad" | "muted" 
   return "muted";
 }
 
-/** How a journal is named in a sentence: its number once posted, else its reference or date. */
+/**
+ * How a journal is named in a sentence: its number once posted, else its
+ * reference or date.
+ *
+ * A reversal waiting for approval has no number yet, and erp_reverse_journal
+ * gives it the original's number as its reference, so it was headed with the
+ * original's number and the list showed two rows called the same (J-101). It
+ * is named by what it reverses until it posts. `reverses` is that word as the
+ * screen says it.
+ */
 export function journalName(
-  journal: Pick<Journal, "journal_number" | "reference" | "posting_date">,
+  journal: Pick<Journal, "journal_number" | "reference" | "posting_date"> &
+    Partial<Pick<Journal, "reverses_number">>,
+  reverses = "Reverses",
 ): string {
-  return journal.journal_number ?? journal.reference ?? journal.posting_date;
+  if (journal.journal_number !== null) return journal.journal_number;
+  if (journal.reverses_number) return `${reverses} ${journal.reverses_number}`;
+  return journal.reference ?? journal.posting_date;
+}
+
+/**
+ * The company a new journal starts on: the draft's own, else the one chosen in
+ * the header when it is one of the companies offered, else the only company
+ * there is, else none (J-102). It opened on "Choose…" in an organisation with
+ * two companies, whatever the header said, and the account picker stayed empty.
+ */
+export function startingCompany(
+  draftEntityId: string | null,
+  headerEntityId: string,
+  entities: readonly { entity_id: string }[],
+): string {
+  if (draftEntityId) return draftEntityId;
+  if (headerEntityId && entities.some((e) => e.entity_id === headerEntityId)) return headerEntityId;
+  if (entities.length === 1) return entities[0]?.entity_id ?? "";
+  return "";
+}
+
+/**
+ * The accounts a journal line may be posted to: the company's own, and not a
+ * control account (J-103). A control account's balance is the total of the
+ * ledger a subledger keeps, and erp.journal_require_account refuses a journal
+ * line to one (CLOVEERP_JOURNAL_CONTROL_ACCOUNT); offering it only led to that
+ * refusal. Goods received not invoiced is not a control account and stays.
+ */
+export function journalAccounts<A extends { entity_id: string; control_kind?: string | null }>(
+  accounts: readonly A[],
+  entityId: string,
+): A[] {
+  return accounts.filter(
+    (a) => a.entity_id === entityId && (a.control_kind === undefined || a.control_kind === null),
+  );
 }
 
 /** One line as the editor holds it: what was typed. */

@@ -35,6 +35,7 @@ export function AutoPanel<T extends Record<string, unknown>>({
   columns,
   rowKey,
   highlight,
+  lazy,
 }: {
   title: string;
   description?: string;
@@ -52,6 +53,8 @@ export function AutoPanel<T extends Record<string, unknown>>({
    * followed an email to one task finds it without reading the list.
    */
   highlight?: string | null;
+  /** Read only once the panel scrolls into view. */
+  lazy?: boolean;
 }) {
   const { ui } = useT();
 
@@ -61,6 +64,7 @@ export function AutoPanel<T extends Record<string, unknown>>({
       {...(description ? { description: ui(description) } : {})}
       fn={fn}
       {...(args ? { args } : {})}
+      {...(lazy ? { lazy } : {})}
       empty={ui(empty)}
       {...(loading ? { loading: ui(loading) } : {})}
       {...(emptyAction

@@ -2465,3 +2465,39 @@ test.describe("a question with a required answer", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a Reports tab reads what is on screen", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("Finance's last report is read when it is scrolled to, not when the tab opens (J-136)", async ({
+    page,
+    backend,
+  }) => {
+    // Opening the tab asked for all nine reports at once, and on live each took
+    // five to eight seconds behind the others. Rows enough that the first
+    // reports fill the screen, whatever they render as.
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      party_id: `p${i}`,
+      party_name: `Supplier ${i}`,
+      currency: "GBP",
+      total_minor: 1000 * i,
+    }));
+    backend.rpc("erp_payables_ageing", rows);
+    backend.rpc("erp_stock_provision", rows);
+
+    await page.goto("/finance");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("tab", { name: /Reports/ }).click();
+
+    const first = page.getByRole("heading", { name: "Payables ageing", exact: true });
+    await expect(first).toBeVisible();
+    await expect.poll(() => backend.called.includes("erp_payables_ageing")).toBe(true);
+    expect(backend.called, "the last report was read before it was in view").not.toContain(
+      "erp_ledgers",
+    );
+
+    await page.getByRole("heading", { name: "Ledgers", exact: true }).scrollIntoViewIfNeeded();
+    await expect.poll(() => backend.called.includes("erp_ledgers")).toBe(true);
+    expect(backend.crashes).toEqual([]);
+  });
+});
