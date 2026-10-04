@@ -167,7 +167,7 @@ export const PURCHASE_TO_PAY: Flow = {
     },
     {
       path: DOCUMENT_SCREEN,
-      does: "Open the new order to check its lines and prices while it is a draft, and add, change or remove a line before anyone commits to it.",
+      does: "Open the new order to check its lines and prices while it is a draft, and add, change or remove a line before anyone commits to it. An order approved with its requisition is taken Back to draft to be changed, and is then submitted for its own approval.",
       doors: [
         "erp_document",
         "erp_add_document_line",
