@@ -6,6 +6,7 @@ import type { ActionSpec } from "../components/erp/actions-bar";
 import type { FlowSpec } from "../components/erp/process-flow";
 import {
   actionKey,
+  doneProps,
   moduleActions,
   pageActions,
   recordAnswer,
@@ -428,4 +429,22 @@ describe("a step's verb reads its step again", () => {
       }
     }
   }
+});
+
+describe("what a verb does once it has worked (J-77)", () => {
+  test("a verb that declares onDone is handed the answer and a way to open a document", () => {
+    const opened: string[] = [];
+    const action: Pick<ActionSpec, "onDone"> = {
+      onDone: (result, openDocument) => {
+        if (typeof result === "string") openDocument(result);
+      },
+    };
+    const props = doneProps(action, (id) => opened.push(id));
+    props.onDone?.("so-1");
+    expect(opened).toEqual(["so-1"]);
+  });
+
+  test("a verb that declares none passes nothing on", () => {
+    expect(doneProps({}, () => undefined)).toEqual({});
+  });
 });
