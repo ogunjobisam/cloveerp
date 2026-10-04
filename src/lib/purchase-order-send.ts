@@ -2,7 +2,8 @@
  * A purchase order's sends to its supplier (20261004920000), as
  * public.erp_purchase_order_sends answers them: the address the next send
  * goes to, whether the reader may send, whether a send must say why, and each
- * send so far with how far it got.
+ * send so far with how far it got. In a demonstration, which never sends
+ * email, it says so, so a send that stays queued is not taken for a stuck one.
  *
  * The order's page draws Send to supplier only where the database says the
  * reader may send it, and asks why only where a send has gone already. The door
@@ -27,6 +28,9 @@ export type PurchaseOrderSend = {
 
 export type PurchaseOrderSends = {
   defaultTo: string | null;
+  /** The order's organisation is a demonstration, which never sends email:
+   *  a send there is queued and stays queued (20261006022000, J-139). */
+  demonstration: boolean;
   maySend: boolean;
   needsReason: boolean;
   sends: PurchaseOrderSend[];
@@ -104,6 +108,7 @@ export function purchaseOrderSends(result: unknown): PurchaseOrderSends | null {
     : [];
   return {
     defaultTo: text(r["default_to"]),
+    demonstration: r["demonstration"] === true,
     maySend: r["may_send"] === true,
     needsReason: r["needs_reason"] === true,
     sends,

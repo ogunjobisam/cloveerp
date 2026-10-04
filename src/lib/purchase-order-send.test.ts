@@ -77,6 +77,12 @@ describe("a purchase order's sends", () => {
     expect(sendStatus("failed", "delivered")).toBe("failed");
   });
 
+  test("says whether the organisation is a demonstration, which sends no email, and only when the answer says so (J-139)", () => {
+    expect(purchaseOrderSends(answer())?.demonstration).toBe(false);
+    expect(purchaseOrderSends(answer({ demonstration: true }))?.demonstration).toBe(true);
+    expect(purchaseOrderSends(answer({ demonstration: "true" }))?.demonstration).toBe(false);
+  });
+
   test("a send without an identifier or an address is left out, and an answer without an order is nothing", () => {
     expect(purchaseOrderSends(answer({ sends: [{ to_address: "x@y.example" }] }))?.sends).toEqual(
       [],
