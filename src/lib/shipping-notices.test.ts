@@ -68,7 +68,26 @@ describe("a shipping notice as the database writes it", () => {
     expect(n?.differences[0]?.kind).toBe("short");
     expect(n?.cartons[1]?.receivedAt).toBeNull();
     expect(n?.sentVia).toBe("supplier");
+    expect(n?.cancelledReason).toBeNull();
     expect(n && noticeOpen(n)).toBe(true);
+  });
+
+  test("a cancelled notice keeps why it was cancelled (J-126)", () => {
+    const n = shippingNotice({
+      ...NOTICE,
+      status: "cancelled",
+      cancelled_reason: " The supplier split the delivery ",
+    });
+    expect(n?.status).toBe("cancelled");
+    expect(n?.cancelledReason).toBe("The supplier split the delivery");
+    expect(n && noticeOpen(n)).toBe(false);
+    expect(shippingNotice({ ...NOTICE, cancelled_reason: "" })?.cancelledReason).toBeNull();
+    const src = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "shipping-notices.tsx"),
+      "utf8",
+    );
+    const card = src.slice(src.indexOf("function NoticeCard"));
+    expect(card).toMatch(/\{ui\("Why it is cancelled"\)\}: \{n\.cancelledReason\}/);
   });
 
   test("is nothing without its ids, and an unknown status reads as on its way", () => {

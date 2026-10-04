@@ -46,6 +46,8 @@ export type ShippingNotice = {
   trackingReference: string | null;
   supplierReference: string | null;
   note: string | null;
+  /** Why the buyer cancelled it, once it is cancelled (J-126). */
+  cancelledReason: string | null;
   sentVia: "supplier" | "buyer";
   receipt: string | null;
   receiptId: string | null;
@@ -108,6 +110,7 @@ export function shippingNotice(v: unknown): ShippingNotice | null {
     trackingReference: text(r["tracking_reference"]),
     supplierReference: text(r["supplier_reference"]),
     note: text(r["note"]),
+    cancelledReason: text(r["cancelled_reason"]),
     sentVia: r["sent_via"] === "buyer" ? "buyer" : "supplier",
     receipt: text(r["receipt"]),
     receiptId: text(r["receipt_id"]),

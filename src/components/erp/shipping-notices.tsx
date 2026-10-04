@@ -169,6 +169,11 @@ function NoticeCard({ n, context }: { n: ShippingNotice; context: string }) {
           ))}
         </ul>
       ) : null}
+      {n.status === "cancelled" && n.cancelledReason ? (
+        <p className="mt-2 min-w-0 break-words text-xs text-muted-foreground">
+          {ui("Why it is cancelled")}: {n.cancelledReason}
+        </p>
+      ) : null}
       {noticeOpen(n) ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <ReceiveMoves n={n} context={context} />

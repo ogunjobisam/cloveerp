@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { formatMinor } from "./money";
 import {
@@ -167,5 +169,16 @@ describe("what allocating a prepayment did", () => {
     expect(prepaymentAllocationOutcome(answer({ allocated_minor: null }))).toBeNull();
     expect(prepaymentAllocationOutcome(answer({ bill_id: null }))).toBeNull();
     expect(prepaymentAllocationOutcome(null)).toBeNull();
+  });
+});
+
+describe("the order's prepayment section", () => {
+  test("draws the reason the prepayment was asked for (J-126)", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "order-prepayment.tsx"),
+      "utf8",
+    );
+    expect(src).toMatch(/\{ui\("Reason"\)\}<\/dt>\s*<dd[^>]*>\{prepayment\.reason\}<\/dd>/);
+    expect(orderPrepayment(order())?.reason).toBe("pro-forma 0042");
   });
 });

@@ -119,6 +119,12 @@ export function OrderPrepayment({ documentId, context }: { documentId: string; c
           ))}
         </dl>
       ) : null}
+      {asked && prepayment.reason ? (
+        <dl className="mt-3 min-w-0 text-sm">
+          <dt className="text-xs text-muted-foreground">{ui("Reason")}</dt>
+          <dd className="break-words">{prepayment.reason}</dd>
+        </dl>
+      ) : null}
 
       {prepayment.payments.length > 0 ? (
         <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
