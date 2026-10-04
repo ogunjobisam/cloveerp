@@ -96,10 +96,11 @@ function Reconciliation() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_reconciliation", "Do the books tie")}>
-        Four things have to be true for these accounts to be right. Each is checked against the
-        ledger as this screen is opened — for your organisation and no other — and the one that does
-        not hold says by how much and what to do about it.
+      <PageHeader
+        title={t("nav.finance_reconciliation", "Do the books tie")}
+        howItWorks="Each is checked against the ledger as this screen is opened — for your organisation and no other — and the one that does not hold says by how much and what to do about it."
+      >
+        Four things have to be true for these accounts to be right.
       </PageHeader>
 
       <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 sm:px-5">

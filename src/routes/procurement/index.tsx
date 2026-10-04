@@ -990,17 +990,10 @@ function Procurement() {
           // Every verb the strip does not carry, one press away rather than in
           // the middle of the page. Grouped and worded exactly as before.
           <HeaderActions>
-            <ActionBar
-              title="The rest of buying"
-              note="Work beside the steps: invoices that do not match, drawing down from standing orders, supplier-direct orders, approval limits, price lookups, supplier approval and delivery costs."
-              actions={BESIDE_THE_CHAIN}
-            />
+            <ActionBar title="The rest of buying" actions={BESIDE_THE_CHAIN} />
           </HeaderActions>
         }
-      >
-        Buying something and paying for it: somebody asks, somebody approves, the order goes to the
-        supplier, the goods arrive, and the supplier&apos;s bill is matched against what arrived.
-      </PageHeader>
+      />
 
       <KpiRow kpis={PURCHASING_KPIS} />
 

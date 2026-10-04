@@ -213,6 +213,7 @@ function Output() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Output and printing"
+        howItWorks="A label template is not live until its barcode has been decoded back from a test render."
         actions={
           <HeaderActions>
             <ActionBar
@@ -542,8 +543,7 @@ function Output() {
       >
         Every document and label the organisation produces comes from a template version, is
         rendered once with a checksum, and is delivered to a printer, a mailbox or a file with a
-        record of whether it arrived. A label template is not live until its barcode has been
-        decoded back from a test render.
+        record of whether it arrived.
       </PageHeader>
 
       <DataPanel<Finding>

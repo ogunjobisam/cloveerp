@@ -65,10 +65,11 @@ function Terminology() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("module.terminology", "Terminology")}>
-        No label in this application is written into a screen. Each one is a key resolved against
-        product text and, where a tenant disagrees, against its own wording. Changing what a
-        delivery note is called is a row here, not a release.
+      <PageHeader
+        title={t("module.terminology", "Terminology")}
+        howItWorks="Each one is a key resolved against product text and, where a tenant disagrees, against its own wording. Changing what a delivery note is called is a row here, not a release."
+      >
+        No label in this application is written into a screen.
       </PageHeader>
 
       {mayConfigure ? null : <PermissionNote code="administration.configure" />}

@@ -129,11 +129,13 @@ function AccessibilityStatement() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Accessibility">
+      <PageHeader
+        title="Accessibility"
+        howItWorks="The register is checked on every build, so the statement stays true on the day it is read rather than the day it was written."
+      >
         The statement is generated from a register of every WCAG 2.2 Level A and AA success
         criterion, with what in the product meets each one, what does not, and which kind of
-        checking stands behind the answer. The register is checked on every build, so the statement
-        stays true on the day it is read rather than the day it was written.
+        checking stands behind the answer.
       </PageHeader>
 
       {isPending ? (

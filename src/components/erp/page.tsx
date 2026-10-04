@@ -195,7 +195,9 @@ export function PageHeader({
   children?: ReactNode;
   /**
    * Everything a screen used to say after its first sentence. Shown behind the
-   * header's help icon under "How this works", reached from a link here.
+   * header's help icon under "How this works", reached from a link here. Drawn
+   * as given: a screen whose words a tenant can rename passes them through
+   * ui() itself, and one whose header was plain text hands the rest over plain.
    */
   howItWorks?: string;
   /**

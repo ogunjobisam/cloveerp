@@ -202,10 +202,12 @@ function Statements() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_statements", "Profit and balance sheet")}>
+      <PageHeader
+        title={t("nav.finance_statements", "Profit and balance sheet")}
+        howItWorks="Narrow them to a period or a single cost centre; the balance sheet carries the result to date so it balances without a year-end entry."
+      >
         Both statements are read from the journals that purchases, stock movements, deliveries and
-        invoices have already posted. Narrow them to a period or a single cost centre; the balance
-        sheet carries the result to date so it balances without a year-end entry.
+        invoices have already posted.
       </PageHeader>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-4">
