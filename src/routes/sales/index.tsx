@@ -22,6 +22,7 @@ import { PageHeader } from "../../components/erp/page";
 import { ProcessFlow, type FlowSpec } from "../../components/erp/process-flow";
 import { unstagedActions } from "../../lib/flow-actions";
 import { DELIVER_THIS_ORDER, SALES_KPIS, salesPolicyArgs } from "../../lib/modules";
+import { madeDocumentId } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/sales/")({
   head: () => ({ meta: [{ title: "Sales — Clove ERP" }] }),
@@ -30,6 +31,13 @@ export const Route = createFileRoute("/sales/")({
       <Sales />
     </Gate>
   ),
+});
+
+/** What converting a quotation takes when nothing is chosen, read for the form. */
+const CONVERSION_DEFAULTS = (key: string) => ({
+  fn: "erp_conversion_defaults",
+  argsFrom: { p_document_id: "p_document_id" },
+  key,
 });
 
 /**
@@ -56,9 +64,17 @@ const SALES_ACTIONS: ActionSpec[] = [
       "A quotation the customer has accepted becomes an order. Every line still outstanding is carried across at the quoted price, and the order remembers the quotation it came from.",
     permission: "sales.order",
     fn: "erp_convert_document",
+    // Both arrive holding the quotation's customer and site, as converting a
+    // requisition does, and stay the person's to change (J-77).
     fields: [
-      pickParty("customer", "p_party_id", "Customer", false),
-      pickSite("p_site_id", "Site the goods ship from", false),
+      {
+        ...pickParty("customer", "p_party_id", "Customer", false),
+        defaultFrom: CONVERSION_DEFAULTS("party_id"),
+      },
+      {
+        ...pickSite("p_site_id", "Site the goods ship from", false),
+        defaultFrom: CONVERSION_DEFAULTS("site_id"),
+      },
     ],
     // Moved on as it is made, as a requisition's order is: submitted for the
     // approval a sales order asks for, and confirmed where none is needed.
@@ -71,6 +87,11 @@ const SALES_ACTIONS: ActionSpec[] = [
     emptyNote: "Only a quotation that has been sent and accepted converts into an order.",
     invalidates: ["erp_documents"],
     submitLabel: "Create the sales order",
+    // On to the order it made, as the quotation's own page goes.
+    onDone: (result, openDocument) => {
+      const made = madeDocumentId(result);
+      if (made) openDocument(made);
+    },
   },
   {
     label: "Find a price",

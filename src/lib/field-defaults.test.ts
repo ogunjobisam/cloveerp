@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { defaultedValues, dropDefaultedValues, type FieldDefault } from "./dependent-options";
+import {
+  defaultedValues,
+  dropDefaultedValues,
+  optionArgs,
+  type FieldDefault,
+} from "./dependent-options";
 
 /**
  * A field that arrives holding a door's answer.
@@ -70,5 +77,36 @@ describe("when the choice a default follows changes", () => {
   test("a change to anything else leaves every answer as it was", () => {
     const values = { p_document_id: "rq-1", p_party_id: "sup-2" };
     expect(dropDefaultedValues(fields, values, "p_note")).toBe(values);
+  });
+});
+
+describe("converting a quotation from the strip (J-77)", () => {
+  const sales = readFileSync(join(import.meta.dir, "..", "routes", "sales", "index.tsx"), "utf8");
+  const convert = sales.slice(
+    sales.indexOf('label: "Convert to a sales order"'),
+    sales.indexOf('label: "Find a price"'),
+  );
+
+  test("the customer and the site arrive holding the quotation's", () => {
+    expect(convert).toContain('defaultFrom: CONVERSION_DEFAULTS("party_id")');
+    expect(convert).toContain('defaultFrom: CONVERSION_DEFAULTS("site_id")');
+    expect(sales).toContain('fn: "erp_conversion_defaults"');
+  });
+
+  test("the quotation the strip chose is enough to ask for them", () => {
+    // The strip hands the chosen quotation over as p_document_id, with no
+    // picker of its own on the form.
+    expect(optionArgs(conversion("party_id"), { p_document_id: "qt-1" })).toEqual({
+      p_document_id: "qt-1",
+    });
+    expect(defaultedValues(fields, {}, { p_party_id: answer, p_site_id: answer })).toEqual({
+      p_party_id: "sup-1",
+      p_site_id: "site-1",
+    });
+  });
+
+  test("it goes on to the order it made", () => {
+    expect(convert).toContain("onDone: (result, openDocument)");
+    expect(convert).toContain("madeDocumentId(result)");
   });
 });

@@ -659,55 +659,6 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     invalidates: ["erp_inbound_shipments", "erp_shipments", "erp_documents"],
   },
   {
-    // A supplier's samples, arrived (20261004930000): held here as theirs,
-    // valued by nobody, until they go back, are kept or are bought from
-    // Samples below.
-    label: "Receive samples",
-    description:
-      "The samples stay the supplier's: held and counted here, valued by nobody, until they go back, are kept or are bought.",
-    permission: "procurement.receive",
-    fn: "erp_receive_samples",
-    fields: [
-      pickParty("supplier", "p_supplier", "Supplier"),
-      pickSite("p_site"),
-      {
-        kind: "rows",
-        name: "p_lines",
-        label: "Products",
-        addLabel: "Add a product",
-        columns: [
-          {
-            name: "item_id",
-            label: "Product",
-            kind: "select",
-            options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
-          },
-          { name: "quantity", label: "Quantity", kind: "number", placeholder: "1" },
-        ],
-      },
-      {
-        kind: "choice",
-        name: "p_purpose",
-        label: "Purpose",
-        required: true,
-        choices: [
-          { value: "shoot", label: "Photo shoot" },
-          { value: "buying", label: "Buying appointment" },
-          { value: "press", label: "Press loan" },
-          { value: "fit", label: "Fit or quality check" },
-        ],
-      },
-      { kind: "date", name: "p_due_back", label: "Due back" },
-      {
-        kind: "text",
-        name: "p_their_reference",
-        label: "Their reference",
-        placeholder: "Their delivery note or sample request",
-      },
-    ],
-    invalidates: ["erp_samples", "erp_documents", "erp_stock_health"],
-  },
-  {
     label: "Confirm a supplier-direct order",
     description:
       "The supplier delivered straight to the customer: both the purchase and the sales order are fulfilled, and no stock moves here.",
@@ -851,6 +802,9 @@ const PURCHASE_TO_PAY: FlowSpec = {
       // Waiting on a decision, or approved and waiting to become an
       // order: converting is the verb of this step, so it is listed here.
       states: ["submitted", "approved"],
+      // The record beside the step names its party as the steps either side
+      // of it do: a supplier, not a business partner (J-144).
+      partyRole: "supplier",
       recordArg: "p_document_id",
       actionFn: "requisition_approve",
       actionFns: ["requisition_reject", "erp_convert_document"],
@@ -893,17 +847,15 @@ const PURCHASE_TO_PAY: FlowSpec = {
 
       typeCode: "goods_receipt",
       // A receipt still being counted in. Posted, its stock is in goods-in
-      // and it waits for the bill from the supplier; "Show finished" lists it
-      // here to be billed.
+      // and it waits for the bill from the supplier, which is raised at the
+      // Supplier bill step: "Bill a receipt" there picks posted receipts.
       states: ["draft"],
       actionStates: {
         erp_receive_against: ["draft"],
-        erp_bill_from_receipt: ["posted"],
       },
       partyRole: "supplier",
       recordArg: "p_receipt_id",
       actionFn: "erp_receive_against",
-      actionFns: ["erp_bill_from_receipt"],
       // The receipt comes from its order, chosen on the form.
       createFn: "erp_create_receipt_from_order",
     },
@@ -940,7 +892,6 @@ const PURCHASE_TO_PAY: FlowSpec = {
     {
       label: "Supplier bill",
       hint: "Their invoice, matched to what arrived, so you know what you now owe.",
-      fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
       typeCode: "purchase_invoice",
       // Being entered, owed in full or in part (20260929100000), or in

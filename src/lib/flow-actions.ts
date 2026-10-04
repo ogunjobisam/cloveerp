@@ -106,3 +106,15 @@ export function pageActions(def: ModuleVerbs): { daily: ActionSpec[]; behind: Ac
   if (def.exceptions === undefined) return { daily: [], behind: actions };
   return { daily: actions, behind: unstagedActions(def.flow, def.exceptions) };
 }
+
+/**
+ * The onDone an ActionDialog takes, from an action that declares one, given a
+ * way to open a document. Nothing for an action that declares none.
+ */
+export function doneProps(
+  action: Pick<ActionSpec, "onDone">,
+  openDocument: (documentId: string) => void,
+): { onDone?: (result: unknown) => void } {
+  const onDone = action.onDone;
+  return onDone ? { onDone: (result) => onDone(result, openDocument) } : {};
+}

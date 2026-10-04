@@ -31,6 +31,7 @@ import {
   emptyReason,
   optionArgs,
   optionList,
+  pickerOptions,
   seedBlocksAdding,
   seededRows,
   type FieldDefault,
@@ -63,7 +64,6 @@ import { Prose, TOUCH } from "./page";
 import { useUnsavedGuard } from "./unsaved";
 import { fill } from "../../lib/interview";
 import { missingRequired } from "../../lib/required-fields";
-import { firstPerValue } from "../../lib/combo-options";
 
 /**
  * The write surface.
@@ -475,14 +475,6 @@ export function pickIntoRow(
   return next;
 }
 
-/** The label a picker shows for one row of its source. */
-function optionLabel(row: Record<string, unknown>, keys: string[]): string {
-  return keys
-    .map((k) => row[k])
-    .filter((x) => x !== null && x !== undefined && x !== "")
-    .join(" — ");
-}
-
 function useOptions(source: OptionSource | undefined, values: Record<string, string> = {}) {
   // Null while a choice this picker follows has not been made: there is
   // nothing to ask for yet.
@@ -501,29 +493,8 @@ function useOptions(source: OptionSource | undefined, values: Record<string, str
   // a list inside the record chosen above is taken from that record.
   const list = source ? optionList(source, data, values) : data;
 
-  // Most reference reads return a row per option. A few — the time zone list
-  // is one — return plain strings, which are their own value and their own
-  // label. A row keeps its record, so a picker can say more than its label
-  // about what was chosen.
-  const rows: { value: string; label: string; record?: Record<string, unknown> }[] = source
-    ? (Array.isArray(list) ? (list as Record<string, unknown>[]) : [])
-        .filter(
-          (row) =>
-            !source.keep || typeof row === "string" || typeof row === "number" || source.keep(row),
-        )
-        .map((row) =>
-          typeof row === "string" || typeof row === "number"
-            ? { value: String(row), label: String(row) }
-            : {
-                value: String(row[source.value] ?? ""),
-                label:
-                  source.describe?.(row) ||
-                  optionLabel(row, source.label) ||
-                  String(row[source.value] ?? ""),
-                record: row,
-              },
-        )
-    : [];
+  // A row per option, each value once; see pickerOptions.
+  const rows = source ? pickerOptions(source, list) : [];
 
   return { rows, isPending: Boolean(source) && !waiting && isPending, error, waiting };
 }
@@ -658,7 +629,7 @@ export function ComboField({
         className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
       />
       <datalist id={listId}>
-        {firstPerValue(rows).map((r) => (
+        {rows.map((r) => (
           <option key={r.value} value={r.value}>
             {r.label}
           </option>

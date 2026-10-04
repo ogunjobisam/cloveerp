@@ -6,9 +6,12 @@ import { useT } from "../../lib/i18n";
 import { inboundShipments } from "../../lib/inbound-shipments";
 import {
   differenceWords,
+  noticeLineSummary,
+  noticeLinesTyped,
   noticeOpen,
   noticeWords,
   orderNotices,
+  recordNoticeSeed,
   shippingNotices,
   type ShippingNotice,
 } from "../../lib/shipping-notices";
@@ -277,6 +280,10 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
       kind: "rows",
       name: "lines",
       label: "What is on its way",
+      // A notice holding nothing is refused by the door (J-60): the editor
+      // arrives holding what is still open on each line, and is required.
+      required: true,
+      seed: recordNoticeSeed(orderId),
       columns: [
         {
           name: "order_line_id",
@@ -303,13 +310,9 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
       fn="erp_record_shipping_notice"
       fields={fields}
       mapArgs={(v, picked) => {
-        // mapArgs is handed what was typed: the quantities as text.
-        const lines = (picked?.rows["lines"] ?? [])
-          .filter((row) => (row["order_line_id"] ?? "") !== "" && (row["quantity"] ?? "") !== "")
-          .map((row) => ({
-            order_line_id: row["order_line_id"],
-            quantity: Number(row["quantity"]),
-          }));
+        // mapArgs is handed what was typed: the quantities as text. A line
+        // the editor arrived holding at nought is already notified in full.
+        const lines = noticeLinesTyped(picked?.rows["lines"] ?? []);
         const opt = (k: string) => (v[k] ? { [k]: v[k] } : {});
         return {
           p_order: orderId,
@@ -432,7 +435,15 @@ export function OnItsWay() {
                     >
                       {n.order}
                     </Link>
+                    {/* Which notice, and what it holds: two notices against
+                        one order read the same without them (J-57). */}
+                    <span className="tabular-nums">{n.notice}</span>
                     <span className="text-muted-foreground">{n.supplier}</span>
+                    {n.lines.length > 0 ? (
+                      <span className="min-w-0 text-xs text-muted-foreground">
+                        {noticeLineSummary(n.lines)}
+                      </span>
+                    ) : null}
                     <span className="tabular-nums">
                       {ui("Arrives")} {n.expectedArrival ?? "—"}
                     </span>

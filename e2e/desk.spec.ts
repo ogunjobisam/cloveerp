@@ -1443,6 +1443,46 @@ test.describe("the cash documents are on the desk", () => {
     expect(backend.crashes).toEqual([]);
   });
 
+  // J-158: the lines arrive after the record, and drew above the buttons, so
+  // the buttons dropped under the pointer. J-129: a document opened from a
+  // step and Back came back to step 1 with nothing chosen.
+  test("a chosen receipt's buttons sit above its lines, and Back returns to the step and the receipt", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_documents", [receipt()]);
+    backend.rpc(
+      "erp_document",
+      cashDocument(receipt(), [line(1, "INV-000041", 60000), line(2, "On account", 10000)]),
+    );
+
+    await page.goto("/finance");
+    await step(page, "Cash in").click({ timeout: 20_000 });
+    await page.getByRole("button", { name: /^RCPT-000012/ }).click();
+
+    const open = page.getByRole("link", { name: "Open the document" });
+    const lines = page.getByText("Lines", { exact: true });
+    await expect(open).toBeVisible();
+    await expect(lines).toBeVisible();
+    const buttonsAt = (await open.boundingBox())?.y ?? Number.POSITIVE_INFINITY;
+    const linesAt = (await lines.boundingBox())?.y ?? Number.NEGATIVE_INFINITY;
+    expect(buttonsAt).toBeLessThan(linesAt);
+
+    await open.click();
+    await expect(page).toHaveURL(new RegExp(`/documents/${RCPT}$`));
+    await page.goBack();
+
+    await expect(step(page, "Cash in")).toHaveAttribute("aria-pressed", "true", {
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("button", { name: /^RCPT-000012/ })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    await expect(page.getByRole("link", { name: "Open the document" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
   test("paying a run names each supplier's payment, and a payment prints its remittance advice", async ({
     page,
     backend,
@@ -1962,6 +2002,75 @@ test.describe("despatch offers only what its doors take", () => {
     );
     await first.click();
     await expect(page.getByRole("button", { name: "Ship these deliveries" }).first()).toBeVisible();
+  });
+
+  // J-171: a step whose read failed showed "0" on its badge and "0 deliveries"
+  // under the error, which says the step is empty when nobody knows.
+  test("a step whose read failed shows no count", async ({ page, backend }) => {
+    backend.fail("erp_deliveries_to_ship", {
+      status: 403,
+      code: "42501",
+      message: "CLOVEERP_PERMISSION_DENIED: logistics.read is required to list deliveries",
+    });
+    await page.goto("/logistics");
+
+    const first = page.getByRole("button", {
+      name: /^Delivery, step 1 of 3, not counted here$/,
+    });
+    await expect(first).toBeVisible({ timeout: 20_000 });
+    await expect(first.locator("[data-step-count]")).toHaveText("—");
+    await expect(page.getByRole("alert").first()).toBeVisible();
+    await expect(page.getByText(/^0 deliveries/)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  // J-143: a step still counting was an empty pulsing pill on the step's grey,
+  // which read as blank for the seconds the larger reads take.
+  test("a step still counting shows its badge holding an ellipsis", async ({ page, backend }) => {
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    await page.route("**/rest/v1/rpc/erp_deliveries_to_ship", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fallback();
+      await answered;
+      return route.fallback();
+    });
+    backend.rpc("erp_deliveries_to_ship", [delivery(1, "MAIN")]);
+    await page.goto("/logistics");
+
+    const counting = page.getByRole("button", { name: /^Delivery, step 1 of 3, still counting$/ });
+    await expect(counting).toBeVisible({ timeout: 20_000 });
+    await expect(counting.locator("[data-step-count]")).toHaveText("…");
+
+    answer();
+    const counted = page.getByRole("button", { name: /^Delivery, step 1 of 3, 1 outstanding$/ });
+    await expect(counted.locator("[data-step-count]")).toHaveText("1");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  // J-55: a page of rows stretched the step down the screen and carried the
+  // record's buttons out of sight. The list scrolls inside its own box.
+  test("a long step list scrolls inside its box and leaves the record's buttons in view", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc(
+      "erp_deliveries_to_ship",
+      Array.from({ length: 20 }, (_, i) => delivery(i + 1, "MAIN")),
+    );
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/logistics");
+
+    await expect(
+      page.getByRole("button", { name: /^Delivery, step 1 of 3, 20 outstanding$/ }),
+    ).toBeVisible({ timeout: 20_000 });
+    const rows = page.locator("[data-stage-rows]");
+    await expect(rows.getByRole("button").first()).toBeVisible();
+    const box = await rows.boundingBox();
+    expect(box?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(32 * 16);
+    expect(await rows.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    expect(backend.crashes).toEqual([]);
   });
 });
 
@@ -2624,6 +2733,46 @@ test.describe("a Reports tab reads what is on screen", () => {
 
     await page.getByRole("heading", { name: "Ledgers", exact: true }).scrollIntoViewIfNeeded();
     await expect.poll(() => backend.called.includes("erp_ledgers")).toBe(true);
+    expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("report runs say where they come from", () => {
+  const NOT_INSTALLED = /^Reporting services are not installed\./;
+
+  test("with services not installed, Reproducibility says so and points at where they are installed (J-113)", async ({
+    page,
+    backend,
+  }) => {
+    // The fixture's contract answers services_installed: false, and no run.
+    // The empty Runs panel said a run is started from the report itself, but
+    // no door starts one: a pack assembled or a subscription delivered does.
+    await page.goto("/reporting/reproducibility");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+
+    await expect(page.getByText(NOT_INSTALLED)).toBeVisible();
+    await expect(
+      page.getByText(
+        "No report has been run. A run is made when a pack is assembled or a subscription is delivered.",
+      ),
+    ).toBeVisible();
+    await expect(page.getByText(/started from the report itself/)).toHaveCount(0);
+    const links = page.getByRole("link", { name: "Open Subscriptions, packs and extracts" });
+    await expect(links.first()).toHaveAttribute("href", "/reporting/distribution");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("with services installed, Reproducibility draws no notice", async ({ page, backend }) => {
+    backend.rpc("erp_analytics_contract", {
+      views: [],
+      credentials: [],
+      services_installed: true,
+      findings: [],
+    });
+    await page.goto("/reporting/reproducibility");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => backend.called.includes("erp_analytics_contract")).toBe(true);
+    await expect(page.getByText(NOT_INSTALLED)).toHaveCount(0);
     expect(backend.crashes).toEqual([]);
   });
 });

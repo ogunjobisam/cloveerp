@@ -24,10 +24,16 @@ import {
   DOCUMENT_READ,
   FIELD_LABELS,
   SETTLED,
+  forgetPlaces,
   formatWhen,
   offerFor,
   partyLabel,
+  placeIn,
+  recordLeftAt,
+  rememberRecord,
+  rememberStep,
   rowsAtStage,
+  shownValue,
   stageEmptyState,
   stepsPerRow,
   settledAtStage,
@@ -334,7 +340,11 @@ describe("the record says what a person reads", () => {
     const cost = fields.find((f) => f.key === "freight_cost_minor");
     expect(cost?.label).toBe("Freight cost");
     expect(cost?.value).toContain("42.50");
-    expect(fields.find((f) => f.key === "actual_arrival")?.value).toBe("2026-09-15 09:30");
+    expect(fields.find((f) => f.key === "actual_arrival")?.value).toBe(
+      formatWhen("2026-09-15T09:30:00+00:00"),
+    );
+    expect(fields.find((f) => f.key === "actual_arrival")?.value).toMatch(/ 09:30$/);
+    expect(fields.find((f) => f.key === "actual_arrival")?.value).not.toContain("2026-09-15");
   });
 
   test("a zero-place currency is not divided by a hundred", () => {
@@ -347,8 +357,41 @@ describe("the record says what a person reads", () => {
   });
 
   test("a time at midnight is a date", () => {
-    expect(formatWhen("2026-09-14T00:00:00+00:00")).toBe("2026-09-14");
-    expect(formatWhen("2026-09-14")).toBe("2026-09-14");
+    expect(formatWhen("2026-09-14T00:00:00+00:00", "en-GB")).toBe(
+      formatWhen("2026-09-14", "en-GB"),
+    );
+    expect(formatWhen("2026-10-01", "en-GB")).toBe("01 Oct 2026");
+  });
+
+  test("a date reads as the desk's other dates do, and keeps its time when it has one (J-149)", () => {
+    expect(formatWhen("2026-10-01T09:30:00+00:00", "en-GB")).toBe("01 Oct 2026 09:30");
+    // The day written is the day shown, whatever the reader's timezone.
+    expect(formatWhen("2026-10-01", "en-GB")).toBe("01 Oct 2026");
+    expect(formatWhen("2026-10-01T23:59:00-11:00", "en-GB")).toBe("01 Oct 2026 23:59");
+    expect(formatWhen("not a date")).toBe("not a date");
+  });
+
+  test("a code reads as words, and anything else as it came (J-149)", () => {
+    expect(shownValue("non_conformance")).toBe("Non conformance");
+    expect(shownValue("medium")).toBe("Medium");
+    expect(shownValue("PO-000123")).toBe("PO-000123");
+    expect(shownValue("Dales Dairy Co")).toBe("Dales Dairy Co");
+    expect(shownValue("GBP")).toBe("GBP");
+    expect(shownValue(12)).toBe("12");
+    expect(shownValue("2026-10-01")).toBe(formatWhen("2026-10-01"));
+
+    const fields = summariseRecord(
+      { ncr_id: "n1", reference: "NCR-1", kind: "non_conformance", severity: "medium" },
+      { fn: "erp_non_conformances", id: "ncr_id", title: ["reference"] },
+    );
+    expect(fields.map((f) => f.value)).toEqual(["Non conformance", "Medium"]);
+  });
+
+  test("the step's list and the record's line say the same (J-149)", () => {
+    const flow = readFileSync(join(ROOT, "src", "components", "erp", "process-flow.tsx"), "utf8");
+    const join_ = flow.slice(flow.indexOf("function join("), flow.indexOf("function haystack("));
+    expect(join_).toContain(".map(shownValue)");
+    expect(flow).toContain("{shownValue(row[source.status])}");
   });
 });
 
@@ -719,10 +762,42 @@ describe("why a step is showing nothing", () => {
     expect(said).not.toContain("yet");
   });
 
-  test("one finished record is one, not ones", () => {
-    expect(
-      stageEmptyState({ ...step, showing: 0, held: 0, finished: 1, counting: false }),
-    ).toContain("All 1 document at goods receipt are finished");
+  test("one finished record is one, not ones (J-160)", () => {
+    const said = stageEmptyState({ ...step, showing: 0, held: 0, finished: 1, counting: false });
+    expect(said).toBe(
+      "Nothing waiting here. The one document here is finished — tick Show finished to see it.",
+    );
+    expect(said).not.toContain("All 1");
+  });
+
+  test("a step named for what it holds does not say the word twice (J-160)", () => {
+    const event = {
+      ...step,
+      noun: "event",
+      nounPlural: "events",
+      label: "Event",
+      fedBy: undefined,
+    };
+    expect(stageEmptyState({ ...event, showing: 0, held: 0, finished: 0, counting: false })).toBe(
+      "No events yet.",
+    );
+    expect(stageEmptyState({ ...event, showing: 0, held: 0, finished: 3, counting: false })).toBe(
+      "Nothing waiting here. All 3 events are finished — tick Show finished to see them.",
+    );
+    const orders = {
+      ...step,
+      noun: "works order",
+      nounPlural: "works orders",
+      label: "Works orders",
+      fedBy: undefined,
+    };
+    expect(stageEmptyState({ ...orders, showing: 0, held: 0, finished: 0, counting: false })).toBe(
+      "No works orders yet.",
+    );
+    // A step named otherwise still names itself.
+    expect(stageEmptyState({ ...step, showing: 0, held: 0, finished: 2, counting: false })).toBe(
+      "Nothing waiting here. All 2 documents at goods receipt are finished — tick Show finished to see them.",
+    );
   });
 
   test("the toggle is named as this step names it", () => {
@@ -754,6 +829,64 @@ describe("why a step is showing nothing", () => {
     expect(stageEmptyState({ ...step, showing: 2, held: 2, finished: 0, counting: false })).toBe(
       "",
     );
+  });
+});
+
+describe("a strip keeps its place (J-129)", () => {
+  test("the step and the record chosen are where the flow was left", () => {
+    forgetPlaces();
+    expect(placeIn("purchase_to_pay")).toBeUndefined();
+    rememberStep("purchase_to_pay", "Goods receipt");
+    rememberRecord("purchase_to_pay", "Goods receipt", "doc-1");
+    expect(placeIn("purchase_to_pay")).toEqual({ step: "Goods receipt", record: "doc-1" });
+    expect(recordLeftAt("purchase_to_pay", "Goods receipt")).toBe("doc-1");
+    // Another flow is another place.
+    expect(placeIn("order_to_cash")).toBeUndefined();
+  });
+
+  test("choosing another step leaves the record behind; choosing the same one keeps it", () => {
+    forgetPlaces();
+    rememberRecord("purchase_to_pay", "Goods receipt", "doc-1");
+    rememberStep("purchase_to_pay", "Goods receipt");
+    expect(recordLeftAt("purchase_to_pay", "Goods receipt")).toBe("doc-1");
+    rememberStep("purchase_to_pay", "Bill");
+    expect(recordLeftAt("purchase_to_pay", "Bill")).toBeNull();
+    expect(recordLeftAt("purchase_to_pay", "Goods receipt")).toBeNull();
+    forgetPlaces();
+  });
+
+  test("the strip opens where it was left and writes down each choice", () => {
+    const flow = readFileSync(join(ROOT, "src", "components", "erp", "process-flow.tsx"), "utf8");
+    expect(flow).toMatch(/useState\(\(\) => \{\s*const left = placeIn\(flow\.code\)/);
+    expect(flow).toMatch(
+      /useState<string \| null>\(\(\) =>\s*recordLeftAt\(flowCode, stage\.label\)/,
+    );
+    expect(flow).toContain("rememberStep(flow.code, step.label)");
+    expect(flow).toContain("rememberRecord(flowCode, stage.label, id)");
+    expect(flow).not.toContain("setChosen(i)");
+  });
+});
+
+describe("a step counts honestly (J-171, J-143)", () => {
+  const flow = readFileSync(join(ROOT, "src", "components", "erp", "process-flow.tsx"), "utf8");
+  const tab = flow.slice(flow.indexOf("function StageTab("), flow.indexOf("const STEP_MIN_REM"));
+  const list = flow.slice(
+    flow.indexOf("function StageList("),
+    flow.indexOf("type DocumentPayload"),
+  );
+
+  test("a failed read is not counted as nothing", () => {
+    expect(tab).toMatch(/source && !isPending && !error \?/);
+    expect(tab).toMatch(
+      /!source \|\| error\s*\? fill\(ui\("\{step\}, step \{n\} of \{total\}, not counted here"\)/,
+    );
+    // The footer says no count under a read that is out or failed.
+    expect(list).toMatch(/\{isPending \|\| error \? null : \(/);
+  });
+
+  test("a step still counting draws the badge, holding an ellipsis", () => {
+    expect(tab).toContain('{count ?? (source && isPending ? "…" : "—")}');
+    expect(tab).not.toContain("h-5 w-6 shrink-0 animate-pulse rounded-full bg-card");
   });
 });
 
@@ -883,5 +1016,28 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     expect(money?.stages.filter((s) => !s.typeCode && !s.list).map((s) => s.label)).toEqual([
       "Journals",
     ]);
+  });
+});
+
+describe("a purchasing step names its party a supplier (J-144)", () => {
+  test("every step of purchase to pay that lists documents says whose side they are on", () => {
+    const src = readFileSync(join(ROOT, "src", "routes", "procurement", "index.tsx"), "utf8");
+    const start = src.indexOf("const PURCHASE_TO_PAY: FlowSpec = {");
+    expect(start).toBeGreaterThan(-1);
+    const flow = src.slice(start, src.indexOf("\n};\n", start));
+    const stages = flow.split(/\n {4}\{\n {6}label: /).slice(1);
+    expect(stages.length).toBeGreaterThan(5);
+    const documentary = stages.filter(
+      (s) => s.includes("typeCode:") || s.includes('fn: "erp_documents"'),
+    );
+    // Requisition, Approval, Purchase order, Goods receipt, Supplier bill.
+    expect(documentary.map((s) => s.slice(0, s.indexOf(",")))).toEqual([
+      '"Requisition"',
+      '"Approval"',
+      '"Purchase order"',
+      '"Goods receipt"',
+      '"Supplier bill"',
+    ]);
+    for (const s of documentary) expect(s).toContain('partyRole: "supplier"');
   });
 });

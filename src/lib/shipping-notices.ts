@@ -10,6 +10,8 @@
  * public.erp_record_shipping_notice (the buyer).
  */
 
+import type { RowSeed } from "./dependent-options";
+
 export type NoticeStatus = "notified" | "part_received" | "received" | "cancelled";
 
 export type NoticeLine = {
@@ -160,6 +162,53 @@ export function orderNotices(result: unknown): {
 
 export const noticeOpen = (n: Pick<ShippingNotice, "status">): boolean =>
   n.status === "notified" || n.status === "part_received";
+
+/**
+ * What a notice holds, in a few words for goods-in's list: "6 × Coat, 10 ×
+ * Scarf", the first `shown` lines and a count of the rest ("+3"). Goods-in's
+ * row named the order and the supplier only, so two notices against one order
+ * could not be told apart without opening a dialog (J-57). Data, not words:
+ * nothing here goes through ui().
+ */
+export function noticeLineSummary(lines: readonly NoticeLine[], shown = 2): string {
+  const amount = (q: number) => (Number.isInteger(q) ? String(q) : String(Number(q.toFixed(4))));
+  const said = lines
+    .slice(0, shown)
+    .map((l) =>
+      l.description === "" ? amount(l.quantity) : `${amount(l.quantity)} × ${l.description}`,
+    )
+    .join(", ");
+  const rest = lines.length - shown;
+  return rest > 0 ? `${said} +${rest}` : said;
+}
+
+/**
+ * "What is on its way" arrives holding every line of the order at what is
+ * still open for a notice, so a notice is not recorded holding nothing (J-60).
+ */
+export const recordNoticeSeed = (orderId: string): RowSeed => ({
+  fn: "erp_order_shipping_notices",
+  args: { p_order: orderId },
+  path: "open",
+  fill: { order_line_id: "order_line_id", quantity: "open" },
+});
+
+/**
+ * The lines a recorded notice holds, from the rows as typed: a row with no
+ * line, or nothing above nought on it, is not in this shipment. A line already
+ * notified in full arrives in the editor at nought and is left out here.
+ */
+export function noticeLinesTyped(
+  rows: readonly Record<string, string>[],
+): { order_line_id: string; quantity: number }[] {
+  return rows.flatMap((row) => {
+    const line = (row["order_line_id"] ?? "").trim();
+    const quantity = num(row["quantity"] ?? "");
+    return line !== "" && quantity !== null && quantity > 0
+      ? [{ order_line_id: line, quantity }]
+      : [];
+  });
+}
 
 export function noticeWords(s: NoticeStatus): {
   words: string;

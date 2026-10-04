@@ -4,7 +4,9 @@ import { ActionButtons, pickDocument } from "../../components/erp/actions-bar";
 import { DecisionMoves } from "../../components/erp/decision-moves";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
-import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { StatusPill, shortDate } from "../../components/erp/auto";
+import { DataPanel, Table } from "../../components/erp/panel";
+import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
 import { ADJUSTMENT_INVALIDATES, RAISE_STOCK_ADJUSTMENT } from "../../lib/modules";
@@ -49,18 +51,6 @@ type AdjustmentRow = {
   cost_minor: number;
   currency: string | null;
 };
-
-/**
- * The tone of an adjustment's state. A draft is the one worth colouring: it has
- * changed nothing and will keep changing nothing until somebody approves it,
- * which is the fact people most often miss about this screen. One waiting for
- * its approver has changed nothing either.
- */
-function stateTone(state: string | null): "ok" | "warn" | "muted" {
-  if (state === "posted") return "ok";
-  if (state === "draft" || state === "pending_approval") return "warn";
-  return "muted";
-}
 
 function StockAdjustments() {
   const { ui } = useT();
@@ -116,6 +106,7 @@ function StockAdjustments() {
               ui("Date"),
               ui("State"),
               ui("Reason"),
+              ui("Note"),
               ui("Found"),
               ui("Missing"),
               ui("Worth"),
@@ -125,9 +116,12 @@ function StockAdjustments() {
               <tr key={r.document_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 font-mono text-xs">{r.document_number}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{r.site ?? "—"}</td>
-                <td className="py-2 pr-4 tabular-nums">{r.adjusted_on}</td>
+                <td className="py-2 pr-4 tabular-nums">{shortDate(r.adjusted_on)}</td>
                 <td className="py-2 pr-4">
-                  <Pill tone={stateTone(r.state)}>{r.state ?? "—"}</Pill>
+                  {/* A draft, or one waiting for its approver, has changed
+                      nothing yet: the pill says so in amber, a posted one in
+                      green. */}
+                  <StatusPill value={r.state} />
                   {/* Approve and Reject, on an adjustment waiting for its
                       approver, to the people its approval asked (PR11 M6).
                       Nothing is drawn until the lifecycle has such a state. */}
@@ -139,9 +133,10 @@ function StockAdjustments() {
                     invalidates={invalidates}
                   />
                 </td>
-                <td className="py-2 pr-4 font-mono text-xs" title={r.reason_note ?? undefined}>
-                  {r.reason_code ?? "—"}
+                <td className="py-2 pr-4">
+                  {r.reason_code ? prettifyField(r.reason_code.toLowerCase()) : "—"}
                 </td>
+                <td className="py-2 pr-4">{r.reason_note ?? "—"}</td>
                 <td className="py-2 pr-4 tabular-nums">{r.found}</td>
                 <td className="py-2 pr-4 tabular-nums">{r.missing}</td>
                 <td className="py-2 pr-4 tabular-nums">

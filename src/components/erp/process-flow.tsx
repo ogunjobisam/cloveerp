@@ -1,19 +1,24 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
-import { actionKey, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
+import { actionKey, doneProps, recordAnswer, stageActionKeys } from "../../lib/flow-actions";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
-import { article } from "../../lib/plain-words";
+import { article, transitionTone } from "../../lib/plain-words";
 import {
   DOCUMENT_READ,
   describeLine,
   offerFor,
+  placeIn,
+  recordLeftAt,
+  rememberRecord,
+  rememberStep,
   rowsAtStage,
+  shownValue,
   stageEmptyState,
   stepsPerRow,
   settledAtStage,
@@ -262,12 +267,13 @@ function useStageRows(stage: Stage, showFinished = false) {
   };
 }
 
+/** A row's line, its values as a person reads them: no codes, no ISO dates (J-149). */
 function join(row: Row, keys: string[] | undefined): string {
   if (!keys) return "";
   return keys
     .map((k) => row[k])
     .filter((x) => x !== null && x !== undefined && x !== "")
-    .map((x) => String(x))
+    .map(shownValue)
     .join(" — ");
 }
 
@@ -312,6 +318,9 @@ function StageAction({
   settled?: string | null;
 }) {
   const { ui } = useT();
+  const navigate = useNavigate();
+  const openDocument = (documentId: string) =>
+    void navigate({ to: "/documents/$documentId", params: { documentId } });
 
   // Not drawn where it cannot be completed (20260923600000): the database
   // refuses it regardless.
@@ -328,9 +337,17 @@ function StageAction({
       </ActionButton>
     );
 
+  // A verb that moves the record on is the way forward, drawn as the document
+  // page draws it: Convert to a sales order beside Decline and Expire was the
+  // plain button of the three (J-76).
+  const forward =
+    action.transition !== undefined && transitionTone({ code: action.transition }) === "forward";
+
   return (
     <ActionDialog
-      trigger={<ActionButton variant="secondary">{ui(action.label)}</ActionButton>}
+      trigger={
+        <ActionButton variant={forward ? "primary" : "secondary"}>{ui(action.label)}</ActionButton>
+      }
       title={action.title ?? action.label}
       {...(action.description ? { description: action.description } : {})}
       {...(action.permission ? { permission: action.permission } : {})}
@@ -341,9 +358,9 @@ function StageAction({
       prefill={prefill}
       {...(preselect && Object.keys(preselect).length > 0 ? { preselect } : {})}
       {...(context ? { context } : {})}
-
       invalidates={action.invalidates ?? []}
       submitLabel={action.submitLabel ?? action.label}
+      {...doneProps(action, openDocument)}
     />
   );
 }
@@ -473,7 +490,10 @@ function StageList({
         </div>
       ) : null}
 
-      <div className="min-h-[12rem]">
+      {/* Bounded beside the record, as the record browser's list is. A page of
+          twenty rows stretched the step down the screen and carried the
+          record's buttons out of sight while the list was read (J-55). */}
+      <div className="min-h-[12rem] lg:max-h-[32rem] lg:overflow-y-auto" data-stage-rows>
         {isPending ? (
           <LoadingRows rows={4} className="px-4 py-4 sm:px-5" />
         ) : error ? (
@@ -509,7 +529,7 @@ function StageList({
                       <span className="truncate font-mono text-xs">{join(row, source.title)}</span>
                       {source.status && row[source.status] ? (
                         <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                          {String(row[source.status])}
+                          {shownValue(row[source.status])}
                         </span>
                       ) : null}
                     </span>
@@ -527,9 +547,15 @@ function StageList({
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-[11px] text-muted-foreground sm:px-5">
+        {/* No count while the read is out or has failed: "0 deliveries" under
+            an error said the step was empty when nobody knew (J-171). */}
         <span>
-          {matches.length} {matches.length === 1 ? source.noun : source.nounPlural}
-          {capped ? ` — the first ${CAP}. Search to reach the rest.` : ""}
+          {isPending || error ? null : (
+            <>
+              {matches.length} {matches.length === 1 ? source.noun : source.nounPlural}
+              {capped ? ` — the first ${CAP}. Search to reach the rest.` : ""}
+            </>
+          )}
         </span>
         {pages > 1 ? (
           <span className="flex shrink-0 items-center gap-1">
@@ -710,63 +736,6 @@ function StageRecord({
               ))}
             </dl>
           ) : null}
-
-          {lines.length > 0 ? (
-            <div className="mt-3">
-              <p className="text-[11px] font-medium text-muted-foreground">{ui("Lines")}</p>
-              <ul className="mt-1 divide-y divide-border/60 rounded-md border border-border/60">
-                {lines.slice(0, LINES_SHOWN).map((line) => (
-                  <li
-                    key={`${line.line_no}`}
-                    className="flex items-baseline justify-between gap-3 px-2 py-1 text-xs"
-                  >
-                    <span className="min-w-0 truncate">{describeLine(line)}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {line.quantity}
-                      {line.net_minor !== null && line.net_minor !== undefined
-                        ? ` · ${formatMinor(line.net_minor, currency, minorUnits(currency))}`
-                        : ""}
-                      {/* The tax the line was determined at, once the document
-                          committed and determined it (20260916030000). A line
-                          with none reads exactly as it did before. */}
-                      {line.tax_minor
-                        ? ` + ${formatMinor(line.tax_minor, currency, minorUnits(currency))} ${ui("Tax")}`
-                        : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {lines.length > LINES_SHOWN ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {ui("More lines are on the document.")}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {isDocument ? (
-            <DocumentTransitions
-              documentId={id}
-              documentNumber={
-                typeof row["document_number"] === "string" ? row["document_number"] : null
-              }
-              documentType={documentType}
-              transitions={transitions}
-              committed={row["is_committed"] === true}
-              exclude={coveredMoves}
-              quiet
-            />
-          ) : null}
-
-          {/* A step whose verbs are all spent is not a dead end: this record
-              has been worked here and belongs to the step after this one. Say
-              which, and put the way there beside the sentence. */}
-          {nothingApplies ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {ui("Nothing on this step applies to this record in its current state.")}
-              {next ? ` ${fill(ui("The next step is {step}."), { step: ui(next.label) })}` : ""}
-            </p>
-          ) : null}
         </>
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -836,16 +805,83 @@ function StageRecord({
           </button>
         ) : null}
       </div>
+
+      {/* Below the buttons, everything that arrives late: the document's other
+          moves, the sentence when nothing applies, and its lines. Above them,
+          each pushed the buttons down as its read answered, under the pointer
+          about to press one (J-158). */}
+      {row && source ? (
+        <>
+          {isDocument ? (
+            <DocumentTransitions
+              documentId={id}
+              documentNumber={
+                typeof row["document_number"] === "string" ? row["document_number"] : null
+              }
+              documentType={documentType}
+              transitions={transitions}
+              committed={row["is_committed"] === true}
+              exclude={coveredMoves}
+              quiet
+            />
+          ) : null}
+
+          {/* A step whose verbs are all spent is not a dead end: this record
+              has been worked here and belongs to the step after this one. Say
+              which; the way there is among the buttons above. */}
+          {nothingApplies ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {ui("Nothing on this step applies to this record in its current state.")}
+              {next ? ` ${fill(ui("The next step is {step}."), { step: ui(next.label) })}` : ""}
+            </p>
+          ) : null}
+          {lines.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-[11px] font-medium text-muted-foreground">{ui("Lines")}</p>
+              <ul className="mt-1 divide-y divide-border/60 rounded-md border border-border/60">
+                {lines.slice(0, LINES_SHOWN).map((line) => (
+                  <li
+                    key={`${line.line_no}`}
+                    className="flex items-baseline justify-between gap-3 px-2 py-1 text-xs"
+                  >
+                    <span className="min-w-0 truncate">{describeLine(line)}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {line.quantity}
+                      {line.net_minor !== null && line.net_minor !== undefined
+                        ? ` · ${formatMinor(line.net_minor, currency, minorUnits(currency))}`
+                        : ""}
+                      {/* The tax the line was determined at, once the document
+                          committed and determined it (20260916030000). A line
+                          with none reads exactly as it did before. */}
+                      {line.tax_minor
+                        ? ` + ${formatMinor(line.tax_minor, currency, minorUnits(currency))} ${ui("Tax")}`
+                        : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {lines.length > LINES_SHOWN ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {ui("More lines are on the document.")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
 
 /** The workbench for one chosen stage: its list on the left, its record on the right. */
 function StageWorkbench({
+  flowCode,
   stage,
   actions,
   next,
 }: {
+  /** The flow's code, under which the record chosen here is remembered (J-129). */
+  flowCode: string;
   stage: Stage;
   actions: ActionSpec[];
   next: NextStep | null;
@@ -855,7 +891,13 @@ function StageWorkbench({
     stage,
     showFinished,
   );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    recordLeftAt(flowCode, stage.label),
+  );
+  const select = (id: string) => {
+    setSelectedId(id);
+    rememberRecord(flowCode, stage.label, id);
+  };
 
   const byFn = new Map(actions.map((a) => [actionKey(a), a]));
   const names = [...(stage.actionFn ? [stage.actionFn] : []), ...(stage.actionFns ?? [])];
@@ -881,7 +923,7 @@ function StageWorkbench({
           finished={finished}
           countingFinished={countingFinished}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={select}
           showFinished={showFinished}
           onShowFinished={setShowFinished}
         />
@@ -924,9 +966,11 @@ function StageTab({
 }) {
   const { ui } = useT();
   const hintId = useId();
-  // The count is what is waiting at the step, never its history.
-  const { source, rows, capped, isPending } = useStageRows(stage);
-  const count = source && !isPending ? (capped ? `${rows.length}+` : String(rows.length)) : null;
+  // The count is what is waiting at the step, never its history. A read that
+  // failed counted nothing, and says so rather than "0" (J-171).
+  const { source, rows, capped, isPending, error } = useStageRows(stage);
+  const count =
+    source && !isPending && !error ? (capped ? `${rows.length}+` : String(rows.length)) : null;
 
   // The step's name as a screen reader says it. It used to be whatever the
   // button's text and title added up to, and the tree reported the whole hint,
@@ -936,11 +980,12 @@ function StageTab({
   // the description, where it belongs.
   // Whole sentences, so a translation can put the words in its own order.
   const values = { step: ui(stage.label), n: index + 1, total, count: count ?? "0" };
-  const name = !source
-    ? fill(ui("{step}, step {n} of {total}, not counted here"), values)
-    : isPending
-      ? fill(ui("{step}, step {n} of {total}, still counting"), values)
-      : fill(ui("{step}, step {n} of {total}, {count} outstanding"), values);
+  const name =
+    !source || error
+      ? fill(ui("{step}, step {n} of {total}, not counted here"), values)
+      : isPending
+        ? fill(ui("{step}, step {n} of {total}, still counting"), values)
+        : fill(ui("{step}, step {n} of {total}, {count} outstanding"), values);
 
   return (
     <li className="min-w-0">
@@ -975,23 +1020,19 @@ function StageTab({
         </span>
         {/* A badge on every step, or the strip reads as if the last step —
             Hand on, Payment, Pick — were missing something. A step that keeps
-            no list of its own says so with a dash; one still counting shows
-            the badge's shape rather than nothing. */}
-        {source && isPending ? (
-          <span
-            aria-hidden="true"
-            className="h-5 w-6 shrink-0 animate-pulse rounded-full bg-card"
-          />
-        ) : (
-          <span
-            aria-hidden="true"
-            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
-              active ? "bg-accent-foreground/25" : "bg-card text-muted-foreground"
-            }`}
-          >
-            {count ?? "—"}
-          </span>
-        )}
+            no list of its own, or whose read failed, says so with a dash. One
+            still counting is the same badge holding an ellipsis: an empty
+            pulsing pill on the step's own grey read as blank for the seconds
+            the larger reads take (J-143). */}
+        <span
+          aria-hidden="true"
+          data-step-count
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
+            active ? "bg-accent-foreground/25" : "bg-card text-muted-foreground"
+          } ${source && isPending ? "animate-pulse" : ""}`}
+        >
+          {count ?? (source && isPending ? "…" : "—")}
+        </span>
         <span id={hintId} className="sr-only">
           {ui(stage.hint)}
         </span>
@@ -1035,7 +1076,18 @@ function useStepsPerRow(count: number) {
 export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: ActionSpec[] }) {
   const { ui } = useT();
   const { session } = useErpSession();
-  const [chosen, setChosen] = useState(0);
+  // Opened where it was left (J-129): a document opened from a step and Back
+  // came back to step 1 with nothing chosen.
+  const [chosen, setChosen] = useState(() => {
+    const left = placeIn(flow.code);
+    const at = left ? flow.stages.findIndex((s) => s.label === left.step) : -1;
+    return at >= 0 ? at : 0;
+  });
+  const choose = (index: number) => {
+    setChosen(index);
+    const step = flow.stages[index];
+    if (step) rememberStep(flow.code, step.label);
+  };
 
   // Keyed the way the workbench keys them. Keyed by function alone, a step that
   // names a verb by its code found nothing, and a step with nothing is never
@@ -1056,7 +1108,7 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
   // Where work goes from here. The last step of a chain has nowhere further to
   // point, and says so by pointing nowhere.
   const after = flow.stages[at + 1];
-  const next: NextStep | null = after ? { label: after.label, go: () => setChosen(at + 1) } : null;
+  const next: NextStep | null = after ? { label: after.label, go: () => choose(at + 1) } : null;
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
@@ -1078,7 +1130,7 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
                 index={i}
                 total={flow.stages.length}
                 active={i === chosen}
-                onSelect={() => setChosen(i)}
+                onSelect={() => choose(i)}
                 disabled={!allowed(s)}
               />
             ))}
@@ -1087,7 +1139,13 @@ export function ProcessFlow({ flow, actions }: { flow: FlowSpec; actions: Action
       </div>
 
       {stage ? (
-        <StageWorkbench key={stage.label} stage={stage} actions={actions} next={next} />
+        <StageWorkbench
+          key={stage.label}
+          flowCode={flow.code}
+          stage={stage}
+          actions={actions}
+          next={next}
+        />
       ) : null}
     </section>
   );

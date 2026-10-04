@@ -209,8 +209,8 @@ export const PURCHASE_TO_PAY: Flow = {
     },
     {
       path: "/procurement",
-      stage: "Goods receipt",
-      does: "Show finished, then bill the posted receipt: the supplier's own invoice number and dates, against the quantities and prices that arrived.",
+      stage: "Supplier bill",
+      does: "Bill the posted receipt:the supplier's own invoice number and dates, against the quantities and prices that arrived.",
       doors: ["erp_bill_from_receipt"],
       leaves: "A supplier bill, raised from the receipt.",
     },

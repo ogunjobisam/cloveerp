@@ -37,6 +37,7 @@ import {
   planningOutcome,
   soundsInternal,
   transitionTone,
+  madeDocumentId,
   OUTCOME_LINGER_MS,
 } from "./plain-words";
 import { rowsAtStage } from "./stage-records";
@@ -525,6 +526,33 @@ describe("a way out does not look like the way forward", () => {
     expect(transitionTone(move("decline", "declined"))).toBe("back");
     expect(transitionTone(move("submit", "pending_approval"))).toBe("forward");
     expect(transitionTone(move("approve", "approved"))).toBe("forward");
+  });
+
+  test("a quotation left to expire is a way back, not the way forward (J-76)", () => {
+    expect(transitionTone(move("expire", "expired"))).toBe("back");
+    expect(transitionTone({ code: "expire" })).toBe("back");
+    expect(transitionTone(move("accept", "accepted"))).toBe("forward");
+    expect(
+      byTone([
+        move("expire", "expired"),
+        move("decline", "declined"),
+        move("accept", "accepted"),
+      ]).map((m) => m.code),
+    ).toEqual(["accept", "expire", "decline"]);
+  });
+
+  test("the document a door made is the one opened next (J-77)", () => {
+    expect(madeDocumentId({ document_id: "so-1", document_number: "SO-000001" })).toBe("so-1");
+    expect(madeDocumentId({ document_id: "" })).toBeNull();
+    expect(madeDocumentId([{ document_id: "so-1" }])).toBeNull();
+    expect(madeDocumentId(null)).toBeNull();
+  });
+
+  test("a step verb that moves the record on is drawn as the way forward", () => {
+    const strip = readFileSync(join(ROOT, "src", "components", "erp", "process-flow.tsx"), "utf8");
+    expect(strip).toContain('transitionTone({ code: action.transition }) === "forward"');
+    expect(strip).toContain('variant={forward ? "primary" : "secondary"}');
+    expect(strip).toContain("{...doneProps(action, openDocument)}");
   });
 
   test("the way forward is drawn first and the way out last", () => {

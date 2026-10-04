@@ -6,6 +6,7 @@ import { friendlyError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { formatMinorTotals, minorUnitsOf } from "../../lib/money";
 import type { Chart, Kpi, KpiContext, Row } from "../../lib/modules";
+import { kpiKeys } from "../../lib/kpi-keys";
 import { chartBars } from "../../lib/report-figures";
 import { useCurrencies } from "./currencies";
 import { LoadingRows, Prose } from "./page";
@@ -109,10 +110,11 @@ export function KpiTile({ kpi }: { kpi: Kpi }) {
 
 export function KpiRow({ kpis }: { kpis: Kpi[] }) {
   if (kpis.length === 0) return null;
+  const keys = kpiKeys(kpis);
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {kpis.map((k) => (
-        <KpiTile key={`${k.fn}-${k.label}`} kpi={k} />
+      {kpis.map((k, i) => (
+        <KpiTile key={keys[i]} kpi={k} />
       ))}
     </div>
   );
