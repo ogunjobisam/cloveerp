@@ -36,6 +36,21 @@ export function isCompletable(t: Transition): boolean {
 }
 
 /**
+ * Whether a step's own verb may make this move now.
+ *
+ * A verb tied to a move calls the door that makes it: converting a requisition
+ * is what marks it ordered. The lifecycle leaves such a move to its door
+ * (`is_automatic`), so it is never a button of its own, and `isCompletable`
+ * says no. Asked of the verb, that answer hid "Convert to a purchase order"
+ * from every approved requisition on the Approval step (found walking the live
+ * product, 4 October 2026). The verb is offered where the person may make the
+ * move, its guard passes and the door would not refuse it.
+ */
+export function isOfferable(t: Transition): boolean {
+  return t.permitted && t.guard_passes && !t.refused;
+}
+
+/**
  * The moves a document's current state has, as `erp_available_transitions`
  * reads them from the lifecycle the organisation promoted.
  *

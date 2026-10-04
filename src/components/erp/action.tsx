@@ -38,6 +38,7 @@ import {
   actionOutcome,
   documentOutcome,
   paymentRunOutcome,
+  lookupOutcome,
   planningOutcome,
   receiptIds,
   receiptOutcome,
@@ -1291,10 +1292,11 @@ export function ActionDialog({
               description: <OutcomeLinks documents={message.documents} />,
               duration: 20_000,
             })
-          : toast(
-              typeof message === "string" ? message : message.message,
-              context && documentOutcome(result) === null ? { description: context } : undefined,
-            );
+          : toast(typeof message === "string" ? message : message.message, {
+              ...(context && documentOutcome(result) === null ? { description: context } : {}),
+              // A lookup's answer is the point of asking: it stays to be read.
+              ...(lookupOutcome(fn, "", result) !== null ? { duration: 20_000 } : {}),
+            });
       const followUp = FOLLOW_UP_BY_FN[fn];
       if (followUp)
         void followUp(result, args, ui(title)).then(

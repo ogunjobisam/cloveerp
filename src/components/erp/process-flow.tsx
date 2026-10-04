@@ -30,7 +30,7 @@ import { useCurrencies } from "./currencies";
 import {
   documentTone,
   heldReasons,
-  isCompletable,
+  isOfferable,
   manualTransitions,
   offersAnyTransition,
   useAvailableTransitions,
@@ -623,8 +623,9 @@ function StageRecord({
       ? undefined
       : moves.error || !Array.isArray(moves.data)
         ? null
-        : // Only what the person can complete here (20260923600000).
-          moves.data.filter((t) => isCompletable(t)).map((t) => t.code);
+        : // Only what the person can complete here (20260923600000), through
+          // the verb's own door: a move the lifecycle leaves to a door counts.
+          moves.data.filter((t) => isOfferable(t)).map((t) => t.code);
 
   const minorUnits = (code: string) => minorUnitsOf(currencies, code);
   const fields = row && source ? summariseRecord(row, source, minorUnits, stage.partyRole) : [];

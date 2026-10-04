@@ -1,9 +1,12 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { ErpError, callErp } from "../../lib/erp";
 import { EmptyState, LoadingRows, Prose } from "./page";
+
+/** A read that took longer than this is asked again only when somebody asks. */
+const SLOW_READ_MS = 5_000;
 
 /**
  * A panel backed by one `public.erp_*` call.
@@ -49,13 +52,28 @@ export function DataPanel<T>({
   loading?: string;
   children: (rows: T[]) => ReactNode;
 }) {
+  // How long the last read took. A slow read is not repeated on a timer: the
+  // checks screen runs every structural check against the database, twenty
+  // seconds of it, and asked again every thirty for as long as the screen
+  // stood open. On live that was 228 runs, and while one ran every other
+  // screen's reads met the statement timeout (found 4 October 2026). The
+  // Refresh button still asks again.
+  const took = useRef(0);
   const { data, isPending, error } = useQuery({
     queryKey: [fn, args ?? {}],
-    queryFn: () => callErp<T[]>(fn, args ?? {}),
+    queryFn: async () => {
+      const started = performance.now();
+      try {
+        return await callErp<T[]>(fn, args ?? {});
+      } finally {
+        took.current = performance.now() - started;
+      }
+    },
     // Not while it is failing. A refusal polled every thirty seconds is a
     // refusal repeated for as long as the screen is open, and the answer will
     // not have changed.
-    refetchInterval: (q) => (q.state.error ? false : 30_000),
+    refetchInterval: (q) => (q.state.error || took.current > SLOW_READ_MS ? false : 30_000),
+    refetchOnWindowFocus: () => took.current <= SLOW_READ_MS,
   });
 
   // A refusal is not a fault. A panel the account may not read says so in the
