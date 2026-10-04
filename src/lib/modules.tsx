@@ -4608,7 +4608,11 @@ export const LOGISTICS: ModuleDef = {
         { header: "Shipments", cell: "shipments", numeric: true },
         { header: "On time", cell: "on_time", numeric: true },
         { header: "On time %", cell: "on_time_pct", numeric: true },
-        { header: "Freight", cell: "freight_minor", numeric: true },
+        // Money, not a count of pence: 4250 read as four thousand pounds. The
+        // door adds a carrier's shipments together and answers with no
+        // currency, so the figure is in the one the booking forms above take
+        // the cost in.
+        { header: "Freight", cell: moneyCell("freight_minor"), numeric: true },
       ],
     },
   ],
