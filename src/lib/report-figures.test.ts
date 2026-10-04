@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { isValidElement } from "react";
 
 import type { Column } from "../components/erp/auto";
-import { FINANCE, LOGISTICS, RECEIVABLES_AGEING_COLUMNS, type Row } from "./modules";
+import {
+  FINANCE,
+  LOGISTICS,
+  MODULES,
+  PLANNING,
+  RECEIVABLES_AGEING_COLUMNS,
+  reportPanelCount,
+  type Row,
+} from "./modules";
 import { chartBars, statementCurrency } from "./report-figures";
 
 /**
@@ -177,5 +185,23 @@ describe("a statement's currency", () => {
   test("is the fallback when no line names one", () => {
     expect(statementCurrency([])).toBe("GBP");
     expect(statementCurrency([{ currency: " " }], "USD")).toBe("USD");
+  });
+});
+
+describe("the number on the Reports tab (J-161)", () => {
+  test("counts the chart as one of the panels it draws", () => {
+    // Planning draws its chart over three reports, and the tab said 3.
+    expect(PLANNING.chart).toBeDefined();
+    expect(reportPanelCount(PLANNING)).toBe(PLANNING.reports.length + 1);
+    expect(reportPanelCount(FINANCE)).toBe(FINANCE.reports.length + (FINANCE.chart ? 1 : 0));
+  });
+
+  test("for every module, is the reports plus the chart, and leaves the questions out", () => {
+    // Planning asks six questions under its reports, and they are not counted.
+    expect((PLANNING.inquiries ?? []).length).toBeGreaterThan(0);
+    for (const def of MODULES) {
+      const drawn = def.reports.length + (def.chart ? 1 : 0);
+      expect(reportPanelCount(def), def.key).toBe(drawn);
+    }
   });
 });

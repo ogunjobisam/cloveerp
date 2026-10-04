@@ -1,12 +1,43 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ErpError, callErp } from "../../lib/erp";
 import { EmptyState, LoadingRows, Prose } from "./page";
 
 /** A read that took longer than this is asked again only when somebody asks. */
 const SLOW_READ_MS = 5_000;
+
+/**
+ * Whether a panel has come into view, or near it.
+ *
+ * Opening Finance's Reports tab asked for all nine reports at once; they queued
+ * behind each other in the database and each took five to eight seconds
+ * (J-136). A lazy panel is read the first time it comes within a screen's
+ * reach and stays read after. Not a fetch: it only says when the query may run.
+ * Where the browser cannot say what is in view, every panel is read, as before.
+ */
+function useSeen(lazy: boolean) {
+  const ref = useRef<HTMLElement>(null);
+  const [seen, setSeen] = useState(!lazy);
+  const observable = typeof IntersectionObserver !== "undefined";
+  useEffect(() => {
+    const el = ref.current;
+    if (seen || !observable || !el) return;
+    const watch = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setSeen(true);
+          watch.disconnect();
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [seen, observable]);
+  return { ref, seen: seen || !observable };
+}
 
 /**
  * A panel backed by one `public.erp_*` call.
@@ -31,6 +62,7 @@ export function DataPanel<T>({
   empty,
   emptyAction,
   loading,
+  lazy = false,
   children,
 }: {
   title: string;
@@ -50,8 +82,11 @@ export function DataPanel<T>({
    * and reloading.
    */
   loading?: string;
+  /** Read only once the panel scrolls into view, for a page of many panels. */
+  lazy?: boolean;
   children: (rows: T[]) => ReactNode;
 }) {
+  const { ref, seen } = useSeen(lazy);
   // How long the last read took. A slow read is not repeated on a timer: the
   // checks screen runs every structural check against the database, twenty
   // seconds of it, and asked again every thirty for as long as the screen
@@ -74,6 +109,7 @@ export function DataPanel<T>({
     // not have changed.
     refetchInterval: (q) => (q.state.error || took.current > SLOW_READ_MS ? false : 30_000),
     refetchOnWindowFocus: () => took.current <= SLOW_READ_MS,
+    enabled: seen,
   });
 
   // A refusal is not a fault. A panel the account may not read says so in the
@@ -90,7 +126,7 @@ export function DataPanel<T>({
   return (
     // min-w-0 so a wide table inside cannot stretch this section past the
     // column it sits in; the table scrolls itself instead.
-    <section className="min-w-0 rounded-xl border border-border bg-card">
+    <section ref={ref} className="min-w-0 rounded-xl border border-border bg-card">
       <header
         className={isEmpty ? "px-4 pt-4 sm:px-5" : "border-b border-border px-4 py-4 sm:px-5"}
       >

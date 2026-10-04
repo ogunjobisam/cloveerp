@@ -8,7 +8,7 @@ import { useCurrencies } from "../../components/erp/currencies";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
-import { useErpSession } from "../../components/erp/session-context";
+import { useErpSession, useScope } from "../../components/erp/session-context";
 import { useUnsavedGuard } from "../../components/erp/unsaved";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
@@ -19,11 +19,13 @@ import {
   draftLinesOf,
   emptyLine,
   isBlankLine,
+  journalAccounts,
   journalLinesArg,
   journalName,
   journalTotals,
   lineAmounts,
   readJournals,
+  startingCompany,
   stateLabel,
   stateTone,
   type DraftLine,
@@ -94,6 +96,8 @@ type Account = {
   name: string;
   entity_id: string;
   status: string;
+  /** Set on an account a subledger keeps; a journal line to one is refused. */
+  control_kind: string | null;
 };
 type CostCentre = { code: string; name: string; status: string };
 
@@ -194,7 +198,7 @@ function JournalRow({ journal, onChange }: { journal: Journal; onChange: () => v
 
   const minorUnits = minorUnitsOf(currencies, journal.currency);
   const money = (minor: number) => formatMinor(minor, journal.currency, minorUnits);
-  const name = journalName(journal);
+  const name = journalName(journal, ui("Reverses"));
   const context = `${name} · ${journal.company ?? ""} · ${journal.posting_date}`;
 
   const submit = useErpAction({ fn: DOORS.submit.fn, invalidates: INVALIDATES });
@@ -462,9 +466,10 @@ function JournalForm({
 }) {
   const { ui } = useT();
   const queryClient = useQueryClient();
+  const scope = useScope();
 
-  const [entityId, setEntityId] = useState(
-    journal?.entity_id ?? (entities.length === 1 ? (entities[0]?.entity_id ?? "") : ""),
+  const [entityId, setEntityId] = useState(() =>
+    startingCompany(journal?.entity_id ?? null, scope.entityId, entities),
   );
   const [postingDate, setPostingDate] = useState(journal?.posting_date ?? today());
   const [reference, setReference] = useState(journal?.reference ?? "");
@@ -487,7 +492,7 @@ function JournalForm({
     queryFn: () => callErp<CostCentre[]>("erp_cost_centres"),
   });
   const companyAccounts = useMemo(
-    () => (accounts.data ?? []).filter((a) => a.entity_id === entityId),
+    () => journalAccounts(accounts.data ?? [], entityId),
     [accounts.data, entityId],
   );
   const activeCentres = (centres.data ?? []).filter((c) => c.status === "active");

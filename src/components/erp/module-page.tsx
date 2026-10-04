@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 
 import { moduleActions, pageActions } from "../../lib/flow-actions";
 import { useT } from "../../lib/i18n";
-import { type ModuleDef, type Panel } from "../../lib/modules";
+import { reportPanelCount, type ModuleDef, type Panel } from "../../lib/modules";
 import { ActionBar, ActionButtons, HeaderActions } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
@@ -50,11 +50,18 @@ function withSite<T extends { args?: Record<string, unknown>; siteArg?: string }
   return { ...read, args: { ...(read.args ?? {}), [read.siteArg]: siteId || null } };
 }
 
-function panelOf(p: Panel) {
+/**
+ * A panel. A report is read only once it scrolls into view: opening Finance's
+ * Reports tab asked for all nine at once, and each took five to eight seconds
+ * because they queued behind each other (J-136). The two or three on screen are
+ * read now; the rest when somebody scrolls to them.
+ */
+function panelOf(p: Panel, lazy = false) {
   return (
     <AutoPanel
       key={`${p.fn}-${p.title}`}
       title={p.title}
+      lazy={lazy}
       {...(p.description ? { description: p.description } : {})}
       fn={p.fn}
       {...(p.args ? { args: p.args } : {})}
@@ -88,7 +95,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "dashboard", label: ui("Dashboard") },
-    { id: "reports", label: ui("Reports"), badge: def.reports.length },
+    { id: "reports", label: ui("Reports"), badge: reportPanelCount(def) },
   ];
 
   return (
@@ -194,7 +201,7 @@ export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNo
             <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
               {def.reports.map((r) => (
                 <div key={`${r.fn}-${r.title}`} className="min-w-0">
-                  {panelOf(withSite(r, siteId))}
+                  {panelOf(withSite(r, siteId), true)}
                 </div>
               ))}
             </div>
