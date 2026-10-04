@@ -246,12 +246,50 @@ const DOCUMENT_FIELDS_WHEN_PRESENT = new Set(["required_date", "tax_minor", "gro
 
 const TIMESTAMP = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const WHEN = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
 
-/** A date as the database's own order, and a time to the minute. */
-export function formatWhen(value: string): string {
-  const stamp = TIMESTAMP.exec(value);
-  if (stamp) return stamp[2] === "00:00" ? stamp[1]! : `${stamp[1]} ${stamp[2]}`;
-  return value;
+/**
+ * A date in the short form the rest of the desk shows (`shortDate`), and a
+ * time to the minute when it is not midnight.
+ *
+ * It used to be the database's own order — "2026-09-15 09:30" — beside tables
+ * that said "15 Sept 2026" (J-149). The day and the time are the ones written
+ * in the value: a date is never moved to the day before by the reader's
+ * timezone. `locale` is for tests; the screen takes the reader's own.
+ */
+export function formatWhen(value: string, locale?: string): string {
+  const when = WHEN.exec(value);
+  if (!when) return value;
+  const [, year, month, day, hour, minute] = when;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (Number.isNaN(date.getTime())) return value;
+  const shown = date.toLocaleDateString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    timeZone: "UTC",
+  });
+  if (!hour || !minute || (hour === "00" && minute === "00")) return shown;
+  return `${shown} ${hour}:${minute}`;
+}
+
+/** A value the database writes as a code: `non_conformance`, `medium`, `booked`. */
+const CODE = /^[a-z]+(_[a-z]+)*$/;
+
+/**
+ * A value as a person reads it, in a step's list and on the record beside it.
+ *
+ * The list's rows and the record's fields printed what the read returned —
+ * "non_conformance — medium", "2026-09-15 09:30" — while only the status pill
+ * humanised its word (J-149). A code goes through `prettifyField`, as the pill's
+ * does, and a date through `formatWhen`. Anything else is shown as it came.
+ */
+export function shownValue(value: unknown): string {
+  const text = String(value);
+  if (typeof value !== "string") return text;
+  if (DATE.test(text) || TIMESTAMP.test(text)) return formatWhen(text);
+  if (CODE.test(text)) return prettifyField(text);
+  return text;
 }
 
 function labelFor(key: string, partyRole?: string): string {
@@ -289,7 +327,7 @@ function fieldOf(
   const text = String(value);
   if (DATE.test(text) || TIMESTAMP.test(text))
     return { key, label, value: formatWhen(text), kind: "date" };
-  return { key, label, value: text, kind: "text" };
+  return { key, label, value: shownValue(text), kind: "text" };
 }
 
 /**
@@ -378,16 +416,58 @@ export function stageEmptyState(input: {
   if (input.showing > 0) return "";
   if (input.held > 0) return `No ${input.nounPlural} match that search.`;
   if (input.counting) return "Nothing waiting here.";
+  // A step named for what it holds — Event, Works order, Forecast — said the
+  // word twice: "No events at event yet." (J-160).
+  const step = input.label.toLowerCase();
+  const at = step === input.noun || step === input.nounPlural ? "" : ` at ${step}`;
+  // "All 1 document at goods receipt are finished" (J-160).
+  if (input.finished === 1)
+    return `Nothing waiting here. The one ${input.noun} here is finished — tick ${input.toggle} to see it.`;
   if (input.finished > 0)
     return (
-      `Nothing waiting here. All ${input.finished} ` +
-      `${input.finished === 1 ? input.noun : input.nounPlural} at ${input.label.toLowerCase()} ` +
+      `Nothing waiting here. All ${input.finished} ${input.nounPlural}${at} ` +
       `are finished — tick ${input.toggle} to see them.`
     );
-  return (
-    `No ${input.nounPlural} at ${input.label.toLowerCase()} yet.` +
-    (input.fedBy ? ` ${input.fedBy}` : "")
-  );
+  return `No ${input.nounPlural}${at} yet.` + (input.fedBy ? ` ${input.fedBy}` : "");
+}
+
+/**
+ * Where a reader left a process strip: the step, and the record chosen on it.
+ *
+ * Both were component state, so opening a document from a step and pressing
+ * Back remounted the module on step 1 with nothing chosen (J-129). Kept here,
+ * for the life of the page, keyed by the flow's code. A record that has since
+ * left the step is simply not found, and the step asks for a choice again.
+ */
+export type StripPlace = { step: string; record: string | null };
+
+const places = new Map<string, StripPlace>();
+
+/** The place a flow was left at, if it was left anywhere. */
+export function placeIn(flow: string): StripPlace | undefined {
+  return places.get(flow);
+}
+
+/** A step was chosen. The record chosen on another step does not follow it. */
+export function rememberStep(flow: string, step: string): void {
+  const was = places.get(flow);
+  places.set(flow, { step, record: was?.step === step ? was.record : null });
+}
+
+/** A record was chosen on a step. */
+export function rememberRecord(flow: string, step: string, record: string | null): void {
+  places.set(flow, { step, record });
+}
+
+/** The record left chosen on this step of this flow, if any. */
+export function recordLeftAt(flow: string, step: string): string | null {
+  const place = places.get(flow);
+  return place?.step === step ? place.record : null;
+}
+
+/** Forget every place. For tests. */
+export function forgetPlaces(): void {
+  places.clear();
 }
 
 /**
