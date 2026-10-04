@@ -24,6 +24,7 @@ import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { ApprovalsWaitingBadge } from "./approvals-waiting";
 import { CommandPalette } from "./command-palette";
 import { ServiceBanner } from "./service-banner";
+import { PersonaBanner } from "./persona";
 import { ContextHelp, ContextHelpSheet } from "./context-help";
 import { BrandMark } from "./logo";
 import { Breadcrumbs } from "./breadcrumbs";
@@ -604,6 +605,7 @@ export function Shell({
               </div>
             </header>
             {session.tenant_id ? <ServiceBanner /> : null}
+            {session.tenant_id ? <PersonaBanner /> : null}
 
             <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
               <SheetContent
