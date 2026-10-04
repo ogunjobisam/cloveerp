@@ -1,9 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { GoTo } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { callErp } from "../../lib/erp";
+import { useT } from "../../lib/i18n";
 
 /**
  * Report versions and the runs made against them.
@@ -111,6 +114,21 @@ function outcomeTone(outcome: string): "ok" | "warn" | "bad" | "muted" {
 }
 
 function Reproducibility() {
+  const { ui } = useT();
+  // Runs are made by the services Subscriptions, packs and extracts installs:
+  // a pack assembled or a subscription delivered. Without them every panel
+  // below is empty, so the page says why rather than leaving it to be guessed.
+  const services = useQuery({
+    // Its own key: Subscriptions, packs and extracts caches the whole contract
+    // under ["erp_analytics_contract", {}], and this keeps only one field of it.
+    // Installing there still refreshes this, as invalidation goes by prefix.
+    queryKey: ["erp_analytics_contract", "services_installed"],
+    queryFn: async () => {
+      const d = await callErp<{ services_installed?: boolean } | null>("erp_analytics_contract");
+      return { services_installed: d?.services_installed ?? false };
+    },
+  });
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Report versions and runs">
@@ -118,6 +136,19 @@ function Reproducibility() {
         the columns it shows, the parameters it takes and the budget it may spend. A run records the
         version and the parameters, so that what somebody was shown can be shown again.
       </PageHeader>
+
+      {services.data && !services.data.services_installed ? (
+        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+          <p className="text-sm">
+            {ui(
+              "Reporting services are not installed. Installing them is a configuration change, approved and promoted like a module: the extract template a deferred run is produced through, and the two jobs that produce extracts and distribute subscriptions.",
+            )}
+          </p>
+          <div className="mt-3">
+            <GoTo to="/reporting/distribution">Open Subscriptions, packs and extracts</GoTo>
+          </div>
+        </section>
+      ) : null}
 
       <DataPanel<Finding>
         title="What is wrong"
@@ -220,8 +251,10 @@ function Reproducibility() {
         title="Runs"
         description="The last five hundred runs, newest first, each with the version and parameters it used. An extract — rows leaving the product as a file — carries the reason that was given for it."
         fn="erp_report_runs"
-        empty="No report has been run. A run is started from the report itself, under Reports and inquiries."
-        emptyAction={<GoTo to="/reporting">Open Reports and inquiries</GoTo>}
+        empty="No report has been run. A run is made when a pack is assembled or a subscription is delivered."
+        emptyAction={
+          <GoTo to="/reporting/distribution">Open Subscriptions, packs and extracts</GoTo>
+        }
       >
         {(rows) => (
           <Table columns={["Run", "Report", "Parameters", "Result", "Outcome"]}>

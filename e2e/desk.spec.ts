@@ -2627,3 +2627,43 @@ test.describe("a Reports tab reads what is on screen", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("report runs say where they come from", () => {
+  const NOT_INSTALLED = /^Reporting services are not installed\./;
+
+  test("with services not installed, Reproducibility says so and points at where they are installed (J-113)", async ({
+    page,
+    backend,
+  }) => {
+    // The fixture's contract answers services_installed: false, and no run.
+    // The empty Runs panel said a run is started from the report itself, but
+    // no door starts one: a pack assembled or a subscription delivered does.
+    await page.goto("/reporting/reproducibility");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+
+    await expect(page.getByText(NOT_INSTALLED)).toBeVisible();
+    await expect(
+      page.getByText(
+        "No report has been run. A run is made when a pack is assembled or a subscription is delivered.",
+      ),
+    ).toBeVisible();
+    await expect(page.getByText(/started from the report itself/)).toHaveCount(0);
+    const links = page.getByRole("link", { name: "Open Subscriptions, packs and extracts" });
+    await expect(links.first()).toHaveAttribute("href", "/reporting/distribution");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("with services installed, Reproducibility draws no notice", async ({ page, backend }) => {
+    backend.rpc("erp_analytics_contract", {
+      views: [],
+      credentials: [],
+      services_installed: true,
+      findings: [],
+    });
+    await page.goto("/reporting/reproducibility");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => backend.called.includes("erp_analytics_contract")).toBe(true);
+    await expect(page.getByText(NOT_INSTALLED)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+});
