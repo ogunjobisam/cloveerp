@@ -96,6 +96,14 @@ type Doc = {
   state: string | null;
   state_name: string | null;
   is_committed: boolean;
+  /** A state its lifecycle ends in: cancelled, declined, closed and the like. */
+  is_terminal: boolean;
+  /**
+   * Whether its lines may be added, priced, changed or removed
+   * (erp.document_lines_open): a draft, not cancelled, and not a type whose
+   * lines a routine writes. The database refuses the rest by name.
+   */
+  lines_open: boolean;
 };
 
 type Line = {
@@ -243,6 +251,7 @@ function Document() {
             dataUpdatedAt,
           })}
           committed={doc.is_committed}
+          terminal={doc.is_terminal}
         />
 
         {/* An order that can still be despatched is where its delivery comes
@@ -368,6 +377,7 @@ function Document() {
         documentId={documentId}
         lines={data.lines}
         committed={doc.is_committed}
+        open={doc.lines_open}
         writtenByDoor={doorOpened}
         amendment={data.amendment ?? null}
         money={money}
@@ -859,10 +869,20 @@ function ApprovalDecisions({ documentId }: { documentId: string }) {
   );
 }
 
+/** What a line changed or removed on a draft makes stale. */
+const LINE_READS = [
+  "erp_document",
+  "erp_documents",
+  "erp_document_lines",
+  "erp_receivable_lines",
+  "erp_receipt_order_lines",
+] as const;
+
 function Lines({
   documentId,
   lines,
   committed,
+  open,
   writtenByDoor,
   amendment,
   money,
@@ -872,6 +892,8 @@ function Lines({
   documentId: string;
   lines: Line[];
   committed: boolean;
+  /** A draft whose lines the database takes: added, priced, changed and removed. */
+  open: boolean;
   /** Only the routine that opened it writes its lines; the database refuses a person. */
   writtenByDoor: boolean;
   amendment: Amendment | null;
@@ -883,6 +905,21 @@ function Lines({
     fn: "erp_price_document_line",
     invalidates: ["erp_document"],
   });
+  // Lines are added, priced, changed and removed only on a draft
+  // (20261006100000). Past draft the database refuses them by name, so
+  // offering them would be a lie rather than a restriction.
+  const editable = open && !writtenByDoor;
+  const { ui } = useT();
+  // Said only where nothing else is: the routine that writes the lines, the
+  // commitment, or a document past draft (J-156 took out the sentence about
+  // major and minor units, which said nothing to anybody typing a price).
+  const note = writtenByDoor
+    ? "The routine that opened this document wrote its lines, and nobody adds or changes one here."
+    : committed
+      ? "This document is committed: the outside world has seen it, so lines are no longer editable. Amendment and reversal are what change it now."
+      : open
+        ? null
+        : ui("Lines change only on a draft.");
   const amend = useErpAction({
     fn: "erp_amend_document_line",
     invalidates: ["erp_document", "erp_documents"],
@@ -893,13 +930,7 @@ function Lines({
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">Lines ({lines.length})</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            {writtenByDoor
-              ? "The routine that opened this document wrote its lines, and nobody adds or changes one here."
-              : committed
-                ? "This document is committed: the outside world has seen it, so lines are no longer editable. Amendment and reversal are what change it now."
-                : "Prices are entered in major units and stored as an integer count of minor ones."}
-          </Prose>
+          {note ? <Prose className="mt-0.5 text-xs text-muted-foreground">{note}</Prose> : null}
           {/* Amend is drawn only where the database would take it
               (20260923600000); where it would not, the reason is said once. */}
           {committed && amendment && !amendment.allowed && amendment.detail ? (
@@ -909,9 +940,7 @@ function Lines({
           ) : null}
         </div>
 
-        {/* erp.add_document_line refuses a committed document outright, so
-            offering it would be a lie rather than a restriction. */}
-        {!committed && !writtenByDoor ? (
+        {editable ? (
           <ActionDialog
             trigger={<ActionButton>Add line</ActionButton>}
             title="Add a line"
@@ -983,17 +1012,89 @@ function Lines({
                 <td className="py-2 pr-4 text-right tabular-nums">{money(l.unit_price_minor)}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{money(l.net_minor)}</td>
                 <td className="py-2 pr-4">
-                  {writtenByDoor ? null : !committed ? (
-                    <button
-                      type="button"
-                      onClick={() => price.mutate({ p_line_id: l.line_id })}
-                      disabled={price.isPending}
-                      className={`${TOUCH} inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2 disabled:opacity-50`}
-                      title="Reprice this line through the tenant's promoted pricing policies."
-                    >
-                      Reprice
-                    </button>
-                  ) : amendment?.allowed !== false ? (
+                  {writtenByDoor ? null : editable ? (
+                    <div className="flex flex-wrap items-center gap-x-3">
+                      <button
+                        type="button"
+                        onClick={() => price.mutate({ p_line_id: l.line_id })}
+                        disabled={price.isPending}
+                        className={`${TOUCH} inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2 disabled:opacity-50`}
+                        title="Reprice this line through the tenant's promoted pricing policies."
+                      >
+                        Reprice
+                      </button>
+                      {/* A draft's line is put right in place (J-31): the
+                          quantity, the price or the wording. The price stays
+                          unless one is typed; Reprice is what asks the list. */}
+                      <ActionDialog
+                        trigger={
+                          <button
+                            type="button"
+                            className={`${TOUCH} inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2`}
+                          >
+                            Change
+                          </button>
+                        }
+                        title="Change this line"
+                        description="The price stays as it is unless you type a new one."
+                        fn="erp_change_document_line"
+                        fields={[
+                          {
+                            kind: "number",
+                            name: "p_quantity",
+                            label: "Quantity",
+                            required: true,
+                            default: String(l.quantity),
+                          },
+                          {
+                            kind: "money",
+                            name: "p_unit_price_minor",
+                            label: "Unit price",
+                            currency,
+                          },
+                          {
+                            kind: "text",
+                            name: "p_description",
+                            label: "Description",
+                            default: l.description ?? "",
+                            hint: "Optional. Overrides the product's own wording on this line.",
+                          },
+                        ]}
+                        mapArgs={(v) => ({
+                          p_line_id: l.line_id,
+                          p_quantity: Number(v["p_quantity"] ?? 0),
+                          // Left empty, the price stays as it is: toMinor gives
+                          // null for an empty box, and the door keeps the
+                          // line's price for null.
+                          p_unit_price_minor: toMinor(
+                            (v["p_unit_price_minor"] ?? "") as string,
+                            minorUnits,
+                          ),
+                          // Emptied, the wording goes back to the product's own.
+                          p_description: v["p_description"] ?? null,
+                        })}
+                        invalidates={[...LINE_READS]}
+                        submitLabel="Change"
+                      />
+                      <ActionDialog
+                        trigger={
+                          <button
+                            type="button"
+                            className={`${TOUCH} inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2`}
+                          >
+                            Remove
+                          </button>
+                        }
+                        title="Remove this line?"
+                        description="It comes off the draft, and anything it was raised from is open again."
+                        fn="erp_remove_document_line"
+                        fields={[]}
+                        mapArgs={() => ({ p_line_id: l.line_id })}
+                        invalidates={[...LINE_READS]}
+                        submitLabel="Remove"
+                      />
+                    </div>
+                  ) : committed && amendment?.allowed !== false ? (
                     /* A committed line changes only by amendment: a new
                        quantity, a reason, and the old figure kept beside it. */
                     <ActionDialog

@@ -167,8 +167,14 @@ export const PURCHASE_TO_PAY: Flow = {
     },
     {
       path: DOCUMENT_SCREEN,
-      does: "Open the new order to check its lines and prices, and add or amend a line before anyone commits to it.",
-      doors: ["erp_document", "erp_add_document_line", "erp_amend_document_line"],
+      does: "Open the new order to check its lines and prices while it is a draft, and add, change or remove a line before anyone commits to it.",
+      doors: [
+        "erp_document",
+        "erp_add_document_line",
+        "erp_change_document_line",
+        "erp_remove_document_line",
+        "erp_amend_document_line",
+      ],
       leaves: "The order still where it was, with the lines it will be sent on.",
     },
     {
@@ -189,7 +195,7 @@ export const PURCHASE_TO_PAY: Flow = {
       path: "/procurement",
       stage: "Goods receipt",
       does: "Count what actually turned up, correct any line that came short, and post the receipt.",
-      doors: ["erp_receive_against", "erp_transition_document"],
+      doors: ["erp_receive_against", "erp_receipt_order_lines", "erp_transition_document"],
       leaves:
         "The receipt posted: stock standing in the site's receiving area, the goods-received accrual raised, and the order partly or fully received.",
     },
@@ -277,8 +283,14 @@ export const ORDER_TO_CASH: Flow = {
     },
     {
       path: DOCUMENT_SCREEN,
-      does: "Open the order to check its lines and prices, and add or amend a line before it is committed.",
-      doors: ["erp_document", "erp_add_document_line", "erp_amend_document_line"],
+      does: "Open the order to check its lines and prices while it is a draft, and add, change or remove a line before it is committed.",
+      doors: [
+        "erp_document",
+        "erp_add_document_line",
+        "erp_change_document_line",
+        "erp_remove_document_line",
+        "erp_amend_document_line",
+      ],
       leaves: "The order still where it was, with the lines it will be confirmed on.",
     },
     {
