@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
-import { useContext, useEffect, useState, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { useT } from "../../lib/i18n";
 import { HelpContext, PageHeaderExtras } from "./page-extras";
@@ -22,14 +22,18 @@ import { HelpContext, PageHeaderExtras } from "./page-extras";
 export const TOUCH = "min-h-11";
 
 /**
- * A description that costs one line on a small screen.
+ * A description that costs one line on a small screen and two on a wide one.
  *
- * Below `md` the text is clamped and a toggle reveals the rest; from `md` up
- * the clamp is off and the toggle is not rendered at all, so the desktop
- * reading experience is unchanged and no measurement is involved. The toggle
- * is always offered rather than only when the text overflows: knowing whether
- * it overflows means measuring after layout, and a control that appears and
- * disappears as the text reflows is worse than one that is always there.
+ * The text is clamped at every width — one line below `md`, two from `md` up —
+ * and a toggle reveals the rest. The toggle is drawn only where there is a rest
+ * to reveal: the paragraph is measured after layout, and again whenever its box
+ * or its words change, so a sentence that fits carries no control at all. Text
+ * that has been opened keeps its toggle whatever the measurement says, so what
+ * was opened can always be closed.
+ *
+ * It used to be clamped on a phone only, with the toggle always there. A wide
+ * screen then paid for every description in full on every visit, and a phone
+ * offered "Show more" over sentences that had no more to show.
  */
 export function Prose({
   children,
@@ -39,20 +43,53 @@ export function Prose({
   className?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const text = useRef<HTMLParagraphElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = text.current;
+    // Open text has no clamp to measure against; the last answer stands until
+    // it is closed again.
+    if (!el || expanded) return;
+    let live = true;
+    // A pixel of tolerance: both heights are rounded, and at a fractional zoom
+    // they can round apart over text that fits.
+    const measure = () => {
+      if (live) setOverflows(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    // The web fonts swap in after first paint and can push a line over.
+    void document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        live = false;
+      };
+    }
+    // Also how a description inside something closed — a folded inquiry, a
+    // hidden tab — gets measured: it has no box until it is shown.
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [expanded, children]);
 
   return (
     <div className="min-w-0">
-      <p className={`${className} ${expanded ? "" : "line-clamp-1 md:line-clamp-none"}`}>
+      <p ref={text} className={`${className} ${expanded ? "" : "line-clamp-1 md:line-clamp-2"}`}>
         {children}
       </p>
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        className={`${TOUCH} -mb-2 inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2 md:hidden`}
-      >
-        {expanded ? "Show less" : "Show more"}
-      </button>
+      {overflows || expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className={`${TOUCH} -mb-2 inline-flex items-center text-xs font-medium text-muted-foreground underline underline-offset-2`}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
     </div>
   );
 }
