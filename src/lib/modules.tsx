@@ -304,6 +304,16 @@ export type ModuleDef = {
   inquiries?: InquirySpec[];
 };
 
+/**
+ * The number on the Reports tab: the panels it draws. The chart is drawn as a
+ * panel above the reports and was not counted, so Planning said 3 over four
+ * panels (J-161). The questions sit under their own heading and are not
+ * reports, so they stay out of it.
+ */
+export function reportPanelCount(def: Pick<ModuleDef, "reports" | "chart">): number {
+  return def.reports.length + (def.chart ? 1 : 0);
+}
+
 const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;

@@ -5,12 +5,14 @@ import {
   draftLinesOf,
   emptyLine,
   isBlankLine,
+  journalAccounts,
   journalLinesArg,
   journalName,
   journalTotals,
   lineAmounts,
   minorToInput,
   readJournals,
+  startingCompany,
   stateLabel,
   stateTone,
   type DraftLine,
@@ -201,5 +203,78 @@ describe("reading the list", () => {
     expect(stateLabel("submitted")).toBe("Waiting for approval");
     expect(stateTone("returned")).toBe("bad");
     expect(stateTone("posted")).toBe("ok");
+  });
+});
+
+describe("a reversal waiting for approval (J-101)", () => {
+  // erp_reverse_journal raises the reversal unnumbered, with the original's
+  // number as its reference.
+  const pending = {
+    journal_number: null,
+    reference: "GL-2026-001078",
+    posting_date: "2026-10-03",
+    reverses_number: "GL-2026-001078",
+  };
+
+  test("is named by what it reverses, not with the original's number", () => {
+    expect(journalName(pending)).not.toBe("GL-2026-001078");
+    expect(journalName(pending)).toBe("Reverses GL-2026-001078");
+    expect(journalName(pending, "Kehrt um")).toBe("Kehrt um GL-2026-001078");
+  });
+
+  test("takes its own number once it posts", () => {
+    expect(journalName({ ...pending, journal_number: "GL-2026-001079" })).toBe("GL-2026-001079");
+  });
+
+  test("a journal that reverses nothing is named as before", () => {
+    expect(
+      journalName({
+        journal_number: null,
+        reference: "ACC",
+        posting_date: "2026-09-30",
+        reverses_number: null,
+      }),
+    ).toBe("ACC");
+  });
+});
+
+describe("the company a journal starts on (J-102)", () => {
+  const two = [{ entity_id: "acme" }, { entity_id: "acme-eu" }];
+
+  test("a draft keeps its own company", () => {
+    expect(startingCompany("acme-eu", "acme", two)).toBe("acme-eu");
+  });
+
+  test("a new journal starts on the company chosen in the header", () => {
+    expect(startingCompany(null, "acme-eu", two)).toBe("acme-eu");
+  });
+
+  test("a header company that is not offered is not taken", () => {
+    expect(startingCompany(null, "gone", two)).toBe("");
+  });
+
+  test("with no choice in the header, the only company, else none", () => {
+    expect(startingCompany(null, "", [{ entity_id: "acme" }])).toBe("acme");
+    expect(startingCompany(null, "", two)).toBe("");
+    expect(startingCompany(null, "", [])).toBe("");
+  });
+});
+
+describe("the accounts a line may post to (J-103)", () => {
+  const accounts = [
+    { code: "1100", entity_id: "acme", control_kind: "receivables" },
+    { code: "2000", entity_id: "acme", control_kind: "payables" },
+    { code: "1200", entity_id: "acme", control_kind: "inventory" },
+    { code: "2100", entity_id: "acme", control_kind: null },
+    { code: "6000", entity_id: "acme", control_kind: null },
+    { code: "6000", entity_id: "acme-eu", control_kind: null },
+  ];
+
+  test("only the company's own, and no control account; GRNI stays", () => {
+    expect(journalAccounts(accounts, "acme").map((a) => a.code)).toEqual(["2100", "6000"]);
+  });
+
+  test("nothing before a company is chosen", () => {
+    expect(journalAccounts(accounts, "")).toEqual([]);
   });
 });
