@@ -77,6 +77,19 @@ export type ActionSpec = {
 const InPanel = createContext(false);
 
 /**
+ * Whether a bar is drawn for its forms alone, with no buttons.
+ *
+ * Set by HeaderActions round a second drawing of its groups, outside the
+ * panel. What the panel holds is on the page only while the panel is open, so
+ * a form behind it could be opened by nothing but its own button — and the
+ * walkthrough opens a step's form by the door it drives (action-registry.ts).
+ * Drawn this way each form is on the page, answers to its door and shows
+ * nothing until it is opened; the button that opens it by hand is still the
+ * one in the panel.
+ */
+const FormsOnly = createContext(false);
+
+/**
  * A bar of actions, under a heading that says what they act on.
  *
  * The heading used to be the literal word "Actions", on every one of these.
@@ -109,7 +122,10 @@ export function ActionBar({
 }) {
   const { ui } = useT();
   const inPanel = useContext(InPanel);
+  const formsOnly = useContext(FormsOnly);
   if (actions.length === 0) return null;
+  // No card, heading or note: nothing of the bar is seen until a form opens.
+  if (formsOnly) return <ActionButtons actions={actions} />;
 
   return (
     <section
@@ -141,12 +157,20 @@ export function ActionBar({
  */
 export function ActionButtons({ actions }: { actions: ActionSpec[] }) {
   const { ui } = useT();
+  const formsOnly = useContext(FormsOnly);
   return (
     <>
       {actions.map((a) => (
         <ActionDialog
           key={`${a.fn}-${a.label}`}
-          trigger={<ActionButton variant="secondary">{ui(a.label)}</ActionButton>}
+          trigger={
+            formsOnly ? (
+              // Nothing to press: the form is opened by its door.
+              <span hidden />
+            ) : (
+              <ActionButton variant="secondary">{ui(a.label)}</ActionButton>
+            )
+          }
           title={a.title ?? a.label}
           {...(a.description ? { description: a.description } : {})}
           {...(a.permission ? { permission: a.permission } : {})}
@@ -177,6 +201,13 @@ export function ActionButtons({ actions }: { actions: ActionSpec[] }) {
  * of the same declarations, so there is still one way an action is drawn and
  * every word on the panel is still harvested by supabase/ci/screen_strings.sh
  * from the ActionBar it is written on.
+ *
+ * The same groups are drawn a second time beside the button, as their forms
+ * alone (FormsOnly), so a form behind a shut panel still answers to its door:
+ * the setup walkthrough's "open the form" works on a screen whose verbs are
+ * here exactly as it does on one whose verbs are cards in the page. That is
+ * why the children are ActionBars and nothing else — anything that does not
+ * read FormsOnly would be drawn on the page as well as in the panel.
  */
 export function HeaderActions({ children, label }: { children: ReactNode; label?: string }) {
   const { ui } = useT();
@@ -199,6 +230,7 @@ export function HeaderActions({ children, label }: { children: ReactNode; label?
         {name}
         <ChevronDown aria-hidden className="size-3.5 opacity-60" />
       </button>
+      <FormsOnly.Provider value={true}>{children}</FormsOnly.Provider>
       <Sheet open={open} onOpenChange={setOpen}>
         {/* No description: this thread moves controls and writes no new
             words, and each group below carries its own heading and note. */}

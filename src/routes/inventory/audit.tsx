@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickChangeSet, pickFrom } from "../../components/erp/actions-bar";
+import { ActionButtons, pickChangeSet, pickFrom } from "../../components/erp/actions-bar";
 import { CountWorklist } from "../../components/erp/count-worklist";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -138,132 +138,131 @@ function StockAudit() {
         howItWorks={ui(
           "A place nobody has counted shows as never counted rather than as agreeing. A count inside its tolerance corrects the stock as it is recorded, through a stock adjustment with a reason; one outside it corrects nothing until it is agreed and posted.",
         )}
+        actions={
+          <ActionButtons
+            actions={[
+              {
+                label: "Raise count tasks",
+                description: "Ask a counting programme for its next set of places to count.",
+                permission: "inventory.count",
+                fn: "erp_raise_count_tasks",
+                // The door refuses a programme that is not active, so the status
+                // is shown beside the code.
+                fields: [
+                  pickFrom(
+                    "erp_count_programmes",
+                    "code",
+                    ["code", "name", "status"],
+                    "p_programme_code",
+                    "Programme",
+                  ),
+                ],
+                invalidates,
+              },
+              {
+                // A count outside the tolerance of its programme waits on an
+                // approval task, and until 20260914070000 deciding it moved
+                // nothing: the count stayed waiting. Deciding it here approves or
+                // refuses the count itself.
+                label: "Decide a count difference",
+                description:
+                  "A count outside its programme's tolerance waits for the approving role to agree. Agreed, it is posted by somebody who may adjust stock; refused, it stays as it was found and is not posted.",
+                // No permission: the door gates on the task being assigned to the
+                // caller, and a code here would hide it from an assignee who lacks it.
+                fn: "erp_decide_approval",
+                fields: [
+                  pickFrom(
+                    "erp_my_approvals",
+                    "task_id",
+                    ["object_type", "requested_by", "requested_at"],
+                    "p_task_id",
+                    "Approval waiting on me",
+                  ),
+                  {
+                    kind: "choice",
+                    name: "p_approve",
+                    label: "Decision",
+                    required: true,
+                    choices: [
+                      { value: "true", label: "Approve" },
+                      { value: "false", label: "Refuse" },
+                    ],
+                  },
+                  {
+                    kind: "text",
+                    name: "p_comment",
+                    label: "Comment",
+                    placeholder: "Recounted, the shortage is real",
+                  },
+                ],
+                mapArgs: (v) => ({
+                  p_task_id: v["p_task_id"],
+                  p_approve: v["p_approve"] === "true",
+                  ...(v["p_comment"] ? { p_comment: v["p_comment"] } : {}),
+                }),
+                invalidates: [...invalidates, "erp_my_approvals"],
+                submitLabel: "Record the decision",
+              },
+              {
+                // inventory.count_posting (20260927300000): whether a count inside
+                // tolerance posts as it is recorded, per company or site.
+                label: "Propose the count posting policy",
+                description:
+                  "Whether a count inside its tolerance posts itself as it is recorded or waits for somebody to post it, and whether the counter's own does once the organisation is live. The tolerance is the counting programme's, in units or a share of the units expected, with no threshold by value. Proposed as a change like any other configuration.",
+                permission: "administration.configure",
+                fn: "erp_propose_count_posting_policy",
+                mapArgs: countPostingArgs,
+                fields: [
+                  {
+                    kind: "select",
+                    name: "p_entity_code",
+                    label: "Company",
+                    options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+                    hint: "Leave unchosen to set the policy for the whole organisation.",
+                  },
+                  {
+                    kind: "select",
+                    name: "p_site_code",
+                    label: "Site",
+                    options: { fn: "erp_sites", value: "code", label: ["code", "name"] },
+                    hint: "Leave unchosen to apply the policy across the whole company.",
+                  },
+                  {
+                    kind: "choice",
+                    name: "within_tolerance",
+                    label: "A count inside tolerance",
+                    choices: [
+                      { value: "post", label: "Posts as it is recorded" },
+                      { value: "hold", label: "Waits for somebody to post it" },
+                    ],
+                    hint: "Hold waits for somebody who may adjust stock to post each count, as outside tolerance. Left unchosen, the broader setting applies.",
+                  },
+                  {
+                    kind: "choice",
+                    name: "self_post_within_tolerance",
+                    label: "The counter's own count inside tolerance",
+                    boolean: true,
+                    choices: [
+                      { value: "true", label: "Posts itself" },
+                      { value: "false", label: "Waits for somebody else" },
+                    ],
+                    hint: "Once the organisation is live. Waits leaves the counter's own count for a second person, as every count outside tolerance is. Left unchosen, the broader setting applies.",
+                  },
+                  {
+                    ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+                    hint: "Leave unchosen to start a new change for this proposal.",
+                  },
+                ],
+                invalidates: ["erp_change_sets"],
+              },
+            ]}
+          />
+        }
       >
         {ui(
           "What the system says is in each place, what it is worth, and what the last count found.",
         )}
       </PageHeader>
-
-      <ActionBar
-        title="Counting"
-        note="Raise tasks from a counting programme, then record each place on the worklist below. A count outside its tolerance is decided here by its approver."
-        actions={[
-          {
-            label: "Raise count tasks",
-            description: "Ask a counting programme for its next set of places to count.",
-            permission: "inventory.count",
-            fn: "erp_raise_count_tasks",
-            // The door refuses a programme that is not active, so the status
-            // is shown beside the code.
-            fields: [
-              pickFrom(
-                "erp_count_programmes",
-                "code",
-                ["code", "name", "status"],
-                "p_programme_code",
-                "Programme",
-              ),
-            ],
-            invalidates,
-          },
-          {
-            // A count outside the tolerance of its programme waits on an
-            // approval task, and until 20260914070000 deciding it moved
-            // nothing: the count stayed waiting. Deciding it here approves or
-            // refuses the count itself.
-            label: "Decide a count difference",
-            description:
-              "A count outside its programme's tolerance waits for the approving role to agree. Agreed, it is posted by somebody who may adjust stock; refused, it stays as it was found and is not posted.",
-            // No permission: the door gates on the task being assigned to the
-            // caller, and a code here would hide it from an assignee who lacks it.
-            fn: "erp_decide_approval",
-            fields: [
-              pickFrom(
-                "erp_my_approvals",
-                "task_id",
-                ["object_type", "requested_by", "requested_at"],
-                "p_task_id",
-                "Approval waiting on me",
-              ),
-              {
-                kind: "choice",
-                name: "p_approve",
-                label: "Decision",
-                required: true,
-                choices: [
-                  { value: "true", label: "Approve" },
-                  { value: "false", label: "Refuse" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_comment",
-                label: "Comment",
-                placeholder: "Recounted, the shortage is real",
-              },
-            ],
-            mapArgs: (v) => ({
-              p_task_id: v["p_task_id"],
-              p_approve: v["p_approve"] === "true",
-              ...(v["p_comment"] ? { p_comment: v["p_comment"] } : {}),
-            }),
-            invalidates: [...invalidates, "erp_my_approvals"],
-            submitLabel: "Record the decision",
-          },
-          {
-            // inventory.count_posting (20260927300000): whether a count inside
-            // tolerance posts as it is recorded, per company or site.
-            label: "Propose the count posting policy",
-            description:
-              "Whether a count inside its tolerance posts itself as it is recorded or waits for somebody to post it, and whether the counter's own does once the organisation is live. The tolerance is the counting programme's, in units or a share of the units expected, with no threshold by value. Proposed as a change like any other configuration.",
-            permission: "administration.configure",
-            fn: "erp_propose_count_posting_policy",
-            mapArgs: countPostingArgs,
-            fields: [
-              {
-                kind: "select",
-                name: "p_entity_code",
-                label: "Company",
-                options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
-                hint: "Leave unchosen to set the policy for the whole organisation.",
-              },
-              {
-                kind: "select",
-                name: "p_site_code",
-                label: "Site",
-                options: { fn: "erp_sites", value: "code", label: ["code", "name"] },
-                hint: "Leave unchosen to apply the policy across the whole company.",
-              },
-              {
-                kind: "choice",
-                name: "within_tolerance",
-                label: "A count inside tolerance",
-                choices: [
-                  { value: "post", label: "Posts as it is recorded" },
-                  { value: "hold", label: "Waits for somebody to post it" },
-                ],
-                hint: "Hold waits for somebody who may adjust stock to post each count, as outside tolerance. Left unchosen, the broader setting applies.",
-              },
-              {
-                kind: "choice",
-                name: "self_post_within_tolerance",
-                label: "The counter's own count inside tolerance",
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Posts itself" },
-                  { value: "false", label: "Waits for somebody else" },
-                ],
-                hint: "Once the organisation is live. Waits leaves the counter's own count for a second person, as every count outside tolerance is. Left unchosen, the broader setting applies.",
-              },
-              {
-                ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
-                hint: "Leave unchosen to start a new change for this proposal.",
-              },
-            ],
-            invalidates: ["erp_change_sets"],
-          },
-        ]}
-      />
 
       <CountWorklist />
 

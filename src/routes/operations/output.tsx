@@ -3,7 +3,13 @@ import type React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { GoTo } from "../../components/erp/action";
-import { ActionBar, codeField, pickFrom, pickLocale } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  HeaderActions,
+  codeField,
+  pickFrom,
+  pickLocale,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -205,320 +211,340 @@ function deliveryTone(status: string | null): "ok" | "warn" | "bad" | "muted" {
 function Output() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Output and printing">
+      <PageHeader
+        title="Output and printing"
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Printers"
+              note="Printers are configuration: on a live organisation the edit is raised as a change and promoted, and a direct write here is refused. A label printer needs a language and a resolution; a document printer needs neither."
+              actions={[
+                {
+                  label: "Render an output template",
+                  description:
+                    "Renders one template for one document in a locale, into the output store.",
+                  permission: "administration.configure",
+                  fn: "erp_render_output_template",
+                  fields: [
+                    pickFrom(
+                      "erp_output_templates",
+                      "code",
+                      ["code", "kind"],
+                      "p_code",
+                      "Template",
+                    ),
+                    // Any document but a cancelled one: what is rendered is mostly
+                    // posted or closed, so p_actionable would hide it.
+                    pickFrom(
+                      "erp_documents",
+                      "document_id",
+                      ["document_number", "document_type"],
+                      "p_document_id",
+                      "Document",
+                      { p_limit: 200, p_exclude_cancelled: true },
+                    ),
+                    {
+                      ...pickLocale("p_locale", "Locale", false),
+                      hint: "Left empty, the document's own.",
+                    },
+                  ],
+                  invalidates: ["erp_output_requests", "erp_output_integrity"],
+                },
+                {
+                  label: "Route a render to a printer",
+                  description:
+                    "Sends a render through the print routes for a site and workstation.",
+                  permission: "administration.read",
+                  fn: "erp_route_print",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_render_id",
+                      label: "Render id",
+                      required: true,
+                      placeholder: "0f9c1a2e-…",
+                      hint: "Copy it from the render listed in Recent output on this page.",
+                    },
+                    { kind: "site", name: "p_site_id", label: "Site", required: false },
+                    {
+                      kind: "text",
+                      name: "p_workstation",
+                      label: "Workstation",
+                      placeholder: "GOODS-IN-1",
+                      hint: "The name of the terminal printing. Leave blank for any.",
+                    },
+                  ],
+                  invalidates: ["erp_output_requests", "erp_print_queue_health"],
+                },
+                {
+                  label: "Add a print route",
+                  permission: "administration.configure",
+                  fn: "erp_upsert_print_route",
+                  fields: [
+                    codeField("p_code", "Code", "GOODS-IN-LABELS", {
+                      fn: "erp_print_routes",
+                      value: "code",
+                      label: ["code"],
+                    }),
+                    {
+                      kind: "choice",
+                      name: "p_output_kind",
+                      label: "Output kind",
+                      required: true,
+                      choices: [
+                        { value: "label", label: "Labels" },
+                        { value: "document", label: "Documents" },
+                      ],
+                    },
+                    pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
+                    {
+                      ...pickFrom(
+                        "erp_output_templates",
+                        "code",
+                        ["code", "kind"],
+                        "p_template_code",
+                        "Template",
+                        undefined,
+                        false,
+                      ),
+                      hint: "Leave empty for any template of the kind.",
+                    },
+                    { kind: "site", name: "p_site_id", label: "Site", required: false },
+                    {
+                      kind: "text",
+                      name: "p_workstation",
+                      label: "Workstation",
+                      placeholder: "GOODS-IN-1",
+                      hint: "The name of the terminal printing. Leave blank for any.",
+                    },
+                    {
+                      kind: "number",
+                      name: "p_priority",
+                      label: "Priority",
+                      hint: "Lower wins among equally specific routes.",
+                    },
+                  ],
+                  invalidates: ["erp_print_routes", "erp_output_integrity"],
+                },
+                {
+                  label: "Render a label",
+                  permission: "inventory.read",
+                  fn: "erp_render_label",
+                  fields: [
+                    pickFrom(
+                      "erp_output_templates",
+                      "code",
+                      ["code", "kind"],
+                      "p_template_code",
+                      "Label template",
+                    ),
+                    pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
+                    {
+                      // Any document but a cancelled one: a label is printed for
+                      // goods that are posted as often as for ones still moving.
+                      ...pickFrom(
+                        "erp_documents",
+                        "document_id",
+                        ["document_number", "document_type"],
+                        "p_document_id",
+                        "Document",
+                        { p_limit: 200, p_exclude_cancelled: true },
+                        false,
+                      ),
+                      hint: "Optional; a label for a document carries its number.",
+                    },
+                  ],
+                  invalidates: [
+                    "erp_output_requests",
+                    "erp_print_queue_health",
+                    "erp_output_health",
+                  ],
+                },
+                {
+                  label: "Reprint",
+                  permission: "inventory.read",
+                  fn: "erp_reprint_output",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_render_id",
+                      label: "Render id",
+                      required: true,
+                      placeholder: "0f9c1a2e-…",
+                      hint: "Copy it from the render listed in Recent output on this page.",
+                    },
+                    pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
+                  ],
+                  invalidates: [
+                    "erp_output_requests",
+                    "erp_print_queue_health",
+                    "erp_output_health",
+                  ],
+                },
+                {
+                  label: "Register a sending domain",
+                  permission: "administration.integrate",
+                  fn: "erp_upsert_sender_identity",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_domain",
+                      label: "Domain",
+                      required: true,
+                      placeholder: "yourcompany.co.uk",
+                      hint: "The domain your documents are sent from.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_category",
+                      label: "Category",
+                      required: true,
+                      choices: [
+                        { value: "transactional", label: "Transactional (invoices, orders)" },
+                        { value: "operational", label: "Operational (alerts, reminders)" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_from_local_part",
+                      label: "From (local part)",
+                      hint: "e.g. invoices",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reply_to",
+                      label: "Reply-to",
+                      placeholder: "accounts@yourcompany.co.uk",
+                      hint: "Where replies should go, if not the sending address.",
+                    },
+                  ],
+                  invalidates: ["erp_sender_identities"],
+                },
+                {
+                  label: "Record DNS verification",
+                  permission: "administration.integrate",
+                  fn: "erp_record_sender_verification",
+                  fields: [
+                    {
+                      // Registering a domain (above) types it; verifying one chooses it.
+                      kind: "select",
+                      name: "p_domain",
+                      label: "Domain",
+                      required: true,
+                      hint: "The domain the DNS records were published for.",
+                      options: {
+                        fn: "erp_sender_identities",
+                        path: "identities",
+                        value: "domain",
+                        label: ["domain", "category", "status"],
+                      },
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_spf",
+                      label: "SPF verified",
+                      required: true,
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ],
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_dkim",
+                      label: "DKIM verified",
+                      required: true,
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ],
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_dmarc",
+                      label: "DMARC verified",
+                      required: true,
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ],
+                    },
+                  ],
+                  invalidates: ["erp_sender_identities"],
+                },
+                {
+                  label: "Register a printer",
+                  permission: "administration.configure",
+                  fn: "erp_upsert_printer",
+                  fields: [
+                    codeField("p_code", "Code", "PRN-GOODSIN", {
+                      fn: "erp_printers",
+                      value: "code",
+                      label: ["code", "name"],
+                    }),
+                    { kind: "site", name: "p_site_id", label: "Site", required: true },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Goods-in label printer",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_printer_type",
+                      label: "Type",
+                      required: true,
+                      choices: PRINTER_TYPES,
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_language",
+                      label: "Language",
+                      choices: LANGUAGES,
+                      hint: "Required for a label printer.",
+                    },
+                    {
+                      kind: "number",
+                      name: "p_dots_per_inch",
+                      label: "Resolution",
+                      hint: "Dots per inch, e.g. 203 or 300. Required for a label printer.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_physical_location",
+                      label: "Where it stands",
+                      placeholder: "Goods-in desk, Leeds",
+                      hint: "So somebody can find the printer when it jams.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_default_stock",
+                      label: "Default stock",
+                      hint: "The label or paper stock loaded by default.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_queue_address",
+                      label: "Queue address",
+                      hint: "How the print agent reaches it, e.g. a host and port or a queue name.",
+                    },
+                  ],
+                  invalidates: ["erp_printers", "erp_output_integrity"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         Every document and label the organisation produces comes from a template version, is
         rendered once with a checksum, and is delivered to a printer, a mailbox or a file with a
         record of whether it arrived. A label template is not live until its barcode has been
         decoded back from a test render.
       </PageHeader>
-
-      <ActionBar
-        title="Printers"
-        note="Printers are configuration: on a live organisation the edit is raised as a change and promoted, and a direct write here is refused. A label printer needs a language and a resolution; a document printer needs neither."
-        actions={[
-          {
-            label: "Render an output template",
-            description:
-              "Renders one template for one document in a locale, into the output store.",
-            permission: "administration.configure",
-            fn: "erp_render_output_template",
-            fields: [
-              pickFrom("erp_output_templates", "code", ["code", "kind"], "p_code", "Template"),
-              // Any document but a cancelled one: what is rendered is mostly
-              // posted or closed, so p_actionable would hide it.
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "document_type"],
-                "p_document_id",
-                "Document",
-                { p_limit: 200, p_exclude_cancelled: true },
-              ),
-              {
-                ...pickLocale("p_locale", "Locale", false),
-                hint: "Left empty, the document's own.",
-              },
-            ],
-            invalidates: ["erp_output_requests", "erp_output_integrity"],
-          },
-          {
-            label: "Route a render to a printer",
-            description: "Sends a render through the print routes for a site and workstation.",
-            permission: "administration.read",
-            fn: "erp_route_print",
-            fields: [
-              {
-                kind: "text",
-                name: "p_render_id",
-                label: "Render id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "Copy it from the render listed in Recent output on this page.",
-              },
-              { kind: "site", name: "p_site_id", label: "Site", required: false },
-              {
-                kind: "text",
-                name: "p_workstation",
-                label: "Workstation",
-                placeholder: "GOODS-IN-1",
-                hint: "The name of the terminal printing. Leave blank for any.",
-              },
-            ],
-            invalidates: ["erp_output_requests", "erp_print_queue_health"],
-          },
-          {
-            label: "Add a print route",
-            permission: "administration.configure",
-            fn: "erp_upsert_print_route",
-            fields: [
-              codeField("p_code", "Code", "GOODS-IN-LABELS", {
-                fn: "erp_print_routes",
-                value: "code",
-                label: ["code"],
-              }),
-              {
-                kind: "choice",
-                name: "p_output_kind",
-                label: "Output kind",
-                required: true,
-                choices: [
-                  { value: "label", label: "Labels" },
-                  { value: "document", label: "Documents" },
-                ],
-              },
-              pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
-              {
-                ...pickFrom(
-                  "erp_output_templates",
-                  "code",
-                  ["code", "kind"],
-                  "p_template_code",
-                  "Template",
-                  undefined,
-                  false,
-                ),
-                hint: "Leave empty for any template of the kind.",
-              },
-              { kind: "site", name: "p_site_id", label: "Site", required: false },
-              {
-                kind: "text",
-                name: "p_workstation",
-                label: "Workstation",
-                placeholder: "GOODS-IN-1",
-                hint: "The name of the terminal printing. Leave blank for any.",
-              },
-              {
-                kind: "number",
-                name: "p_priority",
-                label: "Priority",
-                hint: "Lower wins among equally specific routes.",
-              },
-            ],
-            invalidates: ["erp_print_routes", "erp_output_integrity"],
-          },
-          {
-            label: "Render a label",
-            permission: "inventory.read",
-            fn: "erp_render_label",
-            fields: [
-              pickFrom(
-                "erp_output_templates",
-                "code",
-                ["code", "kind"],
-                "p_template_code",
-                "Label template",
-              ),
-              pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
-              {
-                // Any document but a cancelled one: a label is printed for
-                // goods that are posted as often as for ones still moving.
-                ...pickFrom(
-                  "erp_documents",
-                  "document_id",
-                  ["document_number", "document_type"],
-                  "p_document_id",
-                  "Document",
-                  { p_limit: 200, p_exclude_cancelled: true },
-                  false,
-                ),
-                hint: "Optional; a label for a document carries its number.",
-              },
-            ],
-            invalidates: ["erp_output_requests", "erp_print_queue_health", "erp_output_health"],
-          },
-          {
-            label: "Reprint",
-            permission: "inventory.read",
-            fn: "erp_reprint_output",
-            fields: [
-              {
-                kind: "text",
-                name: "p_render_id",
-                label: "Render id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "Copy it from the render listed in Recent output on this page.",
-              },
-              pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
-            ],
-            invalidates: ["erp_output_requests", "erp_print_queue_health", "erp_output_health"],
-          },
-          {
-            label: "Register a sending domain",
-            permission: "administration.integrate",
-            fn: "erp_upsert_sender_identity",
-            fields: [
-              {
-                kind: "text",
-                name: "p_domain",
-                label: "Domain",
-                required: true,
-                placeholder: "yourcompany.co.uk",
-                hint: "The domain your documents are sent from.",
-              },
-              {
-                kind: "choice",
-                name: "p_category",
-                label: "Category",
-                required: true,
-                choices: [
-                  { value: "transactional", label: "Transactional (invoices, orders)" },
-                  { value: "operational", label: "Operational (alerts, reminders)" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_from_local_part",
-                label: "From (local part)",
-                hint: "e.g. invoices",
-              },
-              {
-                kind: "text",
-                name: "p_reply_to",
-                label: "Reply-to",
-                placeholder: "accounts@yourcompany.co.uk",
-                hint: "Where replies should go, if not the sending address.",
-              },
-            ],
-            invalidates: ["erp_sender_identities"],
-          },
-          {
-            label: "Record DNS verification",
-            permission: "administration.integrate",
-            fn: "erp_record_sender_verification",
-            fields: [
-              {
-                // Registering a domain (above) types it; verifying one chooses it.
-                kind: "select",
-                name: "p_domain",
-                label: "Domain",
-                required: true,
-                hint: "The domain the DNS records were published for.",
-                options: {
-                  fn: "erp_sender_identities",
-                  path: "identities",
-                  value: "domain",
-                  label: ["domain", "category", "status"],
-                },
-              },
-              {
-                kind: "choice",
-                name: "p_spf",
-                label: "SPF verified",
-                required: true,
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Yes" },
-                  { value: "false", label: "No" },
-                ],
-              },
-              {
-                kind: "choice",
-                name: "p_dkim",
-                label: "DKIM verified",
-                required: true,
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Yes" },
-                  { value: "false", label: "No" },
-                ],
-              },
-              {
-                kind: "choice",
-                name: "p_dmarc",
-                label: "DMARC verified",
-                required: true,
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Yes" },
-                  { value: "false", label: "No" },
-                ],
-              },
-            ],
-            invalidates: ["erp_sender_identities"],
-          },
-          {
-            label: "Register a printer",
-            permission: "administration.configure",
-            fn: "erp_upsert_printer",
-            fields: [
-              codeField("p_code", "Code", "PRN-GOODSIN", {
-                fn: "erp_printers",
-                value: "code",
-                label: ["code", "name"],
-              }),
-              { kind: "site", name: "p_site_id", label: "Site", required: true },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Goods-in label printer",
-              },
-              {
-                kind: "choice",
-                name: "p_printer_type",
-                label: "Type",
-                required: true,
-                choices: PRINTER_TYPES,
-              },
-              {
-                kind: "choice",
-                name: "p_language",
-                label: "Language",
-                choices: LANGUAGES,
-                hint: "Required for a label printer.",
-              },
-              {
-                kind: "number",
-                name: "p_dots_per_inch",
-                label: "Resolution",
-                hint: "Dots per inch, e.g. 203 or 300. Required for a label printer.",
-              },
-              {
-                kind: "text",
-                name: "p_physical_location",
-                label: "Where it stands",
-                placeholder: "Goods-in desk, Leeds",
-                hint: "So somebody can find the printer when it jams.",
-              },
-              {
-                kind: "text",
-                name: "p_default_stock",
-                label: "Default stock",
-                hint: "The label or paper stock loaded by default.",
-              },
-              {
-                kind: "text",
-                name: "p_queue_address",
-                label: "Queue address",
-                hint: "How the print agent reaches it, e.g. a host and port or a queue name.",
-              },
-            ],
-            invalidates: ["erp_printers", "erp_output_integrity"],
-          },
-        ]}
-      />
 
       <DataPanel<Finding>
         title="What is wrong"

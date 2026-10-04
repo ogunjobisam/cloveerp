@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, HeaderActions, pickFrom } from "../../components/erp/actions-bar";
 import { FileImport } from "../../components/erp/file-import";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
@@ -177,7 +177,167 @@ function Cutover() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Moving your old data in">
+      <PageHeader
+        title="Moving your old data in"
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Migration batches and cutover"
+              note="Stage a batch from a legacy extract, record the legacy figure against ours, then cut the domain over. A load is reversed from the batch itself, below."
+              actions={[
+                {
+                  label: "Stage opening balances",
+                  permission: "master_data.import",
+                  fn: "erp_stage_opening_balances",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_domain_code",
+                      label: "Domain",
+                      required: true,
+                      choices: DOMAINS,
+                    },
+                    {
+                      kind: "date",
+                      name: "p_as_at",
+                      label: "As at",
+                      required: true,
+                      hint: "The date the balances stand at. Every movement and journal is dated here.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_rows",
+                      label: "Rows",
+                      required: true,
+                      hint: 'A JSON list of rows. Stock: item, site, location, quantity, unit_cost_minor, batch. Ledgers: party, reference, amount_minor, due_date. Nominal: account, debit_minor, credit_minor. For example [{"item":"WID","site":"MAIN","location":"BULK-01","quantity":100,"unit_cost_minor":250}].',
+                    },
+                    {
+                      kind: "number",
+                      name: "p_control_total_minor",
+                      label: "Control total, minor units",
+                      required: true,
+                      hint: "From the legacy report as at the same date: stock value, open balances, or trial balance debits.",
+                    },
+                    {
+                      kind: "number",
+                      name: "p_control_quantity",
+                      label: "Control quantity",
+                      hint: "Stock only: total units on the legacy report.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Batch code",
+                      placeholder: "STOCK-LOAD-1",
+                      hint: "Optional. Left empty, one is generated.",
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_domain_code: v["p_domain_code"],
+                    p_as_at: v["p_as_at"],
+                    p_rows: JSON.parse(v["p_rows"] ?? "[]"),
+                    p_control_total_minor: Number(v["p_control_total_minor"]),
+                    p_control_quantity: v["p_control_quantity"]
+                      ? Number(v["p_control_quantity"])
+                      : null,
+                    p_code: v["p_code"] ? v["p_code"] : null,
+                  }),
+                  invalidates: ["erp_opening_batches", "erp_migration_domains"],
+                },
+                {
+                  label: "Record a parallel-run figure",
+                  permission: "master_data.import",
+                  fn: "erp_record_parallel_run_figure",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_domain_code",
+                      label: "Domain",
+                      required: true,
+                      choices: DOMAINS,
+                    },
+                    { kind: "date", name: "p_as_at", label: "As at", required: true },
+                    {
+                      kind: "number",
+                      name: "p_legacy_value_minor",
+                      label: "Legacy figure, minor units",
+                      required: true,
+                      hint: "What the old system reports for this domain as at the date. Ours is computed when you record it.",
+                    },
+                    {
+                      kind: "number",
+                      name: "p_tolerance_minor",
+                      label: "Tolerance, minor units",
+                      hint: "How far apart the two may be and still agree. Zero when blank.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_note",
+                      label: "Note",
+                      placeholder: "Taken from the legacy stock valuation report",
+                      hint: "Optional. Where the legacy figure came from.",
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_domain_code: v["p_domain_code"],
+                    p_as_at: v["p_as_at"],
+                    p_legacy_value_minor: Number(v["p_legacy_value_minor"]),
+                    p_tolerance_minor: v["p_tolerance_minor"] ? Number(v["p_tolerance_minor"]) : 0,
+                    p_note: v["p_note"] ? v["p_note"] : null,
+                  }),
+                  invalidates: ["erp_parallel_run_figures", "erp_migration_domains"],
+                },
+                {
+                  label: "Cut a domain over",
+                  permission: "administration.configure",
+                  fn: "erp_cut_over_domain",
+                  description:
+                    "Refused unless every load of the domain reconciles, a parallel-run figure on or after the latest load is within tolerance, and you are not the person who loaded it. The nominal ledger also needs migration clearing at zero.",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_domain_code",
+                      label: "Domain",
+                      required: true,
+                      choices: DOMAINS,
+                    },
+                    {
+                      kind: "text",
+                      name: "p_note",
+                      label: "Note",
+                      placeholder: "Signed off at the cutover meeting",
+                      hint: "Optional. Kept permanently against the cutover.",
+                    },
+                  ],
+                  invalidates: ["erp_domain_cutovers", "erp_migration_domains"],
+                },
+                {
+                  label: "Revert a cutover",
+                  permission: "administration.configure",
+                  fn: "erp_revert_cutover",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_domain_code",
+                      label: "Domain",
+                      required: true,
+                      choices: DOMAINS,
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      required: true,
+                      hint: "Kept with the decision. Reverting reopens the domain to loads and reversals.",
+                    },
+                  ],
+                  invalidates: ["erp_domain_cutovers", "erp_migration_domains"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         Opening balances arrive as a batch with the control total the legacy extract was taken with,
         dated as at one day, and load through the same movement and journal tables everything else
         posts to. After loading, the product says per check what it expected and what it found. A
@@ -186,159 +346,6 @@ function Cutover() {
       </PageHeader>
 
       <FileImport profiles={OPENING_PROFILES} currency={base} />
-
-      <ActionBar
-        title="Migration batches and cutover"
-        note="Stage a batch from a legacy extract, record the legacy figure against ours, then cut the domain over. A load is reversed from the batch itself, below."
-        actions={[
-          {
-            label: "Stage opening balances",
-            permission: "master_data.import",
-            fn: "erp_stage_opening_balances",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_domain_code",
-                label: "Domain",
-                required: true,
-                choices: DOMAINS,
-              },
-              {
-                kind: "date",
-                name: "p_as_at",
-                label: "As at",
-                required: true,
-                hint: "The date the balances stand at. Every movement and journal is dated here.",
-              },
-              {
-                kind: "text",
-                name: "p_rows",
-                label: "Rows",
-                required: true,
-                hint: 'A JSON list of rows. Stock: item, site, location, quantity, unit_cost_minor, batch. Ledgers: party, reference, amount_minor, due_date. Nominal: account, debit_minor, credit_minor. For example [{"item":"WID","site":"MAIN","location":"BULK-01","quantity":100,"unit_cost_minor":250}].',
-              },
-              {
-                kind: "number",
-                name: "p_control_total_minor",
-                label: "Control total, minor units",
-                required: true,
-                hint: "From the legacy report as at the same date: stock value, open balances, or trial balance debits.",
-              },
-              {
-                kind: "number",
-                name: "p_control_quantity",
-                label: "Control quantity",
-                hint: "Stock only: total units on the legacy report.",
-              },
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Batch code",
-                placeholder: "STOCK-LOAD-1",
-                hint: "Optional. Left empty, one is generated.",
-              },
-            ],
-            mapArgs: (v) => ({
-              p_domain_code: v["p_domain_code"],
-              p_as_at: v["p_as_at"],
-              p_rows: JSON.parse(v["p_rows"] ?? "[]"),
-              p_control_total_minor: Number(v["p_control_total_minor"]),
-              p_control_quantity: v["p_control_quantity"] ? Number(v["p_control_quantity"]) : null,
-              p_code: v["p_code"] ? v["p_code"] : null,
-            }),
-            invalidates: ["erp_opening_batches", "erp_migration_domains"],
-          },
-          {
-            label: "Record a parallel-run figure",
-            permission: "master_data.import",
-            fn: "erp_record_parallel_run_figure",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_domain_code",
-                label: "Domain",
-                required: true,
-                choices: DOMAINS,
-              },
-              { kind: "date", name: "p_as_at", label: "As at", required: true },
-              {
-                kind: "number",
-                name: "p_legacy_value_minor",
-                label: "Legacy figure, minor units",
-                required: true,
-                hint: "What the old system reports for this domain as at the date. Ours is computed when you record it.",
-              },
-              {
-                kind: "number",
-                name: "p_tolerance_minor",
-                label: "Tolerance, minor units",
-                hint: "How far apart the two may be and still agree. Zero when blank.",
-              },
-              {
-                kind: "text",
-                name: "p_note",
-                label: "Note",
-                placeholder: "Taken from the legacy stock valuation report",
-                hint: "Optional. Where the legacy figure came from.",
-              },
-            ],
-            mapArgs: (v) => ({
-              p_domain_code: v["p_domain_code"],
-              p_as_at: v["p_as_at"],
-              p_legacy_value_minor: Number(v["p_legacy_value_minor"]),
-              p_tolerance_minor: v["p_tolerance_minor"] ? Number(v["p_tolerance_minor"]) : 0,
-              p_note: v["p_note"] ? v["p_note"] : null,
-            }),
-            invalidates: ["erp_parallel_run_figures", "erp_migration_domains"],
-          },
-          {
-            label: "Cut a domain over",
-            permission: "administration.configure",
-            fn: "erp_cut_over_domain",
-            description:
-              "Refused unless every load of the domain reconciles, a parallel-run figure on or after the latest load is within tolerance, and you are not the person who loaded it. The nominal ledger also needs migration clearing at zero.",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_domain_code",
-                label: "Domain",
-                required: true,
-                choices: DOMAINS,
-              },
-              {
-                kind: "text",
-                name: "p_note",
-                label: "Note",
-                placeholder: "Signed off at the cutover meeting",
-                hint: "Optional. Kept permanently against the cutover.",
-              },
-            ],
-            invalidates: ["erp_domain_cutovers", "erp_migration_domains"],
-          },
-          {
-            label: "Revert a cutover",
-            permission: "administration.configure",
-            fn: "erp_revert_cutover",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_domain_code",
-                label: "Domain",
-                required: true,
-                choices: DOMAINS,
-              },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                required: true,
-                hint: "Kept with the decision. Reverting reopens the domain to loads and reversals.",
-              },
-            ],
-            invalidates: ["erp_domain_cutovers", "erp_migration_domains"],
-          },
-        ]}
-      />
 
       <InquiryBoard
         inquiries={[

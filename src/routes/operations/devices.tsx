@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickItemClass } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  HeaderActions,
+  pickFrom,
+  pickItemClass,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -128,115 +133,126 @@ function actionTone(status: string): "ok" | "warn" | "bad" | "muted" {
 function Devices() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Devices and scanning">
+      <PageHeader
+        title="Devices and scanning"
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Devices and scan rules"
+              note="Registering a device is the first act; a session is opened from the device itself. Scan rules are per step, with an optional product class that overrides the step's default."
+              actions={[
+                {
+                  label: "Register a device",
+                  permission: "administration.configure",
+                  fn: "erp_register_device",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "SCAN-LEE-01",
+                      hint: "A short code for the handset or terminal.",
+                    },
+                    // Not pickSite: that sends the site id, and this door takes the code.
+                    pickFrom("erp_sites", "code", ["code", "name"], "p_site_code", "Site"),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Goods-in scanner 1",
+                    },
+                    pickFrom(
+                      "erp_device_classes",
+                      "code",
+                      ["code", "name"],
+                      "p_device_class",
+                      "Class",
+                    ),
+                    {
+                      kind: "text",
+                      name: "p_serial_number",
+                      label: "Serial number",
+                      placeholder: "ZB-2291-8841",
+                      hint: "Optional. From the label on the device.",
+                    },
+                  ],
+                  invalidates: ["erp_devices", "erp_device_operations"],
+                },
+                {
+                  label: "Set a scan rule",
+                  permission: "administration.configure",
+                  fn: "erp_upsert_scan_rule",
+                  fields: [
+                    pickFrom("erp_device_tasks", "code", ["code", "name"], "p_task_code", "Step"),
+                    {
+                      kind: "multi",
+                      name: "p_accepted_symbologies",
+                      label: "Accepted symbologies",
+                      required: true,
+                      // erp.upsert_scan_rule takes the several as one comma-separated line.
+                      join: ",",
+                      options: { fn: "erp_symbologies", value: "code", label: ["code", "name"] },
+                    },
+                    {
+                      kind: "multi",
+                      name: "p_mandatory_identifiers",
+                      label: "Mandatory identifiers",
+                      hint: "Leave empty when any recognised barcode will do.",
+                      join: ",",
+                      options: {
+                        fn: "erp_gs1_application_identifiers",
+                        value: "ai",
+                        label: ["ai", "name"],
+                      },
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_when_absent",
+                      label: "When one is missing",
+                      required: true,
+                      choices: WHEN_ABSENT,
+                    },
+                    pickItemClass(
+                      "p_item_class",
+                      "Product class",
+                      false,
+                      "Leave empty for the step's default rule.",
+                    ),
+                  ],
+                  invalidates: ["erp_scan_rules", "erp_device_operations"],
+                },
+                {
+                  label: "Apply my queued actions",
+                  permission: "inventory.move",
+                  fn: "erp_drain_device_actions",
+                  fields: [
+                    {
+                      ...pickFrom(
+                        "erp_devices",
+                        "code",
+                        ["code", "name"],
+                        "p_device_code",
+                        "Device",
+                        undefined,
+                        false,
+                      ),
+                      hint: "Leave empty to apply your queued actions on every device. Only actions captured under your own session apply; anyone else's are held for them.",
+                    },
+                  ],
+                  invalidates: ["erp_device_actions", "erp_device_operations"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         The warehouse client is a device with a session, sending actions that are received first and
         applied second, so a pick captured offline arrives whole and in order. What the client reads
         at each step is a scan rule: which symbologies a step accepts, which identifiers a barcode
         must carry, and what happens when one is missing.
       </PageHeader>
-
-      <ActionBar
-        title="Devices and scan rules"
-        note="Registering a device is the first act; a session is opened from the device itself. Scan rules are per step, with an optional product class that overrides the step's default."
-        actions={[
-          {
-            label: "Register a device",
-            permission: "administration.configure",
-            fn: "erp_register_device",
-            fields: [
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "SCAN-LEE-01",
-                hint: "A short code for the handset or terminal.",
-              },
-              // Not pickSite: that sends the site id, and this door takes the code.
-              pickFrom("erp_sites", "code", ["code", "name"], "p_site_code", "Site"),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Goods-in scanner 1",
-              },
-              pickFrom("erp_device_classes", "code", ["code", "name"], "p_device_class", "Class"),
-              {
-                kind: "text",
-                name: "p_serial_number",
-                label: "Serial number",
-                placeholder: "ZB-2291-8841",
-                hint: "Optional. From the label on the device.",
-              },
-            ],
-            invalidates: ["erp_devices", "erp_device_operations"],
-          },
-          {
-            label: "Set a scan rule",
-            permission: "administration.configure",
-            fn: "erp_upsert_scan_rule",
-            fields: [
-              pickFrom("erp_device_tasks", "code", ["code", "name"], "p_task_code", "Step"),
-              {
-                kind: "multi",
-                name: "p_accepted_symbologies",
-                label: "Accepted symbologies",
-                required: true,
-                // erp.upsert_scan_rule takes the several as one comma-separated line.
-                join: ",",
-                options: { fn: "erp_symbologies", value: "code", label: ["code", "name"] },
-              },
-              {
-                kind: "multi",
-                name: "p_mandatory_identifiers",
-                label: "Mandatory identifiers",
-                hint: "Leave empty when any recognised barcode will do.",
-                join: ",",
-                options: {
-                  fn: "erp_gs1_application_identifiers",
-                  value: "ai",
-                  label: ["ai", "name"],
-                },
-              },
-              {
-                kind: "choice",
-                name: "p_when_absent",
-                label: "When one is missing",
-                required: true,
-                choices: WHEN_ABSENT,
-              },
-              pickItemClass(
-                "p_item_class",
-                "Product class",
-                false,
-                "Leave empty for the step's default rule.",
-              ),
-            ],
-            invalidates: ["erp_scan_rules", "erp_device_operations"],
-          },
-          {
-            label: "Apply my queued actions",
-            permission: "inventory.move",
-            fn: "erp_drain_device_actions",
-            fields: [
-              {
-                ...pickFrom(
-                  "erp_devices",
-                  "code",
-                  ["code", "name"],
-                  "p_device_code",
-                  "Device",
-                  undefined,
-                  false,
-                ),
-                hint: "Leave empty to apply your queued actions on every device. Only actions captured under your own session apply; anyone else's are held for them.",
-              },
-            ],
-            invalidates: ["erp_device_actions", "erp_device_operations"],
-          },
-        ]}
-      />
 
       <DataPanel<Finding>
         title="What is wrong"

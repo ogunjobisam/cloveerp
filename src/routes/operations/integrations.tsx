@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, HeaderActions, pickFrom } from "../../components/erp/actions-bar";
 import { ApiAccess } from "../../components/erp/api-access";
 import { CarrierAccount } from "../../components/erp/carrier-account";
 import { Gate } from "../../components/erp/gate";
@@ -62,7 +62,165 @@ type Backlog = {
 function Integrations() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Integrations">
+      <PageHeader
+        title="Integrations"
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Replaying a message"
+              note="Replaying a message is the one thing a person does to the gateway by hand."
+              actions={[
+                {
+                  label: "Replay a message",
+                  permission: "administration.integrate",
+                  fn: "erp_replay_message",
+                  fields: [
+                    {
+                      // The backlog mixes commands and messages and takes no filter, so
+                      // the label leads with the kind; only a message replays.
+                      kind: "select",
+                      name: "p_message_id",
+                      label: "Message",
+                      required: true,
+                      hint: "Pick a message, not a command; a command is reconciled or cancelled instead.",
+                      options: {
+                        fn: "erp_integration_backlog",
+                        value: "reference",
+                        label: ["kind", "system_code", "operation", "status"],
+                      },
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      required: true,
+                      placeholder: "Their system was down; safe to send again",
+                      hint: "Recorded permanently against the replay.",
+                    },
+                  ],
+                  invalidates: ["erp_integration_backlog", "erp_integration_health"],
+                },
+                {
+                  label: "Reconcile an ambiguous command",
+                  description:
+                    "A command that was sent and never answered is ambiguous until a person says what the other side did. The evidence is kept.",
+                  permission: "administration.integrate",
+                  fn: "erp_reconcile_ambiguous_command",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_command_id",
+                      label: "Command id",
+                      required: true,
+                      placeholder: "0f9c1a2e-…",
+                      hint: "Copy the id from the message shown in the backlog below.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_outcome",
+                      label: "What happened",
+                      required: true,
+                      choices: [
+                        { value: "succeeded", label: "It succeeded" },
+                        { value: "failed", label: "It failed" },
+                        { value: "requeue", label: "Send it again" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_evidence",
+                      label: "Evidence",
+                      required: true,
+                      hint: "What you saw on the other side.",
+                    },
+                  ],
+                  invalidates: ["erp_integration_backlog", "erp_integration_health"],
+                },
+                {
+                  label: "Cancel a queued command",
+                  permission: "administration.integrate",
+                  fn: "erp_cancel_command",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_command_id",
+                      label: "Command id",
+                      required: true,
+                      placeholder: "0f9c1a2e-…",
+                      hint: "Copy the id from the message shown in the backlog below.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      required: true,
+                      placeholder: "Confirmed by phone that nothing was despatched",
+                      hint: "The evidence for what the other side actually did.",
+                    },
+                  ],
+                  invalidates: ["erp_integration_backlog", "erp_integration_health"],
+                },
+                {
+                  label: "Submit a command",
+                  description:
+                    "Queues one operation on a connected system for the worker to deliver. A dry run is settled as simulated and sends nothing.",
+                  permission: "administration.integrate",
+                  fn: "erp_submit_command",
+                  fields: [
+                    pickFrom(
+                      "erp_integration_health",
+                      "system_code",
+                      ["system_code", "system_status"],
+                      "p_system_code",
+                      "System",
+                    ),
+                    {
+                      kind: "text",
+                      name: "p_operation_code",
+                      label: "Operation",
+                      required: true,
+                      placeholder: "despatch.confirm",
+                      hint: "The operation that system accepts, as agreed with whoever runs it.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_payload",
+                      label: "Payload",
+                      required: true,
+                      hint: "JSON, validated against the operation's schema.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_dry_run",
+                      label: "Dry run",
+                      required: true,
+                      boolean: true,
+                      choices: [
+                        { value: "false", label: "No" },
+                        { value: "true", label: "Yes" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_idempotency_key",
+                      label: "Idempotency key",
+                      hint: "Left empty, one is generated.",
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_system_code: v["p_system_code"],
+                    p_operation_code: v["p_operation_code"],
+                    p_payload: JSON.parse(v["p_payload"] ?? "{}"),
+                    p_dry_run: v["p_dry_run"] === "true",
+                    p_idempotency_key: v["p_idempotency_key"] || null,
+                  }),
+                  invalidates: ["erp_integration_backlog", "erp_integration_health"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         Manage connected systems, review delivery health and use the versioned public API.
       </PageHeader>
 
@@ -109,159 +267,6 @@ function Integrations() {
 
       {/* The organisation's own carrier account (20261004965000). */}
       <CarrierAccount />
-
-      <ActionBar
-        title="Replaying a message"
-        note="Replaying a message is the one thing a person does to the gateway by hand."
-        actions={[
-          {
-            label: "Replay a message",
-            permission: "administration.integrate",
-            fn: "erp_replay_message",
-            fields: [
-              {
-                // The backlog mixes commands and messages and takes no filter, so
-                // the label leads with the kind; only a message replays.
-                kind: "select",
-                name: "p_message_id",
-                label: "Message",
-                required: true,
-                hint: "Pick a message, not a command; a command is reconciled or cancelled instead.",
-                options: {
-                  fn: "erp_integration_backlog",
-                  value: "reference",
-                  label: ["kind", "system_code", "operation", "status"],
-                },
-              },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                required: true,
-                placeholder: "Their system was down; safe to send again",
-                hint: "Recorded permanently against the replay.",
-              },
-            ],
-            invalidates: ["erp_integration_backlog", "erp_integration_health"],
-          },
-          {
-            label: "Reconcile an ambiguous command",
-            description:
-              "A command that was sent and never answered is ambiguous until a person says what the other side did. The evidence is kept.",
-            permission: "administration.integrate",
-            fn: "erp_reconcile_ambiguous_command",
-            fields: [
-              {
-                kind: "text",
-                name: "p_command_id",
-                label: "Command id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "Copy the id from the message shown in the backlog below.",
-              },
-              {
-                kind: "choice",
-                name: "p_outcome",
-                label: "What happened",
-                required: true,
-                choices: [
-                  { value: "succeeded", label: "It succeeded" },
-                  { value: "failed", label: "It failed" },
-                  { value: "requeue", label: "Send it again" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_evidence",
-                label: "Evidence",
-                required: true,
-                hint: "What you saw on the other side.",
-              },
-            ],
-            invalidates: ["erp_integration_backlog", "erp_integration_health"],
-          },
-          {
-            label: "Cancel a queued command",
-            permission: "administration.integrate",
-            fn: "erp_cancel_command",
-            fields: [
-              {
-                kind: "text",
-                name: "p_command_id",
-                label: "Command id",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "Copy the id from the message shown in the backlog below.",
-              },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                required: true,
-                placeholder: "Confirmed by phone that nothing was despatched",
-                hint: "The evidence for what the other side actually did.",
-              },
-            ],
-            invalidates: ["erp_integration_backlog", "erp_integration_health"],
-          },
-          {
-            label: "Submit a command",
-            description:
-              "Queues one operation on a connected system for the worker to deliver. A dry run is settled as simulated and sends nothing.",
-            permission: "administration.integrate",
-            fn: "erp_submit_command",
-            fields: [
-              pickFrom(
-                "erp_integration_health",
-                "system_code",
-                ["system_code", "system_status"],
-                "p_system_code",
-                "System",
-              ),
-              {
-                kind: "text",
-                name: "p_operation_code",
-                label: "Operation",
-                required: true,
-                placeholder: "despatch.confirm",
-                hint: "The operation that system accepts, as agreed with whoever runs it.",
-              },
-              {
-                kind: "text",
-                name: "p_payload",
-                label: "Payload",
-                required: true,
-                hint: "JSON, validated against the operation's schema.",
-              },
-              {
-                kind: "choice",
-                name: "p_dry_run",
-                label: "Dry run",
-                required: true,
-                boolean: true,
-                choices: [
-                  { value: "false", label: "No" },
-                  { value: "true", label: "Yes" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_idempotency_key",
-                label: "Idempotency key",
-                hint: "Left empty, one is generated.",
-              },
-            ],
-            mapArgs: (v) => ({
-              p_system_code: v["p_system_code"],
-              p_operation_code: v["p_operation_code"],
-              p_payload: JSON.parse(v["p_payload"] ?? "{}"),
-              p_dry_run: v["p_dry_run"] === "true",
-              p_idempotency_key: v["p_idempotency_key"] || null,
-            }),
-            invalidates: ["erp_integration_backlog", "erp_integration_health"],
-          },
-        ]}
-      />
 
       <DataPanel<Backlog>
         title="Needs a decision"

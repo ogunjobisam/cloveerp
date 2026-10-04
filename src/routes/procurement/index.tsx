@@ -16,9 +16,7 @@ import {
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { Samples } from "../../components/erp/samples";
-import { AwaitingConfirmations } from "../../components/erp/awaiting-confirmations";
 import { OnItsWay } from "../../components/erp/shipping-notices";
-import { InboundShipments } from "../../components/erp/inbound-shipments";
 import { LandedCosts } from "../../components/erp/landed-costs";
 import { KpiRow } from "../../components/erp/kpi";
 import { PageHeader } from "../../components/erp/page";
@@ -1008,11 +1006,9 @@ function Procurement() {
 
       <ProcessFlow flow={PURCHASE_TO_PAY} actions={PURCHASING_VERBS} />
 
-      <AwaitingConfirmations />
-
+      {/* Orders awaiting their supplier's answer, deliveries notified and
+          collections booked: one card, a list for each that has any. */}
       <OnItsWay />
-
-      <InboundShipments />
 
       <LandedCosts />
 

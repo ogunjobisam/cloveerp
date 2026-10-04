@@ -210,12 +210,16 @@ export function PageHeader({
   const openHelp = useHowItWorks(howItWorks);
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0 flex-1">
+      {/* The title keeps fourteen rem at least: where the controls beside it
+          would leave it less, they take the line under it instead. */}
+      <div className="min-w-0 grow basis-56">
         <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
         {children ? <Prose className="mt-1 text-sm text-muted-foreground">{children}</Prose> : null}
         <HowItWorksLink open={openHelp} />
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      {/* Wraps, and never wider than the header: a page's verbs beside the
+          walkthrough and Refresh are wider than a phone. */}
+      <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
         {Extras ? <Extras /> : null}
         {actions}
         <RefreshButton />

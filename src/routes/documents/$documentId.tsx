@@ -198,6 +198,12 @@ function Document() {
   // supplier payment. Its lines are its routine's, and nothing edits them here.
   const base = typeNames.baseOf(doc.document_type);
   const doorOpened = isDoorOpened(doc.document_type) || isDoorOpened(base);
+  // A posted invoice, and the contra journal where its posting has been
+  // reversed.
+  const postedInvoice =
+    (doc.document_type === "sales_invoice" || doc.document_type === "purchase_invoice") &&
+    doc.is_committed;
+  const reversed = postedInvoice ? data.reversal[0] : undefined;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -271,22 +277,86 @@ function Document() {
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
         ) : null}
+
+        {/* What corrects a document rather than moves it on, each a button
+            beside the moves and each under the condition its own card was
+            drawn under. The form behind each says what it does. */}
+        <div className="mt-3 flex flex-wrap gap-2 empty:hidden">
+          {/* What the supplier charged is a fact on their paperwork, not
+              something to work out from our own rules, so it is typed in from
+              their invoice. Offered on a purchase invoice before it is
+              registered, and on a supplier credit note before it is issued,
+              which is when erp.state_supplier_tax accepts it (20261001400000). */}
+          {(doc.document_type === "purchase_invoice" ||
+            doc.document_type === "purchase_credit_note") &&
+          !doc.is_committed ? (
+            <SupplierTax documentId={documentId} currency={doc.currency} minorUnits={minorUnits} />
+          ) : null}
+
+          {/* A credit note starts from the document that moved the goods,
+              because that is the only place their cost is recorded. Offered
+              once the despatch or the invoice has committed, which is when
+              there is anything to reverse; erp.raise_customer_credit_note
+              refuses anything else by name. */}
+          {(doc.document_type === "delivery" || doc.document_type === "sales_invoice") &&
+          doc.is_committed ? (
+            <CreditCustomer
+              documentId={documentId}
+              context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+            />
+          ) : null}
+
+          {doc.document_type === "goods_receipt" && doc.is_committed ? (
+            <CreditSupplier
+              documentId={documentId}
+              context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+            />
+          ) : null}
+
+          {/* A posted invoice cannot be edited and, where nothing is coming
+              back, cannot be credited either: a credit note in this product is
+              a goods return. Reversing the posting is what is left, and it is
+              what an accounting system does — the opposite journal, on its own
+              date, with both entries standing. Offered once the invoice has
+              committed, which is when there is a posting to unmake, and not
+              once it has been reversed: erp.reverse_document_posting refuses a
+              second one, and anything else, by name. */}
+          {postedInvoice && !reversed ? (
+            <ReversePosting
+              documentId={documentId}
+              context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+            />
+          ) : null}
+        </div>
+
+        {/* Already reversed: what is shown instead is the answer to the
+            question somebody actually has — which journal, when, and why. */}
+        {reversed ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            This posting has been reversed. Journal {reversed.journal_number ?? "—"} reversed{" "}
+            {reversed.reverses_journal_number ?? "it"} on {reversed.posting_date}
+            {reversed.reason ? `: ${reversed.reason}` : "."}
+          </p>
+        ) : null}
       </section>
+
+      {/* The lines are the body of every document, so they come straight
+          after its summary; what belongs to one kind of document follows. */}
+      <Lines
+        documentId={documentId}
+        lines={data.lines}
+        committed={doc.is_committed}
+        writtenByDoor={doorOpened}
+        amendment={data.amendment ?? null}
+        money={money}
+        minorUnits={minorUnits}
+        currency={doc.currency}
+      />
 
       {/* A sales invoice is issued here: its permanent number and the PDF the
           customer receives, through the numbered issue path. */}
       {doc.document_type === "sales_invoice" ? (
         <InvoiceIssue documentId={documentId} draft={doc.state === "draft"} />
-      ) : null}
-
-      {/* What the supplier charged is a fact on their paperwork, not something
-          to work out from our own rules, so it is typed in from their invoice.
-          Offered on a purchase invoice before it is registered, and on a
-          supplier credit note before it is issued, which is when
-          erp.state_supplier_tax accepts it (20261001400000). */}
-      {(doc.document_type === "purchase_invoice" || doc.document_type === "purchase_credit_note") &&
-      !doc.is_committed ? (
-        <SupplierTax documentId={documentId} currency={doc.currency} minorUnits={minorUnits} />
       ) : null}
 
       {/* What the supplier asked for before the goods, paid by the run and
@@ -332,19 +402,6 @@ function Document() {
         />
       ) : null}
 
-      {/* A credit note starts from the document that moved the goods, because
-          that is the only place their cost is recorded. Offered once the
-          despatch or the invoice has committed, which is when there is anything
-          to reverse; erp.raise_customer_credit_note refuses anything else by
-          name. */}
-      {(doc.document_type === "delivery" || doc.document_type === "sales_invoice") &&
-      doc.is_committed ? (
-        <CreditCustomer
-          documentId={documentId}
-          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
-        />
-      ) : null}
-
       {/* Goods sent back to a supplier: what for, their authorisation, what
           is left of the credit, and a replacement's arrival (20261004910000).
           Receive the replacement is drawn where the database says so. */}
@@ -355,46 +412,12 @@ function Document() {
         />
       ) : null}
 
-      {doc.document_type === "goods_receipt" && doc.is_committed ? (
-        <CreditSupplier
-          documentId={documentId}
-          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
-        />
-      ) : null}
-
-      {/* A posted invoice cannot be edited and, where nothing is coming back,
-          cannot be credited either: a credit note in this product is a goods
-          return. Reversing the posting is what is left, and it is what an
-          accounting system does — the opposite journal, on its own date, with
-          both entries standing. Offered once the invoice has committed, which
-          is when there is a posting to unmake; erp.reverse_document_posting
-          refuses anything else by name. */}
-      {(doc.document_type === "sales_invoice" || doc.document_type === "purchase_invoice") &&
-      doc.is_committed ? (
-        <ReversePosting
-          documentId={documentId}
-          context={`${doc.document_number} · ${doc.party ?? "no party"}`}
-          reversal={data.reversal}
-        />
-      ) : null}
-
       {/* A supplier payment prints the remittance advice the supplier is sent
           (20260930200000), for whoever may pay; the door asks finance.post in
           the payment's company. */}
       {(base ?? doc.document_type) === "cash_payment" ? (
         <RemittanceAdvice documentId={documentId} number={doc.document_number} />
       ) : null}
-
-      <Lines
-        documentId={documentId}
-        lines={data.lines}
-        committed={doc.is_committed}
-        writtenByDoor={doorOpened}
-        amendment={data.amendment ?? null}
-        money={money}
-        minorUnits={minorUnits}
-        currency={doc.currency}
-      />
 
       {/* Approval routing is evidence about a decision, and a decision is
           either still to come or recorded. On a committed document with
@@ -1098,121 +1121,95 @@ function LineagePanel({
  */
 function CreditCustomer({ documentId, context }: { documentId: string; context: string }) {
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Give this back</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            A credit note reverses what was billed and puts the goods back on the shelf at what they
-            cost rather than at what they sold for. It is left in draft; issuing it is what moves
-            the money and the stock.
-          </Prose>
-        </div>
-
-        <ActionDialog
-          trigger={<ActionButton>Credit this</ActionButton>}
-          title="Credit the customer and take the goods back"
-          description="Reverses this despatch: the customer owes less, revenue goes back, and the goods return to the shelf at what they cost rather than at what they sold for. A part return is valued at the average of what the whole despatch cost."
-          permission="sales.invoice"
-          fn="erp_raise_customer_credit_note"
-          context={context}
-          fields={[
-            {
-              kind: "text",
-              name: "p_reason_code",
-              label: "Why it came back",
-              placeholder: "damaged",
-              hint: "A short code you can count later: damaged, wrong item, over-ordered.",
-              required: true,
-            },
-            {
-              kind: "text",
-              name: "p_reason",
-              label: "What the customer said",
-              placeholder: "Two cases crushed in transit",
-              hint: "Optional, and the only thing anybody will remember six months later.",
-            },
-          ]}
-          mapArgs={(v) => ({
-            p_document_id: documentId,
-            p_reason_code: (v["p_reason_code"] as string) || "",
-            p_reason: (v["p_reason"] as string) || null,
-          })}
-          invalidates={["erp_document", "erp_documents"]}
-        />
-      </header>
-    </section>
+    <ActionDialog
+      trigger={<ActionButton variant="secondary">Credit this</ActionButton>}
+      title="Credit the customer and take the goods back"
+      description="Reverses this despatch: the customer owes less, revenue goes back, and the goods return to the shelf at what they cost rather than at what they sold for. A part return is valued at the average of what the whole despatch cost."
+      permission="sales.invoice"
+      fn="erp_raise_customer_credit_note"
+      context={context}
+      fields={[
+        {
+          kind: "text",
+          name: "p_reason_code",
+          label: "Why it came back",
+          placeholder: "damaged",
+          hint: "A short code you can count later: damaged, wrong item, over-ordered.",
+          required: true,
+        },
+        {
+          kind: "text",
+          name: "p_reason",
+          label: "What the customer said",
+          placeholder: "Two cases crushed in transit",
+          hint: "Optional, and the only thing anybody will remember six months later.",
+        },
+      ]}
+      mapArgs={(v) => ({
+        p_document_id: documentId,
+        p_reason_code: (v["p_reason_code"] as string) || "",
+        p_reason: (v["p_reason"] as string) || null,
+      })}
+      invalidates={["erp_document", "erp_documents"]}
+    />
   );
 }
 
 /** Sending goods back to the supplier who sent them, against the receipt. */
 function CreditSupplier({ documentId, context }: { documentId: string; context: string }) {
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Send this back</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            A supplier credit note takes the goods off the shelf at what they cost and reduces what
-            we owe by what the supplier is crediting. It is left in draft; issuing it is what moves
-            the stock and the money.
-          </Prose>
-        </div>
-
-        <ActionDialog
-          trigger={<ActionButton>Send back</ActionButton>}
-          title="Credit the supplier and send the goods back"
-          description="Reverses this receipt: the goods leave at what they cost, what we owe the supplier falls by what they are crediting, and the purchase order's history shows the return."
-          permission="procurement.order"
-          fn="erp_raise_supplier_credit_note"
-          context={context}
-          fields={[
-            {
-              kind: "text",
-              name: "p_reason_code",
-              label: "Why it is going back",
-              placeholder: "wrong_item",
-              hint: "A short code you can count later: damaged, wrong item, over-supplied.",
-              required: true,
-            },
-            {
-              kind: "text",
-              name: "p_reason",
-              label: "What we told the supplier",
-              placeholder: "Wrong grade on ten of the hundred",
-              hint: "Optional, and the only thing anybody will remember six months later.",
-            },
-            {
-              kind: "choice",
-              name: "p_outcome",
-              label: "What for",
-              required: true,
-              hint: "Credit: the supplier gives the money back. Replacement: they send the same goods again, and nothing is credited.",
-              choices: [
-                { value: "credit", label: "Credit" },
-                { value: "replacement", label: "Replacement" },
-              ],
-            },
-            {
-              kind: "text",
-              name: "p_rma",
-              label: "Their return authorisation",
-              placeholder: "RMA-1234",
-              hint: "Optional. The number the supplier gave for this return.",
-            },
-          ]}
-          preselect={{ p_outcome: "credit" }}
-          mapArgs={(v) => ({
-            p_document_id: documentId,
-            p_reason_code: (v["p_reason_code"] as string) || "",
-            p_reason: (v["p_reason"] as string) || null,
-            p_outcome: (v["p_outcome"] as string) || "credit",
-            p_rma: (v["p_rma"] as string) || null,
-          })}
-          invalidates={["erp_document", "erp_documents"]}
-        />
-      </header>
-    </section>
+    <ActionDialog
+      trigger={<ActionButton variant="secondary">Send back</ActionButton>}
+      title="Credit the supplier and send the goods back"
+      description="Reverses this receipt: the goods leave at what they cost, what we owe the supplier falls by what they are crediting, and the purchase order's history shows the return."
+      permission="procurement.order"
+      fn="erp_raise_supplier_credit_note"
+      context={context}
+      fields={[
+        {
+          kind: "text",
+          name: "p_reason_code",
+          label: "Why it is going back",
+          placeholder: "wrong_item",
+          hint: "A short code you can count later: damaged, wrong item, over-supplied.",
+          required: true,
+        },
+        {
+          kind: "text",
+          name: "p_reason",
+          label: "What we told the supplier",
+          placeholder: "Wrong grade on ten of the hundred",
+          hint: "Optional, and the only thing anybody will remember six months later.",
+        },
+        {
+          kind: "choice",
+          name: "p_outcome",
+          label: "What for",
+          required: true,
+          hint: "Credit: the supplier gives the money back. Replacement: they send the same goods again, and nothing is credited.",
+          choices: [
+            { value: "credit", label: "Credit" },
+            { value: "replacement", label: "Replacement" },
+          ],
+        },
+        {
+          kind: "text",
+          name: "p_rma",
+          label: "Their return authorisation",
+          placeholder: "RMA-1234",
+          hint: "Optional. The number the supplier gave for this return.",
+        },
+      ]}
+      preselect={{ p_outcome: "credit" }}
+      mapArgs={(v) => ({
+        p_document_id: documentId,
+        p_reason_code: (v["p_reason_code"] as string) || "",
+        p_reason: (v["p_reason"] as string) || null,
+        p_outcome: (v["p_outcome"] as string) || "credit",
+        p_rma: (v["p_rma"] as string) || null,
+      })}
+      invalidates={["erp_document", "erp_documents"]}
+    />
   );
 }
 
@@ -1224,80 +1221,38 @@ function CreditSupplier({ documentId, context }: { documentId: string; context: 
  * this month. A closed month refuses it and says which, so the field is not a
  * way round the close.
  */
-function ReversePosting({
-  documentId,
-  context,
-  reversal,
-}: {
-  documentId: string;
-  context: string;
-  reversal: Reversal[];
-}) {
-  const done = reversal[0];
-
-  // Already reversed: the database refuses a second one by name, so offering
-  // the control again would be an invitation into a refusal. What it shows
-  // instead is the answer to the question somebody actually has — when, and
-  // why.
-  if (done) {
-    return (
-      <section className="min-w-0 rounded-xl border border-border bg-card">
-        <header className="border-b border-border px-4 py-4 sm:px-5">
-          <h2 className="text-sm font-semibold">This posting has been reversed</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            The invoice is still here and so is what it posted. Journal {done.journal_number ?? "—"}{" "}
-            reversed {done.reverses_journal_number ?? "it"} on {done.posting_date}
-            {done.reason ? `: ${done.reason}` : "."} What it was worth is off the ageing. To charge
-            it again, raise it again as a new document.
-          </Prose>
-        </header>
-      </section>
-    );
-  }
-
+function ReversePosting({ documentId, context }: { documentId: string; context: string }) {
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Reverse this posting</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            A posted invoice is not edited. Reversing it raises the opposite journal on a date of
-            its own, and both the invoice and the correction stay in the record.
-          </Prose>
-        </div>
-
-        <ActionDialog
-          trigger={<ActionButton>Reverse it</ActionButton>}
-          title="Reverse what this invoice posted"
-          description="The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten."
-          permission="finance.post"
-          fn="erp_reverse_document_posting"
-          context={context}
-          fields={[
-            {
-              kind: "text",
-              name: "p_reason",
-              label: "Why it is being reversed",
-              placeholder: "Keyed against the wrong supplier",
-              hint: "Kept on the reversing journal beside who reversed it and when. A bill keyed against the wrong supplier, an invoice raised twice, a price entered wrong.",
-              required: true,
-            },
-            {
-              kind: "date",
-              name: "p_posting_date",
-              label: "The date it is reversed on",
-              hint: "Today unless you say otherwise. A posting made last month and reversed this month belongs in this month; a month that is closed refuses it and says so.",
-            },
-          ]}
-          mapArgs={(v) => ({
-            p_document_id: documentId,
-            p_reason: (v["p_reason"] as string) || "",
-            p_posting_date: (v["p_posting_date"] as string) || null,
-          })}
-          invalidates={["erp_document", "erp_documents"]}
-        />
-      </header>
-    </section>
+    <ActionDialog
+      trigger={<ActionButton variant="secondary">Reverse this posting</ActionButton>}
+      title="Reverse what this invoice posted"
+      description="The opposite journal is posted on the date you give, the invoice stays exactly as it is, and what it was worth comes off the ageing. Nothing already posted is rewritten."
+      permission="finance.post"
+      fn="erp_reverse_document_posting"
+      context={context}
+      fields={[
+        {
+          kind: "text",
+          name: "p_reason",
+          label: "Why it is being reversed",
+          placeholder: "Keyed against the wrong supplier",
+          hint: "Kept on the reversing journal beside who reversed it and when. A bill keyed against the wrong supplier, an invoice raised twice, a price entered wrong.",
+          required: true,
+        },
+        {
+          kind: "date",
+          name: "p_posting_date",
+          label: "The date it is reversed on",
+          hint: "Today unless you say otherwise. A posting made last month and reversed this month belongs in this month; a month that is closed refuses it and says so.",
+        },
+      ]}
+      mapArgs={(v) => ({
+        p_document_id: documentId,
+        p_reason: (v["p_reason"] as string) || "",
+        p_posting_date: (v["p_posting_date"] as string) || null,
+      })}
+      invalidates={["erp_document", "erp_documents"]}
+    />
   );
 }
 
@@ -1312,51 +1267,38 @@ function SupplierTax({
   minorUnits: number;
 }) {
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Tax the supplier charged</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            Taken from the supplier's invoice or credit note, not worked out here: what they charged
-            or give back is their decision under their own obligations. Spread across the lines by
-            what each is worth, at the rate on their paperwork.
-          </Prose>
-        </div>
-
-        <ActionDialog
-          trigger={<ActionButton>State their tax</ActionButton>}
-          title="State the tax the supplier charged"
-          description="The figure on their invoice. Leave it at nothing if they charged none."
-          fn="erp_state_supplier_tax"
-          fields={[
-            { kind: "money", name: "p_tax_minor", label: "Tax charged", currency, required: true },
-            {
-              kind: "text",
-              name: "p_tax_code",
-              label: "Tax code",
-              placeholder: "S",
-              hint: "The code on their invoice. S is the standard rate.",
-            },
-            {
-              kind: "text",
-              name: "p_note",
-              label: "Note",
-              placeholder: "Their invoice number",
-              hint: "Optional. Kept with the determination so the figure can be traced back.",
-            },
-          ]}
-          mapArgs={(v) => ({
-            p_document_id: documentId,
-            // The document's own exponent, not GBP's: a zero-decimal currency
-            // would otherwise store a hundred times what was typed.
-            p_tax_minor: toMinor((v["p_tax_minor"] ?? "") as string, minorUnits),
-            p_tax_code: (v["p_tax_code"] as string) || "S",
-            p_note: (v["p_note"] as string) || null,
-          })}
-          invalidates={["erp_document", "erp_documents"]}
-        />
-      </header>
-    </section>
+    <ActionDialog
+      trigger={<ActionButton variant="secondary">State their tax</ActionButton>}
+      title="State the tax the supplier charged"
+      description="The figure on their invoice. Leave it at nothing if they charged none."
+      fn="erp_state_supplier_tax"
+      fields={[
+        { kind: "money", name: "p_tax_minor", label: "Tax charged", currency, required: true },
+        {
+          kind: "text",
+          name: "p_tax_code",
+          label: "Tax code",
+          placeholder: "S",
+          hint: "The code on their invoice. S is the standard rate.",
+        },
+        {
+          kind: "text",
+          name: "p_note",
+          label: "Note",
+          placeholder: "Their invoice number",
+          hint: "Optional. Kept with the determination so the figure can be traced back.",
+        },
+      ]}
+      mapArgs={(v) => ({
+        p_document_id: documentId,
+        // The document's own exponent, not GBP's: a zero-decimal currency
+        // would otherwise store a hundred times what was typed.
+        p_tax_minor: toMinor((v["p_tax_minor"] ?? "") as string, minorUnits),
+        p_tax_code: (v["p_tax_code"] as string) || "S",
+        p_note: (v["p_note"] as string) || null,
+      })}
+      invalidates={["erp_document", "erp_documents"]}
+    />
   );
 }
 

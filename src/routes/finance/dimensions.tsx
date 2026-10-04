@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { type Field } from "../../components/erp/action";
-import { ActionBar, pickFrom } from "../../components/erp/actions-bar";
+import { ActionBar, HeaderActions, pickFrom } from "../../components/erp/actions-bar";
 import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
@@ -79,233 +79,238 @@ function Dimensions() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_dimensions", "Extra reporting tags")}>
+      <PageHeader
+        title={t("nav.finance_dimensions", "Extra reporting tags")}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Dimensions and values"
+              note="A derivation is a JsonLogic expression over the posting's facts — document, account, line, entity — that returns one of the dimension's value codes. It is checked against those facts when it is saved, not discovered at month end."
+              actions={[
+                {
+                  label: "Add or amend a dimension",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_dimension",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      hint: "CC, DEPT, PROJECT.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Cost centre",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_derivation",
+                      label: "Derivation",
+                      hint: 'JSON, for example {"if": [{"==": [{"var": "document.base_type"}, "purchase_order"]}, "PURCH", "GEN"]} or {"var": "document.site_code"}. Empty means no derivation.',
+                    },
+                    yesNo(
+                      "p_is_mandatory_default",
+                      "Mandatory on every line",
+                      "Every posting must carry it, whatever the account says.",
+                    ),
+                    {
+                      kind: "choice",
+                      name: "p_status",
+                      label: "Status",
+                      required: true,
+                      choices: [
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Inactive" },
+                      ],
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_code: v["p_code"],
+                    p_name: v["p_name"],
+                    p_derivation: parseJson(v["p_derivation"]),
+                    p_is_mandatory_default: v["p_is_mandatory_default"] === "true",
+                    p_status: v["p_status"] ?? "active",
+                  }),
+                  invalidates: ["erp_dimensions"],
+                },
+                {
+                  label: "Add or amend a value",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_dimension_value",
+                  fields: [
+                    pickDimension(),
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Value code",
+                      required: true,
+                      placeholder: "CC-1000",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Leeds warehouse",
+                    },
+                    // The door resolves the parent within the dimension chosen
+                    // above; the picker cannot narrow to it, so every value is
+                    // offered with its dimension named.
+                    {
+                      kind: "select",
+                      name: "p_parent_code",
+                      label: "Parent value",
+                      required: false,
+                      hint: "Optional. Groups values into a tree. Choose a value of the same dimension.",
+                      options: {
+                        fn: "erp_dimension_values",
+                        value: "code",
+                        label: ["dimension", "code", "name"],
+                      },
+                    },
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                    { kind: "date", name: "p_valid_to", label: "Valid to" },
+                    {
+                      kind: "choice",
+                      name: "p_status",
+                      label: "Status",
+                      required: true,
+                      choices: [
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Inactive" },
+                      ],
+                    },
+                  ],
+                  invalidates: ["erp_dimension_values", "erp_dimensions"],
+                },
+                {
+                  label: "Require dimensions on an account",
+                  description: "The dimensions a line to this account must carry.",
+                  permission: "finance.configure",
+                  fn: "erp_set_account_dimension_requirements",
+                  fields: [
+                    pickAccount(),
+                    {
+                      kind: "multi",
+                      name: "p_dimension_codes",
+                      label: "Dimensions",
+                      hint: "Tick every dimension a line to this account must carry. None ticked removes every requirement.",
+                      join: ", ",
+                      options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
+                    },
+                  ],
+                  // The door takes the several as one comma-separated line and has
+                  // no default, so the key is always sent — an empty string is the
+                  // instruction to remove every requirement. Field.join is honoured
+                  // by buildArgs only, so the joining is done here.
+                  mapArgs: (v, picked) => ({
+                    p_account_id: v["p_account_id"],
+                    p_dimension_codes: (picked?.lists["p_dimension_codes"] ?? []).join(", "),
+                  }),
+                  invalidates: ["erp_accounts"],
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Combination rules"
+              note="A rule has a scope (when it applies; empty is always) and a condition, both JsonLogic over account, dimensions and entity. Forbid refuses the line when the condition holds; permit refuses it when the condition does not. Evaluated for every journal, however it was raised."
+              actions={[
+                {
+                  label: "Add or amend a rule",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_dimension_rule",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "CC-MANDATORY-SPEND",
+                      hint: "A short code for this rule.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Cost centre required on spend",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_scope",
+                      label: "Scope",
+                      hint: 'JSON, for example {"==": [{"var": "account.code"}, "8100"]}. Empty applies always.',
+                    },
+                    {
+                      kind: "text",
+                      name: "p_condition",
+                      label: "Condition",
+                      required: true,
+                      hint: 'JSON, for example {"in": [{"var": "dimensions.CC"}, ["PURCH", "OPS"]]}.',
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_effect",
+                      label: "Effect",
+                      required: true,
+                      choices: [
+                        { value: "forbid", label: "Forbid when the condition holds" },
+                        { value: "permit", label: "Permit only when the condition holds" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_message",
+                      label: "Message",
+                      hint: "What the person posting is told.",
+                    },
+                    pickFrom(
+                      "erp_entities",
+                      "entity_id",
+                      ["code", "name"],
+                      "p_entity_id",
+                      "Company",
+                      undefined,
+                      false,
+                    ),
+                    {
+                      kind: "choice",
+                      name: "p_status",
+                      label: "Status",
+                      required: true,
+                      choices: [
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Inactive" },
+                      ],
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_code: v["p_code"],
+                    p_name: v["p_name"],
+                    p_condition: parseJson(v["p_condition"]),
+                    p_effect: v["p_effect"] ?? "forbid",
+                    p_message: v["p_message"] || null,
+                    p_entity_id: v["p_entity_id"] || null,
+                    p_scope: parseJson(v["p_scope"]),
+                    p_status: v["p_status"] ?? "active",
+                  }),
+                  invalidates: ["erp_dimension_rules"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         A dimension is a way of analysing a posting: cost centre, project, region. A value is
         stamped on every journal line from the posting rule, from the document, or derived from the
         document&rsquo;s facts by a rule you write here; a combination rule says which values an
         account may carry together.
       </PageHeader>
-
-      <ActionBar
-        title="Dimensions and values"
-        note="A derivation is a JsonLogic expression over the posting's facts — document, account, line, entity — that returns one of the dimension's value codes. It is checked against those facts when it is saved, not discovered at month end."
-        actions={[
-          {
-            label: "Add or amend a dimension",
-            permission: "finance.configure",
-            fn: "erp_upsert_dimension",
-            fields: [
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                hint: "CC, DEPT, PROJECT.",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Cost centre",
-              },
-              {
-                kind: "text",
-                name: "p_derivation",
-                label: "Derivation",
-                hint: 'JSON, for example {"if": [{"==": [{"var": "document.base_type"}, "purchase_order"]}, "PURCH", "GEN"]} or {"var": "document.site_code"}. Empty means no derivation.',
-              },
-              yesNo(
-                "p_is_mandatory_default",
-                "Mandatory on every line",
-                "Every posting must carry it, whatever the account says.",
-              ),
-              {
-                kind: "choice",
-                name: "p_status",
-                label: "Status",
-                required: true,
-                choices: [
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ],
-              },
-            ],
-            mapArgs: (v) => ({
-              p_code: v["p_code"],
-              p_name: v["p_name"],
-              p_derivation: parseJson(v["p_derivation"]),
-              p_is_mandatory_default: v["p_is_mandatory_default"] === "true",
-              p_status: v["p_status"] ?? "active",
-            }),
-            invalidates: ["erp_dimensions"],
-          },
-          {
-            label: "Add or amend a value",
-            permission: "finance.configure",
-            fn: "erp_upsert_dimension_value",
-            fields: [
-              pickDimension(),
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Value code",
-                required: true,
-                placeholder: "CC-1000",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Leeds warehouse",
-              },
-              // The door resolves the parent within the dimension chosen
-              // above; the picker cannot narrow to it, so every value is
-              // offered with its dimension named.
-              {
-                kind: "select",
-                name: "p_parent_code",
-                label: "Parent value",
-                required: false,
-                hint: "Optional. Groups values into a tree. Choose a value of the same dimension.",
-                options: {
-                  fn: "erp_dimension_values",
-                  value: "code",
-                  label: ["dimension", "code", "name"],
-                },
-              },
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-              { kind: "date", name: "p_valid_to", label: "Valid to" },
-              {
-                kind: "choice",
-                name: "p_status",
-                label: "Status",
-                required: true,
-                choices: [
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ],
-              },
-            ],
-            invalidates: ["erp_dimension_values", "erp_dimensions"],
-          },
-          {
-            label: "Require dimensions on an account",
-            description: "The dimensions a line to this account must carry.",
-            permission: "finance.configure",
-            fn: "erp_set_account_dimension_requirements",
-            fields: [
-              pickAccount(),
-              {
-                kind: "multi",
-                name: "p_dimension_codes",
-                label: "Dimensions",
-                hint: "Tick every dimension a line to this account must carry. None ticked removes every requirement.",
-                join: ", ",
-                options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
-              },
-            ],
-            // The door takes the several as one comma-separated line and has
-            // no default, so the key is always sent — an empty string is the
-            // instruction to remove every requirement. Field.join is honoured
-            // by buildArgs only, so the joining is done here.
-            mapArgs: (v, picked) => ({
-              p_account_id: v["p_account_id"],
-              p_dimension_codes: (picked?.lists["p_dimension_codes"] ?? []).join(", "),
-            }),
-            invalidates: ["erp_accounts"],
-          },
-        ]}
-      />
-
-      <ActionBar
-        title="Combination rules"
-        note="A rule has a scope (when it applies; empty is always) and a condition, both JsonLogic over account, dimensions and entity. Forbid refuses the line when the condition holds; permit refuses it when the condition does not. Evaluated for every journal, however it was raised."
-        actions={[
-          {
-            label: "Add or amend a rule",
-            permission: "finance.configure",
-            fn: "erp_upsert_dimension_rule",
-            fields: [
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "CC-MANDATORY-SPEND",
-                hint: "A short code for this rule.",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Cost centre required on spend",
-              },
-              {
-                kind: "text",
-                name: "p_scope",
-                label: "Scope",
-                hint: 'JSON, for example {"==": [{"var": "account.code"}, "8100"]}. Empty applies always.',
-              },
-              {
-                kind: "text",
-                name: "p_condition",
-                label: "Condition",
-                required: true,
-                hint: 'JSON, for example {"in": [{"var": "dimensions.CC"}, ["PURCH", "OPS"]]}.',
-              },
-              {
-                kind: "choice",
-                name: "p_effect",
-                label: "Effect",
-                required: true,
-                choices: [
-                  { value: "forbid", label: "Forbid when the condition holds" },
-                  { value: "permit", label: "Permit only when the condition holds" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_message",
-                label: "Message",
-                hint: "What the person posting is told.",
-              },
-              pickFrom(
-                "erp_entities",
-                "entity_id",
-                ["code", "name"],
-                "p_entity_id",
-                "Company",
-                undefined,
-                false,
-              ),
-              {
-                kind: "choice",
-                name: "p_status",
-                label: "Status",
-                required: true,
-                choices: [
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ],
-              },
-            ],
-            mapArgs: (v) => ({
-              p_code: v["p_code"],
-              p_name: v["p_name"],
-              p_condition: parseJson(v["p_condition"]),
-              p_effect: v["p_effect"] ?? "forbid",
-              p_message: v["p_message"] || null,
-              p_entity_id: v["p_entity_id"] || null,
-              p_scope: parseJson(v["p_scope"]),
-              p_status: v["p_status"] ?? "active",
-            }),
-            invalidates: ["erp_dimension_rules"],
-          },
-        ]}
-      />
 
       <InquiryBoard
         inquiries={[

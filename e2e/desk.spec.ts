@@ -1954,3 +1954,221 @@ test.describe("a wave's lines are the lines of the wave chosen", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a page opens on its records", () => {
+  // The verbs of a setup screen are behind Actions in its header, the three
+  // supplier lists of Purchasing are one card, and a document's lines come
+  // straight after its summary, with what corrects it as buttons there.
+
+  test("the walkthrough opens a step's form on a screen whose verbs are behind Actions", async ({
+    page,
+    backend,
+  }) => {
+    // erp_setup_walkthrough as 20260914030000 answers it: one step, driven by
+    // the door the jobs screen declares under Actions.
+    backend.rpc("erp_setup_walkthrough", {
+      screen: {
+        screen_path: "/operations/jobs",
+        seq: 16,
+        title: "Scheduled jobs",
+        blurb: "What runs on a timer, and what happens when it does not.",
+        previous: null,
+        next: null,
+        screens: 27,
+      },
+      steps: [
+        {
+          code: "jobs.define",
+          seq: 1,
+          title: "Define a job",
+          why: "Nothing runs on a timer until a job says so.",
+          action_label: "Define a job",
+          action_fn: "erp_upsert_job",
+          permission_code: "administration.jobs",
+          permitted: true,
+          observable: true,
+          satisfied: false,
+          evidence: null,
+          done_at: null,
+          dismissed_at: null,
+          complete: false,
+          blocked: false,
+          requires: [],
+        },
+      ],
+    });
+    await page.goto("/operations/jobs");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+
+    // The page is its lists: no verb is drawn on it, only the way to them.
+    await expect(page.getByRole("heading", { name: "Running and stopping jobs" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Define a job", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Actions" })).toBeVisible();
+
+    // The walkthrough still opens the form rather than pointing at it.
+    await page.getByRole("button", { name: "Walkthrough" }).click();
+    const walk = page.getByRole("dialog", { name: /Walkthrough/ });
+    await walk.getByRole("button", { name: "Define a job" }).click();
+    const form = page.getByRole("dialog", { name: "Define a job" });
+    await expect(form).toBeVisible();
+    await expect(walk).toBeHidden();
+    await form.getByRole("button", { name: "Back" }).click();
+    await expect(form).toBeHidden();
+
+    // And by hand it is one press further: the group, named as it was.
+    await page.getByRole("button", { name: "Actions" }).click();
+    const panel = page.getByRole("dialog", { name: "Actions" });
+    await expect(panel.getByRole("heading", { name: "Running and stopping jobs" })).toBeVisible();
+    await panel.getByRole("button", { name: "Define a job", exact: true }).click();
+    await expect(form).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("Purchasing draws one card for everything on its way, and only the lists that hold something", async ({
+    page,
+    backend,
+  }) => {
+    const ORDER = "00000000-0000-4000-8000-00000000a0a1";
+    await page.goto("/procurement");
+    const card = page.locator("section", {
+      has: page.getByRole("heading", { name: "On its way", level: 2 }),
+    });
+    await expect(card).toHaveCount(1, { timeout: 20_000 });
+    // Nothing anywhere: said once, and the carton scan is still offered.
+    await expect(card.getByText("Nothing is on its way.", { exact: true })).toBeVisible();
+    await expect(card.getByRole("heading", { level: 3 })).toHaveCount(0);
+    await expect(card.getByRole("button", { name: "Receive a carton" })).toBeVisible();
+
+    // erp_awaiting_confirmations (20261004990000) and erp_shipping_notices
+    // (20261005000000) answer; erp_inbound_shipments still has nothing.
+    backend.rpc("erp_awaiting_confirmations", [
+      {
+        order_id: ORDER,
+        order: "PO-000051",
+        supplier: "A Supplier",
+        status: "awaiting",
+        days_waiting: 6,
+        overdue: true,
+      },
+    ]);
+    backend.rpc("erp_shipping_notices", [
+      {
+        notice_id: "00000000-0000-4000-8000-00000000a0b1",
+        notice: "ASN-000007",
+        order_id: ORDER,
+        order: "PO-000049",
+        supplier: "B Supplier",
+        status: "notified",
+        expected_arrival: "2026-10-06",
+        late: false,
+        lines: [],
+        cartons: [],
+        differences: [],
+      },
+    ]);
+    await page.reload();
+    await expect(card.getByRole("heading", { name: "Awaiting confirmation" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(card.getByRole("link", { name: "PO-000051" })).toBeVisible();
+    await expect(card.getByText("6 days")).toBeVisible();
+    await expect(card.getByText("Late", { exact: true })).toBeVisible();
+    await expect(card.getByRole("heading", { name: "Shipping notices" })).toBeVisible();
+    await expect(card.getByRole("link", { name: "PO-000049" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Receive as notified" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Receive what arrived" })).toBeVisible();
+    // The list with nothing in it is left out, and so is the empty sentence.
+    await expect(card.getByRole("heading", { name: "We collect" })).toHaveCount(0);
+    await expect(card.getByText("Nothing is on its way.", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "On its way", level: 2 })).toHaveCount(1);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a posted invoice's lines follow its summary, where crediting and reversing it are buttons", async ({
+    page,
+    backend,
+  }) => {
+    const INV = "00000000-0000-4000-8000-00000000d0c7";
+    const invoice = (reversal: unknown[]) => ({
+      document: {
+        document_id: INV,
+        document_number: "INV-000077",
+        document_type: "sales_invoice",
+        document_date: "2026-09-20",
+        currency: "GBP",
+        party: "A Customer",
+        their_reference: null,
+        total_minor: 12000,
+        state: "posted",
+        state_name: "Posted",
+        is_committed: true,
+      },
+      lines: [
+        {
+          line_id: "00000000-0000-4000-8000-0000000077e1",
+          line_no: 1,
+          description: "Widgets",
+          quantity: 10,
+          unit_price_minor: 1200,
+          net_minor: 12000,
+          item: "WID",
+          supplier_item_code: null,
+        },
+      ],
+      lineage: [],
+      reversal,
+      amendment: { allowed: true, cut_off: null, detail: null },
+      available_transitions: [],
+    });
+    backend.rpc("erp_document", invoice([]));
+    await page.goto(`/documents/${INV}`);
+    await expect(page.getByRole("heading", { name: "INV-000077", level: 1 })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // The lines are the first card under the summary.
+    const cards = page.locator("main section");
+    await expect(cards.nth(1).getByRole("heading", { name: "Lines (1)" })).toBeVisible();
+
+    // Both corrections are in the summary, each opening the form it opened.
+    const summary = cards.first();
+    await summary.getByRole("button", { name: "Credit this" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Credit the customer and take the goods back" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await summary.getByRole("button", { name: "Reverse this posting" }).click();
+    const form = page.getByRole("dialog", { name: "Reverse what this invoice posted" });
+    await form.getByLabel("Why it is being reversed").fill("Raised twice");
+    const sent = page.waitForRequest(/rpc\/erp_reverse_document_posting$/);
+    // Reversed: the document answers with its contra journal from here on.
+    backend.rpc(
+      "erp_document",
+      invoice([
+        {
+          journal_id: "00000000-0000-4000-8000-0000000077f1",
+          journal_number: "JNL-000090",
+          posting_date: "2026-10-04",
+          reason: "Raised twice",
+          reversed_at: "2026-10-04T09:00:00Z",
+          reverses_journal_number: "JNL-000081",
+        },
+      ]),
+    );
+    await form.getByRole("button", { name: "Save" }).click();
+    expect((await sent).postDataJSON()).toMatchObject({
+      p_document_id: INV,
+      p_reason: "Raised twice",
+    });
+
+    // One line says so, and the button that would be refused is gone.
+    await expect(
+      summary.getByText(
+        "This posting has been reversed. Journal JNL-000090 reversed JNL-000081 on 2026-10-04: Raised twice",
+      ),
+    ).toBeVisible();
+    await expect(summary.getByRole("button", { name: "Reverse this posting" })).toHaveCount(0);
+    await expect(summary.getByRole("button", { name: "Credit this" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+});

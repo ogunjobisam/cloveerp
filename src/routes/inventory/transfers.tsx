@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickDocument } from "../../components/erp/actions-bar";
+import { ActionButtons, pickDocument } from "../../components/erp/actions-bar";
 import { DecisionMoves } from "../../components/erp/decision-moves";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -76,37 +76,36 @@ function SiteTransfers() {
         howItWorks={ui(
           "The goods leave the first site's shelves when they are loaded and stay that site's stock, at the same value, until they are booked in at the other end.",
         )}
+        actions={
+          <ActionButtons
+            actions={[
+              RAISE_TRANSFER_ORDER,
+              {
+                label: "Despatch a transfer",
+                title: "Load the goods",
+                description:
+                  "Takes the goods off the despatching site's shelves and stands them in that site's transit place. They are still that site's stock and still its value until they arrive.",
+                permission: "inventory.move",
+                fn: "erp_despatch_transfer",
+                fields: [pickDocument("transfer_order", "p_document_id", "Transfer order")],
+                invalidates,
+              },
+              {
+                label: "Receive a transfer",
+                title: "Book the goods in",
+                description:
+                  "Books the goods onto the receiving site's shelves. The quantity and the value both cross here, for the same figure, so the company holds exactly what it held before.",
+                permission: "inventory.move",
+                fn: "erp_receive_transfer",
+                fields: [pickDocument("transfer_order", "p_document_id", "Transfer order")],
+                invalidates,
+              },
+            ]}
+          />
+        }
       >
         {ui("Moving stock from one of your warehouses to another.")}
       </PageHeader>
-
-      <ActionBar
-        title="Raise and move a transfer"
-        note="A transfer order is approved before anything leaves a shelf, despatched when the lorry is loaded, and received when it arrives. The value crosses at the last step, in one figure, so both sites always add up to what the company holds."
-        actions={[
-          RAISE_TRANSFER_ORDER,
-          {
-            label: "Despatch a transfer",
-            title: "Load the goods",
-            description:
-              "Takes the goods off the despatching site's shelves and stands them in that site's transit place. They are still that site's stock and still its value until they arrive.",
-            permission: "inventory.move",
-            fn: "erp_despatch_transfer",
-            fields: [pickDocument("transfer_order", "p_document_id", "Transfer order")],
-            invalidates,
-          },
-          {
-            label: "Receive a transfer",
-            title: "Book the goods in",
-            description:
-              "Books the goods onto the receiving site's shelves. The quantity and the value both cross here, for the same figure, so the company holds exactly what it held before.",
-            permission: "inventory.move",
-            fn: "erp_receive_transfer",
-            fields: [pickDocument("transfer_order", "p_document_id", "Transfer order")],
-            invalidates,
-          },
-        ]}
-      />
 
       <DataPanel<TransferRow>
         title={ui("Transfer orders")}
