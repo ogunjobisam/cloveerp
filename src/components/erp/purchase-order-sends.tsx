@@ -23,7 +23,9 @@ import { useErpSession } from "./session-context";
  * public.erp_purchase_order_sends says the reader may send, and asks why only
  * when the order has gone already. Download PDF draws the same document from
  * the order as it reads now, for sending by hand. Every send is listed with how
- * far it got: queued, sent, delivered, or bounced and why.
+ * far it got: queued, sent, delivered, or bounced and why. A demonstration
+ * never sends email, so there a send stays queued, and the section and the
+ * dialog say why (J-139).
  */
 
 const TONE: Record<SendStatus, "ok" | "warn" | "bad" | "muted"> = {
@@ -96,6 +98,12 @@ export function PurchaseOrderSends({
       required: true,
       placeholder: "orders@supplier.example",
       ...(sends.defaultTo ? { default: sends.defaultTo } : {}),
+      // Where the address is typed, the reason a send stays queued (J-139).
+      ...(sends.demonstration
+        ? {
+            hint: "A demonstration organisation never sends email outside the product, so nobody is written to by accident.",
+          }
+        : {}),
     },
     {
       kind: "text",
@@ -142,6 +150,13 @@ export function PurchaseOrderSends({
               "The order as the supplier receives it: emailed from here with its PDF attached, or downloaded and sent by hand.",
             )}
           </Prose>
+          {sends.demonstration ? (
+            <Prose className="mt-0.5 text-xs text-muted-foreground">
+              {ui(
+                "A demonstration organisation never sends email outside the product, so nobody is written to by accident.",
+              )}
+            </Prose>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <ActionButton variant="secondary" busy={downloading} onClick={download}>
