@@ -6,7 +6,7 @@ import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
 import { ActionButton, ComboField, ErrorNote, MultiField, type Field } from "./action";
 import { useErpSession } from "./session-context";
-import { TOUCH } from "./page";
+import { Prose, TOUCH } from "./page";
 
 /**
  * A question with parameters.
@@ -76,9 +76,19 @@ function Value({ value }: { value: unknown }) {
   return <span className="break-words">{String(value)}</span>;
 }
 
-function Inquiry({ spec }: { spec: InquirySpec }) {
+/**
+ * One question, folded to its name until somebody wants to ask it.
+ *
+ * Financials and Planning each ended their Reports tab with six open forms and
+ * Stock with five: a screenful of empty fields under the reports people came
+ * for. A native <details> keeps every one of them a press away, opens from the
+ * keyboard without any code here, and leaves the form in the page so what was
+ * typed and what was answered survive being folded away again.
+ */
+function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean }) {
   const { session } = useErpSession();
   const { ui } = useT();
+  const [open, setOpen] = useState(startsOpen);
   const [values, setValues] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const f of spec.fields) if (f.default) out[f.name] = f.default;
@@ -105,103 +115,111 @@ function Inquiry({ spec }: { spec: InquirySpec }) {
   if (spec.permission && !hasPermission(session, spec.permission)) return null;
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 className="text-sm font-semibold">{ui(spec.label)}</h3>
-      {spec.description ? (
-        <p className="mt-0.5 text-xs text-muted-foreground">{ui(spec.description)}</p>
-      ) : null}
+    <details
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+      className="min-w-0 rounded-xl border border-border bg-card"
+    >
+      {/* 44px with its padding: the whole line is the control. */}
+      <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-semibold sm:px-5">
+        <h3 className="inline">{ui(spec.label)}</h3>
+      </summary>
 
-      <form
-        className="mt-3 flex flex-wrap items-end gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          ask.mutate();
-        }}
-      >
-        {spec.fields.map((f) => {
-          const Wrap = f.kind === "multi" ? "div" : "label";
-          return (
-            <Wrap key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {ui(f.label)}
-              </span>
-              {f.kind === "site" ? (
-                <select
-                  aria-label={ui(f.label)}
-                  value={values[f.name] ?? ""}
-                  onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
-                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                >
-                  <option value="">{ui("Choose…")}</option>
-                  {session.sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.code} — {s.name}
-                    </option>
-                  ))}
-                </select>
-              ) : f.kind === "choice" ? (
-                <select
-                  aria-label={ui(f.label)}
-                  value={values[f.name] ?? ""}
-                  onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
-                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                >
-                  <option value="">{ui("Choose…")}</option>
-                  {f.choices.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {ui(c.label)}
-                    </option>
-                  ))}
-                </select>
-              ) : f.kind === "select" ? (
-                <SelectInput
-                  spec={f}
-                  value={values[f.name] ?? ""}
-                  onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
-                />
-              ) : f.kind === "combo" ? (
-                <ComboField
-                  field={f}
-                  value={values[f.name] ?? ""}
-                  onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
-                />
-              ) : f.kind === "multi" ? (
-                <MultiField
-                  field={f}
-                  value={lists[f.name] ?? []}
-                  onChange={(v) => setLists((p) => ({ ...p, [f.name]: v }))}
-                />
-              ) : (
-                <input
-                  aria-label={ui(f.label)}
-                  type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"}
-                  placeholder={f.kind === "rows" ? "" : (f.placeholder ?? "")}
-                  value={values[f.name] ?? ""}
-                  onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
-                  className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-                />
-              )}
-              {f.hint ? <span className="text-xs text-muted-foreground">{ui(f.hint)}</span> : null}
-            </Wrap>
-          );
-        })}
-        <ActionButton type="submit" busy={ask.isPending}>
-          {ask.isPending ? ui("Asking…") : ui("Ask")}
-        </ActionButton>
-      </form>
+      <div className="flex min-w-0 flex-col gap-3 px-4 pb-4 sm:px-5 sm:pb-5">
+        {spec.description ? (
+          <Prose className="text-xs text-muted-foreground">{ui(spec.description)}</Prose>
+        ) : null}
 
-      {ask.error ? (
-        <div className="mt-3">
-          <ErrorNote error={ask.error} />
-        </div>
-      ) : null}
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            ask.mutate();
+          }}
+        >
+          {spec.fields.map((f) => {
+            const Wrap = f.kind === "multi" ? "div" : "label";
+            return (
+              <Wrap key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {ui(f.label)}
+                </span>
+                {f.kind === "site" ? (
+                  <select
+                    aria-label={ui(f.label)}
+                    value={values[f.name] ?? ""}
+                    onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                    className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                  >
+                    <option value="">{ui("Choose…")}</option>
+                    {session.sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.code} — {s.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.kind === "choice" ? (
+                  <select
+                    aria-label={ui(f.label)}
+                    value={values[f.name] ?? ""}
+                    onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                    className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                  >
+                    <option value="">{ui("Choose…")}</option>
+                    {f.choices.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {ui(c.label)}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.kind === "select" ? (
+                  <SelectInput
+                    spec={f}
+                    value={values[f.name] ?? ""}
+                    onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
+                  />
+                ) : f.kind === "combo" ? (
+                  <ComboField
+                    field={f}
+                    value={values[f.name] ?? ""}
+                    onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
+                  />
+                ) : f.kind === "multi" ? (
+                  <MultiField
+                    field={f}
+                    value={lists[f.name] ?? []}
+                    onChange={(v) => setLists((p) => ({ ...p, [f.name]: v }))}
+                  />
+                ) : (
+                  <input
+                    aria-label={ui(f.label)}
+                    type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"}
+                    placeholder={f.kind === "rows" ? "" : (f.placeholder ?? "")}
+                    value={values[f.name] ?? ""}
+                    onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                    className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+                  />
+                )}
+                {f.hint ? (
+                  <span className="text-xs text-muted-foreground">{ui(f.hint)}</span>
+                ) : null}
+              </Wrap>
+            );
+          })}
+          <ActionButton type="submit" busy={ask.isPending}>
+            {ask.isPending ? ui("Asking…") : ui("Ask")}
+          </ActionButton>
+        </form>
 
-      {ask.data !== undefined && !ask.error ? (
-        <div className="mt-3 rounded-md border border-border p-3">
-          <Value value={ask.data} />
-        </div>
-      ) : null}
-    </section>
+        {ask.error ? <ErrorNote error={ask.error} /> : null}
+
+        {ask.data !== undefined && !ask.error ? (
+          <div className="rounded-md border border-border p-3">
+            <Value value={ask.data} />
+          </div>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -255,7 +273,13 @@ function SelectInput({
 /** The inquiries of one module, under its Reports tab. */
 export function InquiryBoard({ inquiries }: { inquiries: InquirySpec[] }) {
   const { ui } = useT();
+  const { session } = useErpSession();
   if (inquiries.length === 0) return null;
+
+  // A board with one question on it is that question, so it is drawn open.
+  // Counted as the person sees it: the ones they may not ask are not drawn.
+  const drawn = inquiries.filter((i) => !i.permission || hasPermission(session, i.permission));
+  const alone = drawn.length === 1;
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -263,7 +287,7 @@ export function InquiryBoard({ inquiries }: { inquiries: InquirySpec[] }) {
         {ui("Ask a question")}
       </h2>
       {inquiries.map((i) => (
-        <Inquiry key={`${i.fn}-${i.label}`} spec={i} />
+        <Inquiry key={`${i.fn}-${i.label}`} spec={i} startsOpen={alone} />
       ))}
     </div>
   );

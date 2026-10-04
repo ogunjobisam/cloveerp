@@ -50,7 +50,7 @@ import { supplierCreditOutcome } from "../../lib/supplier-return";
 import { useCurrencies } from "./currencies";
 import { registerActionOpener } from "./action-registry";
 import { useErpSession } from "./session-context";
-import { TOUCH } from "./page";
+import { Prose, TOUCH } from "./page";
 import { useUnsavedGuard } from "./unsaved";
 import { fill } from "../../lib/interview";
 import { missingRequired } from "../../lib/required-fields";
@@ -1624,7 +1624,7 @@ export function ActionDialog({
                     {ui(title)}
                   </h2>
                   {description ? (
-                    <p className="truncate text-xs text-muted-foreground">{ui(description)}</p>
+                    <Prose className="text-xs text-muted-foreground">{ui(description)}</Prose>
                   ) : null}
                 </div>
               </div>

@@ -8,7 +8,7 @@ import { formatMinorTotals, minorUnitsOf } from "../../lib/money";
 import type { Chart, Kpi, KpiContext, Row } from "../../lib/modules";
 import { chartBars } from "../../lib/report-figures";
 import { useCurrencies } from "./currencies";
-import { LoadingRows } from "./page";
+import { LoadingRows, Prose } from "./page";
 
 /**
  * The numbers at the top of a module.
@@ -145,7 +145,7 @@ export function MiniBars({ chart }: { chart: Chart }) {
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">{ui(chart.title)}</h2>
         {chart.description ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">{ui(chart.description)}</p>
+          <Prose className="mt-0.5 text-xs text-muted-foreground">{ui(chart.description)}</Prose>
         ) : null}
       </header>
 
