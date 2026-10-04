@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { byTone, transitionTone } from "../../lib/plain-words";
@@ -125,6 +127,17 @@ export function DocumentTransitions({
     answered !== transitions.find((t) => t.code === "approve")?.to_state;
   const explained = documentType ? EXPLAINED_MOVES[documentType] : undefined;
 
+  // A way out (cancel, void, reject for good) is made on a second press. One
+  // press on "Cancel" cancelled an approved purchase order with no question
+  // and no word afterwards (found walking the live product, 4 October 2026).
+  // The first press arms the button, which says so; it disarms itself.
+  const [armed, setArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (armed === null) return;
+    const timer = window.setTimeout(() => setArmed(null), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+
   const manual = manualTransitions(documentType, transitions);
   // Drawn only where the person can complete it (20260923600000): permitted,
   // its guard passing against the document, and not refused by the door. The
@@ -224,9 +237,17 @@ export function DocumentTransitions({
               }
               busy={act.isPending}
               title={`Moves this document to ${prettifyField(t.to_state).toLowerCase()}.`}
-              onClick={() => act.mutate({ p_document_id: documentId, p_transition_code: t.code })}
+              onClick={() => {
+                const key = `${documentId}:${t.code}`;
+                if (transitionTone(t) === "out" && armed !== key) {
+                  setArmed(key);
+                  return;
+                }
+                setArmed(null);
+                act.mutate({ p_document_id: documentId, p_transition_code: t.code });
+              }}
             >
-              {t.name}
+              {armed === `${documentId}:${t.code}` ? `${t.name}: press again to confirm` : t.name}
             </ActionButton>
           );
         })}

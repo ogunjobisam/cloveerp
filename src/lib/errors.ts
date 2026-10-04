@@ -261,7 +261,11 @@ export function friendlyError(error: unknown): FriendlyError {
     return out("Could not reach the server.", "Check your connection and try again.");
   }
   if (/timeout|statement canceled/i.test(raw)) {
-    return out("That took too long.", "The request was cancelled. Try a narrower selection.");
+    // A write that met the limit changed nothing, and has nothing to narrow.
+    return out(
+      "That took too long.",
+      "The request was cancelled and nothing was changed. Try again in a moment; for a report, choose a narrower selection.",
+    );
   }
 
   // Nothing matched: the message is likely an engine sentence already.
