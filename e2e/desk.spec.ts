@@ -409,6 +409,8 @@ test.describe("a document offers only what can be completed", () => {
       state: "sent",
       state_name: "Issued to supplier",
       is_committed: true,
+      is_terminal: false,
+      lines_open: false,
     },
     lines: [
       {
@@ -511,6 +513,7 @@ test.describe("a document offers only what can be completed", () => {
       state: "pending_approval",
       state_name: "Pending approval",
       is_committed: false,
+      lines_open: false,
     },
     lineage: [
       {
@@ -620,6 +623,63 @@ test.describe("a document offers only what can be completed", () => {
     });
     await expect(page.getByText("Named assignment")).toBeVisible();
     await expect(page.getByRole("button", { name: "Stamp the approval chain" })).toHaveCount(1);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  // J-31, J-32: a draft's lines are changed and removed in place, and past
+  // draft nothing on the page changes a line, as the database refuses it.
+  test("a draft's line is changed or removed in place, and an order waiting for approval offers neither", async ({
+    page,
+    backend,
+  }) => {
+    const DRAFT_ID = "00000000-0000-4000-8000-00000000d0c7";
+    const LINE_ID = "00000000-0000-4000-8000-0000000011e1";
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      document: {
+        ...ORDER_PAGE.document,
+        document_id: DRAFT_ID,
+        document_number: "PO-000044",
+        state: "draft",
+        state_name: "Draft",
+        is_committed: false,
+        is_terminal: false,
+        lines_open: true,
+      },
+      amendment: null,
+      available_transitions: [],
+    });
+    backend.rpc("erp_available_transitions", []);
+    backend.rpc("erp_remove_document_line", {
+      line_id: LINE_ID,
+      document_id: DRAFT_ID,
+      document_total_minor: 0,
+    });
+
+    await page.goto(`/documents/${DRAFT_ID}`);
+    await expect(page.getByRole("heading", { name: "PO-000044" })).toBeVisible({ timeout: 20_000 });
+    for (const name of ["Add line", "Reprice", "Change", "Remove"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("Lines change only on a draft.")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Remove this line?" });
+    await expect(
+      form.getByText("It comes off the draft, and anything it was raised from is open again."),
+    ).toBeVisible();
+    const sent = page.waitForRequest(/rpc\/erp_remove_document_line$/);
+    await form.getByRole("button", { name: "Remove" }).click();
+    expect((await sent).postDataJSON()).toMatchObject({ p_line_id: LINE_ID });
+
+    // Waiting for approval, the same order offers nothing that changes a line.
+    backend.rpc("erp_document", PENDING_PAGE);
+    await page.goto(`/documents/${PENDING_ID}`);
+    await expect(page.getByRole("heading", { name: "PO-000043" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Lines change only on a draft.")).toBeVisible();
+    for (const name of ["Add line", "Reprice", "Change", "Remove", "Amend"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
     expect(backend.crashes).toEqual([]);
   });
 });
@@ -1507,7 +1567,7 @@ test.describe("the cash documents are on the desk", () => {
     await expect(
       page.getByText(/The routine that opened this document wrote its lines/),
     ).toBeVisible();
-    for (const name of ["Add line", "Reprice", "Amend", "Post"]) {
+    for (const name of ["Add line", "Reprice", "Change", "Remove", "Amend", "Post"]) {
       await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
     }
     await expect(page.getByRole("button", { name: /remittance/i })).toHaveCount(0);
@@ -1678,7 +1738,7 @@ test.describe("the cash documents are on the desk", () => {
     expect(
       await page.evaluate(() => (window as unknown as { __printed?: boolean }).__printed),
     ).toBe(true);
-    for (const name of ["Add line", "Reprice", "Amend", "Post"]) {
+    for (const name of ["Add line", "Reprice", "Change", "Remove", "Amend", "Post"]) {
       await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
     }
     expect(backend.crashes).toEqual([]);
