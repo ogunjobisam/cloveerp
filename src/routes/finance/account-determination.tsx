@@ -13,6 +13,7 @@ import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
+import { whenText } from "../../lib/when";
 
 export const Route = createFileRoute("/finance/account-determination")({
   head: () => ({
@@ -588,9 +589,7 @@ function AccountDetermination() {
           >
             {rows.map((o) => (
               <tr key={o.override_id} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 tabular-nums">
-                  {o.applied_at.slice(0, 16).replace("T", " ")}
-                </td>
+                <td className="py-2 pr-4 tabular-nums">{whenText(o.applied_at)}</td>
                 <td className="py-2 pr-4">{o.object_type}</td>
                 <td className="py-2 pr-4">{o.line_ref ?? "—"}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{o.account_code ?? "—"}</td>

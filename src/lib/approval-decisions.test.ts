@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   anyAdministratorDecision,
+  decisionComment,
   decisionWords,
+  stampHasSteps,
   type ApprovalDecision,
 } from "./approval-decisions";
 import { INTERNAL_WORDING } from "./plain-words";
@@ -78,5 +80,52 @@ describe("a document's approval decisions, in words", () => {
   test("knows when an administrator decided anything", () => {
     expect(anyAdministratorDecision([base])).toBe(false);
     expect(anyAdministratorDecision([base, { ...base, decided_via: "administrator" }])).toBe(true);
+  });
+});
+
+describe("the decisions card says each thing once (J-121)", () => {
+  const byAdministrator: ApprovalDecision = {
+    ...base,
+    decided_via: "administrator",
+    decided_by: "Ada Lovelace",
+  };
+
+  test("the sentence the administrator door writes is not repeated as a comment", () => {
+    // erp.approve_request_as_administrator writes one of these two.
+    for (const comment of [
+      "Approved as administrator",
+      "Approved as administrator, for the person asked",
+    ]) {
+      expect(decisionComment({ ...byAdministrator, comment })).toBeNull();
+    }
+    expect(decisionWords(byAdministrator)).toBe(
+      "Approved by Ada Lovelace as administrator, for Sam Carter",
+    );
+  });
+
+  test("a comment somebody typed is shown, whoever decided", () => {
+    expect(decisionComment({ ...byAdministrator, comment: "Agreed on the phone" })).toBe(
+      "Agreed on the phone",
+    );
+    expect(decisionComment({ ...base, comment: "Approved as administrator" })).toBe(
+      "Approved as administrator",
+    );
+    expect(decisionComment({ ...base, comment: "  " })).toBeNull();
+    expect(decisionComment(base)).toBeNull();
+  });
+
+  test("the routing card is drawn only where the latest stamp resolved a step", () => {
+    expect(stampHasSteps(undefined)).toBe(false);
+    expect(stampHasSteps([])).toBe(false);
+    expect(stampHasSteps([{ resolved_chain: {} }])).toBe(false);
+    expect(stampHasSteps([{ resolved_chain: { steps: [] } }])).toBe(false);
+    expect(stampHasSteps([{ resolved_chain: { steps: [{ seq: 1 }] } }])).toBe(true);
+    // The latest is first; an older stamp's steps do not count.
+    expect(
+      stampHasSteps([
+        { resolved_chain: { steps: [] } },
+        { resolved_chain: { steps: [{ seq: 1 }] } },
+      ]),
+    ).toBe(false);
   });
 });

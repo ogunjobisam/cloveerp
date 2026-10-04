@@ -12,7 +12,13 @@ import { SupplierConfirmation } from "../../components/erp/supplier-confirmation
 import { SupplierReturn } from "../../components/erp/supplier-return";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
-import { decisionWords, type ApprovalDecision } from "../../lib/approval-decisions";
+import {
+  decisionComment,
+  decisionWords,
+  stampHasSteps,
+  type ApprovalDecision,
+} from "../../lib/approval-decisions";
+import { whenText } from "../../lib/when";
 import { callErp, hasPermission } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
@@ -337,6 +343,12 @@ function Document() {
               context={`${doc.document_number} · ${doc.party ?? "no party"}`}
             />
           ) : null}
+
+          {/* Stamping the approval chain records which rule, at which
+              version, chose each approver. Offered on a document still open
+              to approval that somebody writes by hand; once a stamp has
+              resolved a step, the routing card below carries the button. */}
+          {!doc.is_committed && !doorOpened ? <StampApprovalChain documentId={documentId} /> : null}
         </div>
 
         {/* Already reversed: what is shown instead is the answer to the
@@ -429,17 +441,13 @@ function Document() {
         <RemittanceAdvice documentId={documentId} number={doc.document_number} />
       ) : null}
 
-      {/* Approval routing is evidence about a decision, and a decision is
-          either still to come or recorded. On a committed document with
-          nothing stamped it is neither: a delivery, a goods receipt and an
-          issued invoice have no approval, and the card invited the reader to
-          stamp a chain onto one anyway. It stays wherever a chain exists, so
-          nothing already recorded is hidden. */}
-      {doc.is_committed || doorOpened ? (
-        <ApprovalChainWhenStamped documentId={documentId} />
-      ) : (
-        <ApprovalChain documentId={documentId} />
-      )}
+      {/* Approval routing is evidence about a decision: the chain a stamp
+          resolved from the routing rules. It is drawn only where a stamp
+          resolved at least one step. A document approved through its tasks
+          has no stamp, and the card used to say "Nothing has been stamped"
+          and "No steps resolved." above the decisions that were really made
+          (J-121). Stamping stays a button among the corrections above. */}
+      <ApprovalChainWhenStamped documentId={documentId} />
 
       <ApprovalDecisions documentId={documentId} />
 
@@ -685,26 +693,71 @@ type Stamp = {
   resolved_chain: { steps?: ChainStep[]; department_id?: string | null };
 };
 
-/**
- * The approval chain as it was resolved on this document.
- *
- * The stamp is evidence, not a live calculation: it records which rule, at
- * which version, chose each approver, and where cover moved the decision to
- * somebody else while keeping the approver of record.
- */
-function ApprovalChain({ documentId }: { documentId: string }) {
-  const { data, error } = useQuery({
+/** The routing stamps on a document, latest first; one read the card and the button share. */
+function useApprovalStamps(documentId: string) {
+  return useQuery({
     queryKey: ["erp_document_approval_chain", { p_document_id: documentId }],
     queryFn: () => callErp<Stamp[]>("erp_document_approval_chain", { p_document_id: documentId }),
   });
+}
 
-  const stamp = useErpAction({
+function useStampApproval() {
+  return useErpAction({
     fn: "erp_stamp_document_approval",
     invalidates: ["erp_document_approval_chain"],
   });
+}
+
+/**
+ * Stamping the approval chain, among a document's corrections.
+ *
+ * Drawn while no stamp has resolved a step, which is when the routing card is
+ * not there to carry it. Secondary on purpose: DocumentTransitions' rule —
+ * "the way forward is the one dark button" — is a rule about the screen, and
+ * on a document the way forward is the transition above, never a routing
+ * stamp.
+ */
+function StampApprovalChain({ documentId }: { documentId: string }) {
+  const { data, error } = useApprovalStamps(documentId);
+  const stamp = useStampApproval();
+  if (stampHasSteps(data)) return null;
+  const failed = error ?? stamp.error;
+
+  return (
+    <>
+      <ActionButton
+        variant="secondary"
+        busy={stamp.isPending}
+        onClick={() => stamp.mutate({ p_document_id: documentId })}
+      >
+        Stamp the approval chain
+      </ActionButton>
+      {failed ? (
+        <div className="basis-full">
+          <ErrorNote error={failed} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The approval chain as it was resolved on this document, drawn only where the
+ * latest stamp resolved at least one step.
+ *
+ * The stamp is evidence, not a live calculation: it records which rule, at
+ * which version, chose each approver, and where cover moved the decision to
+ * somebody else while keeping the approver of record. Where nothing was
+ * stamped, or the stamp resolved no step, the card is left out altogether
+ * rather than saying so above the decisions that were really made (J-121).
+ */
+function ApprovalChainWhenStamped({ documentId }: { documentId: string }) {
+  const { data, error } = useApprovalStamps(documentId);
+  const stamp = useStampApproval();
 
   const latest = data?.[0];
-  const steps = latest?.resolved_chain?.steps ?? [];
+  if (!latest || !stampHasSteps(data)) return null;
+  const steps = latest.resolved_chain.steps ?? [];
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
@@ -712,15 +765,10 @@ function ApprovalChain({ documentId }: { documentId: string }) {
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">Approval routing</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
-            {latest
-              ? `Resolved ${latest.resolved_at.slice(0, 16).replace("T", " ")}, against the rules in force at that moment.`
-              : "Nothing has been stamped on this document yet. Stamping records the chain, the rule version behind each step, and any cover in force."}
+            {`Resolved ${whenText(latest.resolved_at)}, against the rules in force at that moment.`}
           </Prose>
         </div>
-        {/* Secondary on purpose. DocumentTransitions' rule — "the way forward
-            is the one dark button" — is a rule about the screen, not about one
-            card, and on a document the way forward is the transition above,
-            never a routing stamp. */}
+        {/* Secondary on purpose, as among the corrections above. */}
         <ActionButton
           variant="secondary"
           busy={stamp.isPending}
@@ -732,55 +780,29 @@ function ApprovalChain({ documentId }: { documentId: string }) {
 
       <div className="px-4 py-4 sm:px-5">
         <ErrorNote error={error ?? stamp.error} />
-        {steps.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No steps resolved.</p>
-        ) : (
-          <Table columns={["Step", "Chosen by", "Rule version", "Approver", "Of record", "Cover"]}>
-            {steps.map((s) => (
-              <tr key={s.seq} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 tabular-nums">{s.seq}</td>
-                <td className="py-2 pr-4">
-                  {s.source === "named_assignment"
-                    ? "Named assignment"
-                    : `Band ${s.band_seq ?? ""}`}
-                </td>
-                <td className="py-2 pr-4 tabular-nums">{s.rule_version ?? "—"}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{s.approver_user_id ?? "—"}</td>
-                <td className="py-2 pr-4 font-mono text-xs">
-                  {s.approver_of_record_user_id ?? "—"}
-                </td>
-                <td className="py-2 pr-4">
-                  {s.covered ? (
-                    <Pill tone="warn">{s.cover_kind ?? "cover"}</Pill>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">none</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </Table>
-        )}
+        <Table columns={["Step", "Chosen by", "Rule version", "Approver", "Of record", "Cover"]}>
+          {steps.map((s) => (
+            <tr key={s.seq} className="border-b border-border/60 last:border-0">
+              <td className="py-2 pr-4 tabular-nums">{s.seq}</td>
+              <td className="py-2 pr-4">
+                {s.source === "named_assignment" ? "Named assignment" : `Band ${s.band_seq ?? ""}`}
+              </td>
+              <td className="py-2 pr-4 tabular-nums">{s.rule_version ?? "—"}</td>
+              <td className="py-2 pr-4 font-mono text-xs">{s.approver_user_id ?? "—"}</td>
+              <td className="py-2 pr-4 font-mono text-xs">{s.approver_of_record_user_id ?? "—"}</td>
+              <td className="py-2 pr-4">
+                {s.covered ? (
+                  <Pill tone="warn">{s.cover_kind ?? "cover"}</Pill>
+                ) : (
+                  <span className="text-xs text-muted-foreground">none</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
       </div>
     </section>
   );
-}
-
-/**
- * The routing card on a document that has committed: drawn only where a chain
- * was actually stamped.
- *
- * The same read the card makes, made once here so the card can be left out
- * altogether rather than rendered saying "No steps resolved." beside a button
- * whose only effect would be to record today's rules against a decision that
- * was taken, or never needed, some time ago.
- */
-function ApprovalChainWhenStamped({ documentId }: { documentId: string }) {
-  const { data } = useQuery({
-    queryKey: ["erp_document_approval_chain", { p_document_id: documentId }],
-    queryFn: () => callErp<Stamp[]>("erp_document_approval_chain", { p_document_id: documentId }),
-  });
-  if (!data || data.length === 0) return null;
-  return <ApprovalChain documentId={documentId} />;
 }
 
 /**
@@ -824,10 +846,10 @@ function ApprovalDecisions({ documentId }: { documentId: string }) {
                     </>
                   ) : null}
                 </td>
-                <td className="py-2 pr-4 whitespace-nowrap">
-                  {d.decided_at ? d.decided_at.slice(0, 16).replace("T", " ") : "—"}
+                <td className="py-2 pr-4 whitespace-nowrap">{whenText(d.decided_at)}</td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {decisionComment(d) ?? "—"}
                 </td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">{d.comment ?? "—"}</td>
               </tr>
             ))}
           </Table>
@@ -1101,21 +1123,28 @@ function LineagePanel({
         />
       </div>
       <ul className="mt-3 flex flex-col gap-1 text-sm">
-        {lineage.map((r) => (
-          <li key={`${r.direction}-${r.document_id}`} className="min-w-0">
-            <span className="text-xs text-muted-foreground">
-              {r.direction === "ancestor" ? "from" : "to"} · {r.relation} ·{" "}
-            </span>
-            <Link
-              to="/documents/$documentId"
-              params={{ documentId: r.document_id }}
-              className="underline underline-offset-2"
-            >
-              {r.document_number}
-            </Link>{" "}
-            <span className="text-xs text-muted-foreground">{typeName(r.base_type)}</span>
-          </li>
-        ))}
+        {/* erp.document_lineage() returns the document itself (direction
+            'self', no relation) beside what it came from ('upstream') and
+            what came of it ('downstream'). The self row is not a related
+            document, and "ancestor" was never a direction it returned, so
+            every row read "to" and the page listed itself (J-155). */}
+        {lineage
+          .filter((r) => r.direction !== "self")
+          .map((r) => (
+            <li key={`${r.direction}-${r.document_id}`} className="min-w-0">
+              <span className="text-xs text-muted-foreground">
+                {r.direction === "upstream" ? "from" : "to"} · {r.relation} ·{" "}
+              </span>
+              <Link
+                to="/documents/$documentId"
+                params={{ documentId: r.document_id }}
+                className="underline underline-offset-2"
+              >
+                {r.document_number}
+              </Link>{" "}
+              <span className="text-xs text-muted-foreground">{typeName(r.base_type)}</span>
+            </li>
+          ))}
       </ul>
     </section>
   );

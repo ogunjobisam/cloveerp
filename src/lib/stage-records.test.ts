@@ -20,6 +20,7 @@ import { actionKey, moduleActions } from "./flow-actions";
 import { formatMinorTotals, formatMinorWhole } from "./money";
 import { MODULES } from "./modules";
 import {
+  asksTheirReference,
   DOCUMENT_READ,
   FIELD_LABELS,
   SETTLED,
@@ -288,6 +289,20 @@ describe("the record says what a person reads", () => {
     expect(partyLabel("customer")).toBe("Customer");
     expect(partyLabel("supplier")).toBe("Supplier");
     expect(partyLabel(undefined)).toBe("Business partner");
+  });
+
+  test("a new document names its party by the side of the trade, and a requisition's reference is ours (J-49)", () => {
+    const form = readFileSync(join(ROOT, "src", "components", "erp", "documents.tsx"), "utf8");
+    const newDocument = form.slice(form.indexOf("export function NewDocumentAction"));
+    // The party picker is labelled the way the record beside a step labels it.
+    expect(newDocument).toMatch(/name: "p_party_id",[\s\S]{0,200}label: partyLabel\(partyRole\)/);
+    expect(newDocument).not.toMatch(/name: "p_party_id",\s*label: "Business partner"/);
+    // The other side's reference, with its example, is asked only where there is another side.
+    expect(newDocument).toMatch(/asksTheirReference\(type\.base_type_code\)/);
+    expect(asksTheirReference("requisition")).toBe(false);
+    for (const base of ["purchase_order", "sales_order", "invoice_reference", "goods_receipt"]) {
+      expect(asksTheirReference(base)).toBe(true);
+    }
   });
 
   test("any other row drops identifiers, flags and the state, and formats money and time", () => {

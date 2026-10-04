@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 
 import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
+import { asksTheirReference, partyLabel } from "../../lib/stage-records";
 import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import { documentTone, isDoorOpened } from "./available-transitions";
@@ -242,7 +243,9 @@ export function NewDocumentAction({
         {
           kind: "select",
           name: "p_party_id",
-          label: "Business partner",
+          // Named by the side of the trade: Supplier when buying, Customer
+          // when selling, as the record beside a step names it (J-49).
+          label: partyLabel(partyRole),
           required: type.requires_party,
           options: {
             fn: "erp_parties",
@@ -256,13 +259,23 @@ export function NewDocumentAction({
         ...(type.requires_site && !scope.siteId && session.sites.length > 1
           ? ([{ kind: "site", name: "p_site_id", label: "Site", required: true }] as const)
           : []),
-        {
-          kind: "text",
-          name: "p_their_ref",
-          label: "Their reference",
-          placeholder: "COOP-PO-771",
-          hint: "Their own order or invoice number, so both sides can find it.",
-        },
+        // A requisition is our own: nobody outside has a number for it, so
+        // its reference is just ours, without the other side's example or
+        // the both-sides hint (J-49).
+        asksTheirReference(type.base_type_code)
+          ? {
+              kind: "text",
+              name: "p_their_ref",
+              label: "Their reference",
+              placeholder: "COOP-PO-771",
+              hint: "Their own order or invoice number, so both sides can find it.",
+            }
+          : {
+              kind: "text",
+              name: "p_their_ref",
+              label: "Reference",
+              hint: "Optional. Your own reference.",
+            },
         { kind: "date", name: "p_required_date", label: "Required date" },
         {
           kind: "rows",

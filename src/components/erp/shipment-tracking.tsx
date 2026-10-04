@@ -5,6 +5,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { weightWords } from "../../lib/inbound-shipments";
 import { formatMinor } from "../../lib/money";
+import { whenText } from "../../lib/when";
 import { ErrorNote } from "./action";
 import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
@@ -50,9 +51,7 @@ export function ShipmentTracking({ documentId }: { documentId: string }) {
           <span className="font-mono text-xs">{t.trackingReference}</span>
         ) : null}
         {t.statusAt ? (
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {t.statusAt.slice(0, 16).replace("T", " ")}
-          </span>
+          <span className="text-xs tabular-nums text-muted-foreground">{whenText(t.statusAt)}</span>
         ) : null}
         {t.labelRateMinor !== null && t.currency ? (
           <span className="text-xs tabular-nums text-muted-foreground">

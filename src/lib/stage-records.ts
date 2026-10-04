@@ -215,6 +215,17 @@ export function partyLabel(partyRole: string | undefined): string {
   return FIELD_LABELS["party"] ?? "Business partner";
 }
 
+/**
+ * Whether a new document asks for the other side's reference.
+ *
+ * Every type but a requisition is a trade with somebody outside, who has their
+ * own number for it. A requisition is internal: there is no other side, so the
+ * reference it carries is our own (J-49).
+ */
+export function asksTheirReference(baseTypeCode: string): boolean {
+  return baseTypeCode !== "requisition";
+}
+
 /** Fields a document's record shows, in this order. Its number and state head the panel. */
 const DOCUMENT_FIELDS = [
   "party",
