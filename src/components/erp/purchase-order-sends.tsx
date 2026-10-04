@@ -3,9 +3,13 @@ import { useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { purchaseOrderSends, type SendStatus } from "../../lib/purchase-order-send";
+import {
+  purchaseOrderSends,
+  SEND_READS_AGAIN,
+  type SendStatus,
+} from "../../lib/purchase-order-send";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
-import { Prose } from "./page";
+import { LoadingRows, Prose } from "./page";
 import { Pill } from "./panel";
 import { useErpSession } from "./session-context";
 
@@ -20,13 +24,6 @@ import { useErpSession } from "./session-context";
  * the order as it reads now, for sending by hand. Every send is listed with how
  * far it got: queued, sent, delivered, or bounced and why.
  */
-
-const INVALIDATES = [
-  "erp_purchase_order_sends",
-  "erp_document",
-  "erp_documents",
-  "erp_available_transitions",
-];
 
 const TONE: Record<SendStatus, "ok" | "warn" | "bad" | "muted"> = {
   queued: "muted",
@@ -65,15 +62,20 @@ export function PurchaseOrderSends({
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<unknown>(null);
   const mayRead = hasPermission(session, "procurement.read");
-  const { data, error } = useQuery({
+  const { data, error, isPending } = useQuery({
     queryKey: ["erp_purchase_order_sends", { p_order: documentId }],
     queryFn: () => callErp<unknown>("erp_purchase_order_sends", { p_order: documentId }),
     enabled: mayRead,
   });
   const sends = purchaseOrderSends(data);
   if (!mayRead) return null;
-  if (error) return <ErrorNote error={error} />;
-  if (!sends) return null;
+  // What was read is kept while a later read fails, with the failure beside
+  // it, so a form open over the section is not taken away (J-34). Its place
+  // is held while it is first read, so the sections below it do not move
+  // under a pointer when it lands (J-128).
+  if (error && data === undefined) return <ErrorNote error={error} />;
+  if (isPending) return <LoadingRows rows={1} />;
+  if (!sends) return <ErrorNote error={error} />;
 
   const word: Record<SendStatus, string> = {
     queued: ui("queued"),
@@ -158,7 +160,7 @@ export function PurchaseOrderSends({
               fields={fields}
               prefill={{ p_order: documentId }}
               context={context}
-              invalidates={INVALIDATES}
+              invalidates={[...SEND_READS_AGAIN]}
               submitLabel="Send"
             />
           ) : null}
@@ -197,6 +199,11 @@ export function PurchaseOrderSends({
           ))}
         </ul>
       )}
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
+      ) : null}
     </section>
   );
 }

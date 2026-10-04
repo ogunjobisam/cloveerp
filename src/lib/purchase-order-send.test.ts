@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { purchaseOrderSends, sendStatus } from "./purchase-order-send";
+import { purchaseOrderSends, SEND_READS_AGAIN, sendStatus } from "./purchase-order-send";
 
 /** An answer as public.erp_purchase_order_sends gives it (20261004920000). */
 const answer = (over: Record<string, unknown> = {}) => ({
@@ -83,5 +83,21 @@ describe("a purchase order's sends", () => {
     );
     expect(purchaseOrderSends({ sends: [] })).toBeNull();
     expect(purchaseOrderSends(null)).toBeNull();
+  });
+});
+
+describe("what a send reads again", () => {
+  test("the order's sends and the order, and what a sent order starts (J-53)", () => {
+    for (const key of [
+      "erp_purchase_order_sends",
+      "erp_document",
+      "erp_documents",
+      "erp_available_transitions",
+      "erp_purchase_order_confirmation",
+      "erp_awaiting_confirmations",
+      "erp_order_shipping_notices",
+    ]) {
+      expect(SEND_READS_AGAIN).toContain(key);
+    }
   });
 });

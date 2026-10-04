@@ -6,7 +6,7 @@ import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
 import { orderPrepayment, showsPrepayment } from "../../lib/prepayment";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
-import { Prose } from "./page";
+import { LoadingRows, Prose } from "./page";
 
 /**
  * A purchase order's prepayment (20261004900000): what the supplier asked for
@@ -29,13 +29,18 @@ const INVALIDATES = [
 
 export function OrderPrepayment({ documentId, context }: { documentId: string; context: string }) {
   const { ui } = useT();
-  const { data, error } = useQuery({
+  const { data, error, isPending } = useQuery({
     queryKey: ["erp_order_prepayment", { p_order: documentId }],
     queryFn: () => callErp<unknown>("erp_order_prepayment", { p_order: documentId }),
   });
   const prepayment = orderPrepayment(data);
-  if (error) return <ErrorNote error={error} />;
-  if (!showsPrepayment(prepayment)) return null;
+  // What was read is kept while a later read fails, with the failure beside
+  // it, so a form open over the section is not taken away (J-34). Its place
+  // is held while it is first read, so nothing below it moves when it lands
+  // (J-128).
+  if (error && data === undefined) return <ErrorNote error={error} />;
+  if (isPending) return <LoadingRows rows={1} />;
+  if (!showsPrepayment(prepayment)) return <ErrorNote error={error} />;
 
   const money = (n: number) => formatMinor(n, prepayment.currency);
   const asked = prepayment.requestedMinor > 0 || prepayment.paidMinor > 0;
@@ -130,6 +135,11 @@ export function OrderPrepayment({ documentId, context }: { documentId: string; c
             </li>
           ))}
         </ul>
+      ) : null}
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
       ) : null}
     </section>
   );

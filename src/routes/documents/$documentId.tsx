@@ -29,6 +29,7 @@ import { useCurrencies } from "../../components/erp/currencies";
 import {
   documentTone,
   isDoorOpened,
+  movesToDraw,
   useAvailableTransitions,
   type Transition,
 } from "../../components/erp/available-transitions";
@@ -159,7 +160,7 @@ function useDocumentTypeNames() {
 function Document() {
   const { documentId } = Route.useParams();
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, dataUpdatedAt } = useQuery({
     queryKey: ["erp_document", { p_document_id: documentId }],
     queryFn: () => callErp<Payload>("erp_document", { p_document_id: documentId }),
   });
@@ -172,7 +173,10 @@ function Document() {
   const { currencies } = useCurrencies();
 
   if (isPending) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (error) {
+  // A read that fails after one has answered keeps the page it drew, with the
+  // failure said above it. The whole page used to give way to the failure,
+  // taking any form open on it with it (J-34).
+  if (error && data === undefined) {
     return (
       <div className="flex min-w-0 flex-col gap-6">
         <PageHeader title="Document" />
@@ -181,7 +185,7 @@ function Document() {
     );
   }
 
-  const doc = data?.document;
+  const doc = data.document;
   if (!doc) {
     return (
       <div className="flex min-w-0 flex-col gap-6">
@@ -211,6 +215,8 @@ function Document() {
         {typeNames.ofType(doc.document_type)} · {doc.party ?? "no party"} · {doc.document_date}
       </PageHeader>
 
+      <ErrorNote error={error} />
+
       <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
           <Pill tone={documentTone(base ?? doc.document_type, doc.state, doc.is_committed)}>
@@ -226,7 +232,10 @@ function Document() {
           documentId={documentId}
           documentNumber={doc.document_number}
           documentType={doc.document_type}
-          transitions={live.data ?? data.available_transitions}
+          transitions={movesToDraw(live, {
+            transitions: data.available_transitions,
+            dataUpdatedAt,
+          })}
           committed={doc.is_committed}
         />
 

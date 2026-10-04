@@ -35,8 +35,10 @@ export function SupplierReturn({ documentId, context }: { documentId: string; co
     queryFn: () => callErp<unknown>("erp_supplier_return", { p_return: documentId }),
   });
   const ret = supplierReturn(data);
-  if (error) return <ErrorNote error={error} />;
-  if (!ret) return null;
+  // What was read is kept while a later read fails, with the failure beside
+  // it, so a form open over the section is not taken away (J-34).
+  if (error && data === undefined) return <ErrorNote error={error} />;
+  if (!ret) return <ErrorNote error={error} />;
 
   const replacement = ret.outcome === "replacement";
 
@@ -112,6 +114,11 @@ export function SupplierReturn({ documentId, context }: { documentId: string; co
             </li>
           ))}
         </ul>
+      ) : null}
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
       ) : null}
     </section>
   );

@@ -8,7 +8,7 @@ import {
   type OrderConfirmation,
 } from "../../lib/supplier-confirmation";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
-import { Prose } from "./page";
+import { LoadingRows, Prose } from "./page";
 import { Pill, Table } from "./panel";
 import { useErpSession } from "./session-context";
 
@@ -39,15 +39,20 @@ export function SupplierConfirmation({
   const { ui } = useT();
   const { session } = useErpSession();
   const mayRead = hasPermission(session, "procurement.read");
-  const { data, error } = useQuery({
+  const { data, error, isPending } = useQuery({
     queryKey: ["erp_purchase_order_confirmation", { p_order: documentId }],
     queryFn: () => callErp<unknown>("erp_purchase_order_confirmation", { p_order: documentId }),
     enabled: mayRead,
   });
   if (!mayRead) return null;
-  if (error) return <ErrorNote error={error} />;
+  // What was read is kept while a later read fails, with the failure beside
+  // it, so a form open over the section is not taken away (J-34). Its place
+  // is held while it is first read, so the sections below it do not move
+  // under a pointer when it lands (J-128).
+  if (error && data === undefined) return <ErrorNote error={error} />;
+  if (isPending) return <LoadingRows rows={1} />;
   const c = orderConfirmation(data);
-  if (!c) return null;
+  if (!c) return <ErrorNote error={error} />;
   const status = confirmationWords(c.status);
   const open = c.state === "sent" || c.state === "partially_received";
 
@@ -115,6 +120,11 @@ export function SupplierConfirmation({
           />
         ) : null}
       </div>
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
+      ) : null}
     </section>
   );
 }

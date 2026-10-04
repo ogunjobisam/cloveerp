@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Transition } from "../components/erp/available-transitions";
+import {
+  approvalStillWaiting,
+  EXPLAINED_MOVE_READS_AGAIN,
+  MOVE_READS_AGAIN,
+  movesToDraw,
+  type Transition,
+} from "../components/erp/available-transitions";
 import {
   AWAITING_DECISION,
   DECISION_MOVES,
@@ -107,5 +113,100 @@ describe("what a waiting row says when it draws nothing", () => {
         move("cancel", { refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }),
       ]),
     ).toEqual([]);
+  });
+});
+
+/**
+ * What a document's page says after an approve press, and which moves it draws
+ * beside the state it shows (R-06, J-120, J-33).
+ */
+describe("an approval still waiting", () => {
+  test("said while the document keeps its approve move and did not reach its state", () => {
+    const waiting = [
+      move("approve", { refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }),
+      move("reject"),
+    ];
+    expect(approvalStillWaiting("pending_approval", waiting)).toBe(true);
+  });
+
+  test("not said once the moves read again no longer hold approve, whatever state it reached", () => {
+    const movedOn = [move("send", { to_state: "sent" }), move("cancel", { to_state: "cancelled" })];
+    for (const state of ["approved", "confirmed", "sent"]) {
+      expect(approvalStillWaiting(state, movedOn)).toBe(false);
+    }
+    expect(approvalStillWaiting("approved", [])).toBe(false);
+  });
+
+  test("not said when the door answered the state approve leads to, or no state at all", () => {
+    expect(approvalStillWaiting("approved", [move("approve")])).toBe(false);
+    expect(approvalStillWaiting(undefined, [move("approve")])).toBe(false);
+    expect(approvalStillWaiting(null, [move("approve")])).toBe(false);
+  });
+});
+
+describe("the moves a document's page draws", () => {
+  const withDocument = [move("send", { to_state: "sent" })];
+  const live = [move("approve"), move("reject")];
+
+  test("the live read's when it answered no earlier than the document", () => {
+    expect(
+      movesToDraw(
+        { data: live, error: null, dataUpdatedAt: 200 },
+        { transitions: withDocument, dataUpdatedAt: 200 },
+      ),
+    ).toBe(live);
+    expect(
+      movesToDraw(
+        { data: live, error: null, dataUpdatedAt: 300 },
+        { transitions: withDocument, dataUpdatedAt: 200 },
+      ),
+    ).toBe(live);
+  });
+
+  test("the document's own when the live read answered for the state before", () => {
+    expect(
+      movesToDraw(
+        { data: live, error: null, dataUpdatedAt: 100 },
+        { transitions: withDocument, dataUpdatedAt: 200 },
+      ),
+    ).toBe(withDocument);
+  });
+
+  test("the document's own when the live read failed, though it keeps its last answer", () => {
+    expect(
+      movesToDraw(
+        { data: live, error: new Error("timeout"), dataUpdatedAt: 300 },
+        { transitions: withDocument, dataUpdatedAt: 200 },
+      ),
+    ).toBe(withDocument);
+  });
+
+  test("the document's own before the live read has answered", () => {
+    expect(
+      movesToDraw(
+        { data: undefined, error: null, dataUpdatedAt: 0 },
+        { transitions: withDocument, dataUpdatedAt: 200 },
+      ),
+    ).toBe(withDocument);
+  });
+});
+
+describe("what a move reads again", () => {
+  test("a purchase order's own sections, so issuing it shows its confirmation and On its way", () => {
+    for (const reads of [MOVE_READS_AGAIN, EXPLAINED_MOVE_READS_AGAIN]) {
+      for (const key of [
+        "erp_document",
+        "erp_documents",
+        "erp_available_transitions",
+        "erp_purchase_order_sends",
+        "erp_purchase_order_confirmation",
+        "erp_awaiting_confirmations",
+        "erp_order_shipping_notices",
+      ]) {
+        expect(reads).toContain(key);
+      }
+    }
+    expect(MOVE_READS_AGAIN).toContain("erp_document_approval_chain");
+    expect(MOVE_READS_AGAIN).toContain("erp_my_approvals");
   });
 });

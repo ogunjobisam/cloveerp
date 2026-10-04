@@ -325,46 +325,48 @@ test.describe("a document offers only what can be completed", () => {
     move("receive_all", "Receive all"),
   ];
 
+  const ORDER_PAGE = {
+    document: {
+      document_id: DOC_ID,
+      document_number: "PO-000042",
+      document_type: "purchase_order",
+      document_date: "2026-09-01",
+      currency: "GBP",
+      party: "A Supplier",
+      their_reference: null,
+      total_minor: 10000,
+      state: "sent",
+      state_name: "Issued to supplier",
+      is_committed: true,
+    },
+    lines: [
+      {
+        line_id: "00000000-0000-4000-8000-0000000011e1",
+        line_no: 1,
+        description: "Widgets",
+        quantity: 10,
+        unit_price_minor: 1000,
+        net_minor: 10000,
+        item: "WID",
+        supplier_item_code: null,
+      },
+    ],
+    lineage: [],
+    reversal: [],
+    amendment: {
+      allowed: false,
+      cut_off: "stock_has_moved",
+      detail:
+        "stock has left against this document; amend by returning it, not by editing the document",
+    },
+    available_transitions: MOVES,
+  };
+
   test("a refused, guarded, unpermitted or door-only move is not a button, and a line past its cut-off has no Amend", async ({
     page,
     backend,
   }) => {
-    backend.rpc("erp_document", {
-      document: {
-        document_id: DOC_ID,
-        document_number: "PO-000042",
-        document_type: "purchase_order",
-        document_date: "2026-09-01",
-        currency: "GBP",
-        party: "A Supplier",
-        their_reference: null,
-        total_minor: 10000,
-        state: "sent",
-        state_name: "Issued to supplier",
-        is_committed: true,
-      },
-      lines: [
-        {
-          line_id: "00000000-0000-4000-8000-0000000011e1",
-          line_no: 1,
-          description: "Widgets",
-          quantity: 10,
-          unit_price_minor: 1000,
-          net_minor: 10000,
-          item: "WID",
-          supplier_item_code: null,
-        },
-      ],
-      lineage: [],
-      reversal: [],
-      amendment: {
-        allowed: false,
-        cut_off: "stock_has_moved",
-        detail:
-          "stock has left against this document; amend by returning it, not by editing the document",
-      },
-      available_transitions: MOVES,
-    });
+    backend.rpc("erp_document", ORDER_PAGE);
     backend.rpc("erp_available_transitions", MOVES);
 
     await page.goto(`/documents/${DOC_ID}`);
@@ -385,6 +387,42 @@ test.describe("a document offers only what can be completed", () => {
     // A line past its cut-off offers no Amend, and says why.
     await expect(page.getByRole("button", { name: "Amend", exact: true })).toHaveCount(0);
     await expect(page.getByText(/No line can be amended now: stock has left/)).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a read that fails after the page is drawn keeps the page and the form open on it (J-34)", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_document", ORDER_PAGE);
+    backend.rpc("erp_available_transitions", MOVES);
+
+    await page.goto(`/documents/${DOC_ID}`);
+    await page.getByRole("button", { name: "Close short" }).click({ timeout: 20_000 });
+    const form = page.getByRole("dialog");
+    await expect(form).toBeVisible();
+    await form.getByRole("textbox").first().fill("The supplier stopped the line");
+
+    // The next read of the document times out (57014 is not asked again).
+    const reads = backend.called.filter((fn) => fn === "erp_document").length;
+    backend.fail("erp_document", {
+      status: 500,
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+    await expect
+      .poll(() => backend.called.filter((fn) => fn === "erp_document").length)
+      .toBeGreaterThan(reads);
+
+    // The form stays open with what was typed, and the page behind it stays.
+    await expect(form).toBeVisible();
+    await expect(form.getByRole("textbox").first()).toHaveValue("The supplier stopped the line");
+    await page.keyboard.press("Escape");
+    await expect(form).toBeHidden();
+    await expect(page.getByRole("heading", { name: "PO-000042" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Close short" })).toBeVisible();
+    await expect(page.getByRole("alert").first()).toBeVisible();
     expect(backend.crashes).toEqual([]);
   });
 });
@@ -2084,6 +2122,61 @@ test.describe("a page opens on its records", () => {
     await expect(card.getByRole("heading", { name: "We collect" })).toHaveCount(0);
     await expect(card.getByText("Nothing is on its way.", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "On its way", level: 2 })).toHaveCount(1);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("On its way says a failed list at its foot, and holds a list's place while it is read (J-128)", async ({
+    page,
+    backend,
+  }) => {
+    const ORDER = "00000000-0000-4000-8000-00000000a0a1";
+    backend.fail("erp_awaiting_confirmations", {
+      status: 500,
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+    backend.rpc("erp_shipping_notices", [
+      {
+        notice_id: "00000000-0000-4000-8000-00000000a0b1",
+        notice: "ASN-000007",
+        order_id: ORDER,
+        order: "PO-000049",
+        supplier: "B Supplier",
+        status: "notified",
+        expected_arrival: "2026-10-06",
+        late: false,
+        lines: [],
+        cartons: [],
+        differences: [],
+      },
+    ]);
+    // The collections read is held until the end of the test.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/rest/v1/rpc/erp_inbound_shipments", async (route) => {
+      if (route.request().method() !== "OPTIONS") await held;
+      await route.fallback();
+    });
+
+    await page.goto("/procurement");
+    const card = page.locator("section", {
+      has: page.getByRole("heading", { name: "On its way", level: 2 }),
+    });
+    const receive = card.getByRole("button", { name: "Receive what arrived" });
+    await expect(receive).toBeVisible({ timeout: 20_000 });
+    // The list still being read holds its place.
+    await expect(card.getByRole("status")).toHaveCount(1);
+    // The failed list is said below the buttons already drawn, not above them.
+    const failed = card.getByRole("alert");
+    await expect(failed).toHaveCount(1);
+    const button = await receive.boundingBox();
+    const note = await failed.boundingBox();
+    if (!button || !note) throw new Error("the button or the note is not drawn");
+    expect(note.y).toBeGreaterThan(button.y);
+    release();
+    await expect(card.getByRole("status")).toHaveCount(0);
     expect(backend.crashes).toEqual([]);
   });
 

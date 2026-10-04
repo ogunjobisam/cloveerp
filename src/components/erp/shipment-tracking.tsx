@@ -26,11 +26,13 @@ export function ShipmentTracking({ documentId }: { documentId: string }) {
     enabled: mayRead,
   });
   if (!mayRead) return null;
-  if (error) return <ErrorNote error={error} />;
+  // What was read is kept while a later read fails, with the failure beside
+  // it (J-34).
+  if (error && data === undefined) return <ErrorNote error={error} />;
   const t = shipmentTracking(data);
-  if (!t) return null;
+  if (!t) return <ErrorNote error={error} />;
   const tracked = t.provider !== null || t.trackingReference !== null;
-  if (!tracked && t.weightG === null) return null;
+  if (!tracked && t.weightG === null) return <ErrorNote error={error} />;
   const status = trackingWords(t.status);
 
   return (
@@ -69,6 +71,11 @@ export function ShipmentTracking({ documentId }: { documentId: string }) {
         ) : null}
       </div>
       {t.detail ? <p className="mt-1 text-xs text-muted-foreground">{t.detail}</p> : null}
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
+      ) : null}
     </section>
   );
 }
