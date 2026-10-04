@@ -29,6 +29,7 @@ import {
   planningOutcome,
   soundsInternal,
   transitionTone,
+  OUTCOME_LINGER_MS,
 } from "./plain-words";
 import { rowsAtStage } from "./stage-records";
 
@@ -669,5 +670,22 @@ describe("a cash document says what it is (PR13 M4)", () => {
     ).toEqual({ message: `PAY-000004 paid ${gbp(1000)} on 2 bills.`, documents: [] });
     expect(paymentRunOutcome("not an answer", "Pay")).toBeNull();
     expect(paymentRunOutcome({ reference: "PAY-1" }, "Pay")).toBeNull();
+  });
+});
+
+describe("how long an outcome stays", () => {
+  // Most outcomes name a document, and each stayed twenty seconds: three of
+  // them stacked over the record's heading for a minute, and over the next
+  // form opened (J-125).
+  test("longer than an ordinary toast, and gone within ten seconds", () => {
+    expect(OUTCOME_LINGER_MS).toBeGreaterThan(5000);
+    expect(OUTCOME_LINGER_MS).toBeLessThanOrEqual(10_000);
+  });
+
+  test("the action form uses it, and clears what is showing when it opens", () => {
+    const source = readFileSync(join(ROOT, "src", "components", "erp", "action.tsx"), "utf8");
+    expect(source).not.toContain("20_000");
+    expect(source).toContain("duration: OUTCOME_LINGER_MS");
+    expect(source).toContain("toast.dismiss()");
   });
 });

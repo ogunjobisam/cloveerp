@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { priceLookupArgs, resolvedPrice, type PriceLookup } from "./line-price";
+import { priceLookupArgs, resolvedPrice, rowPrice, type PriceLookup } from "./line-price";
 
 /**
  * The form asks what the database is about to ask.
@@ -84,7 +84,9 @@ describe("what the form may show of the answer", () => {
     ).toEqual({ minor: 1850, note: "the supplier purchase list" });
   });
 
-  test("no price is no price, and the door's own sentence is what the line says", () => {
+  test("no price is no price, said in the form's one sentence and not the door's", () => {
+    // The purchase door's own wording beside the form's own wording put two
+    // sentences for one thing on the same line editor (J-154).
     expect(
       resolvedPrice(
         { amount_minor: null, source: "no price is on record for this supplier and item" },
@@ -92,7 +94,7 @@ describe("what the form may show of the answer", () => {
         "source",
         "GBP",
       ),
-    ).toEqual({ minor: null, note: "no price is on record for this supplier and item" });
+    ).toEqual({ minor: null, note: null });
   });
 
   test("a price in another currency is no price here either", () => {
@@ -135,5 +137,35 @@ describe("what the form may show of the answer", () => {
       minor: null,
       note: null,
     });
+  });
+});
+
+describe("what one line says about its price", () => {
+  // A fresh requisition line said "No agreed price" in red before a product
+  // was chosen (J-154). Nothing asked and nothing answered are not refusals.
+  test("a line that has asked nothing says nothing", () => {
+    expect(rowPrice(false, undefined, "amount_minor", "source", "GBP")).toBeNull();
+  });
+
+  test("a line whose answer is on its way says nothing yet", () => {
+    expect(rowPrice(true, undefined, "amount_minor", "source", "GBP")).toBeNull();
+  });
+
+  test("a line answered with no price says it has none", () => {
+    expect(
+      rowPrice(
+        true,
+        { amount_minor: null, source: "no price is on record for this supplier and item" },
+        "amount_minor",
+        "source",
+        "GBP",
+      ),
+    ).toEqual({ minor: null, note: null });
+  });
+
+  test("a line answered with a price shows it", () => {
+    expect(
+      rowPrice(true, { amount_minor: 1850, currency: "GBP" }, "amount_minor", "source", "GBP"),
+    ).toEqual({ minor: 1850, note: null });
   });
 });

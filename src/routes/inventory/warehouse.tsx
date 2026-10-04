@@ -127,6 +127,10 @@ type HoldRow = {
  * Why put-away left a pallet where it was. The door answers with a code so the
  * words stay in the terminology layer rather than in the database.
  */
+/** A quantity with its thousands marked and no trailing noughts, as audit does. */
+const QTY = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 });
+const qty = (n: number) => QTY.format(n);
+
 function holdReason(code: string, ui: (text: string) => string): string {
   return code === "every_place_is_full"
     ? ui("Every place it belongs in is full")
@@ -370,14 +374,17 @@ function WarehouseLayout() {
                 <td className="py-2 pr-4 font-mono text-xs">{l.code}</td>
                 <td className="py-2 pr-4">{l.name ?? "—"}</td>
                 <td className="py-2 pr-4">{locationKindWord(l.location_type, ui)}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{l.parent ?? "—"}</td>
+                {/* A code reads in the code face; the dash for none does not. */}
+                <td className={`py-2 pr-4 ${l.parent ? "font-mono text-xs" : ""}`}>
+                  {l.parent ?? "—"}
+                </td>
                 <td className="py-2 pr-4 tabular-nums">
                   {l.capacity_quantity == null
                     ? "—"
-                    : `${l.capacity_quantity} ${l.capacity_uom ?? ""}`.trim()}
+                    : `${qty(l.capacity_quantity)} ${l.capacity_uom ?? ""}`.trim()}
                 </td>
                 <td className="py-2 pr-4">{l.count_class ?? "—"}</td>
-                <td className="py-2 pr-4 tabular-nums">{l.on_hand}</td>
+                <td className="py-2 pr-4 tabular-nums">{qty(l.on_hand)}</td>
                 <td className="py-2 pr-4">
                   <Pill tone={l.is_blocked ? "warn" : l.is_pickable ? "ok" : "muted"}>
                     {l.is_blocked

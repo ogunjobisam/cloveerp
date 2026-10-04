@@ -2012,7 +2012,8 @@ test.describe("a page opens on its records", () => {
     const form = page.getByRole("dialog", { name: "Define a job" });
     await expect(form).toBeVisible();
     await expect(walk).toBeHidden();
-    await form.getByRole("button", { name: "Back" }).click();
+    // A full-screen form closes on Escape as the short one does (J-131).
+    await page.keyboard.press("Escape");
     await expect(form).toBeHidden();
 
     // And by hand it is one press further: the group, named as it was.
@@ -2021,6 +2022,8 @@ test.describe("a page opens on its records", () => {
     await expect(panel.getByRole("heading", { name: "Running and stopping jobs" })).toBeVisible();
     await panel.getByRole("button", { name: "Define a job", exact: true }).click();
     await expect(form).toBeVisible();
+    await form.getByRole("button", { name: "Back" }).click();
+    await expect(form).toBeHidden();
     expect(backend.crashes).toEqual([]);
   });
 
@@ -2343,6 +2346,29 @@ test.describe("a command is chosen from the backlog", () => {
       p_command_id: QUEUED,
       p_reason: "Confirmed by phone that nothing was despatched",
     });
+    expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("a question with a required answer", () => {
+  test("Ask with the required answer empty says what is needed and calls nothing", async ({
+    page,
+    backend,
+  }) => {
+    // J-96: an inquiry left out its empty required answer and called the door
+    // anyway, which answered without it and was worded as "not installed".
+    const asked: string[] = [];
+    page.on("request", (r) => {
+      if (/rpc\/erp_determine_account$/.test(r.url())) asked.push(r.url());
+    });
+    await page.goto("/finance/account-determination");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+
+    await page.getByText("Where would this post?").click();
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(page.getByText("Transaction type is needed.")).toBeVisible();
+    await expect(page.getByLabel("Transaction type")).toBeFocused();
+    expect(asked).toEqual([]);
     expect(backend.crashes).toEqual([]);
   });
 });

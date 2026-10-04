@@ -31,7 +31,7 @@ import {
   type RowSeed,
 } from "../../lib/dependent-options";
 import { useT } from "../../lib/i18n";
-import { priceLookupArgs, resolvedPrice, type ResolvedPrice } from "../../lib/line-price";
+import { priceLookupArgs, rowPrice, type ResolvedPrice } from "../../lib/line-price";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { permissionName } from "../../lib/permission-name";
 import {
@@ -42,6 +42,7 @@ import {
   planningOutcome,
   receiptIds,
   receiptOutcome,
+  OUTCOME_LINGER_MS,
   type Outcome,
 } from "../../lib/plain-words";
 import { allocationOutcome } from "../../lib/on-account";
@@ -54,6 +55,7 @@ import { Prose, TOUCH } from "./page";
 import { useUnsavedGuard } from "./unsaved";
 import { fill } from "../../lib/interview";
 import { missingRequired } from "../../lib/required-fields";
+import { firstPerValue } from "../../lib/combo-options";
 
 /**
  * The write surface.
@@ -648,7 +650,7 @@ export function ComboField({
         className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
       />
       <datalist id={listId}>
-        {rows.map((r) => (
+        {firstPerValue(rows).map((r) => (
           <option key={r.value} value={r.value}>
             {r.label}
           </option>
@@ -776,7 +778,7 @@ function useRowPrices(
   column: RowColumn | undefined,
   rows: Record<string, string>[],
   formValues: Record<string, string>,
-): ResolvedPrice[] {
+): (ResolvedPrice | null)[] {
   const spec = column?.priceFrom;
   const asked = rows.map((row) => priceLookupArgs(spec, row, formValues));
 
@@ -789,9 +791,7 @@ function useRowPrices(
   });
 
   return results.map((r, i) =>
-    asked[i] === null || !spec
-      ? { minor: null, note: null }
-      : resolvedPrice(r.data, spec.amount, spec.note, column?.currency),
+    spec ? rowPrice(asked[i] != null, r.data, spec.amount, spec.note, column?.currency) : null,
   );
 }
 
@@ -865,12 +865,21 @@ function RowsField({
         <span className="text-xs text-muted-foreground">{ui(field.seed.empty)}</span>
       ) : null}
       {value.map((row, index) => (
+        // Top-aligned, so every label sits on one line and every box under it,
+        // and a price note hangs below its box instead of lifting it.
         <div
           key={index}
-          className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2"
+          className="flex flex-wrap items-start gap-2 rounded-md border border-border/60 p-2"
         >
           {field.columns.map((c) => (
-            <div key={c.name} className="flex min-w-[7rem] flex-1 flex-col gap-1">
+            <div
+              key={c.name}
+              // A product is named by a code and a description; at the width
+              // of a quantity it read "RM-300 — Hex" and "Search 32 optior".
+              className={`flex flex-col gap-1 ${
+                c.kind === "select" && c.options ? "min-w-[16rem] flex-[3]" : "min-w-[7rem] flex-1"
+              }`}
+            >
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {c.label}
                 {c.kind === "money" && c.currency ? ` (${c.currency})` : ""}
@@ -907,12 +916,19 @@ function RowsField({
               ) : null}
             </div>
           ))}
-          <ActionButton
-            variant="secondary"
-            onClick={() => onChange(value.filter((_, i) => i !== index))}
-          >
-            Remove
-          </ActionButton>
+          {/* A blank line where the others have a label, so the button sits
+              level with the boxes. */}
+          <div className="flex flex-col gap-1">
+            <span aria-hidden="true" className="text-[11px]">
+              {" "}
+            </span>
+            <ActionButton
+              variant="secondary"
+              onClick={() => onChange(value.filter((_, i) => i !== index))}
+            >
+              Remove
+            </ActionButton>
+          </div>
         </div>
       ))}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -928,7 +944,11 @@ function RowsField({
           <span className="text-sm">
             <span className="text-muted-foreground">Total </span>
             <span className="font-medium tabular-nums">
-              {total.currency} {sum.toFixed(minorUnitsOf(currencies, total.currency) === 0 ? 0 : 2)}
+              {formatMinor(
+                toMinor(sum, minorUnitsOf(currencies, total.currency)),
+                total.currency,
+                minorUnitsOf(currencies, total.currency),
+              )}
             </span>
             {unpriceable > 0 ? (
               <span className="text-muted-foreground">
@@ -1157,8 +1177,20 @@ export function ActionDialog({
   // form is offered. A dialog the viewer cannot see must not answer to its
   // name, or the walkthrough would close on a button that opened nothing.
   const permitted = !permission || hasPermission(session, permission);
+  // A form opens over nothing: an outcome toast sits above every dialog and
+  // covered the heading of the next form opened (J-125).
+  function openForm() {
+    toast.dismiss();
+    setOpen(true);
+  }
   useEffect(
-    () => (permitted ? registerActionOpener(fn, () => setOpen(true)) : undefined),
+    () =>
+      permitted
+        ? registerActionOpener(fn, () => {
+            toast.dismiss();
+            setOpen(true);
+          })
+        : undefined,
     [fn, permitted],
   );
   // What the form starts holding: its declared defaults, then the answers the
@@ -1279,6 +1311,9 @@ export function ActionDialog({
       setValues(opening);
       setLists({});
       setRows({});
+      // A form that worked is not a form with something missing: the alert was
+      // drawn over the emptied form as it closed, and again when it reopened.
+      setAttempted(false);
       setOpen(false);
 
       // A toast that names the document it made needs no second line saying
@@ -1290,12 +1325,12 @@ export function ActionDialog({
             // it stays long enough to follow one.
             toast(message.message, {
               description: <OutcomeLinks documents={message.documents} />,
-              duration: 20_000,
+              duration: OUTCOME_LINGER_MS,
             })
           : toast(typeof message === "string" ? message : message.message, {
               ...(context && documentOutcome(result) === null ? { description: context } : {}),
               // A lookup's answer is the point of asking: it stays to be read.
-              ...(lookupOutcome(fn, "", result) !== null ? { duration: 20_000 } : {}),
+              ...(lookupOutcome(fn, "", result) !== null ? { duration: OUTCOME_LINGER_MS } : {}),
             });
       const followUp = FOLLOW_UP_BY_FN[fn];
       if (followUp)
@@ -1353,9 +1388,6 @@ export function ActionDialog({
     return { ...args, ...(prefill ?? {}), ...extra };
   }
 
-  // Not offered rather than offered-and-disabled. The database still decides.
-  if (!permitted) return null;
-
   /**
    * A question or two is a confirmation; a form is a piece of work.
    *
@@ -1366,6 +1398,33 @@ export function ActionDialog({
    */
   const shown = fields.filter((f) => !(prefill && f.name in prefill));
   const asPage = shown.length > 2 || shown.some((f) => f.kind === "rows");
+
+  // Every way out of the form: Cancel, Back, Escape and the box's own close.
+  // Whatever was marked missing goes with it, so the form opens unmarked.
+  function closeForm() {
+    setOpen(false);
+    setAttempted(false);
+    action.reset();
+  }
+
+  // The short form is a Radix dialog and closes on Escape by itself; the full
+  // screen form is drawn here and did not (J-131). A select or popover inside
+  // it that takes the key first marks it handled, and the form stays open.
+  const { reset: resetAction } = action;
+  useEffect(() => {
+    if (!open || !asPage) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      setOpen(false);
+      setAttempted(false);
+      resetAction();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, asPage, resetAction]);
+
+  // Not offered rather than offered-and-disabled. The database still decides.
+  if (!permitted) return null;
 
   // What is still missing, worked out afresh on every keystroke once Create has
   // been pressed, so a mark goes away the moment its field is answered.
@@ -1558,13 +1617,7 @@ export function ActionDialog({
       ) : null}
 
       <div className="mt-2 flex flex-wrap justify-end gap-2">
-        <ActionButton
-          variant="secondary"
-          onClick={() => {
-            setOpen(false);
-            action.reset();
-          }}
-        >
+        <ActionButton variant="secondary" onClick={closeForm}>
           {ui("Cancel")}
         </ActionButton>
         {alsoSubmit ? (
@@ -1591,12 +1644,7 @@ export function ActionDialog({
   if (asPage)
     return (
       <>
-        <span
-          className="contents"
-          onClick={() => {
-            setOpen(true);
-          }}
-        >
+        <span className="contents" onClick={openForm}>
           {trigger}
         </span>
         {open ? (
@@ -1611,10 +1659,7 @@ export function ActionDialog({
                 <button
                   type="button"
                   aria-label={ui("Back")}
-                  onClick={() => {
-                    setOpen(false);
-                    action.reset();
-                  }}
+                  onClick={closeForm}
                   className={`${TOUCH} grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:text-foreground`}
                 >
                   <ArrowLeft className="size-4" />
@@ -1643,8 +1688,8 @@ export function ActionDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) action.reset();
+        if (next) openForm();
+        else closeForm();
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
