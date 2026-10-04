@@ -14,6 +14,7 @@ import {
   type CountTaskRow,
 } from "../../lib/count-worklist";
 import { useT } from "../../lib/i18n";
+import { countOutcome } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction, type Field } from "./action";
 import { CountSheetPrint } from "./count-sheet-print";
 import { usePrintRendered } from "./use-print-rendered";
@@ -105,7 +106,12 @@ function RowVerb({
   row: CountTaskRow;
   variant?: "primary" | "secondary";
 }) {
-  const action = useErpAction({ fn: door.fn, invalidates: INVALIDATES });
+  // A press said nothing once it was made (J-122).
+  const action = useErpAction({
+    fn: door.fn,
+    invalidates: INVALIDATES,
+    outcome: (result) => countOutcome(placeOf(row), door.fn, result),
+  });
   return (
     <span className="inline-flex flex-col gap-1">
       <ActionButton
@@ -364,9 +370,16 @@ function CountRow({
   onNext: (taskId: string) => void;
 }) {
   const { ui } = useT();
+  // From the keyboard, the next place is ready as soon as this one is
+  // recorded: the counter does not wait for the lists to be read again.
+  const thenNext = useRef(false);
   const record = useErpAction({
     fn: RECORD.fn,
     invalidates: INVALIDATES,
+    onAnswered: () => {
+      if (thenNext.current) onNext(row.task_id);
+    },
+    outcome: (result) => countOutcome(placeOf(row), RECORD.fn, result),
     onDone: () => onRecorded(row.task_id),
   });
   const acts = actionsFor(row, can);
@@ -378,13 +391,11 @@ function CountRow({
    * ready once this one is recorded, and not before: a refusal keeps the
    * counter on the place it refused, with the figure still in the box.
    */
-  function submit(thenNext: boolean) {
+  function submit(next: boolean) {
     const typed = draft.trim();
     if (typed === "" || !Number.isFinite(Number(typed)) || record.isPending) return;
-    record.mutate(
-      { p_task_id: row.task_id, p_quantity: Number(typed) },
-      thenNext ? { onSuccess: () => onNext(row.task_id) } : undefined,
-    );
+    thenNext.current = next;
+    record.mutate({ p_task_id: row.task_id, p_quantity: Number(typed) });
   }
 
   const place = placeOf(row);

@@ -747,6 +747,9 @@ function StageRecord({
           {isDocument ? (
             <DocumentTransitions
               documentId={id}
+              documentNumber={
+                typeof row["document_number"] === "string" ? row["document_number"] : null
+              }
               documentType={documentType}
               transitions={transitions}
               committed={row["is_committed"] === true}

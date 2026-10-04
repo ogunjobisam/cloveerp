@@ -5,7 +5,15 @@ import { join } from "node:path";
 import { formatMinor } from "./money";
 import {
   actionOutcome,
+  approvalChoice,
   cashOutcome,
+  countOutcome,
+  freightTermsOutcome,
+  movedDocumentOutcome,
+  namedOutcome,
+  qualityEventOutcome,
+  samplesOutcome,
+  transitionOutcome,
   paymentRunOutcome,
   receiptIds,
   receiptOutcome,
@@ -687,5 +695,194 @@ describe("how long an outcome stays", () => {
     expect(source).not.toContain("20_000");
     expect(source).toContain("duration: OUTCOME_LINGER_MS");
     expect(source).toContain("toast.dismiss()");
+  });
+});
+
+describe("a press says what it did (J-83, J-122, J-124, J-151, R-03)", () => {
+  const transfer = {
+    document_id: "t",
+    document_number: "TRF-000026",
+    lines: 1,
+    quantity: 4,
+    state: "in_transit",
+  };
+
+  test("a transfer despatched or received is not a transfer created", () => {
+    expect(actionOutcome("Despatch a transfer", transfer, undefined, "erp_despatch_transfer")).toBe(
+      "TRF-000026 despatched.",
+    );
+    expect(actionOutcome("Receive a transfer", transfer, undefined, "erp_receive_transfer")).toBe(
+      "TRF-000026 received.",
+    );
+    expect(
+      actionOutcome(
+        "Confirm a stock adjustment",
+        { document_id: "a", document_number: "ADJ-000003", lines: 2 },
+        undefined,
+        "erp_post_stock_adjustment",
+      ),
+    ).toBe("ADJ-000003 posted.");
+    // A door that makes the document it names still says created.
+    expect(movedDocumentOutcome("erp_create_transfer_order", transfer)).toBeNull();
+    expect(actionOutcome("New transfer", transfer)).toBe("TRF-000026 created.");
+  });
+
+  test("freight terms name the order and who brings the goods", () => {
+    const answer = { order_id: "o", order_number: "PO-000143", freight_terms: "we_collect" };
+    expect(freightTermsOutcome(answer)).toBe("PO-000143: we collect the goods.");
+    expect(freightTermsOutcome({ ...answer, freight_terms: "supplier_delivers" })).toBe(
+      "PO-000143: the supplier delivers the goods.",
+    );
+    expect(actionOutcome("Set freight terms", answer, undefined, "erp_set_freight_terms")).toBe(
+      "PO-000143: we collect the goods.",
+    );
+    expect(freightTermsOutcome({ order_number: "PO-1", freight_terms: "by_pigeon" })).toBeNull();
+  });
+
+  test("a sample settled says which way, from which receipt, and what is still held", () => {
+    const settled = {
+      line_id: "l",
+      receipt_number: "GRN-000012",
+      outcome: "return",
+      quantity: 3,
+      price_minor: 0,
+      currency: "GBP",
+      held: 2,
+    };
+    expect(samplesOutcome(settled)).toBe("GRN-000012: 3 returned to the supplier, 2 still held.");
+    expect(samplesOutcome({ ...settled, outcome: "keep", held: 0 })).toBe(
+      "GRN-000012: 3 kept free, none still held.",
+    );
+    expect(
+      samplesOutcome({ ...settled, outcome: "buy", price_minor: 500, quantity: 1, held: 0 }),
+    ).toBe(`GRN-000012: 1 bought at ${formatMinor(500, "GBP")} each, none still held.`);
+    expect(actionOutcome("Settle a sample", settled, undefined, "erp_settle_samples")).toBe(
+      "GRN-000012: 3 returned to the supplier, 2 still held.",
+    );
+    expect(samplesOutcome({ receipt_number: "GRN-1", outcome: "lose", quantity: 1 })).toBeNull();
+  });
+
+  test("a sentence naming its record replaces the line written before the press", () => {
+    expect(
+      namedOutcome("erp_settle_samples", {
+        receipt_number: "GRN-1",
+        outcome: "keep",
+        quantity: 1,
+        held: 0,
+      }),
+    ).not.toBeNull();
+    expect(
+      namedOutcome("erp_set_freight_terms", { order_number: "PO-1", freight_terms: "we_collect" }),
+    ).not.toBeNull();
+    expect(namedOutcome("erp_reverse_journal", { state: "submitted" })).toBeNull();
+    const source = readFileSync(join(ROOT, "src", "components", "erp", "action.tsx"), "utf8");
+    expect(source).toContain("namedOutcome(fn, result) !== null");
+  });
+
+  test("a journal reversal waits for approval, and says so", () => {
+    const reversal = { journal_id: "j", journal_number: null, state: "submitted", lines: 2 };
+    expect(actionOutcome("Reverse the journal", reversal, undefined, "erp_reverse_journal")).toBe(
+      "Submitted for approval.",
+    );
+    expect(actionOutcome("Reverse the journal", reversal)).not.toBe("Submitted for approval.");
+  });
+
+  test("a problem reported is named by its reference", () => {
+    expect(qualityEventOutcome({ quality_event_id: "q", reference: "QE-000012" })).toBe(
+      "QE-000012 reported.",
+    );
+    expect(qualityEventOutcome(undefined)).toBeNull();
+  });
+
+  test("a move on a document names it and the state it is in now", () => {
+    expect(transitionOutcome("PO-000143", { state: "approved" })).toBe(
+      "PO-000143 is now approved.",
+    );
+    expect(transitionOutcome(null, { state: "pending_approval" })).toBe(
+      "This document is now pending approval.",
+    );
+    expect(transitionOutcome("PO-000143", null)).toBeNull();
+  });
+
+  test("a count says whether it posted or what it waits for", () => {
+    expect(countOutcome("A-01 P1", "erp_record_count", "posted")).toBe(
+      "A-01 P1: counted and posted.",
+    );
+    expect(countOutcome("A-01 P1", "erp_record_count", "pending_approval")).toBe(
+      "A-01 P1: counted, and waiting for approval.",
+    );
+    expect(countOutcome("A-01 P1", "erp_record_count", "counted")).toBe(
+      "A-01 P1: counted, and waiting to be posted.",
+    );
+    expect(countOutcome("A-01 P1", "erp_post_count", 2)).toBe("A-01 P1: posted.");
+    expect(countOutcome("", "erp_recount_task", "open")).toBe("The count: to be counted again.");
+  });
+
+  test("none of these sentences is written for the people who build the product", () => {
+    for (const sentence of [
+      actionOutcome("x", transfer, undefined, "erp_despatch_transfer"),
+      freightTermsOutcome({ order_number: "PO-1", freight_terms: "supplier_delivers" }) ?? "",
+      samplesOutcome({ receipt_number: "GRN-1", outcome: "keep", quantity: 1, held: 1 }) ?? "",
+      transitionOutcome("SO-1", { state: "pending_approval" }) ?? "",
+      countOutcome("A-01", "erp_record_count", "pending_approval"),
+    ])
+      expect(soundsInternal(sentence)).toBe(false);
+  });
+
+  test("the pressed buttons say what they did", () => {
+    const transitions = readFileSync(
+      join(ROOT, "src", "components", "erp", "document-transitions.tsx"),
+      "utf8",
+    );
+    expect(transitions).toContain("transitionOutcome(documentNumber, result)");
+    const counts = readFileSync(
+      join(ROOT, "src", "components", "erp", "count-worklist.tsx"),
+      "utf8",
+    );
+    expect(counts.match(/countOutcome\(/g)?.length).toBe(2);
+  });
+});
+
+describe("a press is busy until its lists are read again (J-123)", () => {
+  const source = readFileSync(join(ROOT, "src", "components", "erp", "action.tsx"), "utf8");
+
+  test("both the press and the form wait for what they changed", () => {
+    expect(source).not.toMatch(/invalidates\.forEach\(/);
+    expect(source.match(/await readAgain\(queryClient, invalidates\)/g)?.length).toBe(2);
+    expect(source).toContain("queryClient.invalidateQueries({ queryKey: [key] })");
+  });
+});
+
+describe("an approval waiting on me says what it is worth (J-56)", () => {
+  test("the amount sits between who it is with and who asked", () => {
+    expect(
+      approvalChoice({
+        object_type: "document",
+        document_number: "PO-000143",
+        document_type_name: "Purchase order",
+        partner: "Anchor Fasteners",
+        value_minor: 10860,
+        currency: "GBP",
+        requested_by: "Samuel Ogunjobi",
+      }),
+    ).toBe(
+      `PO-000143 · Purchase order — Anchor Fasteners — ${formatMinor(10860, "GBP")} — Samuel Ogunjobi`,
+    );
+  });
+
+  test("an approval with no amount, or no partner, leaves them out", () => {
+    expect(
+      approvalChoice({
+        object_type: "match_exception",
+        value_minor: null,
+        currency: null,
+        requested_by: "Sam",
+      }),
+    ).toBe("Match exception — Sam");
+  });
+
+  test("the approvals picker uses it", () => {
+    const src = readFileSync(join(ROOT, "src", "routes", "procurement", "index.tsx"), "utf8");
+    expect(src).toContain("describe: approvalChoice");
   });
 });

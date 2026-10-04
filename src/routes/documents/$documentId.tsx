@@ -224,6 +224,7 @@ function Document() {
 
         <DocumentTransitions
           documentId={documentId}
+          documentNumber={doc.document_number}
           documentType={doc.document_type}
           transitions={live.data ?? data.available_transitions}
           committed={doc.is_committed}

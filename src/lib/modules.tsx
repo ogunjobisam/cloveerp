@@ -1363,7 +1363,8 @@ export const INVENTORY: ModuleDef = {
       permission: "inventory.move",
       fields: [pickSite()],
       fn: "erp_raise_putaway_tasks",
-      invalidates: ["erp_warehouse_tasks"],
+      // The Goods in step shows each pallet's putaway task.
+      invalidates: ["erp_warehouse_tasks", "erp_goods_in"],
     },
     {
       label: "Raise replenishment tasks",
@@ -2137,7 +2138,9 @@ export const FINANCE: ModuleDef = {
           hint: "Why nobody else can invoice these goods, and what checks the invoice instead. At least twenty characters once the organisation is live; kept on the invoice.",
         },
       ],
-      invalidates: ["erp_receivables_ageing", "erp_trial_balance"],
+      // The invoice it made, on the Invoice step, and the delivery it came from
+      // (R-03).
+      invalidates: ["erp_receivables_ageing", "erp_trial_balance", "erp_documents", "erp_document"],
     },
     {
       // Approving a run used to be the end of it: the proposal said approved
@@ -2869,7 +2872,7 @@ export const PLANNING: ModuleDef = {
         { kind: "number", name: "p_periods", label: "Periods ahead" },
         { kind: "number", name: "p_buckets", label: "Past weeks or months to use" },
       ],
-      invalidates: ["erp_planner_workbench", "erp_planned_orders"],
+      invalidates: ["erp_planner_workbench", "erp_planned_orders", "erp_forecast_versions"],
     },
     {
       label: "Sign off a forecast",
@@ -2891,7 +2894,7 @@ export const PLANNING: ModuleDef = {
           hint: "Optional. Kept with the record.",
         },
       ],
-      invalidates: ["erp_planner_workbench"],
+      invalidates: ["erp_planner_workbench", "erp_forecast_versions"],
     },
   ],
 
