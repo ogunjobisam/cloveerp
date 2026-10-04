@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { whenText } from "../../lib/when";
 import {
   purchaseOrderSends,
   SEND_READS_AGAIN,
@@ -182,7 +183,7 @@ export function PurchaseOrderSends({
                 <span className="text-xs text-muted-foreground">+{s.cc.length}</span>
               ) : null}
               <span className="text-xs text-muted-foreground tabular-nums">
-                {[s.issuedNumber, s.when?.slice(0, 16).replace("T", " "), s.sentBy]
+                {[s.issuedNumber, s.when ? whenText(s.when) : null, s.sentBy]
                   .filter(Boolean)
                   .join(" · ")}
               </span>

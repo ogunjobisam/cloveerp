@@ -18,6 +18,7 @@ import { useErpSession } from "../../components/erp/session-context";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { whenText } from "../../lib/when";
 
 export const Route = createFileRoute("/master-data/classification")({
   head: () => ({
@@ -591,9 +592,7 @@ function Classification() {
                 <td className="py-2 pr-4">{a.item_name}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{a.template_code ?? "—"}</td>
                 <td className="py-2 pr-4 tabular-nums">{a.template_version ?? "—"}</td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {a.assigned_at.slice(0, 16).replace("T", " ")}
-                </td>
+                <td className="py-2 pr-4 tabular-nums">{whenText(a.assigned_at)}</td>
                 <td className="py-2 pr-4">{a.assigned_by ?? "—"}</td>
               </tr>
             ))}

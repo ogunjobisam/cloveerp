@@ -16,6 +16,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { WavePrintReadiness } from "../../components/erp/wave-print";
 import { useT } from "../../lib/i18n";
+import { whenText } from "../../lib/when";
 
 export const Route = createFileRoute("/logistics/release-areas")({
   head: () => ({
@@ -361,15 +362,9 @@ function ReleaseAreas() {
                 </td>
                 <td className="py-2 pr-4 tabular-nums">{w.lines}</td>
                 <td className="py-2 pr-4 tabular-nums">{w.short_lines}</td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {w.opened_at.slice(0, 16).replace("T", " ")}
-                </td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {w.allocated_at ? w.allocated_at.slice(0, 16).replace("T", " ") : "—"}
-                </td>
-                <td className="py-2 pr-4 tabular-nums">
-                  {w.printed_at ? w.printed_at.slice(0, 16).replace("T", " ") : "—"}
-                </td>
+                <td className="py-2 pr-4 tabular-nums">{whenText(w.opened_at)}</td>
+                <td className="py-2 pr-4 tabular-nums">{whenText(w.allocated_at)}</td>
+                <td className="py-2 pr-4 tabular-nums">{whenText(w.printed_at)}</td>
               </tr>
             ))}
           </Table>

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { whenText } from "../../lib/when";
 import {
   confirmationWords,
   orderConfirmation,
@@ -135,7 +136,7 @@ function Facts({ c }: { c: OrderConfirmation }) {
     [
       ui("Answered"),
       c.respondedAt
-        ? `${c.respondedAt.slice(0, 16).replace("T", " ")} · ${
+        ? `${whenText(c.respondedAt)} · ${
             c.respondedVia === "buyer" ? ui("recorded by the buyer") : ui("by the supplier")
           }`
         : null,

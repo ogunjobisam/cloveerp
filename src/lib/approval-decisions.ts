@@ -67,3 +67,34 @@ export function decisionWords(d: ApprovalDecision): string {
 export function anyAdministratorDecision(decisions: readonly ApprovalDecision[]): boolean {
   return decisions.some((d) => d.decided_via === "administrator");
 }
+
+/**
+ * The comment beside a decision, or null where there is nothing to add.
+ *
+ * erp.approve_request_as_administrator writes "Approved as administrator" (or
+ * "..., for the person asked") into the comment, and decisionWords already says
+ * that in full, so the row read the same sentence twice (J-121). A comment
+ * somebody typed is shown as typed.
+ */
+export function decisionComment(d: ApprovalDecision): string | null {
+  const comment = (d.comment ?? "").trim();
+  if (comment === "") return null;
+  if (d.decided_via === "administrator" && comment.startsWith("Approved as administrator")) {
+    return null;
+  }
+  return comment;
+}
+
+/**
+ * Whether the latest routing stamp resolved any step.
+ *
+ * Only erp_stamp_document_approval writes a stamp, from the routing rules; a
+ * document approved through its tasks has none, and a stamp taken where no
+ * rule applied has no steps. Either way the routing card had nothing to show
+ * and said so above the decisions that were really made (J-121).
+ */
+export function stampHasSteps(
+  stamps: readonly { resolved_chain?: { steps?: readonly unknown[] } | null }[] | undefined,
+): boolean {
+  return (stamps?.[0]?.resolved_chain?.steps?.length ?? 0) > 0;
+}
