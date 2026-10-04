@@ -13,6 +13,7 @@ import {
   checkSaid,
   closePresses,
   closesWith,
+  lastClosedSays,
   normaliseChecklist,
   taskPresses,
   type Checklist,
@@ -95,6 +96,9 @@ function Close() {
   const presses = data ? closePresses(data, can) : { open: null, close: false };
   const together = data ? closesWith(data) : [];
   const keptOn = data ? checklistKeptOn(data) : null;
+  // The month closed before this one, so a close just finished is confirmed
+  // here and not only on the list of periods (J-98).
+  const lastClosed = data ? lastClosedSays(data) : null;
 
   /**
    * The one sentence. Three of the five states say the same thing however the
@@ -148,6 +152,11 @@ function Close() {
             {keptOn ? (
               <p className="mt-1 text-xs text-muted-foreground" data-checklist-on>
                 {ui("The month's checklist is kept on")} {keptOn}
+              </p>
+            ) : null}
+            {lastClosed ? (
+              <p className="mt-1 text-xs text-muted-foreground" data-last-closed>
+                {ui("Last closed")} {lastClosed}
               </p>
             ) : null}
 

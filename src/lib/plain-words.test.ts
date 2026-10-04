@@ -375,20 +375,26 @@ describe("the Close step's periods", () => {
   ];
   const today = "2026-09-14";
 
-  test("the current period first, then open periods already ended, oldest first, then closed ones, latest first", () => {
+  test("the current period first, then open periods already ended, oldest first", () => {
     expect(orderPeriods(calendar, today).map((p) => `${p.code} ${p.ledger}`)).toEqual([
       "2026-09 COMMIT",
       "2026-09 GL",
       "2025-01 GL",
       "2026-06 GL",
-      "2026-08 GL",
-      "2026-07 GL",
     ]);
   });
 
-  test("periods not yet started and years closed for good wait behind the toggle", () => {
+  test("a closed period is not work waiting, so the step does not count it (J-98)", () => {
+    const shown = orderPeriods(calendar, today);
+    expect(shown.map((p) => p.status)).not.toContain("closed");
+    // The step's count is the rows it lists: one month open and nothing
+    // closed counted, not every closed month of every ledger.
+    expect(shown).toHaveLength(4);
+  });
+
+  test("closed periods, latest first, then periods not yet started and years closed for good wait behind the toggle", () => {
     const all = orderPeriods(calendar, today, true).map((p) => p.code);
-    expect(all.slice(-3)).toEqual(["2026-10", "2027-12", "2024-12"]);
+    expect(all.slice(4)).toEqual(["2026-08", "2026-07", "2026-10", "2027-12", "2024-12"]);
     expect(all).toHaveLength(calendar.length);
   });
 
