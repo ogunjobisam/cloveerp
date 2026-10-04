@@ -18,6 +18,7 @@ import {
   INVENTORY,
   MODULES,
   PLANNING,
+  PRODUCTION,
   QUALITY,
   RAISE_STOCK_ADJUSTMENT,
   RAISE_TRANSFER_ORDER,
@@ -446,5 +447,97 @@ describe("what a verb does once it has worked (J-77)", () => {
 
   test("a verb that declares none passes nothing on", () => {
     expect(doneProps({}, () => undefined)).toEqual({});
+  });
+});
+
+/**
+ * Inspect and Decide listed quality events and opened doors that take an
+ * inspection, so the event chosen was never carried in and the same events
+ * were counted at every step. Each lists the inspections still to be decided,
+ * and the one chosen is the one the form acts on.
+ */
+describe("Quality's Inspect and Decide act on the inspection chosen", () => {
+  const stages = QUALITY.flow?.stages ?? [];
+  const byKey = new Map(moduleActions(QUALITY).map((a) => [actionKey(a), a]));
+  for (const [label, fn] of [
+    ["Inspect", "erp_record_inspection_result"],
+    ["Decide", "erp_disposition_inspection"],
+  ] as const) {
+    test(`${label} lists inspections and opens ${fn} on the one chosen`, () => {
+      const stage = stages.find((s) => s.label === label);
+      expect(stage?.list?.fn).toBe("erp_inspections");
+      expect(stage?.list?.id).toBe("inspection_id");
+      // erp.disposition_inspection refuses one that is complete or cancelled.
+      expect(stage?.states).toEqual(["planned", "sampling", "testing"]);
+      expect(stage?.recordArg).toBe("p_inspection_id");
+      expect(stage?.actionFn).toBe(fn);
+      // A verb for the record, not one that needs none.
+      expect(stage?.createFn).toBeUndefined();
+      const action = byKey.get(fn);
+      expect(action?.fields?.some((f) => f.name === "p_inspection_id")).toBe(true);
+      if (!stage || !action) throw new Error(`${label} has no verb`);
+      expect(recordAnswer(stage, action, "ins-1")).toEqual({
+        prefill: { p_inspection_id: "ins-1" },
+        preselect: {},
+      });
+    });
+  }
+
+  test("the Event and Close steps still list events", () => {
+    for (const label of ["Event", "Close"]) {
+      expect(stages.find((s) => s.label === label)?.list?.fn).toBe("erp_quality_events");
+    }
+  });
+});
+
+/**
+ * "Start making something" offered every product, and the database refuses
+ * one with no active bill of materials. It offers what has one.
+ */
+describe("a works order is raised for something that can be made", () => {
+  test("the product is chosen from the active bills of materials", () => {
+    const raise = (PRODUCTION.actions ?? []).find((a) => a.fn === "erp_raise_works_order");
+    const product = raise?.fields?.find((f) => f.name === "p_item_id");
+    if (product?.kind !== "select") throw new Error("the product is not chosen from a list");
+    expect(product.label).toBe("Product");
+    expect(product.required).toBe(true);
+    expect(product.options.fn).toBe("erp_boms");
+    expect(product.options.value).toBe("item_id");
+    expect(product.options.label).toEqual(["item", "item_name"]);
+    expect(product.options.keep?.({ status: "active" })).toBe(true);
+    expect(product.options.keep?.({ status: "draft" })).toBe(false);
+    expect(product.options.keep?.({ status: "withdrawn" })).toBe(false);
+  });
+});
+
+/**
+ * A stock adjustment asked "Which shelf" for a site, offered the reasons for
+ * returns beside its own, and had nowhere to say where on the site the count
+ * was taken, though the door keeps a location on each line.
+ */
+describe("a stock adjustment asks for what it records", () => {
+  const field = (name: string) => RAISE_STOCK_ADJUSTMENT.fields?.find((f) => f.name === name);
+
+  test("the site is called a site", () => {
+    expect(field("p_site_id")?.label).toBe("Site");
+  });
+
+  test("only stock adjustment reasons are offered", () => {
+    const reasonField = field("p_reason_code");
+    if (reasonField?.kind !== "combo") throw new Error("the reason is not a combo");
+    expect(reasonField.options.fn).toBe("erp_reason_codes");
+    expect(reasonField.options.args).toEqual({ p_category: "STOCK_ADJUSTMENT" });
+  });
+
+  test("each line may say where on the chosen site it was counted", () => {
+    const lines = field("p_lines");
+    if (lines?.kind !== "rows") throw new Error("the lines are not rows");
+    const location = lines.columns.find((c) => c.name === "location_id");
+    expect(location?.label).toBe("Location");
+    expect(location?.kind).toBe("select");
+    expect(location?.options?.fn).toBe("erp_locations");
+    expect(location?.options?.argsFrom).toEqual({ p_site_id: "p_site_id" });
+    expect(location?.options?.value).toBe("location_id");
+    expect(lines.columns.map((c) => c.name)).toEqual(["item_id", "location_id", "quantity"]);
   });
 });

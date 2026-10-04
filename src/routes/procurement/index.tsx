@@ -847,17 +847,15 @@ const PURCHASE_TO_PAY: FlowSpec = {
 
       typeCode: "goods_receipt",
       // A receipt still being counted in. Posted, its stock is in goods-in
-      // and it waits for the bill from the supplier; "Show finished" lists it
-      // here to be billed.
+      // and it waits for the bill from the supplier, which is raised at the
+      // Supplier bill step: "Bill a receipt" there picks posted receipts.
       states: ["draft"],
       actionStates: {
         erp_receive_against: ["draft"],
-        erp_bill_from_receipt: ["posted"],
       },
       partyRole: "supplier",
       recordArg: "p_receipt_id",
       actionFn: "erp_receive_against",
-      actionFns: ["erp_bill_from_receipt"],
       // The receipt comes from its order, chosen on the form.
       createFn: "erp_create_receipt_from_order",
     },
@@ -894,7 +892,6 @@ const PURCHASE_TO_PAY: FlowSpec = {
     {
       label: "Supplier bill",
       hint: "Their invoice, matched to what arrived, so you know what you now owe.",
-      fedBy: "Bills appear here once a goods receipt is billed at the goods receipt step.",
 
       typeCode: "purchase_invoice",
       // Being entered, owed in full or in part (20260929100000), or in
