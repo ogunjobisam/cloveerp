@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickTimeOfDay, pickTimezone } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  HeaderActions,
+  pickFrom,
+  pickTimeOfDay,
+  pickTimezone,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -82,162 +88,170 @@ const QUEUE_LABEL: Record<string, string> = {
 function Jobs() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Scheduled jobs">
+      <PageHeader
+        title="Scheduled jobs"
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Running and stopping jobs"
+              note="Running a job by hand, and the kill switches that stop one from running at all."
+              actions={[
+                {
+                  // The screen had panels, a trigger and two kill switches, and no way
+                  // to bring a job into existence — so it had never shown a row and
+                  // "Trigger a job" could only ever fail.
+                  label: "Define a job",
+                  permission: "administration.jobs",
+                  fn: "erp_upsert_job",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "NIGHTLY-REPLEN",
+                      hint: "A short code for this job.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Nightly replenishment",
+                    },
+                    pickFrom("erp_job_handlers", "code", ["code"], "p_handler_code", "Handler"),
+                    {
+                      kind: "choice",
+                      name: "p_schedule_kind",
+                      label: "Runs",
+                      required: true,
+                      choices: [
+                        { value: "interval", label: "Every N seconds" },
+                        { value: "daily", label: "Daily at a time" },
+                        { value: "weekly", label: "Weekly" },
+                        { value: "monthly", label: "Monthly" },
+                        { value: "manual", label: "Only when triggered" },
+                      ],
+                    },
+                    {
+                      kind: "number",
+                      name: "p_interval_seconds",
+                      label: "Interval (seconds)",
+                      hint: "For an interval schedule. At least 30.",
+                    },
+                    {
+                      ...pickTimeOfDay("p_at_time", "At", false),
+                      hint: "Daily, weekly or monthly.",
+                    },
+                    {
+                      kind: "multi",
+                      name: "p_days_of_week",
+                      label: "Days of week",
+                      hint: "Weekly only.",
+                      // erp.upsert_job splits the line on ',' and casts each part to smallint.
+                      join: ",",
+                      choices: [
+                        { value: "1", label: "Monday" },
+                        { value: "2", label: "Tuesday" },
+                        { value: "3", label: "Wednesday" },
+                        { value: "4", label: "Thursday" },
+                        { value: "5", label: "Friday" },
+                        { value: "6", label: "Saturday" },
+                        { value: "7", label: "Sunday" },
+                      ],
+                    },
+                    { kind: "number", name: "p_day_of_month", label: "Day of month" },
+                    pickTimezone("p_timezone", "Time zone", false),
+                  ],
+                  invalidates: ["erp_silent_jobs", "erp_job_health", "erp_job_handlers"],
+                },
+                {
+                  label: "Trigger a job",
+                  permission: "administration.jobs",
+                  fn: "erp_trigger_job",
+                  fields: [
+                    // erp_silent_jobs lists only jobs overdue against their schedule, so
+                    // on a healthy system the old picker offered nothing. erp_job_health
+                    // is one row per job.
+                    pickFrom(
+                      "erp_job_health",
+                      "job_code",
+                      ["job_code", "last_outcome"],
+                      "p_job_code",
+                      "Job",
+                    ),
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      placeholder: "Missed last night's run",
+                      hint: "Optional. Recorded against the run.",
+                    },
+                  ],
+                  invalidates: ["erp_silent_jobs", "erp_job_health"],
+                },
+                {
+                  label: "Set a kill switch",
+                  permission: "administration.configure",
+                  fn: "erp_set_kill_switch",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_kind",
+                      label: "Target",
+                      required: true,
+                      choices: KILL_TARGETS,
+                    },
+                    {
+                      kind: "text",
+                      name: "p_key",
+                      label: "Key",
+                      required: true,
+                      placeholder: "NIGHTLY-REPLEN",
+                      hint: "The code of the job, handler or integration being stopped.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      required: true,
+                      placeholder: "Supplier feed sending bad prices",
+                      hint: "Recorded permanently, and shown to whoever clears it.",
+                    },
+                  ],
+                  invalidates: ["erp_job_health", "erp_silent_jobs"],
+                },
+                {
+                  label: "Clear a kill switch",
+                  permission: "administration.configure",
+                  fn: "erp_clear_kill_switch",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_kind",
+                      label: "Target",
+                      required: true,
+                      choices: KILL_TARGETS,
+                    },
+                    {
+                      kind: "text",
+                      name: "p_key",
+                      label: "Key",
+                      required: true,
+                      placeholder: "NIGHTLY-REPLEN",
+                      hint: "The key the switch was set against.",
+                    },
+                  ],
+                  invalidates: ["erp_job_health", "erp_silent_jobs"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         A job that fails is loud. A job that stops being scheduled is silent, and silence looks
         exactly like success — so it is reported first.
       </PageHeader>
-
-      <ActionBar
-        title="Running and stopping jobs"
-        note="Running a job by hand, and the kill switches that stop one from running at all."
-        actions={[
-          {
-            // The screen had panels, a trigger and two kill switches, and no way
-            // to bring a job into existence — so it had never shown a row and
-            // "Trigger a job" could only ever fail.
-            label: "Define a job",
-            permission: "administration.jobs",
-            fn: "erp_upsert_job",
-            fields: [
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "NIGHTLY-REPLEN",
-                hint: "A short code for this job.",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Nightly replenishment",
-              },
-              pickFrom("erp_job_handlers", "code", ["code"], "p_handler_code", "Handler"),
-              {
-                kind: "choice",
-                name: "p_schedule_kind",
-                label: "Runs",
-                required: true,
-                choices: [
-                  { value: "interval", label: "Every N seconds" },
-                  { value: "daily", label: "Daily at a time" },
-                  { value: "weekly", label: "Weekly" },
-                  { value: "monthly", label: "Monthly" },
-                  { value: "manual", label: "Only when triggered" },
-                ],
-              },
-              {
-                kind: "number",
-                name: "p_interval_seconds",
-                label: "Interval (seconds)",
-                hint: "For an interval schedule. At least 30.",
-              },
-              { ...pickTimeOfDay("p_at_time", "At", false), hint: "Daily, weekly or monthly." },
-              {
-                kind: "multi",
-                name: "p_days_of_week",
-                label: "Days of week",
-                hint: "Weekly only.",
-                // erp.upsert_job splits the line on ',' and casts each part to smallint.
-                join: ",",
-                choices: [
-                  { value: "1", label: "Monday" },
-                  { value: "2", label: "Tuesday" },
-                  { value: "3", label: "Wednesday" },
-                  { value: "4", label: "Thursday" },
-                  { value: "5", label: "Friday" },
-                  { value: "6", label: "Saturday" },
-                  { value: "7", label: "Sunday" },
-                ],
-              },
-              { kind: "number", name: "p_day_of_month", label: "Day of month" },
-              pickTimezone("p_timezone", "Time zone", false),
-            ],
-            invalidates: ["erp_silent_jobs", "erp_job_health", "erp_job_handlers"],
-          },
-          {
-            label: "Trigger a job",
-            permission: "administration.jobs",
-            fn: "erp_trigger_job",
-            fields: [
-              // erp_silent_jobs lists only jobs overdue against their schedule, so
-              // on a healthy system the old picker offered nothing. erp_job_health
-              // is one row per job.
-              pickFrom(
-                "erp_job_health",
-                "job_code",
-                ["job_code", "last_outcome"],
-                "p_job_code",
-                "Job",
-              ),
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                placeholder: "Missed last night's run",
-                hint: "Optional. Recorded against the run.",
-              },
-            ],
-            invalidates: ["erp_silent_jobs", "erp_job_health"],
-          },
-          {
-            label: "Set a kill switch",
-            permission: "administration.configure",
-            fn: "erp_set_kill_switch",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_kind",
-                label: "Target",
-                required: true,
-                choices: KILL_TARGETS,
-              },
-              {
-                kind: "text",
-                name: "p_key",
-                label: "Key",
-                required: true,
-                placeholder: "NIGHTLY-REPLEN",
-                hint: "The code of the job, handler or integration being stopped.",
-              },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                required: true,
-                placeholder: "Supplier feed sending bad prices",
-                hint: "Recorded permanently, and shown to whoever clears it.",
-              },
-            ],
-            invalidates: ["erp_job_health", "erp_silent_jobs"],
-          },
-          {
-            label: "Clear a kill switch",
-            permission: "administration.configure",
-            fn: "erp_clear_kill_switch",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_kind",
-                label: "Target",
-                required: true,
-                choices: KILL_TARGETS,
-              },
-              {
-                kind: "text",
-                name: "p_key",
-                label: "Key",
-                required: true,
-                placeholder: "NIGHTLY-REPLEN",
-                hint: "The key the switch was set against.",
-              },
-            ],
-            invalidates: ["erp_job_health", "erp_silent_jobs"],
-          },
-        ]}
-      />
 
       <DataPanel<Silent>
         title="Jobs that have stopped running"

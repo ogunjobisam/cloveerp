@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { inboundShipments } from "../../lib/inbound-shipments";
 import {
   differenceWords,
   noticeOpen,
@@ -11,7 +12,10 @@ import {
   shippingNotices,
   type ShippingNotice,
 } from "../../lib/shipping-notices";
+import { awaitingOrders } from "../../lib/supplier-confirmation";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
+import { AwaitingConfirmations } from "./awaiting-confirmations";
+import { InboundShipments } from "./inbound-shipments";
 import { Prose } from "./page";
 import { Pill, Table } from "./panel";
 import { useErpSession } from "./session-context";
@@ -316,30 +320,50 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
   );
 }
 
-/** Everything on its way to goods in, late first, on the Purchasing screen. */
+/**
+ * Everything on its way to goods in, on the Purchasing screen: one card for
+ * the supplier's side of an order after it is sent.
+ *
+ * It used to be three cards one after another — orders awaiting their
+ * supplier's answer, deliveries notified, collections booked — two of them
+ * headed "On its way", and each saying in its own sentence that it was empty.
+ * They are three lists of one card now: a list with nothing in it is left
+ * out, and the card says once when nothing is on its way at all.
+ */
 export function OnItsWay() {
   const { ui } = useT();
   const { session } = useErpSession();
   const mayRead = hasPermission(session, "procurement.read");
-  const { data, error } = useQuery({
+  // Three reads, each for whoever may read purchasing: the orders still
+  // waiting on their supplier, the deliveries notified, the collections booked.
+  const awaiting = useQuery({
+    queryKey: ["erp_awaiting_confirmations"],
+    queryFn: () => callErp<unknown>("erp_awaiting_confirmations", {}),
+    enabled: mayRead,
+  });
+  const notified = useQuery({
     queryKey: ["erp_shipping_notices"],
     queryFn: () => callErp<unknown>("erp_shipping_notices", {}),
     enabled: mayRead,
   });
+  const inbound = useQuery({
+    queryKey: ["erp_inbound_shipments"],
+    queryFn: () => callErp<unknown>("erp_inbound_shipments", {}),
+    enabled: mayRead,
+  });
   if (!mayRead) return null;
-  const notices = shippingNotices(data);
+  const orders = awaitingOrders(awaiting.data);
+  const notices = shippingNotices(notified.data);
+  const shipments = inboundShipments(inbound.data);
+  const nothing = orders.length === 0 && notices.length === 0 && shipments.length === 0;
+  // Said only once every read has answered: a list still being read is not
+  // an empty one, and neither is one that failed.
+  const answered = [awaiting, notified, inbound].every((q) => !q.isPending && !q.error);
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">{ui("On its way")}</h2>
-          <Prose className="mt-0.5 text-xs text-muted-foreground">
-            {ui(
-              "Deliveries suppliers have told you are coming, the late ones first. Receive one as notified, or a carton by scanning its label.",
-            )}
-          </Prose>
-        </div>
+        <h2 className="text-sm font-semibold">{ui("On its way")}</h2>
         <ActionDialog
           trigger={<ActionButton variant="secondary">{ui("Receive a carton")}</ActionButton>}
           title="Receive a carton"
@@ -361,41 +385,61 @@ export function OnItsWay() {
           submitLabel="Receive"
         />
       </div>
-      <ErrorNote error={error} />
-      {notices.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">{ui("Nothing is on its way.")}</p>
+      <ErrorNote error={awaiting.error} />
+      <ErrorNote error={notified.error} />
+      <ErrorNote error={inbound.error} />
+      {nothing ? (
+        answered ? (
+          <p className="mt-3 text-sm text-muted-foreground">{ui("Nothing is on its way.")}</p>
+        ) : null
       ) : (
-        <ul className="mt-3 flex flex-col divide-y divide-border text-sm">
-          {notices.map((n) => (
-            <li
-              key={n.noticeId}
-              className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-2"
-            >
-              <Link
-                to="/documents/$documentId"
-                params={{ documentId: n.orderId }}
-                className="font-medium underline underline-offset-2"
-              >
-                {n.order}
-              </Link>
-              <span className="text-muted-foreground">{n.supplier}</span>
-              <span className="tabular-nums">
-                {ui("Arrives")} {n.expectedArrival ?? "—"}
-              </span>
-              {n.late ? <Pill tone="bad">{ui("Late")}</Pill> : null}
-              {n.status === "part_received" ? <Pill tone="warn">{ui("Part received")}</Pill> : null}
-              {n.carrier ? (
-                <span className="text-xs text-muted-foreground">
-                  {n.carrier}
-                  {n.trackingReference ? ` · ${n.trackingReference}` : ""}
-                </span>
-              ) : null}
-              <span className="ml-auto flex flex-wrap gap-2">
-                <ReceiveMoves n={n} context={`${n.notice} · ${n.order}`} />
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 flex flex-col divide-y divide-border">
+          {orders.length > 0 ? <AwaitingConfirmations orders={orders} /> : null}
+          {notices.length > 0 ? (
+            <div className="min-w-0 py-4 first:pt-0 last:pb-0">
+              <h3 className="text-sm font-medium">{ui("Shipping notices")}</h3>
+              <Prose className="mt-0.5 text-xs text-muted-foreground">
+                {ui(
+                  "Deliveries suppliers have told you are coming, the late ones first. Receive one as notified, or a carton by scanning its label.",
+                )}
+              </Prose>
+              <ul className="mt-2 flex flex-col divide-y divide-border text-sm">
+                {notices.map((n) => (
+                  <li
+                    key={n.noticeId}
+                    className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-2"
+                  >
+                    <Link
+                      to="/documents/$documentId"
+                      params={{ documentId: n.orderId }}
+                      className="font-medium underline underline-offset-2"
+                    >
+                      {n.order}
+                    </Link>
+                    <span className="text-muted-foreground">{n.supplier}</span>
+                    <span className="tabular-nums">
+                      {ui("Arrives")} {n.expectedArrival ?? "—"}
+                    </span>
+                    {n.late ? <Pill tone="bad">{ui("Late")}</Pill> : null}
+                    {n.status === "part_received" ? (
+                      <Pill tone="warn">{ui("Part received")}</Pill>
+                    ) : null}
+                    {n.carrier ? (
+                      <span className="text-xs text-muted-foreground">
+                        {n.carrier}
+                        {n.trackingReference ? ` · ${n.trackingReference}` : ""}
+                      </span>
+                    ) : null}
+                    <span className="ml-auto flex flex-wrap gap-2">
+                      <ReceiveMoves n={n} context={`${n.notice} · ${n.order}`} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {shipments.length > 0 ? <InboundShipments shipments={shipments} /> : null}
+        </div>
       )}
     </section>
   );

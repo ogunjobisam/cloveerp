@@ -1,6 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickItem, pickParty } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  HeaderActions,
+  pickFrom,
+  pickItem,
+  pickParty,
+} from "../../components/erp/actions-bar";
 import { RpcButton } from "../../components/erp/rpc-button";
 import { AutoPanel, StatusPill, moneyCell, shortDate } from "../../components/erp/auto";
 
@@ -57,133 +63,158 @@ function Governance() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("module.governance", "Change requests and approvals")}>
+      <PageHeader
+        title={t("module.governance", "Change requests and approvals")}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Proposing a change"
+              note="Proposing a change, and the mass change that proposes the same edit against many records."
+              actions={[
+                {
+                  label: "Preview a mass change",
+                  description:
+                    "Works out which records the selector matches and what each would become. A mass change is applied only after it has been previewed.",
+                  permission: "master_data.write",
+                  fn: "erp_preview_mass_change",
+                  fields: [pickMassChange()],
+                  invalidates: ["erp_mass_changes"],
+                },
+                {
+                  label: "Apply a mass change",
+                  description:
+                    "Applies an approved mass change to every record it names. Each record's old value is kept, so the whole change can be reversed as one.",
+                  permission: "master_data.write",
+                  fn: "erp_apply_mass_change",
+                  fields: [
+                    { ...pickMassChange(), hint: "Only a previewed mass change can be applied." },
+                  ],
+                  invalidates: [
+                    "erp_mass_changes",
+                    "erp_change_requests",
+                    "erp_items",
+                    "erp_parties",
+                  ],
+                },
+                {
+                  label: "Reverse a mass change",
+                  description: "Puts every record the mass change touched back as it was.",
+                  permission: "master_data.write",
+                  fn: "erp_reverse_mass_change",
+                  fields: [
+                    { ...pickMassChange(), hint: "Only an applied mass change can be reversed." },
+                  ],
+                  invalidates: [
+                    "erp_mass_changes",
+                    "erp_change_requests",
+                    "erp_items",
+                    "erp_parties",
+                  ],
+                },
+                {
+                  label: "Open a change request",
+                  permission: "master_data.write",
+                  fn: "erp_open_change_request",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_object_type",
+                      label: "Object",
+                      required: true,
+                      choices: [
+                        { value: "item", label: "Product" },
+                        { value: "party", label: "Business partner" },
+                      ],
+                    },
+                    // A picker's source is fixed, so it cannot follow the object type;
+                    // one picker per kind, and mapArgs sends whichever matches.
+                    {
+                      ...pickItem("p_item_id", "Product"),
+                      required: false,
+                      hint: "Only when the object is a product.",
+                    },
+                    {
+                      ...pickParty(undefined, "p_party_id", "Business partner", false),
+                      hint: "Only when the object is a business partner.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_proposed",
+                      label: "Proposed change",
+                      required: true,
+                      hint: 'JSON, for example {"name":"New name"}.',
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      placeholder: "Corrected after the supplier's notice",
+                      hint: "Optional. Shown to whoever approves this.",
+                    },
+                  ],
+                  invalidates: ["erp_change_requests", "erp_my_approvals"],
+                  mapArgs: (v) => ({
+                    p_object_type: v["p_object_type"],
+                    p_object_id:
+                      (v["p_object_type"] === "item" ? v["p_item_id"] : v["p_party_id"]) || null,
+                    p_proposed: JSON.parse(v["p_proposed"] ?? "{}"),
+                    ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
+                  }),
+                },
+                {
+                  label: "Open a mass change",
+                  permission: "master_data.write",
+                  fn: "erp_open_mass_change",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_object_type",
+                      label: "Object",
+                      required: true,
+                      choices: [
+                        { value: "item", label: "Product" },
+                        { value: "party", label: "Business partner" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_selector",
+                      label: "Selector",
+                      required: true,
+                      hint: 'JSON, for example {"item_class":"finished_good"}.',
+                    },
+                    {
+                      kind: "text",
+                      name: "p_changes",
+                      label: "Changes",
+                      required: true,
+                      hint: "JSON.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Reason",
+                      placeholder: "Annual price review",
+                      hint: "Optional. Shown to whoever approves this.",
+                    },
+                  ],
+                  invalidates: ["erp_change_requests", "erp_mass_changes"],
+                  mapArgs: (v) => ({
+                    p_object_type: v["p_object_type"],
+                    p_selector: JSON.parse(v["p_selector"] ?? "{}"),
+                    p_changes: JSON.parse(v["p_changes"] ?? "{}"),
+                    ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
+                  }),
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         Master data does not change because somebody typed into a form. A change is proposed against
         a specific record, shown as a before-and-after, approved by whoever the rule names, and only
         then applied — with the whole sequence kept.
       </PageHeader>
-
-      <ActionBar
-        title="Proposing a change"
-        note="Proposing a change, and the mass change that proposes the same edit against many records."
-        actions={[
-          {
-            label: "Preview a mass change",
-            description:
-              "Works out which records the selector matches and what each would become. A mass change is applied only after it has been previewed.",
-            permission: "master_data.write",
-            fn: "erp_preview_mass_change",
-            fields: [pickMassChange()],
-            invalidates: ["erp_mass_changes"],
-          },
-          {
-            label: "Apply a mass change",
-            description:
-              "Applies an approved mass change to every record it names. Each record's old value is kept, so the whole change can be reversed as one.",
-            permission: "master_data.write",
-            fn: "erp_apply_mass_change",
-            fields: [{ ...pickMassChange(), hint: "Only a previewed mass change can be applied." }],
-            invalidates: ["erp_mass_changes", "erp_change_requests", "erp_items", "erp_parties"],
-          },
-          {
-            label: "Reverse a mass change",
-            description: "Puts every record the mass change touched back as it was.",
-            permission: "master_data.write",
-            fn: "erp_reverse_mass_change",
-            fields: [{ ...pickMassChange(), hint: "Only an applied mass change can be reversed." }],
-            invalidates: ["erp_mass_changes", "erp_change_requests", "erp_items", "erp_parties"],
-          },
-          {
-            label: "Open a change request",
-            permission: "master_data.write",
-            fn: "erp_open_change_request",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Object",
-                required: true,
-                choices: [
-                  { value: "item", label: "Product" },
-                  { value: "party", label: "Business partner" },
-                ],
-              },
-              // A picker's source is fixed, so it cannot follow the object type;
-              // one picker per kind, and mapArgs sends whichever matches.
-              {
-                ...pickItem("p_item_id", "Product"),
-                required: false,
-                hint: "Only when the object is a product.",
-              },
-              {
-                ...pickParty(undefined, "p_party_id", "Business partner", false),
-                hint: "Only when the object is a business partner.",
-              },
-              {
-                kind: "text",
-                name: "p_proposed",
-                label: "Proposed change",
-                required: true,
-                hint: 'JSON, for example {"name":"New name"}.',
-              },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                placeholder: "Corrected after the supplier's notice",
-                hint: "Optional. Shown to whoever approves this.",
-              },
-            ],
-            invalidates: ["erp_change_requests", "erp_my_approvals"],
-            mapArgs: (v) => ({
-              p_object_type: v["p_object_type"],
-              p_object_id:
-                (v["p_object_type"] === "item" ? v["p_item_id"] : v["p_party_id"]) || null,
-              p_proposed: JSON.parse(v["p_proposed"] ?? "{}"),
-              ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
-            }),
-          },
-          {
-            label: "Open a mass change",
-            permission: "master_data.write",
-            fn: "erp_open_mass_change",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Object",
-                required: true,
-                choices: [
-                  { value: "item", label: "Product" },
-                  { value: "party", label: "Business partner" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_selector",
-                label: "Selector",
-                required: true,
-                hint: 'JSON, for example {"item_class":"finished_good"}.',
-              },
-              { kind: "text", name: "p_changes", label: "Changes", required: true, hint: "JSON." },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Reason",
-                placeholder: "Annual price review",
-                hint: "Optional. Shown to whoever approves this.",
-              },
-            ],
-            invalidates: ["erp_change_requests", "erp_mass_changes"],
-            mapArgs: (v) => ({
-              p_object_type: v["p_object_type"],
-              p_selector: JSON.parse(v["p_selector"] ?? "{}"),
-              p_changes: JSON.parse(v["p_changes"] ?? "{}"),
-              ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
-            }),
-          },
-        ]}
-      />
 
       <AutoPanel
         title="My approvals"

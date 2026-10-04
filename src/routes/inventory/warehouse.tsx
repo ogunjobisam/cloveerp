@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   ActionBar,
+  HeaderActions,
   pickCountClass,
   pickFrom,
   pickItem,
@@ -154,137 +155,190 @@ function WarehouseLayout() {
         howItWorks={ui(
           "Put-away sends goods to the place the rules name, replenishment tops up the pick face they name, and picking prefers it once the first-expired rule has chosen the stock.",
         )}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Locations and bins"
+              note="Give a place a parent to nest it — a bin inside an aisle inside a zone. A place that is not pickable is reserve: stock stands there, but pickers are not sent to it."
+              actions={[
+                {
+                  label: "Add a location",
+                  permission: "administration.configure",
+                  fn: "erp_create_location",
+                  fields: [
+                    pickSite(),
+                    codeField("p_code", "Code", "LEE-A-01-02", {
+                      fn: "erp_locations",
+                      value: "code",
+                      label: ["site", "code", "name"],
+                    }),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      placeholder: "Aisle A, bay 1, level 2",
+                      hint: "Optional. The code is what people scan.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_location_type",
+                      label: "Kind of place",
+                      required: true,
+                      choices: LOCATION_TYPES,
+                    },
+                    pickLocation("p_parent_location_id", "Sits inside", false),
+                    {
+                      kind: "choice",
+                      name: "p_is_pickable",
+                      label: "Pickable",
+                      boolean: true,
+                      choices: PICKABLE,
+                    },
+                    {
+                      kind: "number",
+                      name: "p_capacity_quantity",
+                      label: "Holds at most",
+                      hint: "Optional. Put-away skips a place that is already full.",
+                    },
+                    {
+                      ...pickUom("p_capacity_uom", "Capacity unit", false),
+                      hint: "Optional. What the capacity above is counted in.",
+                    },
+                    pickCountClass(),
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Amend a location",
+                  permission: "administration.configure",
+                  fn: "erp_update_location",
+                  fields: [
+                    pickPlace("Location to amend"),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      placeholder: "Aisle A, bay 1, level 2",
+                      hint: "Leave empty to keep the name it has.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_location_type",
+                      label: "Kind of place",
+                      choices: LOCATION_TYPES,
+                    },
+                    pickLocation("p_parent_location_id", "Sits inside", false),
+                    {
+                      kind: "choice",
+                      name: "p_is_pickable",
+                      label: "Pickable",
+                      boolean: true,
+                      choices: PICKABLE,
+                    },
+                    { kind: "number", name: "p_capacity_quantity", label: "Holds at most" },
+                    {
+                      ...pickUom("p_capacity_uom", "Capacity unit", false),
+                      hint: "What the amount above is counted in.",
+                    },
+                    pickCountClass(),
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Block a location",
+                  title: "Block a location",
+                  description:
+                    "Nothing is put away to a blocked place and nothing is picked from it. The stock standing in it stays where it is.",
+                  permission: "administration.configure",
+                  fn: "erp_block_location",
+                  fields: [
+                    pickPlace("Location to block"),
+                    // A combo, not a select: the door stores the trimmed text
+                    // without validation and the register has no category for
+                    // blocking a location yet, so the register is offered and a
+                    // reason of your own is still possible.
+                    {
+                      kind: "combo",
+                      name: "p_reason_code",
+                      label: "Reason",
+                      required: false,
+                      placeholder: "DAMAGED-RACK",
+                      hint: "Pick a reason code from the register, or type one of your own.",
+                      options: {
+                        fn: "erp_reason_codes",
+                        value: "code",
+                        label: ["category", "code", "name"],
+                      },
+                    },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Unblock a location",
+                  permission: "administration.configure",
+                  fn: "erp_unblock_location",
+                  fields: [pickPlace("Location to unblock")],
+                  invalidates,
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Storage rules"
+              note="Name a product, or a product class, or neither — a rule naming the product beats a rule naming its class, which beats a rule naming everything. Lower priority numbers are tried first."
+              actions={[
+                {
+                  label: "Add a storage rule",
+                  permission: "inventory.adjust",
+                  fn: "erp_create_storage_rule",
+                  fields: [
+                    pickSite(),
+                    {
+                      kind: "choice",
+                      name: "p_rule_kind",
+                      label: "What the rule decides",
+                      required: true,
+                      choices: RULE_KINDS,
+                    },
+                    pickPlace("Where it belongs"),
+                    { ...pickItem("p_item_id", "Product"), required: false },
+                    pickItemClass(
+                      "p_item_class",
+                      "Or a product class",
+                      false,
+                      "Leave both empty and the rule covers every product at the site.",
+                    ),
+                    {
+                      kind: "number",
+                      name: "p_priority",
+                      label: "Priority",
+                      hint: "Lower is tried first. 100 unless you say otherwise.",
+                    },
+                    {
+                      kind: "number",
+                      name: "p_max_quantity",
+                      label: "Fill to at most",
+                      hint: "Optional. Once the place holds this much, the next rule is used.",
+                    },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Withdraw a storage rule",
+                  permission: "inventory.adjust",
+                  fn: "erp_remove_storage_rule",
+                  fields: [pickRule()],
+                  invalidates,
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
       >
         {ui(
           "A warehouse is a shape, not a list: zones hold aisles, aisles hold bins, and a storage rule says which product belongs where.",
         )}
       </PageHeader>
-
-      <ActionBar
-        title="Locations and bins"
-        note="Give a place a parent to nest it — a bin inside an aisle inside a zone. A place that is not pickable is reserve: stock stands there, but pickers are not sent to it."
-        actions={[
-          {
-            label: "Add a location",
-            permission: "administration.configure",
-            fn: "erp_create_location",
-            fields: [
-              pickSite(),
-              codeField("p_code", "Code", "LEE-A-01-02", {
-                fn: "erp_locations",
-                value: "code",
-                label: ["site", "code", "name"],
-              }),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                placeholder: "Aisle A, bay 1, level 2",
-                hint: "Optional. The code is what people scan.",
-              },
-              {
-                kind: "choice",
-                name: "p_location_type",
-                label: "Kind of place",
-                required: true,
-                choices: LOCATION_TYPES,
-              },
-              pickLocation("p_parent_location_id", "Sits inside", false),
-              {
-                kind: "choice",
-                name: "p_is_pickable",
-                label: "Pickable",
-                boolean: true,
-                choices: PICKABLE,
-              },
-              {
-                kind: "number",
-                name: "p_capacity_quantity",
-                label: "Holds at most",
-                hint: "Optional. Put-away skips a place that is already full.",
-              },
-              {
-                ...pickUom("p_capacity_uom", "Capacity unit", false),
-                hint: "Optional. What the capacity above is counted in.",
-              },
-              pickCountClass(),
-            ],
-            invalidates,
-          },
-          {
-            label: "Amend a location",
-            permission: "administration.configure",
-            fn: "erp_update_location",
-            fields: [
-              pickPlace("Location to amend"),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                placeholder: "Aisle A, bay 1, level 2",
-                hint: "Leave empty to keep the name it has.",
-              },
-              {
-                kind: "choice",
-                name: "p_location_type",
-                label: "Kind of place",
-                choices: LOCATION_TYPES,
-              },
-              pickLocation("p_parent_location_id", "Sits inside", false),
-              {
-                kind: "choice",
-                name: "p_is_pickable",
-                label: "Pickable",
-                boolean: true,
-                choices: PICKABLE,
-              },
-              { kind: "number", name: "p_capacity_quantity", label: "Holds at most" },
-              {
-                ...pickUom("p_capacity_uom", "Capacity unit", false),
-                hint: "What the amount above is counted in.",
-              },
-              pickCountClass(),
-            ],
-            invalidates,
-          },
-          {
-            label: "Block a location",
-            title: "Block a location",
-            description:
-              "Nothing is put away to a blocked place and nothing is picked from it. The stock standing in it stays where it is.",
-            permission: "administration.configure",
-            fn: "erp_block_location",
-            fields: [
-              pickPlace("Location to block"),
-              // A combo, not a select: the door stores the trimmed text
-              // without validation and the register has no category for
-              // blocking a location yet, so the register is offered and a
-              // reason of your own is still possible.
-              {
-                kind: "combo",
-                name: "p_reason_code",
-                label: "Reason",
-                required: false,
-                placeholder: "DAMAGED-RACK",
-                hint: "Pick a reason code from the register, or type one of your own.",
-                options: {
-                  fn: "erp_reason_codes",
-                  value: "code",
-                  label: ["category", "code", "name"],
-                },
-              },
-            ],
-            invalidates,
-          },
-          {
-            label: "Unblock a location",
-            permission: "administration.configure",
-            fn: "erp_unblock_location",
-            fields: [pickPlace("Location to unblock")],
-            invalidates,
-          },
-        ]}
-      />
 
       <DataPanel<LocationRow>
         title={ui("Locations")}
@@ -338,56 +392,6 @@ function WarehouseLayout() {
           </Table>
         )}
       </DataPanel>
-
-      <ActionBar
-        title="Storage rules"
-        note="Name a product, or a product class, or neither — a rule naming the product beats a rule naming its class, which beats a rule naming everything. Lower priority numbers are tried first."
-        actions={[
-          {
-            label: "Add a storage rule",
-            permission: "inventory.adjust",
-            fn: "erp_create_storage_rule",
-            fields: [
-              pickSite(),
-              {
-                kind: "choice",
-                name: "p_rule_kind",
-                label: "What the rule decides",
-                required: true,
-                choices: RULE_KINDS,
-              },
-              pickPlace("Where it belongs"),
-              { ...pickItem("p_item_id", "Product"), required: false },
-              pickItemClass(
-                "p_item_class",
-                "Or a product class",
-                false,
-                "Leave both empty and the rule covers every product at the site.",
-              ),
-              {
-                kind: "number",
-                name: "p_priority",
-                label: "Priority",
-                hint: "Lower is tried first. 100 unless you say otherwise.",
-              },
-              {
-                kind: "number",
-                name: "p_max_quantity",
-                label: "Fill to at most",
-                hint: "Optional. Once the place holds this much, the next rule is used.",
-              },
-            ],
-            invalidates,
-          },
-          {
-            label: "Withdraw a storage rule",
-            permission: "inventory.adjust",
-            fn: "erp_remove_storage_rule",
-            fields: [pickRule()],
-            invalidates,
-          },
-        ]}
-      />
 
       <DataPanel<RuleRow>
         title={ui("Storage rules")}

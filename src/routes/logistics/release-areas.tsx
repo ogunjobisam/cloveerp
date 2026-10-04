@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import {
   ActionBar,
+  HeaderActions,
   pickDocumentType,
   pickFrom,
   pickItem,
@@ -105,6 +106,154 @@ function ReleaseAreas() {
         howItWorks={ui(
           "A wave allocates in detail against the area, what the area cannot cover raises directed replenishment rather than a shortage, and nothing prints until every line is covered.",
         )}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Loading bays"
+              note="An area is a scope, not a place on a map: a site, a location, the order type and the product classes it serves. A wave will not take a line the area does not serve."
+              actions={[
+                {
+                  label: "Add or change a loading bay",
+                  permission: "logistics.plan",
+                  fn: "erp_upsert_release_area",
+                  fields: [
+                    { kind: "site", name: "p_site_id", label: "Site", required: true },
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "LEE-DESPATCH",
+                      hint: "A short code for this loading bay.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Leeds despatch bay",
+                    },
+                    pickLocation("p_location_id", "Location"),
+                    {
+                      kind: "choice",
+                      name: "p_replenishment_mode",
+                      label: "Replenishment",
+                      required: true,
+                      choices: [
+                        { value: "pull", label: "Pull — move only what a wave is short" },
+                        { value: "push", label: "Push — top up to the maximum" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_channel_code",
+                      label: "Channel",
+                      placeholder: "WHOLESALE",
+                      hint: "A label for the people who work in this area. Nothing is matched against it: the area serves every channel.",
+                    },
+                    {
+                      ...pickDocumentType(undefined, "p_order_type_code", "Order type", false),
+                      hint: "Leave empty to serve every order type.",
+                    },
+                    pickItemClasses(
+                      "p_item_classes",
+                      "Product classes",
+                      "Tick every class this serves. None ticked serves any product.",
+                    ),
+                    {
+                      kind: "number",
+                      name: "p_min_quantity",
+                      label: "Minimum",
+                      hint: "The level the area is kept at. A replenishment raised for a wave never leaves it below this.",
+                    },
+                    { kind: "number", name: "p_max_quantity", label: "Maximum" },
+                    { kind: "number", name: "p_ageing_hours", label: "Ageing (hours)" },
+                    {
+                      kind: "choice",
+                      name: "p_gate_printing",
+                      label: "Gate printing on full allocation",
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ],
+                    },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Age untouched stock back to bulk",
+                  permission: "logistics.plan",
+                  fn: "erp_age_back_release_area",
+                  fields: [pickArea()],
+                  invalidates,
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Waves"
+              note="The wave is the unit of release: open it, put lines on it, allocate, then print."
+              actions={[
+                {
+                  label: "Open a wave",
+                  permission: "logistics.plan",
+                  fn: "erp_open_release_wave",
+                  fields: [
+                    pickArea(),
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      hint: "Left empty, one is generated.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_note",
+                      label: "Note",
+                      placeholder: "Friday afternoon run",
+                      hint: "Optional. Helps the floor recognise the wave.",
+                    },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Add a line to a wave",
+                  permission: "logistics.plan",
+                  fn: "erp_add_wave_line",
+                  fields: [
+                    pickWave(),
+                    pickItem(),
+                    { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+                    {
+                      kind: "select",
+                      name: "p_document_id",
+                      label: "Order this line is for",
+                      hint: "Optional. A loading bay set up for one order type only takes lines from an order of that type.",
+                      options: {
+                        fn: "erp_documents",
+                        args: { p_limit: 200, p_actionable: true },
+                        value: "document_id",
+                        label: ["document_number", "document_type", "party"],
+                      },
+                    },
+                  ],
+                  invalidates,
+                },
+                // Allocating again is the same press: the door takes the wave and
+                // nothing else, so a short wave is re-allocated from here. Printing
+                // is under Printing readiness below, beside what would stop it.
+                {
+                  label: "Allocate the wave",
+                  permission: "logistics.plan",
+                  fn: "erp_allocate_release_wave",
+                  fields: [pickWave()],
+                  invalidates,
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
       >
         {ui(
           "Stock in a loading bay is allocated stock: out of counting scope and out of reach of other demand.",
@@ -116,151 +265,6 @@ function ReleaseAreas() {
         title="Loading bays as a file"
         description="Sites and locations are named by code; the download doubles as the upload template."
         invalidates={["erp_release_areas", "erp_release_area_locations"]}
-      />
-
-      <ActionBar
-        title="Loading bays"
-        note="An area is a scope, not a place on a map: a site, a location, the order type and the product classes it serves. A wave will not take a line the area does not serve."
-        actions={[
-          {
-            label: "Add or change a loading bay",
-            permission: "logistics.plan",
-            fn: "erp_upsert_release_area",
-            fields: [
-              { kind: "site", name: "p_site_id", label: "Site", required: true },
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "LEE-DESPATCH",
-                hint: "A short code for this loading bay.",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Leeds despatch bay",
-              },
-              pickLocation("p_location_id", "Location"),
-              {
-                kind: "choice",
-                name: "p_replenishment_mode",
-                label: "Replenishment",
-                required: true,
-                choices: [
-                  { value: "pull", label: "Pull — move only what a wave is short" },
-                  { value: "push", label: "Push — top up to the maximum" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_channel_code",
-                label: "Channel",
-                placeholder: "WHOLESALE",
-                hint: "A label for the people who work in this area. Nothing is matched against it: the area serves every channel.",
-              },
-              {
-                ...pickDocumentType(undefined, "p_order_type_code", "Order type", false),
-                hint: "Leave empty to serve every order type.",
-              },
-              pickItemClasses(
-                "p_item_classes",
-                "Product classes",
-                "Tick every class this serves. None ticked serves any product.",
-              ),
-              {
-                kind: "number",
-                name: "p_min_quantity",
-                label: "Minimum",
-                hint: "The level the area is kept at. A replenishment raised for a wave never leaves it below this.",
-              },
-              { kind: "number", name: "p_max_quantity", label: "Maximum" },
-              { kind: "number", name: "p_ageing_hours", label: "Ageing (hours)" },
-              {
-                kind: "choice",
-                name: "p_gate_printing",
-                label: "Gate printing on full allocation",
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Yes" },
-                  { value: "false", label: "No" },
-                ],
-              },
-            ],
-            invalidates,
-          },
-          {
-            label: "Age untouched stock back to bulk",
-            permission: "logistics.plan",
-            fn: "erp_age_back_release_area",
-            fields: [pickArea()],
-            invalidates,
-          },
-        ]}
-      />
-
-      <ActionBar
-        title="Waves"
-        note="The wave is the unit of release: open it, put lines on it, allocate, then print."
-        actions={[
-          {
-            label: "Open a wave",
-            permission: "logistics.plan",
-            fn: "erp_open_release_wave",
-            fields: [
-              pickArea(),
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                hint: "Left empty, one is generated.",
-              },
-              {
-                kind: "text",
-                name: "p_note",
-                label: "Note",
-                placeholder: "Friday afternoon run",
-                hint: "Optional. Helps the floor recognise the wave.",
-              },
-            ],
-            invalidates,
-          },
-          {
-            label: "Add a line to a wave",
-            permission: "logistics.plan",
-            fn: "erp_add_wave_line",
-            fields: [
-              pickWave(),
-              pickItem(),
-              { kind: "number", name: "p_quantity", label: "Quantity", required: true },
-              {
-                kind: "select",
-                name: "p_document_id",
-                label: "Order this line is for",
-                hint: "Optional. A loading bay set up for one order type only takes lines from an order of that type.",
-                options: {
-                  fn: "erp_documents",
-                  args: { p_limit: 200, p_actionable: true },
-                  value: "document_id",
-                  label: ["document_number", "document_type", "party"],
-                },
-              },
-            ],
-            invalidates,
-          },
-          // Allocating again is the same press: the door takes the wave and
-          // nothing else, so a short wave is re-allocated from here. Printing
-          // is under Printing readiness below, beside what would stop it.
-          {
-            label: "Allocate the wave",
-            permission: "logistics.plan",
-            fn: "erp_allocate_release_wave",
-            fields: [pickWave()],
-            invalidates,
-          },
-        ]}
       />
 
       <DataPanel<Area>

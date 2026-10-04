@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { type Field } from "../../components/erp/action";
 import {
   ActionBar,
+  HeaderActions,
   codeField,
   pickCountry,
   pickCurrency,
@@ -25,8 +26,8 @@ import { siteAddressIsComplete, siteAddressLine } from "../../lib/site-address";
 
 /**
  * Whether administrators may approve anything here (20260914098000): on by
- * default, and switched on the form above. What an administrator's approval
- * did is on each document's page.
+ * default, and switched by a form under Actions. What an administrator's
+ * approval did is on each document's page.
  */
 function AdministratorApproval() {
   const { ui } = useT();
@@ -371,546 +372,787 @@ function Organisation() {
         howItWorks={ui(
           "Bands decide who approves by value; a named assignment overrides that for a person, a role or a whole department.",
         )}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Departments and membership"
+              note="Departments and membership. A person's primary department at capture is the one that routes their request."
+              actions={[
+                {
+                  label: "Create a company",
+                  description:
+                    "A further legal entity of this organisation, with its own currency, country, locales and fiscal year. Finance is installed for it separately.",
+                  permission: "administration.configure",
+                  fn: "erp_create_entity",
+                  fields: [
+                    codeField("p_code", "Code", "UK-TRADING", {
+                      fn: "erp_entities",
+                      value: "code",
+                      label: ["code", "name"],
+                    }),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Northwind Foods UK",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_legal_name",
+                      label: "Legal name",
+                      placeholder: "Northwind Foods (UK) Limited",
+                      hint: "The registered name, if it differs from the one used day to day.",
+                    },
+                    {
+                      ...pickCurrency("p_base_currency", "Currency"),
+                      hint: "The books are kept in this.",
+                    },
+                    pickCountry("p_country_code", "Country", true),
+                    // Optional, both: the door defaults each to en when left blank.
+                    pickLocale("p_reporting_locale", "Reporting locale", false),
+                    {
+                      ...pickLocale("p_document_locale", "Document locale", false),
+                      hint: "The language printed documents use, if not the reporting one.",
+                    },
+                    {
+                      // Sent as the text "3"; the door's parameter is an integer and
+                      // the call casts it on the way in, as it does every argument.
+                      kind: "choice",
+                      name: "p_fiscal_year_start_month",
+                      label: "Fiscal year starts in month",
+                      choices: MONTHS,
+                    },
+                    {
+                      ...pickFrom(
+                        "erp_entities",
+                        "code",
+                        ["code", "name"],
+                        "p_parent_code",
+                        "Parent company",
+                        undefined,
+                        false,
+                      ),
+                      hint: "For a subsidiary.",
+                    },
+                  ],
+                  invalidates: ["erp_entities"],
+                },
+                {
+                  label: "Set a company's invoice details",
+                  description:
+                    "The registration number, registered office and VAT number every invoice the company issues must carry. What is left empty keeps what is recorded; an office given replaces the one recorded.",
+                  permission: "administration.configure",
+                  fn: "erp_set_company_invoice_details",
+                  mapArgs: companyInvoiceDetailsArgs,
+                  fields: [
+                    {
+                      kind: "select",
+                      name: "p_entity_code",
+                      label: "Company",
+                      required: true,
+                      options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+                    },
+                    {
+                      kind: "text",
+                      name: "p_registration_number",
+                      label: "Company registration number",
+                      placeholder: "07123456",
+                    },
+                    {
+                      kind: "text",
+                      name: "office_line_1",
+                      label: "Registered office, first line",
+                      placeholder: "1 Ledger Way",
+                    },
+                    {
+                      kind: "text",
+                      name: "office_line_2",
+                      label: "Registered office, second line",
+                      placeholder: "Suite 4",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_office_locality",
+                      label: "Town",
+                      placeholder: "Leeds",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_office_postcode",
+                      label: "Postcode",
+                      placeholder: "LS1 1AA",
+                    },
+                    pickCountry("p_office_country_code", "Country", false),
+                    {
+                      kind: "text",
+                      name: "p_vat_number",
+                      label: "VAT number",
+                      placeholder: "GB123456789",
+                    },
+                    {
+                      kind: "date",
+                      name: "p_vat_registered_from",
+                      label: "VAT registered from",
+                      hint: "For a company not yet registered: the date its registration took effect. Left empty, today.",
+                    },
+                  ],
+                  invalidates: ["erp_entities"],
+                },
+                {
+                  label: "Add or amend a department",
+                  permission: "administration.configure",
+                  fn: "erp_upsert_department",
+                  fields: [
+                    codeField("p_code", "Code", "FIN", {
+                      fn: "erp_departments",
+                      value: "code",
+                      label: ["code", "name"],
+                    }),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Finance",
+                    },
+                    pickPrincipal("p_manager_user_id", "Manager"),
+                    pickDepartment("p_parent_department_id", "Parent department", false),
+                    {
+                      // A combo: the door stores the code unchecked, so a centre may
+                      // be named before finance has created it. The list behind it
+                      // is read under administration.configure as well as finance.read.
+                      kind: "combo",
+                      name: "p_default_cost_centre",
+                      label: "Default cost centre",
+                      placeholder: "CC-1000",
+                      hint: "Charged by default for spend this department approves.",
+                      options: { fn: "erp_cost_centres", value: "code", label: ["code", "name"] },
+                    },
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Assign someone to a department",
+                  permission: "administration.configure",
+                  fn: "erp_assign_department",
+                  fields: [
+                    pickPrincipal("p_app_user_id", "Person"),
+                    pickDepartment(),
+                    {
+                      kind: "choice",
+                      name: "p_is_primary",
+                      label: "Primary",
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Primary department" },
+                        { value: "false", label: "Secondary" },
+                      ],
+                    },
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                    { kind: "date", name: "p_valid_to", label: "Valid to" },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "End a membership",
+                  permission: "administration.configure",
+                  fn: "erp_end_department_membership",
+                  fields: [
+                    pickFrom(
+                      "erp_department_members",
+                      "membership_id",
+                      ["display_name", "department_code"],
+                      "p_membership_id",
+                      "Membership",
+                    ),
+                    { kind: "date", name: "p_valid_to", label: "Ends on" },
+                  ],
+                  invalidates,
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Approval bands and named approvers"
+              note="Value bands and named assignments. Resolution runs named assignment first, then the department's bands."
+              actions={[
+                {
+                  label: "Add or amend a band",
+                  permission: "administration.configure",
+                  fn: "erp_upsert_approval_band",
+                  fields: [
+                    pickDepartment(),
+                    {
+                      kind: "choice",
+                      name: "p_object_type",
+                      label: "Object type",
+                      required: true,
+                      choices: OBJECT_TYPES,
+                    },
+                    { kind: "number", name: "p_seq", label: "Band number", required: true },
+                    { kind: "money", name: "p_lower_bound_minor", label: "From", currency: "GBP" },
+                    {
+                      kind: "money",
+                      name: "p_upper_bound_minor",
+                      label: "Up to",
+                      currency: "GBP",
+                      hint: "Leave empty for the top band.",
+                    },
+                    pickPrincipal("p_approver_user_id", "Named approver", false),
+                    pickRoleCode(
+                      "p_approver_role_code",
+                      "Approver role",
+                      false,
+                      "Tried in the department first, then at company level.",
+                    ),
+                    {
+                      kind: "choice",
+                      name: "p_use_line_manager",
+                      label: "Fall back to the line manager",
+                      boolean: true,
+                      choices: [
+                        { value: "false", label: "No" },
+                        { value: "true", label: "Yes" },
+                      ],
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_is_parallel",
+                      label: "Approvers act",
+                      boolean: true,
+                      hint: "In parallel asks everybody the approver rule above can find, at the same time, and any one of them may approve. In sequence asks the first one it finds.",
+                      choices: [
+                        { value: "false", label: "In sequence" },
+                        { value: "true", label: "In parallel" },
+                      ],
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_rerun_lower_bands",
+                      label: "Lower bands re-run",
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Yes — lower approvers still act" },
+                        { value: "false", label: "No — the higher band replaces them" },
+                      ],
+                    },
+                    {
+                      kind: "number",
+                      name: "p_escalate_after_hours",
+                      label: "Escalate after (hours)",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_vacancy",
+                      label: "When nobody resolves",
+                      choices: [
+                        {
+                          value: "hold_and_raise",
+                          label: "Hold the request and raise an exception",
+                        },
+                        {
+                          value: "escalate_to_manager",
+                          label: "Escalate to the department manager",
+                        },
+                      ],
+                    },
+                    {
+                      kind: "number",
+                      name: "p_tolerance_pct",
+                      label: "Overshoot tolerance (%)",
+                      hint: "A request that passes the ceiling above by no more than this percentage is approved by this band rather than sent up to the one above it. Leave it empty and anything over the ceiling escalates.",
+                    },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Retire a band",
+                  permission: "administration.configure",
+                  fn: "erp_retire_approval_band",
+                  fields: [
+                    pickFrom(
+                      "erp_approval_bands",
+                      "band_id",
+                      ["department_code", "object_type", "seq"],
+                      "p_band_id",
+                      "Band",
+                    ),
+                  ],
+                  invalidates,
+                },
+                // One action per subject kind, because the subject picker cannot
+                // follow a kind chosen beside it. ActionBar keys by fn and label, so
+                // the three labels must differ.
+                {
+                  label: "Assign a named approver for a person",
+                  permission: "administration.configure",
+                  fn: "erp_assign_named_approver",
+                  fields: namedApproverFields(
+                    { value: "principal", label: "A person" },
+                    pickPrincipal("p_subject_id", "Person"),
+                  ),
+                  invalidates,
+                },
+                {
+                  label: "Assign a named approver for a department",
+                  permission: "administration.configure",
+                  fn: "erp_assign_named_approver",
+                  fields: namedApproverFields(
+                    { value: "department", label: "A department" },
+                    pickDepartment("p_subject_id", "Department"),
+                  ),
+                  invalidates,
+                },
+                {
+                  label: "Assign a named approver for a role",
+                  permission: "administration.configure",
+                  fn: "erp_assign_named_approver",
+                  fields: namedApproverFields(
+                    { value: "role", label: "A role" },
+                    pickFrom("erp_roles", "role_id", ["name"], "p_subject_id", "Role"),
+                  ),
+                  invalidates,
+                },
+                {
+                  label: "End a named assignment",
+                  permission: "administration.configure",
+                  fn: "erp_end_approver_assignment",
+                  fields: [
+                    pickFrom(
+                      "erp_approver_assignments",
+                      "assignment_id",
+                      ["subject_label", "object_type"],
+                      "p_assignment_id",
+                      "Assignment",
+                    ),
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Let administrators approve anything",
+                  description:
+                    "Whether a person holding Promote configuration may approve their own requests, journals and changes, and approve at once what is still waiting on others. Switch it off where every approval needs a second person. In a live organisation this raises a change, approved and promoted on the Configuration screen.",
+                  permission: "administration.configure",
+                  fn: "erp_set_administrator_approval",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_allowed",
+                      label: "Administrators may approve anything",
+                      required: true,
+                      boolean: true,
+                      choices: [
+                        { value: "true", label: "Allowed" },
+                        { value: "false", label: "Not allowed" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_reason",
+                      label: "Why it is changing",
+                      hint: "Kept with the change, so the next person knows why the organisation decided it.",
+                    },
+                  ],
+                  invalidates: ["erp_administrator_approval", "erp_change_sets"],
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Approval chains"
+              note="A chain is the order things are approved in. Bands and named approvers above say who; a chain says how many steps there are, which of them apply, and where each one looks. Composing one raises a change: promoted at once while the organisation is being set up, and left for a second administrator once it is live."
+              actions={[
+                {
+                  label: "Compose an approval chain",
+                  description:
+                    "The steps a request goes through before it may go ahead. A step names the role or the person who approves it, or asks for one of the three that read the organisation: the line manager of whoever raised it, the value bands of their department, or the approver named for them. This writes nothing directly — it raises a change, which the Configuration screen approves and promotes.",
+                  permission: "administration.configure",
+                  fn: "erp_propose_approval_chain",
+                  submitLabel: "Propose the chain",
+                  fields: [
+                    codeField("p_code", "Code", "purchase_order_value", {
+                      fn: "erp_approval_chains",
+                      value: "code",
+                      label: ["code", "name"],
+                    }),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Purchase order approval",
+                      hint: "What this chain is called on the approvals people see.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_object_type",
+                      label: "Approves",
+                      required: true,
+                      hint: "The kind of thing this chain is asked about.",
+                      choices: CHAIN_OBJECT_TYPES,
+                    },
+                    {
+                      kind: "select",
+                      name: "document_type",
+                      label: "Only documents of type",
+                      required: false,
+                      hint: "Leave empty and the chain is considered for every request of the kind above.",
+                      options: { fn: "erp_document_types", value: "code", label: ["code", "name"] },
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_value_field",
+                      label: "The figure a threshold reads",
+                      required: false,
+                      hint: "Set this where a step only applies above a value. Leave it empty for a chain that does not depend on how much something is worth.",
+                      choices: CHAIN_VALUE_FIELDS,
+                    },
+                    {
+                      kind: "rows",
+                      name: "p_steps",
+                      label: "Steps",
+                      addLabel: "Add a step",
+                      hint: "One row per step, in the order they are asked. Steps sharing a number are asked at the same time. Name a role or a person, or choose where to look — never both.",
+                      columns: [
+                        { name: "seq", label: "Order", kind: "number" },
+                        {
+                          name: "code",
+                          label: "Code",
+                          kind: "text",
+                          placeholder: "buying_manager",
+                        },
+                        {
+                          name: "name",
+                          label: "Step",
+                          kind: "text",
+                          placeholder: "Buying manager",
+                        },
+                        {
+                          name: "approver_source",
+                          label: "Where to look",
+                          kind: "select",
+                          options: {
+                            fn: "erp_approval_step_sources",
+                            value: "source",
+                            label: ["name"],
+                          },
+                        },
+                        {
+                          name: "role",
+                          label: "Or the role",
+                          kind: "select",
+                          options: { fn: "erp_roles", value: "code", label: ["name"] },
+                        },
+                        {
+                          name: "user",
+                          label: "Or the person",
+                          kind: "select",
+                          options: {
+                            fn: "erp_principals",
+                            value: "email",
+                            label: ["display_name"],
+                          },
+                        },
+                        { name: "min_approvals", label: "Approvals needed", kind: "number" },
+                        { name: "above", label: "Only above", kind: "money", currency: "GBP" },
+                        {
+                          name: "escalate_after_hours",
+                          label: "Escalate after (hours)",
+                          kind: "number",
+                        },
+                        {
+                          name: "escalate_to_role",
+                          label: "Escalate to",
+                          kind: "select",
+                          options: { fn: "erp_roles", value: "code", label: ["name"] },
+                        },
+                      ],
+                    },
+                    { kind: "number", name: "p_priority", label: "Priority" },
+                    {
+                      kind: "text",
+                      name: "p_note",
+                      label: "Why this chain exists",
+                      placeholder: "Agreed at the September board",
+                      hint: "Kept with the change, so the next person knows why the organisation decided it.",
+                    },
+                  ],
+                  // The door takes the condition the engine evaluates, not a
+                  // sentence, and the form cannot type one. So the two conditions an
+                  // organisation actually writes are composed here: the document type
+                  // the chain applies to, and the value above which a step fires.
+                  // Both are the shapes the module installers already use.
+                  mapArgs: (v, picked) => {
+                    const valueField = v["p_value_field"] ?? "";
+                    const documentType = v["document_type"] ?? "";
+                    const steps = (picked?.rows["p_steps"] ?? [])
+                      .map((row, i) => {
+                        const step: Record<string, unknown> = {
+                          seq: Number(row["seq"] ?? "") || i + 1,
+                        };
+                        for (const key of [
+                          "code",
+                          "name",
+                          "approver_source",
+                          "role",
+                          "user",
+                          "escalate_to_role",
+                        ] as const) {
+                          const raw = row[key] ?? "";
+                          if (raw !== "") step[key] = raw;
+                        }
+                        for (const key of ["min_approvals", "escalate_after_hours"] as const) {
+                          const raw = row[key] ?? "";
+                          if (raw !== "") step[key] = Number(raw);
+                        }
+                        const above = toMinor(row["above"] ?? "");
+                        if (above !== null)
+                          step["condition"] = {
+                            ">": [{ var: valueField === "" ? "total_minor" : valueField }, above],
+                          };
+                        return step;
+                      })
+                      // A row holding nothing but the order it was added in is a row
+                      // somebody started and abandoned, not a step.
+                      .filter((step) => Object.keys(step).length > 1);
+
+                    const args: Record<string, unknown> = {
+                      p_code: v["p_code"] ?? "",
+                      p_name: v["p_name"] ?? "",
+                      p_object_type: v["p_object_type"] ?? "",
+                      p_steps: steps,
+                    };
+                    if (valueField !== "") args["p_value_field"] = valueField;
+                    if ((v["p_priority"] ?? "") !== "")
+                      args["p_priority"] = Number(v["p_priority"]);
+                    if ((v["p_note"] ?? "") !== "") args["p_note"] = v["p_note"];
+                    if (documentType !== "")
+                      args["p_applies_when"] = { "==": [{ var: "document_type" }, documentType] };
+                    return args;
+                  },
+                  invalidates: ["erp_approval_chains", "erp_change_sets"],
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Cover while somebody is away"
+              note="Cover while somebody is away. A delegation keeps the approver of record and records who acted; a substitution replaces them outright."
+              actions={[
+                {
+                  label: "Delegate approvals",
+                  permission: "administration.configure",
+                  fn: "erp_delegate_approval",
+                  fields: [
+                    pickPrincipal("p_delegator_user_id", "Approver away"),
+                    pickPrincipal("p_delegate_user_id", "Covering for them"),
+                    {
+                      kind: "choice",
+                      name: "p_kind",
+                      label: "Kind of cover",
+                      choices: [
+                        {
+                          value: "delegation",
+                          label: "Delegation — the original stays the approver of record",
+                        },
+                        {
+                          value: "substitution",
+                          label: "Substitution — the delegate takes the decision as their own",
+                        },
+                      ],
+                    },
+                    { kind: "date", name: "p_valid_from", label: "From" },
+                    { kind: "date", name: "p_valid_to", label: "Until" },
+                    {
+                      kind: "choice",
+                      name: "p_object_type",
+                      label: "Only for",
+                      choices: OBJECT_TYPES,
+                      hint: "Leave empty to cover everything they approve.",
+                    },
+                    {
+                      kind: "money",
+                      name: "p_lower_bound_minor",
+                      label: "From value",
+                      currency: "GBP",
+                    },
+                    {
+                      kind: "money",
+                      name: "p_upper_bound_minor",
+                      label: "Up to value",
+                      currency: "GBP",
+                    },
+                    reason(),
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "End cover",
+                  permission: "administration.configure",
+                  fn: "erp_end_approval_delegation",
+                  fields: [
+                    pickFrom(
+                      "erp_approval_delegations",
+                      "delegation_id",
+                      ["delegator", "delegate"],
+                      "p_delegation_id",
+                      "Cover",
+                    ),
+                    reason(),
+                  ],
+                  invalidates,
+                },
+              ]}
+            />
+
+            {/* Sites come before departments here because a newly provisioned
+                organisation has none, and a document that needs a site cannot be
+                raised until one exists. */}
+            <ActionBar
+              title="Sites"
+              note="Sites — the places this organisation works from. Stock, receipts and despatches all happen at one."
+              actions={[
+                {
+                  label: "Add a site",
+                  permission: "administration.configure",
+                  fn: "erp_create_site",
+                  fields: [
+                    codeField("p_code", "Code", "LEE-WH", {
+                      fn: "erp_sites",
+                      value: "code",
+                      label: ["code", "name"],
+                    }),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Leeds warehouse",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_site_type",
+                      label: "Kind of site",
+                      required: true,
+                      choices: SITE_TYPES,
+                    },
+                    // Optional on purpose: erp.create_site() defaults it to the
+                    // organisation's first, and a new organisation has exactly one —
+                    // so insisting here is a question with a single possible answer
+                    // standing between somebody and their first site.
+                    pickFrom(
+                      "erp_entities",
+                      "entity_id",
+                      ["code", "name"],
+                      "p_entity_id",
+                      "Legal entity",
+                      undefined,
+                      false,
+                    ),
+                    pickCountry("p_country_code", "Country", false),
+                  ],
+                  // A new site is given its standard bays in the same call, so the
+                  // locations list is out of date the moment this returns. Leaving it
+                  // out left the screen saying "No locations yet — goods receipts
+                  // cannot be posted at this site" over four locations that existed.
+                  invalidates: ["erp_sites", "erp_locations", "erp_session"],
+                },
+                {
+                  // Where a carrier labels an outbound parcel from and delivers an
+                  // inbound one to (20261004965000). Whole or not at all.
+                  label: "Set a site's address",
+                  description:
+                    "The postal address carriers label parcels from and deliver to. A label cannot be bought for a site without one.",
+                  permission: "administration.configure",
+                  fn: "erp_set_site_address",
+                  fields: [
+                    pickSite(),
+                    {
+                      kind: "text",
+                      name: "p_line1",
+                      label: "First line",
+                      required: true,
+                      placeholder: "1 Dock Road",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_line2",
+                      label: "Second line",
+                      placeholder: "Unit 4",
+                      hint: "Optional.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_city",
+                      label: "Town",
+                      required: true,
+                      placeholder: "London",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_region",
+                      label: "County or state",
+                      placeholder: "Greater London",
+                      hint: "Optional, except where the country's carriers need one.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_postcode",
+                      label: "Postcode",
+                      required: true,
+                      placeholder: "E16 1AA",
+                    },
+                    pickCountry("p_country_code", "Country", true),
+                  ],
+                  invalidates: ["erp_sites", "erp_session"],
+                },
+              ]}
+            />
+
+            {/* A site with nowhere to put anything cannot take a receipt: posting an
+                inbound movement looks for an active receiving location. New sites are
+                given a standard set; this is how a further one is added. */}
+            <ActionBar
+              title="Locations"
+              note="Locations — the places within a site where stock actually stands."
+              actions={[
+                {
+                  label: "Add a location",
+                  permission: "administration.configure",
+                  fn: "erp_create_location",
+                  fields: [
+                    pickSite(),
+                    codeField("p_code", "Code", "MAIN"),
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      placeholder: "Main picking face",
+                      hint: "Optional. The code is what people scan.",
+                    },
+                    {
+                      kind: "choice",
+                      name: "p_location_type",
+                      label: "Kind of location",
+                      required: true,
+                      choices: LOCATION_TYPES,
+                    },
+                  ],
+                  invalidates: ["erp_locations"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
       >
         {ui("A department is one object: it routes an approval and it carries the posting.")}
       </PageHeader>
 
       <TenantAddressCard />
 
-      <ActionBar
-        title="Departments and membership"
-        note="Departments and membership. A person's primary department at capture is the one that routes their request."
-        actions={[
-          {
-            label: "Create a company",
-            description:
-              "A further legal entity of this organisation, with its own currency, country, locales and fiscal year. Finance is installed for it separately.",
-            permission: "administration.configure",
-            fn: "erp_create_entity",
-            fields: [
-              codeField("p_code", "Code", "UK-TRADING", {
-                fn: "erp_entities",
-                value: "code",
-                label: ["code", "name"],
-              }),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Northwind Foods UK",
-              },
-              {
-                kind: "text",
-                name: "p_legal_name",
-                label: "Legal name",
-                placeholder: "Northwind Foods (UK) Limited",
-                hint: "The registered name, if it differs from the one used day to day.",
-              },
-              {
-                ...pickCurrency("p_base_currency", "Currency"),
-                hint: "The books are kept in this.",
-              },
-              pickCountry("p_country_code", "Country", true),
-              // Optional, both: the door defaults each to en when left blank.
-              pickLocale("p_reporting_locale", "Reporting locale", false),
-              {
-                ...pickLocale("p_document_locale", "Document locale", false),
-                hint: "The language printed documents use, if not the reporting one.",
-              },
-              {
-                // Sent as the text "3"; the door's parameter is an integer and
-                // the call casts it on the way in, as it does every argument.
-                kind: "choice",
-                name: "p_fiscal_year_start_month",
-                label: "Fiscal year starts in month",
-                choices: MONTHS,
-              },
-              {
-                ...pickFrom(
-                  "erp_entities",
-                  "code",
-                  ["code", "name"],
-                  "p_parent_code",
-                  "Parent company",
-                  undefined,
-                  false,
-                ),
-                hint: "For a subsidiary.",
-              },
-            ],
-            invalidates: ["erp_entities"],
-          },
-          {
-            label: "Set a company's invoice details",
-            description:
-              "The registration number, registered office and VAT number every invoice the company issues must carry. What is left empty keeps what is recorded; an office given replaces the one recorded.",
-            permission: "administration.configure",
-            fn: "erp_set_company_invoice_details",
-            mapArgs: companyInvoiceDetailsArgs,
-            fields: [
-              {
-                kind: "select",
-                name: "p_entity_code",
-                label: "Company",
-                required: true,
-                options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
-              },
-              {
-                kind: "text",
-                name: "p_registration_number",
-                label: "Company registration number",
-                placeholder: "07123456",
-              },
-              {
-                kind: "text",
-                name: "office_line_1",
-                label: "Registered office, first line",
-                placeholder: "1 Ledger Way",
-              },
-              {
-                kind: "text",
-                name: "office_line_2",
-                label: "Registered office, second line",
-                placeholder: "Suite 4",
-              },
-              { kind: "text", name: "p_office_locality", label: "Town", placeholder: "Leeds" },
-              {
-                kind: "text",
-                name: "p_office_postcode",
-                label: "Postcode",
-                placeholder: "LS1 1AA",
-              },
-              pickCountry("p_office_country_code", "Country", false),
-              {
-                kind: "text",
-                name: "p_vat_number",
-                label: "VAT number",
-                placeholder: "GB123456789",
-              },
-              {
-                kind: "date",
-                name: "p_vat_registered_from",
-                label: "VAT registered from",
-                hint: "For a company not yet registered: the date its registration took effect. Left empty, today.",
-              },
-            ],
-            invalidates: ["erp_entities"],
-          },
-          {
-            label: "Add or amend a department",
-            permission: "administration.configure",
-            fn: "erp_upsert_department",
-            fields: [
-              codeField("p_code", "Code", "FIN", {
-                fn: "erp_departments",
-                value: "code",
-                label: ["code", "name"],
-              }),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Finance",
-              },
-              pickPrincipal("p_manager_user_id", "Manager"),
-              pickDepartment("p_parent_department_id", "Parent department", false),
-              {
-                // A combo: the door stores the code unchecked, so a centre may
-                // be named before finance has created it. The list behind it
-                // is read under administration.configure as well as finance.read.
-                kind: "combo",
-                name: "p_default_cost_centre",
-                label: "Default cost centre",
-                placeholder: "CC-1000",
-                hint: "Charged by default for spend this department approves.",
-                options: { fn: "erp_cost_centres", value: "code", label: ["code", "name"] },
-              },
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-            ],
-            invalidates,
-          },
-          {
-            label: "Assign someone to a department",
-            permission: "administration.configure",
-            fn: "erp_assign_department",
-            fields: [
-              pickPrincipal("p_app_user_id", "Person"),
-              pickDepartment(),
-              {
-                kind: "choice",
-                name: "p_is_primary",
-                label: "Primary",
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Primary department" },
-                  { value: "false", label: "Secondary" },
-                ],
-              },
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-              { kind: "date", name: "p_valid_to", label: "Valid to" },
-            ],
-            invalidates,
-          },
-          {
-            label: "End a membership",
-            permission: "administration.configure",
-            fn: "erp_end_department_membership",
-            fields: [
-              pickFrom(
-                "erp_department_members",
-                "membership_id",
-                ["display_name", "department_code"],
-                "p_membership_id",
-                "Membership",
-              ),
-              { kind: "date", name: "p_valid_to", label: "Ends on" },
-            ],
-            invalidates,
-          },
-        ]}
-      />
-
-      <ActionBar
-        title="Approval bands and named approvers"
-        note="Value bands and named assignments. Resolution runs named assignment first, then the department's bands."
-        actions={[
-          {
-            label: "Add or amend a band",
-            permission: "administration.configure",
-            fn: "erp_upsert_approval_band",
-            fields: [
-              pickDepartment(),
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Object type",
-                required: true,
-                choices: OBJECT_TYPES,
-              },
-              { kind: "number", name: "p_seq", label: "Band number", required: true },
-              { kind: "money", name: "p_lower_bound_minor", label: "From", currency: "GBP" },
-              {
-                kind: "money",
-                name: "p_upper_bound_minor",
-                label: "Up to",
-                currency: "GBP",
-                hint: "Leave empty for the top band.",
-              },
-              pickPrincipal("p_approver_user_id", "Named approver", false),
-              pickRoleCode(
-                "p_approver_role_code",
-                "Approver role",
-                false,
-                "Tried in the department first, then at company level.",
-              ),
-              {
-                kind: "choice",
-                name: "p_use_line_manager",
-                label: "Fall back to the line manager",
-                boolean: true,
-                choices: [
-                  { value: "false", label: "No" },
-                  { value: "true", label: "Yes" },
-                ],
-              },
-              {
-                kind: "choice",
-                name: "p_is_parallel",
-                label: "Approvers act",
-                boolean: true,
-                hint: "In parallel asks everybody the approver rule above can find, at the same time, and any one of them may approve. In sequence asks the first one it finds.",
-                choices: [
-                  { value: "false", label: "In sequence" },
-                  { value: "true", label: "In parallel" },
-                ],
-              },
-              {
-                kind: "choice",
-                name: "p_rerun_lower_bands",
-                label: "Lower bands re-run",
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Yes — lower approvers still act" },
-                  { value: "false", label: "No — the higher band replaces them" },
-                ],
-              },
-              {
-                kind: "number",
-                name: "p_escalate_after_hours",
-                label: "Escalate after (hours)",
-              },
-              {
-                kind: "choice",
-                name: "p_vacancy",
-                label: "When nobody resolves",
-                choices: [
-                  { value: "hold_and_raise", label: "Hold the request and raise an exception" },
-                  { value: "escalate_to_manager", label: "Escalate to the department manager" },
-                ],
-              },
-              {
-                kind: "number",
-                name: "p_tolerance_pct",
-                label: "Overshoot tolerance (%)",
-                hint: "A request that passes the ceiling above by no more than this percentage is approved by this band rather than sent up to the one above it. Leave it empty and anything over the ceiling escalates.",
-              },
-            ],
-            invalidates,
-          },
-          {
-            label: "Retire a band",
-            permission: "administration.configure",
-            fn: "erp_retire_approval_band",
-            fields: [
-              pickFrom(
-                "erp_approval_bands",
-                "band_id",
-                ["department_code", "object_type", "seq"],
-                "p_band_id",
-                "Band",
-              ),
-            ],
-            invalidates,
-          },
-          // One action per subject kind, because the subject picker cannot
-          // follow a kind chosen beside it. ActionBar keys by fn and label, so
-          // the three labels must differ.
-          {
-            label: "Assign a named approver for a person",
-            permission: "administration.configure",
-            fn: "erp_assign_named_approver",
-            fields: namedApproverFields(
-              { value: "principal", label: "A person" },
-              pickPrincipal("p_subject_id", "Person"),
-            ),
-            invalidates,
-          },
-          {
-            label: "Assign a named approver for a department",
-            permission: "administration.configure",
-            fn: "erp_assign_named_approver",
-            fields: namedApproverFields(
-              { value: "department", label: "A department" },
-              pickDepartment("p_subject_id", "Department"),
-            ),
-            invalidates,
-          },
-          {
-            label: "Assign a named approver for a role",
-            permission: "administration.configure",
-            fn: "erp_assign_named_approver",
-            fields: namedApproverFields(
-              { value: "role", label: "A role" },
-              pickFrom("erp_roles", "role_id", ["name"], "p_subject_id", "Role"),
-            ),
-            invalidates,
-          },
-          {
-            label: "End a named assignment",
-            permission: "administration.configure",
-            fn: "erp_end_approver_assignment",
-            fields: [
-              pickFrom(
-                "erp_approver_assignments",
-                "assignment_id",
-                ["subject_label", "object_type"],
-                "p_assignment_id",
-                "Assignment",
-              ),
-            ],
-            invalidates,
-          },
-          {
-            label: "Let administrators approve anything",
-            description:
-              "Whether a person holding Promote configuration may approve their own requests, journals and changes, and approve at once what is still waiting on others. Switch it off where every approval needs a second person. In a live organisation this raises a change, approved and promoted on the Configuration screen.",
-            permission: "administration.configure",
-            fn: "erp_set_administrator_approval",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_allowed",
-                label: "Administrators may approve anything",
-                required: true,
-                boolean: true,
-                choices: [
-                  { value: "true", label: "Allowed" },
-                  { value: "false", label: "Not allowed" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_reason",
-                label: "Why it is changing",
-                hint: "Kept with the change, so the next person knows why the organisation decided it.",
-              },
-            ],
-            invalidates: ["erp_administrator_approval", "erp_change_sets"],
-          },
-        ]}
-      />
-
       <AdministratorApproval />
-
-      <ActionBar
-        title="Approval chains"
-        note="A chain is the order things are approved in. Bands and named approvers above say who; a chain says how many steps there are, which of them apply, and where each one looks. Composing one raises a change: promoted at once while the organisation is being set up, and left for a second administrator once it is live."
-        actions={[
-          {
-            label: "Compose an approval chain",
-            description:
-              "The steps a request goes through before it may go ahead. A step names the role or the person who approves it, or asks for one of the three that read the organisation: the line manager of whoever raised it, the value bands of their department, or the approver named for them. This writes nothing directly — it raises a change, which the Configuration screen approves and promotes.",
-            permission: "administration.configure",
-            fn: "erp_propose_approval_chain",
-            submitLabel: "Propose the chain",
-            fields: [
-              codeField("p_code", "Code", "purchase_order_value", {
-                fn: "erp_approval_chains",
-                value: "code",
-                label: ["code", "name"],
-              }),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Purchase order approval",
-                hint: "What this chain is called on the approvals people see.",
-              },
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Approves",
-                required: true,
-                hint: "The kind of thing this chain is asked about.",
-                choices: CHAIN_OBJECT_TYPES,
-              },
-              {
-                kind: "select",
-                name: "document_type",
-                label: "Only documents of type",
-                required: false,
-                hint: "Leave empty and the chain is considered for every request of the kind above.",
-                options: { fn: "erp_document_types", value: "code", label: ["code", "name"] },
-              },
-              {
-                kind: "choice",
-                name: "p_value_field",
-                label: "The figure a threshold reads",
-                required: false,
-                hint: "Set this where a step only applies above a value. Leave it empty for a chain that does not depend on how much something is worth.",
-                choices: CHAIN_VALUE_FIELDS,
-              },
-              {
-                kind: "rows",
-                name: "p_steps",
-                label: "Steps",
-                addLabel: "Add a step",
-                hint: "One row per step, in the order they are asked. Steps sharing a number are asked at the same time. Name a role or a person, or choose where to look — never both.",
-                columns: [
-                  { name: "seq", label: "Order", kind: "number" },
-                  { name: "code", label: "Code", kind: "text", placeholder: "buying_manager" },
-                  { name: "name", label: "Step", kind: "text", placeholder: "Buying manager" },
-                  {
-                    name: "approver_source",
-                    label: "Where to look",
-                    kind: "select",
-                    options: {
-                      fn: "erp_approval_step_sources",
-                      value: "source",
-                      label: ["name"],
-                    },
-                  },
-                  {
-                    name: "role",
-                    label: "Or the role",
-                    kind: "select",
-                    options: { fn: "erp_roles", value: "code", label: ["name"] },
-                  },
-                  {
-                    name: "user",
-                    label: "Or the person",
-                    kind: "select",
-                    options: { fn: "erp_principals", value: "email", label: ["display_name"] },
-                  },
-                  { name: "min_approvals", label: "Approvals needed", kind: "number" },
-                  { name: "above", label: "Only above", kind: "money", currency: "GBP" },
-                  { name: "escalate_after_hours", label: "Escalate after (hours)", kind: "number" },
-                  {
-                    name: "escalate_to_role",
-                    label: "Escalate to",
-                    kind: "select",
-                    options: { fn: "erp_roles", value: "code", label: ["name"] },
-                  },
-                ],
-              },
-              { kind: "number", name: "p_priority", label: "Priority" },
-              {
-                kind: "text",
-                name: "p_note",
-                label: "Why this chain exists",
-                placeholder: "Agreed at the September board",
-                hint: "Kept with the change, so the next person knows why the organisation decided it.",
-              },
-            ],
-            // The door takes the condition the engine evaluates, not a
-            // sentence, and the form cannot type one. So the two conditions an
-            // organisation actually writes are composed here: the document type
-            // the chain applies to, and the value above which a step fires.
-            // Both are the shapes the module installers already use.
-            mapArgs: (v, picked) => {
-              const valueField = v["p_value_field"] ?? "";
-              const documentType = v["document_type"] ?? "";
-              const steps = (picked?.rows["p_steps"] ?? [])
-                .map((row, i) => {
-                  const step: Record<string, unknown> = {
-                    seq: Number(row["seq"] ?? "") || i + 1,
-                  };
-                  for (const key of [
-                    "code",
-                    "name",
-                    "approver_source",
-                    "role",
-                    "user",
-                    "escalate_to_role",
-                  ] as const) {
-                    const raw = row[key] ?? "";
-                    if (raw !== "") step[key] = raw;
-                  }
-                  for (const key of ["min_approvals", "escalate_after_hours"] as const) {
-                    const raw = row[key] ?? "";
-                    if (raw !== "") step[key] = Number(raw);
-                  }
-                  const above = toMinor(row["above"] ?? "");
-                  if (above !== null)
-                    step["condition"] = {
-                      ">": [{ var: valueField === "" ? "total_minor" : valueField }, above],
-                    };
-                  return step;
-                })
-                // A row holding nothing but the order it was added in is a row
-                // somebody started and abandoned, not a step.
-                .filter((step) => Object.keys(step).length > 1);
-
-              const args: Record<string, unknown> = {
-                p_code: v["p_code"] ?? "",
-                p_name: v["p_name"] ?? "",
-                p_object_type: v["p_object_type"] ?? "",
-                p_steps: steps,
-              };
-              if (valueField !== "") args["p_value_field"] = valueField;
-              if ((v["p_priority"] ?? "") !== "") args["p_priority"] = Number(v["p_priority"]);
-              if ((v["p_note"] ?? "") !== "") args["p_note"] = v["p_note"];
-              if (documentType !== "")
-                args["p_applies_when"] = { "==": [{ var: "document_type" }, documentType] };
-              return args;
-            },
-            invalidates: ["erp_approval_chains", "erp_change_sets"],
-          },
-        ]}
-      />
 
       <AutoPanel<Chain>
         title="Approval chains"
@@ -927,170 +1169,6 @@ function Organisation() {
           { header: "Steps", cell: "step_count", numeric: true },
           { header: "Who approves", cell: "approvers" },
           { header: "Waiting to be promoted", cell: "waiting_change" },
-        ]}
-      />
-
-      <ActionBar
-        title="Cover while somebody is away"
-        note="Cover while somebody is away. A delegation keeps the approver of record and records who acted; a substitution replaces them outright."
-        actions={[
-          {
-            label: "Delegate approvals",
-            permission: "administration.configure",
-            fn: "erp_delegate_approval",
-            fields: [
-              pickPrincipal("p_delegator_user_id", "Approver away"),
-              pickPrincipal("p_delegate_user_id", "Covering for them"),
-              {
-                kind: "choice",
-                name: "p_kind",
-                label: "Kind of cover",
-                choices: [
-                  {
-                    value: "delegation",
-                    label: "Delegation — the original stays the approver of record",
-                  },
-                  {
-                    value: "substitution",
-                    label: "Substitution — the delegate takes the decision as their own",
-                  },
-                ],
-              },
-              { kind: "date", name: "p_valid_from", label: "From" },
-              { kind: "date", name: "p_valid_to", label: "Until" },
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Only for",
-                choices: OBJECT_TYPES,
-                hint: "Leave empty to cover everything they approve.",
-              },
-              { kind: "money", name: "p_lower_bound_minor", label: "From value", currency: "GBP" },
-              { kind: "money", name: "p_upper_bound_minor", label: "Up to value", currency: "GBP" },
-              reason(),
-            ],
-            invalidates,
-          },
-          {
-            label: "End cover",
-            permission: "administration.configure",
-            fn: "erp_end_approval_delegation",
-            fields: [
-              pickFrom(
-                "erp_approval_delegations",
-                "delegation_id",
-                ["delegator", "delegate"],
-                "p_delegation_id",
-                "Cover",
-              ),
-              reason(),
-            ],
-            invalidates,
-          },
-        ]}
-      />
-
-      {/* Sites come before departments here because a newly provisioned
-          organisation has none, and a document that needs a site cannot be
-          raised until one exists. */}
-      <ActionBar
-        title="Sites"
-        note="Sites — the places this organisation works from. Stock, receipts and despatches all happen at one."
-        actions={[
-          {
-            label: "Add a site",
-            permission: "administration.configure",
-            fn: "erp_create_site",
-            fields: [
-              codeField("p_code", "Code", "LEE-WH", {
-                fn: "erp_sites",
-                value: "code",
-                label: ["code", "name"],
-              }),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Leeds warehouse",
-              },
-              {
-                kind: "choice",
-                name: "p_site_type",
-                label: "Kind of site",
-                required: true,
-                choices: SITE_TYPES,
-              },
-              // Optional on purpose: erp.create_site() defaults it to the
-              // organisation's first, and a new organisation has exactly one —
-              // so insisting here is a question with a single possible answer
-              // standing between somebody and their first site.
-              pickFrom(
-                "erp_entities",
-                "entity_id",
-                ["code", "name"],
-                "p_entity_id",
-                "Legal entity",
-                undefined,
-                false,
-              ),
-              pickCountry("p_country_code", "Country", false),
-            ],
-            // A new site is given its standard bays in the same call, so the
-            // locations list is out of date the moment this returns. Leaving it
-            // out left the screen saying "No locations yet — goods receipts
-            // cannot be posted at this site" over four locations that existed.
-            invalidates: ["erp_sites", "erp_locations", "erp_session"],
-          },
-          {
-            // Where a carrier labels an outbound parcel from and delivers an
-            // inbound one to (20261004965000). Whole or not at all.
-            label: "Set a site's address",
-            description:
-              "The postal address carriers label parcels from and deliver to. A label cannot be bought for a site without one.",
-            permission: "administration.configure",
-            fn: "erp_set_site_address",
-            fields: [
-              pickSite(),
-              {
-                kind: "text",
-                name: "p_line1",
-                label: "First line",
-                required: true,
-                placeholder: "1 Dock Road",
-              },
-              {
-                kind: "text",
-                name: "p_line2",
-                label: "Second line",
-                placeholder: "Unit 4",
-                hint: "Optional.",
-              },
-              {
-                kind: "text",
-                name: "p_city",
-                label: "Town",
-                required: true,
-                placeholder: "London",
-              },
-              {
-                kind: "text",
-                name: "p_region",
-                label: "County or state",
-                placeholder: "Greater London",
-                hint: "Optional, except where the country's carriers need one.",
-              },
-              {
-                kind: "text",
-                name: "p_postcode",
-                label: "Postcode",
-                required: true,
-                placeholder: "E16 1AA",
-              },
-              pickCountry("p_country_code", "Country", true),
-            ],
-            invalidates: ["erp_sites", "erp_session"],
-          },
         ]}
       />
 
@@ -1137,40 +1215,6 @@ function Organisation() {
           </Table>
         )}
       </DataPanel>
-
-      {/* A site with nowhere to put anything cannot take a receipt: posting an
-          inbound movement looks for an active receiving location. New sites are
-          given a standard set; this is how a further one is added. */}
-      <ActionBar
-        title="Locations"
-        note="Locations — the places within a site where stock actually stands."
-        actions={[
-          {
-            label: "Add a location",
-            permission: "administration.configure",
-            fn: "erp_create_location",
-            fields: [
-              pickSite(),
-              codeField("p_code", "Code", "MAIN"),
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                placeholder: "Main picking face",
-                hint: "Optional. The code is what people scan.",
-              },
-              {
-                kind: "choice",
-                name: "p_location_type",
-                label: "Kind of location",
-                required: true,
-                choices: LOCATION_TYPES,
-              },
-            ],
-            invalidates: ["erp_locations"],
-          },
-        ]}
-      />
 
       <DataPanel<LocationRow>
         title={ui("Locations")}

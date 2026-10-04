@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { GoTo, type Field } from "../../components/erp/action";
-import { ActionBar, pickFrom, pickItem, reason } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  HeaderActions,
+  pickFrom,
+  pickItem,
+  reason,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
@@ -174,247 +180,250 @@ function AccountDetermination() {
         howItWorks={ui(
           "Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
         )}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Posting classes"
+              note="The vocabulary. Keep it short — a class exists because two things post differently, not because they are different things."
+              actions={[
+                {
+                  label: "Add or amend an accounting code",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_posting_class",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_kind",
+                      label: "Applies to",
+                      required: true,
+                      choices: [
+                        { value: "item", label: "Products" },
+                        { value: "party", label: "Business partners" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "ZERO-RATED",
+                      hint: "A short code for this posting class.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Zero-rated food",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_description",
+                      label: "What posts differently",
+                      placeholder: "Sales post to the zero-rated income account",
+                    },
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Retire an accounting code",
+                  permission: "finance.configure",
+                  fn: "erp_retire_posting_class",
+                  fields: [
+                    pickFrom(
+                      "erp_posting_classes",
+                      "posting_class_id",
+                      ["kind", "code", "name"],
+                      "p_posting_class_id",
+                      "Accounting code",
+                    ),
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Set a product's accounting code",
+                  permission: "finance.configure",
+                  fn: "erp_set_item_posting_class",
+                  fields: [
+                    pickItem(),
+                    {
+                      ...pickClass("item", "p_posting_class_id", "Accounting code"),
+                      required: true,
+                    },
+                    reason(),
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Set a partner's accounting code",
+                  permission: "finance.configure",
+                  fn: "erp_set_party_posting_class",
+                  fields: [
+                    pickAnyParty(),
+                    {
+                      ...pickClass("party", "p_posting_class_id", "Accounting code"),
+                      required: true,
+                    },
+                    reason(),
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                  ],
+                  invalidates,
+                },
+              ]}
+            />
+
+            <ActionBar
+              title="Determination rules"
+              note="The matrix. Leave a key field empty and the rule applies to anything; the narrowest matching rule wins."
+              actions={[
+                {
+                  label: "Add or amend a determination rule",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_account_determination",
+                  fields: [
+                    {
+                      kind: "choice",
+                      name: "p_transaction_type",
+                      label: "Transaction type",
+                      required: true,
+                      choices: TRANSACTION_TYPES,
+                    },
+                    pickAccount(),
+                    pickClass("item", "p_item_class_id", "Product posting class"),
+                    pickClass("party", "p_party_class_id", "Partner posting class"),
+                    pickEntity(),
+                    {
+                      kind: "combo",
+                      name: "p_reason_code",
+                      label: "Reason code",
+                      hint: "Leave empty unless one reason posts differently.",
+                      options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
+                    },
+                    {
+                      kind: "select",
+                      name: "p_legislation_pack_code",
+                      label: "Legislation pack",
+                      required: false,
+                      hint: "Leave empty unless one country posts differently.",
+                      options: {
+                        fn: "erp_legislation_packs",
+                        value: "code",
+                        label: ["code", "jurisdiction"],
+                      },
+                    },
+                    // Typed JSON was sent as a string, and the table's check that
+                    // dimensions is an object refused every non-empty entry. A row
+                    // per dimension, both halves chosen from their registers.
+                    {
+                      kind: "rows",
+                      name: "p_dimensions",
+                      label: "Dimensions",
+                      addLabel: "Add a dimension",
+                      hint: "One row per dimension: the dimension and the value a posting under this rule is stamped with. The account and its analysis come from one rule.",
+                      columns: [
+                        {
+                          name: "dimension",
+                          label: "Dimension",
+                          kind: "select",
+                          options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
+                        },
+                        {
+                          name: "value",
+                          label: "Value",
+                          kind: "select",
+                          options: {
+                            fn: "erp_dimension_values",
+                            value: "code",
+                            label: ["dimension", "code", "name"],
+                          },
+                        },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_note",
+                      label: "Why this rule exists",
+                      placeholder: "Agreed with the auditors, March 2026",
+                    },
+                    { kind: "date", name: "p_valid_from", label: "Valid from" },
+                  ],
+                  // mapArgs replaces buildArgs, so an untouched field's "" is
+                  // dropped here rather than sent. No rows leaves p_dimensions out,
+                  // which on an amendment keeps what the rule already carries.
+                  mapArgs: (v, picked) => {
+                    const entries = (picked?.rows["p_dimensions"] ?? [])
+                      .filter((row) => row["dimension"] && row["value"])
+                      .map((row) => [row["dimension"], row["value"]]);
+                    return {
+                      ...Object.fromEntries(Object.entries(v).filter(([, value]) => value !== "")),
+                      ...(entries.length > 0 ? { p_dimensions: Object.fromEntries(entries) } : {}),
+                    };
+                  },
+                  invalidates,
+                },
+                {
+                  label: "Retire a determination rule",
+                  permission: "finance.configure",
+                  fn: "erp_retire_account_determination",
+                  fields: [
+                    pickFrom(
+                      "erp_account_determination_rules",
+                      "rule_id",
+                      ["transaction_type", "account_code"],
+                      "p_rule_id",
+                      "Rule",
+                    ),
+                  ],
+                  invalidates,
+                },
+                {
+                  label: "Record a deliberate override",
+                  permission: "finance.post",
+                  fn: "erp_override_posting_account",
+                  fields: [
+                    // No schema constraint pins this; the two kinds an override can
+                    // attach to are the UI's contract.
+                    {
+                      kind: "choice",
+                      name: "p_object_type",
+                      label: "Object type",
+                      required: true,
+                      choices: [
+                        { value: "document", label: "Document" },
+                        { value: "journal", label: "Journal" },
+                      ],
+                    },
+                    {
+                      kind: "text",
+                      name: "p_object_id",
+                      label: "Object identifier",
+                      required: true,
+                      placeholder: "0f9c1a2e-…",
+                      hint: "The id of that record. Copy it from the record itself.",
+                    },
+                    pickAccount(),
+                    {
+                      kind: "text",
+                      name: "p_line_ref",
+                      label: "Line reference",
+                      placeholder: "1",
+                      hint: "Optional. The line number this override applies to.",
+                    },
+                    { ...reason(), required: true },
+                  ],
+                  invalidates,
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
       >
         {ui(
           "A posting class is what accounting cares about; the product is what operations cares about.",
         )}
       </PageHeader>
-
-      <ActionBar
-        title="Posting classes"
-        note="The vocabulary. Keep it short — a class exists because two things post differently, not because they are different things."
-        actions={[
-          {
-            label: "Add or amend an accounting code",
-            permission: "finance.configure",
-            fn: "erp_upsert_posting_class",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_kind",
-                label: "Applies to",
-                required: true,
-                choices: [
-                  { value: "item", label: "Products" },
-                  { value: "party", label: "Business partners" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "ZERO-RATED",
-                hint: "A short code for this posting class.",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Zero-rated food",
-              },
-              {
-                kind: "text",
-                name: "p_description",
-                label: "What posts differently",
-                placeholder: "Sales post to the zero-rated income account",
-              },
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-            ],
-            invalidates,
-          },
-          {
-            label: "Retire an accounting code",
-            permission: "finance.configure",
-            fn: "erp_retire_posting_class",
-            fields: [
-              pickFrom(
-                "erp_posting_classes",
-                "posting_class_id",
-                ["kind", "code", "name"],
-                "p_posting_class_id",
-                "Accounting code",
-              ),
-            ],
-            invalidates,
-          },
-          {
-            label: "Set a product's accounting code",
-            permission: "finance.configure",
-            fn: "erp_set_item_posting_class",
-            fields: [
-              pickItem(),
-              {
-                ...pickClass("item", "p_posting_class_id", "Accounting code"),
-                required: true,
-              },
-              reason(),
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-            ],
-            invalidates,
-          },
-          {
-            label: "Set a partner's accounting code",
-            permission: "finance.configure",
-            fn: "erp_set_party_posting_class",
-            fields: [
-              pickAnyParty(),
-              {
-                ...pickClass("party", "p_posting_class_id", "Accounting code"),
-                required: true,
-              },
-              reason(),
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-            ],
-            invalidates,
-          },
-        ]}
-      />
-
-      <ActionBar
-        title="Determination rules"
-        note="The matrix. Leave a key field empty and the rule applies to anything; the narrowest matching rule wins."
-        actions={[
-          {
-            label: "Add or amend a determination rule",
-            permission: "finance.configure",
-            fn: "erp_upsert_account_determination",
-            fields: [
-              {
-                kind: "choice",
-                name: "p_transaction_type",
-                label: "Transaction type",
-                required: true,
-                choices: TRANSACTION_TYPES,
-              },
-              pickAccount(),
-              pickClass("item", "p_item_class_id", "Product posting class"),
-              pickClass("party", "p_party_class_id", "Partner posting class"),
-              pickEntity(),
-              {
-                kind: "combo",
-                name: "p_reason_code",
-                label: "Reason code",
-                hint: "Leave empty unless one reason posts differently.",
-                options: { fn: "erp_reason_codes", value: "code", label: ["code", "name"] },
-              },
-              {
-                kind: "select",
-                name: "p_legislation_pack_code",
-                label: "Legislation pack",
-                required: false,
-                hint: "Leave empty unless one country posts differently.",
-                options: {
-                  fn: "erp_legislation_packs",
-                  value: "code",
-                  label: ["code", "jurisdiction"],
-                },
-              },
-              // Typed JSON was sent as a string, and the table's check that
-              // dimensions is an object refused every non-empty entry. A row
-              // per dimension, both halves chosen from their registers.
-              {
-                kind: "rows",
-                name: "p_dimensions",
-                label: "Dimensions",
-                addLabel: "Add a dimension",
-                hint: "One row per dimension: the dimension and the value a posting under this rule is stamped with. The account and its analysis come from one rule.",
-                columns: [
-                  {
-                    name: "dimension",
-                    label: "Dimension",
-                    kind: "select",
-                    options: { fn: "erp_dimensions", value: "code", label: ["code", "name"] },
-                  },
-                  {
-                    name: "value",
-                    label: "Value",
-                    kind: "select",
-                    options: {
-                      fn: "erp_dimension_values",
-                      value: "code",
-                      label: ["dimension", "code", "name"],
-                    },
-                  },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_note",
-                label: "Why this rule exists",
-                placeholder: "Agreed with the auditors, March 2026",
-              },
-              { kind: "date", name: "p_valid_from", label: "Valid from" },
-            ],
-            // mapArgs replaces buildArgs, so an untouched field's "" is
-            // dropped here rather than sent. No rows leaves p_dimensions out,
-            // which on an amendment keeps what the rule already carries.
-            mapArgs: (v, picked) => {
-              const entries = (picked?.rows["p_dimensions"] ?? [])
-                .filter((row) => row["dimension"] && row["value"])
-                .map((row) => [row["dimension"], row["value"]]);
-              return {
-                ...Object.fromEntries(Object.entries(v).filter(([, value]) => value !== "")),
-                ...(entries.length > 0 ? { p_dimensions: Object.fromEntries(entries) } : {}),
-              };
-            },
-            invalidates,
-          },
-          {
-            label: "Retire a determination rule",
-            permission: "finance.configure",
-            fn: "erp_retire_account_determination",
-            fields: [
-              pickFrom(
-                "erp_account_determination_rules",
-                "rule_id",
-                ["transaction_type", "account_code"],
-                "p_rule_id",
-                "Rule",
-              ),
-            ],
-            invalidates,
-          },
-          {
-            label: "Record a deliberate override",
-            permission: "finance.post",
-            fn: "erp_override_posting_account",
-            fields: [
-              // No schema constraint pins this; the two kinds an override can
-              // attach to are the UI's contract.
-              {
-                kind: "choice",
-                name: "p_object_type",
-                label: "Object type",
-                required: true,
-                choices: [
-                  { value: "document", label: "Document" },
-                  { value: "journal", label: "Journal" },
-                ],
-              },
-              {
-                kind: "text",
-                name: "p_object_id",
-                label: "Object identifier",
-                required: true,
-                placeholder: "0f9c1a2e-…",
-                hint: "The id of that record. Copy it from the record itself.",
-              },
-              pickAccount(),
-              {
-                kind: "text",
-                name: "p_line_ref",
-                label: "Line reference",
-                placeholder: "1",
-                hint: "Optional. The line number this override applies to.",
-              },
-              { ...reason(), required: true },
-            ],
-            invalidates,
-          },
-        ]}
-      />
 
       <DataPanel<PostingClass>
         title={ui("Posting classes")}

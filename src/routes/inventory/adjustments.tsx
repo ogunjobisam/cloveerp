@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickDocument } from "../../components/erp/actions-bar";
+import { ActionButtons, pickDocument } from "../../components/erp/actions-bar";
 import { DecisionMoves } from "../../components/erp/decision-moves";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -73,31 +73,30 @@ function StockAdjustments() {
         howItWorks={ui(
           "An adjustment carries the date the count was taken and the reason it changed, and over the organisation's threshold it waits for an approval before anything is written. Its cost is counted on the day the count was taken, not the day it was typed in.",
         )}
+        actions={
+          <ActionButtons
+            actions={[
+              RAISE_STOCK_ADJUSTMENT,
+              {
+                label: "Confirm a stock adjustment",
+                title: "Write the count into the books",
+                description:
+                  "Moves the stock and posts the cost to the stock adjustments account, both dated the day the count was taken. What the stock is worth is taken from the books as they stand now: an adjustment dated in the past does not change what earlier despatches were valued at, and no ERP can, because what a despatch took out of stock was recorded once and the layers are gone.",
+                permission: "inventory.adjust",
+                fn: "erp_post_stock_adjustment",
+                fields: [
+                  pickDocument("stock_adjustment", "p_document_id", "Stock adjustment", true, {
+                    transition: "post",
+                  }),
+                ],
+                invalidates,
+              },
+            ]}
+          />
+        }
       >
         {ui("Making the system agree with the shelf.")}
       </PageHeader>
-
-      <ActionBar
-        title="Raise and post an adjustment"
-        note="An adjustment is posted as it is raised unless it is worth more than the organisation's threshold, or gives a reason set up to need approval once a threshold is set: then it waits for somebody else to approve it, and is posted as they do. Dating one before today needs the permission to post to the ledger as well, and a closed period refuses it outright."
-        actions={[
-          RAISE_STOCK_ADJUSTMENT,
-          {
-            label: "Confirm a stock adjustment",
-            title: "Write the count into the books",
-            description:
-              "Moves the stock and posts the cost to the stock adjustments account, both dated the day the count was taken. What the stock is worth is taken from the books as they stand now: an adjustment dated in the past does not change what earlier despatches were valued at, and no ERP can, because what a despatch took out of stock was recorded once and the layers are gone.",
-            permission: "inventory.adjust",
-            fn: "erp_post_stock_adjustment",
-            fields: [
-              pickDocument("stock_adjustment", "p_document_id", "Stock adjustment", true, {
-                transition: "post",
-              }),
-            ],
-            invalidates,
-          },
-        ]}
-      />
 
       <DataPanel<AdjustmentRow>
         title={ui("Stock adjustments")}

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar } from "../../components/erp/actions-bar";
+import { ActionBar, HeaderActions } from "../../components/erp/actions-bar";
 import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -46,68 +46,73 @@ function CostCentres() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={t("nav.finance_cost_centres", "Cost centres")}>
+      <PageHeader
+        title={t("nav.finance_cost_centres", "Cost centres")}
+        actions={
+          <HeaderActions>
+            <ActionBar
+              title="Maintain cost centres"
+              note="A code is short and permanent — LEE-WH, ADMIN, SALES. Retiring a cost centre sets it inactive; the postings that already carry it keep it."
+              actions={[
+                {
+                  label: "Add or amend a cost centre",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_cost_centre",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "LEE-WH",
+                      hint: "Short, and the same one the site or department uses where it maps to one.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Leeds warehouse",
+                    },
+                    {
+                      kind: "select",
+                      name: "p_parent_code",
+                      label: "Groups under",
+                      options: { fn: "erp_cost_centres", value: "code", label: ["code", "name"] },
+                      hint: "Optional. Use it to roll several cost centres into one heading.",
+                    },
+                    { kind: "date", name: "p_valid_from", label: "In use from" },
+                    { kind: "date", name: "p_valid_to", label: "In use until" },
+                    {
+                      kind: "choice",
+                      name: "p_status",
+                      label: "Status",
+                      required: true,
+                      choices: [
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Retired" },
+                      ],
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_code: v["p_code"],
+                    p_name: v["p_name"],
+                    p_parent_code: v["p_parent_code"] || null,
+                    p_valid_from: v["p_valid_from"] || null,
+                    p_valid_to: v["p_valid_to"] || null,
+                    p_status: v["p_status"] ?? "active",
+                  }),
+                  invalidates: ["erp_cost_centres", "erp_dimension_values"],
+                },
+              ]}
+            />
+          </HeaderActions>
+        }
+      >
         Every journal line is stamped with a cost centre derived from the document: its own cost
         centre, then its department, then its site. Add the ones this organisation reports on here;
         the profit and loss and the balance sheet can then be read for one of them alone.
       </PageHeader>
-
-      <ActionBar
-        title="Maintain cost centres"
-        note="A code is short and permanent — LEE-WH, ADMIN, SALES. Retiring a cost centre sets it inactive; the postings that already carry it keep it."
-        actions={[
-          {
-            label: "Add or amend a cost centre",
-            permission: "finance.configure",
-            fn: "erp_upsert_cost_centre",
-            fields: [
-              {
-                kind: "text",
-                name: "p_code",
-                label: "Code",
-                required: true,
-                placeholder: "LEE-WH",
-                hint: "Short, and the same one the site or department uses where it maps to one.",
-              },
-              {
-                kind: "text",
-                name: "p_name",
-                label: "Name",
-                required: true,
-                placeholder: "Leeds warehouse",
-              },
-              {
-                kind: "select",
-                name: "p_parent_code",
-                label: "Groups under",
-                options: { fn: "erp_cost_centres", value: "code", label: ["code", "name"] },
-                hint: "Optional. Use it to roll several cost centres into one heading.",
-              },
-              { kind: "date", name: "p_valid_from", label: "In use from" },
-              { kind: "date", name: "p_valid_to", label: "In use until" },
-              {
-                kind: "choice",
-                name: "p_status",
-                label: "Status",
-                required: true,
-                choices: [
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Retired" },
-                ],
-              },
-            ],
-            mapArgs: (v) => ({
-              p_code: v["p_code"],
-              p_name: v["p_name"],
-              p_parent_code: v["p_parent_code"] || null,
-              p_valid_from: v["p_valid_from"] || null,
-              p_valid_to: v["p_valid_to"] || null,
-              p_status: v["p_status"] ?? "active",
-            }),
-            invalidates: ["erp_cost_centres", "erp_dimension_values"],
-          },
-        ]}
-      />
 
       <AutoPanel
         title="Cost centres"
