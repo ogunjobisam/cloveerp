@@ -63,18 +63,26 @@ export function DataPanel<T>({
   // this is simply somebody else's panel.
   const refused = error instanceof ErpError && error.isPermissionDenied;
 
+  // Read, and nothing came back. An empty panel used to print its description,
+  // a rule, and then an empty sentence that mostly said the description again.
+  // It is now one block: the title, the empty sentence and the way to fix it.
+  // Loading, a refusal and a fault are none of them empty, and keep the header.
+  const isEmpty = !isPending && !error && (!data || data.length === 0);
+
   return (
     // min-w-0 so a wide table inside cannot stretch this section past the
     // column it sits in; the table scrolls itself instead.
     <section className="min-w-0 rounded-xl border border-border bg-card">
-      <header className="border-b border-border px-4 py-4 sm:px-5">
+      <header
+        className={isEmpty ? "px-4 pt-4 sm:px-5" : "border-b border-border px-4 py-4 sm:px-5"}
+      >
         <h2 className="text-sm font-semibold">{title}</h2>
-        {description ? (
+        {description && !isEmpty ? (
           <Prose className="mt-0.5 text-xs text-muted-foreground">{description}</Prose>
         ) : null}
       </header>
 
-      <div className="px-4 py-4 sm:px-5">
+      <div className={isEmpty ? "px-4 pb-4 pt-2 sm:px-5" : "px-4 py-4 sm:px-5"}>
         {isPending ? (
           // A slow read says what it is doing in words; anything else shows the
           // shape of what is coming, the same as every other panel.

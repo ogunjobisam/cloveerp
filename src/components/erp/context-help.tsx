@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { CircleHelp } from "lucide-react";
 import { useContext, useState } from "react";
 
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { friendlyError } from "@/lib/errors";
 
 import { callErp } from "../../lib/erp";
@@ -25,8 +25,8 @@ import { HelpContext, type ScreenDetail } from "./page-extras";
  * home screen have a topic, and the build fails when one is missing.
  *
  * An organisation adds its own note beside the product's through the resource
- * layer (help.local.<screen>), which is why the sheet shows two voices and
- * labels them.
+ * layer (help.local.<screen>). Where it has, the sheet shows the two voices and
+ * labels the second; where it has not, the sheet says nothing about it.
  */
 
 type HelpTopic = {
@@ -77,21 +77,6 @@ function helpPathFor(pathname: string): string {
 }
 
 /**
- * What the screen is called, the way the menu calls it.
- *
- * The sheet said "The product's guidance for /procurement": the route, in a
- * typewriter face, to somebody who reached the screen by pressing a tile
- * called Purchasing.
- */
-function useScreenName(path: string): string {
-  const { t, ui } = useT();
-  if (path === "/") return ui("Home");
-  if (path === "/settings") return t("nav.settings", "Settings");
-  const tile = allTiles().find((x) => x.path === path);
-  return tile ? t(tile.titleKey, tile.title) : ui("this screen");
-}
-
-/**
  * The help icon. Rendered in the phone header and the desk header, so it only
  * opens the sheet; the sheet itself is ContextHelpSheet, once, in the shell.
  */
@@ -136,10 +121,9 @@ function HelpSheet({
   setOpen: (open: boolean) => void;
   detail: ScreenDetail | null;
 }) {
-  const { ui } = useT();
+  const { t, ui } = useT();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const path = helpPathFor(pathname);
-  const screen = useScreenName(path);
 
   const topic = useQuery({
     queryKey: ["erp_help_topic", { p_screen_path: path }],
@@ -150,18 +134,16 @@ function HelpSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={setOpen}>
+        {/* No description: the title names the screen, and a sentence about
+            where guidance comes from, read on every open, was not guidance. */}
         <SheetContent
           side="right"
+          aria-describedby={undefined}
           className="flex w-[90vw] max-w-md flex-col gap-4 overflow-y-auto"
         >
           <SheetTitle className="text-base">
             {topic.data?.title ?? "Help for this screen"}
           </SheetTitle>
-          <SheetDescription className="text-xs text-muted-foreground">
-            {ui(
-              "The product's guidance for {screen}. The same for every organisation; a note of your own sits beneath it.",
-            ).replace("{screen}", screen)}
-          </SheetDescription>
 
           {detail && detail.paragraphs.length > 0 ? (
             <section className="rounded-lg border border-border p-3">
@@ -228,13 +210,7 @@ function HelpSheet({
                   </h3>
                   <p className="mt-1 text-sm">{topic.data.local_note}</p>
                 </section>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {ui(
-                    "Your organisation has not added a note for this screen. An administrator can add one under Terminology.",
-                  )}
-                </p>
-              )}
+              ) : null}
 
               {topic.data.actions.length > 0 ? (
                 <section>
@@ -255,20 +231,13 @@ function HelpSheet({
                 </section>
               ) : null}
 
+              {/* One way on, and one anybody can open: the questions and
+                  every guide. It used to send every reader to a screen only
+                  an administrator may open. */}
               <p className="text-xs text-muted-foreground">
-                Your first-run guidance is on{" "}
-                <Link to="/" className="underline" onClick={() => setOpen(false)}>
-                  Home
+                <Link to="/help" className="underline" onClick={() => setOpen(false)}>
+                  {t("nav.help", "Help and guides")}
                 </Link>
-                ; training scenarios and every topic are under{" "}
-                <Link
-                  to="/administration/adoption"
-                  className="underline"
-                  onClick={() => setOpen(false)}
-                >
-                  Guidance and adoption
-                </Link>
-                .
               </p>
             </div>
           )}

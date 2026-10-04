@@ -759,7 +759,6 @@ export const INVENTORY: ModuleDef = {
   flow: {
     code: "stock",
     title: "Stock, step by step",
-    note: "Goods arrive, are put away, are counted, and are corrected or passed on.",
     stages: [
       {
         label: "Goods in",
@@ -889,6 +888,7 @@ export const INVENTORY: ModuleDef = {
   title: "Stock",
   blurb:
     "Knowing what is on the shelf, what it is worth, and putting right where the shelf and the ledger disagree.",
+  howItWorks: "Goods arrive, are put away, are counted, and are corrected or passed on.",
   permission: "inventory.read",
   group: "move",
   // The three things Stock is opened for every day (PR11 M6, D15), on the page
@@ -1648,7 +1648,6 @@ export const FINANCE: ModuleDef = {
   flow: {
     code: "money",
     title: "Money, step by step",
-    note: "Bill what was delivered, take the cash in, pay what is owed out, then close the period.",
     stages: [
       {
         label: "Invoice",
@@ -1847,6 +1846,8 @@ export const FINANCE: ModuleDef = {
   titleKey: "module.finance",
   title: "Financials",
   blurb: "Trial balance, periods, receivables, tax and assets, read from the posted ledger.",
+  howItWorks:
+    "Bill what was delivered, take the cash in, pay what is owed out, then close the period.",
   permission: "finance.read",
   group: "settle",
   actions: [
@@ -2549,7 +2550,6 @@ export const PLANNING: ModuleDef = {
   flow: {
     code: "plan",
     title: "Plan, step by step",
-    note: "Forecast the demand, sign it off, work out what to order, then confirm what the plan suggests.",
     stages: [
       {
         label: "Forecast",
@@ -2723,6 +2723,8 @@ export const PLANNING: ModuleDef = {
   titleKey: "module.planning",
   title: "Planning",
   blurb: "Planned orders and the exceptions worth acting on before they become shortages.",
+  howItWorks:
+    "Forecast the demand, sign it off, work out what to order, then confirm what the plan suggests.",
   permission: "planning.read",
   group: "plan",
   actions: [
@@ -3045,7 +3047,6 @@ export const PRODUCTION: ModuleDef = {
   flow: {
     code: "make",
     title: "Making, step by step",
-    note: "Create the order, which goes to the floor as it is made, record the hours and take in the finished goods. The materials go out as the goods come in, and the order closes itself with the last of them.",
     stages: [
       {
         label: "Works order",
@@ -3138,6 +3139,8 @@ export const PRODUCTION: ModuleDef = {
   titleKey: "module.production",
   title: "Manufacturing",
   blurb: "Works orders and their progress against plan, quantity by quantity.",
+  howItWorks:
+    "Create the order, which goes to the floor as it is made, record the hours and take in the finished goods. The materials go out as the goods come in, and the order closes itself with the last of them.",
   permission: "production.read",
   group: "make",
   actions: [
@@ -3566,7 +3569,6 @@ export const QUALITY: ModuleDef = {
   flow: {
     code: "quality",
     title: "Quality, step by step",
-    note: "Something is found, it is inspected, you decide what happens to it, and if it has left the building there is a recall.",
     stages: [
       {
         label: "Event",
@@ -3631,6 +3633,8 @@ export const QUALITY: ModuleDef = {
   title: "Quality control",
   blurb:
     "Problems found, what was decided about them, supplier approval and recalls — each against a deadline.",
+  howItWorks:
+    "Something is found, it is inspected, you decide what happens to it, and if it has left the building there is a recall.",
   permission: "quality.read",
   group: "make",
   actions: [
@@ -4284,7 +4288,6 @@ export const LOGISTICS: ModuleDef = {
   flow: {
     code: "despatch",
     title: "Despatch, step by step",
-    note: "Ship the posted deliveries, then record proof of delivery when they arrive.",
     stages: [
       {
         label: "Delivery",
