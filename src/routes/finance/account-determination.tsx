@@ -179,7 +179,7 @@ function AccountDetermination() {
       <PageHeader
         title={ui("Which accounts things post to")}
         howItWorks={ui(
-          "Rules are written against the class, and one rule returns the account and its analysis together. Nothing falls into a suspense account: an unmatched posting is refused and reported.",
+          "A posting takes the account its accounting rule names, unless a rule here says otherwise. One rule gives the account and its analysis together, and nothing falls into a suspense account.",
         )}
         actions={
           <HeaderActions>
@@ -432,7 +432,9 @@ function AccountDetermination() {
           "The accounting vocabulary, and how many products or business partners currently carry each class.",
         )}
         fn="erp_posting_classes"
-        empty={ui("No posting classes yet. Until one exists, nothing can be determined.")}
+        empty={ui(
+          "No accounting codes yet, so every posting takes the account its accounting rule names.",
+        )}
       >
         {(rows) => (
           <Table
@@ -467,7 +469,7 @@ function AccountDetermination() {
           "Transaction type, posting classes and place on the left; the account and its analysis on the right.",
         )}
         fn="erp_account_determination_rules"
-        empty={ui("No rules yet. Every posting would be refused until at least one exists.")}
+        empty={ui("No rules yet, so every posting takes the account its accounting rule names.")}
       >
         {(rows) => (
           <Table
@@ -506,7 +508,9 @@ function AccountDetermination() {
 
       <DataPanel<ItemClass>
         title={ui("Products and their accounting code")}
-        description={ui("Products without a class are listed first — they cannot be posted.")}
+        description={ui(
+          "Products without an accounting code are listed first. They take the account their accounting rule names.",
+        )}
         fn="erp_item_posting_classes"
         args={{ p_limit: 200 }}
         empty={ui("No product exists yet, so nothing can be classed for posting.")}
