@@ -17,6 +17,7 @@ import {
   describeWarehouseTask,
   documentIdInPath,
   documentOutcome,
+  lookupOutcome,
   article,
   localIsoDate,
   quarterToDate,
@@ -276,6 +277,65 @@ describe("a toast names what was made", () => {
     expect(nothing).toContain("reorder point");
     expect(planningOutcome("Run planning", undefined)).toBeNull();
     expect(planningOutcome("Run planning", { run_id: "r" })).toBeNull();
+  });
+});
+
+describe("a lookup says its answer", () => {
+  test("a price found names the amount and where it came from", () => {
+    expect(
+      actionOutcome(
+        "Find a price",
+        [
+          {
+            amount_minor: 4200,
+            currency: "GBP",
+            price_kind: "sales_list",
+            price_list_code: "TRADE",
+            source: "the sales list",
+          },
+        ],
+        undefined,
+        "erp_resolve_price",
+      ),
+    ).toBe("Find a price: £42.00 each, from the sales list (TRADE).");
+    expect(
+      actionOutcome(
+        "Find a purchase price",
+        { amount_minor: 1250, currency: "GBP", price_list_code: null, source: "the last cost" },
+        undefined,
+        "erp_resolve_purchase_price",
+      ),
+    ).toBe("Find a purchase price: £12.50 each, from the last cost.");
+  });
+
+  test("no price is said as that, not as nothing raised", () => {
+    expect(actionOutcome("Find a price", [], undefined, "erp_resolve_price")).toBe(
+      "Find a price: nothing prices this product for this customer today. Type a price on the line, or add one to their price list.",
+    );
+    expect(
+      actionOutcome(
+        "Find a purchase price",
+        { amount_minor: null, source: "no price is on record for this supplier and item" },
+        undefined,
+        "erp_resolve_purchase_price",
+      ),
+    ).toBe(
+      "Find a purchase price: no price is on record for this supplier and item. Type a price on the line, or add one to the supplier's price list.",
+    );
+  });
+
+  test("a date promised is shown, and none is said", () => {
+    expect(actionOutcome("Promise a date", "2026-10-12", undefined, "erp_promise_date")).toBe(
+      "Promise a date: that quantity can be promised for 2026-10-12.",
+    );
+    expect(actionOutcome("Promise a date", null, undefined, "erp_promise_date")).toBe(
+      "Promise a date: no date can be promised for that quantity from that site.",
+    );
+  });
+
+  test("any other routine keeps its sentence", () => {
+    expect(lookupOutcome("erp_apply_cash", "Apply cash", [])).toBeNull();
+    expect(lookupOutcome(undefined, "Anything", "2026-10-12")).toBeNull();
   });
 });
 

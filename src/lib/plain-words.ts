@@ -204,6 +204,41 @@ export function documentOutcome(result: unknown): string | null {
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /**
+ * A lookup's answer, in a sentence.
+ *
+ * "Find a price" and "Promise a date" ask a question and change nothing. The
+ * count rule below read their answers as work done: a price found as "1 record
+ * created", none as "nothing was raised", and a date as "done", so the answer
+ * itself was never shown (found walking the live product, 4 October 2026).
+ * Null for any other routine, and for an answer in a shape this does not know.
+ */
+export function lookupOutcome(
+  fn: string | undefined,
+  label: string,
+  result: unknown,
+): string | null {
+  if (fn === "erp_promise_date") {
+    return typeof result === "string" && result !== ""
+      ? `${label}: that quantity can be promised for ${result}.`
+      : `${label}: no date can be promised for that quantity from that site.`;
+  }
+  if (fn === "erp_resolve_price" || fn === "erp_resolve_purchase_price") {
+    const row = asRecord(Array.isArray(result) ? result[0] : result);
+    const amount = row ? Number(row["amount_minor"]) : NaN;
+    const source = row ? text(row, "source") : null;
+    if (!row || row["amount_minor"] === null || !Number.isFinite(amount)) {
+      return fn === "erp_resolve_price"
+        ? `${label}: nothing prices this product for this customer today. Type a price on the line, or add one to their price list.`
+        : `${label}: ${source ?? "no price is on record for this supplier and product"}. Type a price on the line, or add one to the supplier's price list.`;
+    }
+    const list = text(row, "price_list_code");
+    const currency = text(row, "currency") ?? "GBP";
+    return `${label}: ${formatMinor(amount, currency)} each, from ${source ?? "the price list"}${list ? ` (${list})` : ""}.`;
+  }
+  return null;
+}
+
+/**
  * What a count means, for the routines whose rows are not "records created".
  * Applying cash returns a row per open item it settled, not anything new.
  */
@@ -231,6 +266,9 @@ export function actionOutcome(
 ): string {
   const made = documentOutcome(result);
   if (made) return made;
+
+  const answer = lookupOutcome(fn, label, result);
+  if (answer) return answer;
 
   const record = asRecord(result);
   const count =

@@ -11,6 +11,7 @@ import {
   manualTransitions,
   heldReasons,
   isCompletable,
+  isOfferable,
   offersAnyTransition,
   type Transition,
 } from "../components/erp/available-transitions";
@@ -789,6 +790,17 @@ describe("a move is drawn only where it can be completed", () => {
     expect(isCompletable(move({ guard_passes: false }))).toBe(false);
     expect(isCompletable(move({ is_automatic: true }))).toBe(false);
     expect(isCompletable(move({ refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }))).toBe(false);
+  });
+
+  test("a step's verb is offered for a move its own door makes", () => {
+    // Converting a requisition is what marks it ordered: the lifecycle leaves
+    // that move to the door, and the verb that calls the door is still offered.
+    const order = move({ code: "order", is_automatic: true });
+    expect(isCompletable(order)).toBe(false);
+    expect(isOfferable(order)).toBe(true);
+    expect(isOfferable(move({ permitted: false }))).toBe(false);
+    expect(isOfferable(move({ guard_passes: false }))).toBe(false);
+    expect(isOfferable(move({ refused: "CLOVEERP_DOCUMENT_APPROVAL_PENDING" }))).toBe(false);
   });
 
   test("a move held back says why once, and a move nobody may make says nothing", () => {
