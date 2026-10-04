@@ -425,6 +425,132 @@ test.describe("a document offers only what can be completed", () => {
     await expect(page.getByRole("alert").first()).toBeVisible();
     expect(backend.crashes).toEqual([]);
   });
+
+  // An order waiting for approval, written by hand, converted from a
+  // requisition: erp.document_lineage() returns the order itself as a 'self'
+  // row beside the 'upstream' requisition.
+  const PENDING_ID = "00000000-0000-4000-8000-00000000d0c6";
+  const REQ_ID = "00000000-0000-4000-8000-00000000d0c7";
+  const PENDING_PAGE = {
+    ...ORDER_PAGE,
+    document: {
+      ...ORDER_PAGE.document,
+      document_id: PENDING_ID,
+      document_number: "PO-000043",
+      state: "pending_approval",
+      state_name: "Pending approval",
+      is_committed: false,
+    },
+    lineage: [
+      {
+        depth: 0,
+        direction: "self",
+        document_id: PENDING_ID,
+        document_number: "PO-000043",
+        base_type: "purchase_order",
+        relation: null,
+      },
+      {
+        depth: 1,
+        direction: "upstream",
+        document_id: REQ_ID,
+        document_number: "REQ-000007",
+        base_type: "requisition",
+        relation: "converts",
+      },
+    ],
+    amendment: null,
+    available_transitions: [],
+  };
+  const ADMINISTRATOR_DECISION = {
+    task_id: "00000000-0000-4000-8000-00000000a5c1",
+    request_id: "00000000-0000-4000-8000-00000000a5c2",
+    request_status: "approved",
+    requested_at: "2026-10-01T09:00:00Z",
+    requested_by: "Sam Carter",
+    step: "Purchasing",
+    status: "approved",
+    assignee: "Sam Carter",
+    assignee_role: "Purchasing",
+    decided_by: "Ada Lovelace",
+    decided_at: "2026-10-01T10:00:00Z",
+    decided_via: "administrator",
+    own_request: false,
+    comment: "Approved as administrator, for the person asked",
+  };
+
+  test("an order with no routing stamp shows its decisions once, and its lineage without itself (J-121, J-155)", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_document", PENDING_PAGE);
+    backend.rpc("erp_document_approval_decisions", [ADMINISTRATOR_DECISION]);
+
+    await page.goto(`/documents/${PENDING_ID}`);
+    await expect(page.getByRole("heading", { name: "PO-000043" })).toBeVisible({ timeout: 20_000 });
+
+    // No stamp: no routing card saying so above the decisions, and stamping
+    // is one button among the corrections.
+    await expect(page.getByRole("heading", { name: "Approval decisions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Approval routing" })).toHaveCount(0);
+    await expect(page.getByText("No steps resolved.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Stamp the approval chain" })).toHaveCount(1);
+
+    // The administrator's decision is said once, not again as its comment.
+    await expect(
+      page.getByText("Approved by Ada Lovelace as administrator, for Sam Carter"),
+    ).toBeVisible();
+    await expect(page.getByText("Approved as administrator, for the person asked")).toHaveCount(0);
+
+    // The requisition it came from reads "from", and the order is not listed
+    // as related to itself.
+    const related = page.locator("section", {
+      has: page.getByRole("heading", { name: "Related documents" }),
+    });
+    await expect(related.getByRole("link", { name: "REQ-000007" })).toBeVisible();
+    await expect(related.getByText(/from · converts ·/)).toBeVisible();
+    await expect(related.getByRole("link", { name: "PO-000043" })).toHaveCount(0);
+    await expect(related.getByRole("button", { name: "Link a document" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a stamp that resolved a step draws the routing card, which carries the one stamp button", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_document", PENDING_PAGE);
+    backend.rpc("erp_document_approval_chain", [
+      {
+        stamp_id: 1,
+        resolved_at: "2026-10-01T09:00:00Z",
+        value_minor: 10000,
+        currency: "GBP",
+        resolved_chain: {
+          steps: [
+            {
+              seq: 1,
+              source: "named_assignment",
+              rule_id: null,
+              rule_version: 3,
+              approver_user_id: "00000000-0000-4000-8000-0000000000a1",
+              approver_of_record_user_id: "00000000-0000-4000-8000-0000000000a1",
+              covered: false,
+              cover_kind: null,
+              cover_trail: [],
+            },
+          ],
+        },
+      },
+    ]);
+
+    await page.goto(`/documents/${PENDING_ID}`);
+    await expect(page.getByRole("heading", { name: "Approval routing" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("Named assignment")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stamp the approval chain" })).toHaveCount(1);
+    expect(backend.crashes).toEqual([]);
+  });
 });
 
 test.describe("the counter works down a list", () => {

@@ -11,6 +11,10 @@
  * Pure, so the wording is tested without a browser.
  */
 
+import { whenText } from "./when";
+
+export { whenText };
+
 export type CommercialRecipient = { address: string; name: string | null; source: string };
 
 export type CommercialSend = {
@@ -68,20 +72,6 @@ export function sourceWords(source: string): string {
     default:
       return "a recipient";
   }
-}
-
-/** "14 Sep 2026, 10:15" in the reader's own zone; the text given when it is not a time. */
-export function whenText(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const when = new Date(iso);
-  if (Number.isNaN(when.getTime())) return iso;
-  const day = when.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  const time = when.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-  return `${day}, ${time}`;
 }
 
 /** One send, in a line: what happened to it, to whom, and when or why. */

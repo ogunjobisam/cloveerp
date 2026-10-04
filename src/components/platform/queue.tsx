@@ -8,7 +8,7 @@ import { callErp } from "../../lib/erp";
 import { Card, Fail } from "./kit";
 import { atLeast, type DrainResult, type JobHandler, type PlatformRole } from "../../lib/platform";
 import type { EmailDeliveryRead } from "../../lib/platform-today";
-import { whenText } from "../../lib/commercial-sends";
+import { whenText } from "../../lib/when";
 import { purgeSweepSummary, readPurgeSweep } from "../../lib/purge-sweep";
 
 /**
