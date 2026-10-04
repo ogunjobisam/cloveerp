@@ -17,13 +17,13 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/finance/account-determination")({
   head: () => ({
     meta: [
-      { title: "Account determination — Clove ERP" },
+      { title: "Which accounts things post to — Clove ERP" },
       {
         name: "description",
         content:
           "Posting classes and the determination matrix that decides which account and analysis a posting lands on, with a coverage report and no suspense fallback.",
       },
-      { property: "og:title", content: "Account determination — Clove ERP" },
+      { property: "og:title", content: "Which accounts things post to — Clove ERP" },
       {
         property: "og:description",
         content:
@@ -461,7 +461,7 @@ function AccountDetermination() {
       </DataPanel>
 
       <DataPanel<Rule>
-        title={ui("Which accounts things post to")}
+        title={ui("Determination rules")}
         description={ui(
           "Transaction type, posting classes and place on the left; the account and its analysis on the right.",
         )}

@@ -339,6 +339,14 @@ export type OutcomeDocument = { documentId: string; number: string };
 export type Outcome = { message: string; documents: OutcomeDocument[] };
 
 /**
+ * How long an outcome worth reading stays: one that names a document to follow,
+ * or a lookup's answer. Longer than the five seconds every other toast gets.
+ * It was twenty, and since most outcomes name a document, three of them stacked
+ * over the record's heading for a minute (J-125).
+ */
+export const OUTCOME_LINGER_MS = 8_000;
+
+/**
  * The receipts Apply cash opened, from its rows, in the order the rows name
  * them (20260930000000). Usually one; one per company where the cash reached
  * invoices of two (PR13 D5); none where the organisation is on receivables

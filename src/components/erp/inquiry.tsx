@@ -1,9 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
 import { formatMinor } from "../../lib/money";
+import { missingRequired } from "../../lib/required-fields";
 import { ActionButton, ComboField, ErrorNote, MultiField, type Field } from "./action";
 import { useErpSession } from "./session-context";
 import { Prose, TOUCH } from "./page";
@@ -95,6 +97,9 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
     return out;
   });
   const [lists, setLists] = useState<Record<string, string[]>>({});
+  // Whether Ask has been pressed. Until it has, nothing is marked missing.
+  const [attempted, setAttempted] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const ask = useMutation({
     mutationFn: () => {
       const args: Record<string, unknown> = {};
@@ -114,6 +119,23 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
 
   if (spec.permission && !hasPermission(session, spec.permission)) return null;
 
+  // A required answer left empty was left out of the call, and the door,
+  // asked without it, answered "not installed" (J-96). So the form checks
+  // first, says what is missing beside it, and asks nothing until it is given.
+  const missing = attempted ? missingRequired(spec.fields, values, {}, lists) : [];
+  function submit() {
+    setAttempted(true);
+    const gaps = missingRequired(spec.fields, values, {}, lists);
+    if (gaps.length > 0) {
+      formRef.current
+        ?.querySelector<HTMLElement>(`[data-field="${gaps[0]}"]`)
+        ?.querySelector<HTMLElement>("input, select, textarea, button")
+        ?.focus();
+      return;
+    }
+    ask.mutate();
+  }
+
   return (
     <details
       open={open}
@@ -131,22 +153,32 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
         ) : null}
 
         <form
+          ref={formRef}
           className="flex flex-wrap items-end gap-3"
+          // The form checks itself and says what is missing; the browser's own
+          // check stops at a bubble on the first field.
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            ask.mutate();
+            submit();
           }}
         >
           {spec.fields.map((f) => {
             const Wrap = f.kind === "multi" ? "div" : "label";
             return (
-              <Wrap key={f.name} className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+              <Wrap
+                key={f.name}
+                data-field={f.name}
+                aria-invalid={missing.includes(f.name) || undefined}
+                className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm"
+              >
                 <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {ui(f.label)}
                 </span>
                 {f.kind === "site" ? (
                   <select
                     aria-label={ui(f.label)}
+                    required={f.required ?? false}
                     value={values[f.name] ?? ""}
                     onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
@@ -161,6 +193,7 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
                 ) : f.kind === "choice" ? (
                   <select
                     aria-label={ui(f.label)}
+                    required={f.required ?? false}
                     value={values[f.name] ?? ""}
                     onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
@@ -193,6 +226,7 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
                 ) : (
                   <input
                     aria-label={ui(f.label)}
+                    required={f.required ?? false}
                     type={f.kind === "date" ? "date" : f.kind === "number" ? "number" : "text"}
                     placeholder={f.kind === "rows" ? "" : (f.placeholder ?? "")}
                     value={values[f.name] ?? ""}
@@ -202,6 +236,11 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
                 )}
                 {f.hint ? (
                   <span className="text-xs text-muted-foreground">{ui(f.hint)}</span>
+                ) : null}
+                {missing.includes(f.name) ? (
+                  <span className="text-xs font-medium text-destructive">
+                    {fill(ui("{field} is needed."), { field: ui(f.label) })}
+                  </span>
                 ) : null}
               </Wrap>
             );
@@ -246,6 +285,7 @@ function SelectInput({
   return (
     <select
       aria-label={ui(spec.label)}
+      required={spec.required ?? false}
       value={value}
       onFocus={() => {
         if (rows === null && !load.isPending) load.mutate();

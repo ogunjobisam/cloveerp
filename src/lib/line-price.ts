@@ -98,7 +98,29 @@ export function resolvedPrice(
 
   const raw = held[amountKey];
   const minor = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  // No price is said one way. The purchase door words its own refusal ("no
+  // price is on record for this supplier and item"), and passing that through
+  // put two different sentences for the same thing on the same form.
+  if (minor === null) return { minor: null, note: null };
   const note =
     noteKey === undefined ? "" : typeof held[noteKey] === "string" ? String(held[noteKey]) : "";
   return { minor, note: note === "" ? null : note };
+}
+
+/**
+ * What one line of the editor shows about its price, or null for nothing yet.
+ *
+ * A fresh line, which has named no product, asked nothing; a line whose
+ * question is still on its way has no answer. Neither is a line without a
+ * price, and both said "No agreed price" in red the moment they appeared.
+ */
+export function rowPrice(
+  asked: boolean,
+  answer: unknown,
+  amountKey: string,
+  noteKey: string | undefined,
+  documentCurrency: string | undefined,
+): ResolvedPrice | null {
+  if (!asked || answer === undefined) return null;
+  return resolvedPrice(answer, amountKey, noteKey, documentCurrency);
 }

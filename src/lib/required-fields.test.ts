@@ -38,4 +38,16 @@ describe("what a form is still missing", () => {
     expect(missingRequired(form, {}, {}, { p_batches: [] })).toEqual(["p_batches"]);
     expect(missingRequired(form, {}, {}, { p_batches: ["b1"] })).toEqual([]);
   });
+
+  test("an inquiry asked with its required choice empty is missing it, so the door is not called", () => {
+    // The reported case (J-96): a settlement statement asked with no partner
+    // went to the door without its one argument, and the answer was worded as
+    // "not installed". The inquiry form now checks this before it asks.
+    const inquiry = [
+      { name: "p_party_id", kind: "select", required: true },
+      { name: "p_from", kind: "date" },
+    ];
+    expect(missingRequired(inquiry, {}, {})).toEqual(["p_party_id"]);
+    expect(missingRequired(inquiry, { p_party_id: "yorks" }, {})).toEqual([]);
+  });
 });
