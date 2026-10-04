@@ -2108,6 +2108,27 @@ export const FINANCE: ModuleDef = {
       invalidates: ["erp_payment_proposals"],
     },
     {
+      // A run proposed twice, or by mistake, set aside before anybody approves
+      // it (J-106, 20261006041000). Behind the header's Actions rather than on
+      // the Payment run step, so the Money strip's verbs are unchanged.
+      label: "Withdraw a payment run",
+      description:
+        "For a run nobody has approved yet, such as one that repeats another. Its bills go on the next run. An approved or paid run cannot be withdrawn.",
+      permission: "finance.approve_payment",
+      fn: "erp_withdraw_payment_run",
+      fields: [
+        pickFrom(
+          "erp_payment_proposals",
+          "proposal_id",
+          ["reference", "payment_date", "status"],
+          "p_proposal_id",
+          "Payment proposal",
+        ),
+        reason("p_reason", "Why it is withdrawn", true),
+      ],
+      invalidates: ["erp_payment_proposals"],
+    },
+    {
       label: "Apply cash",
       permission: "finance.post",
       fn: "erp_apply_cash",
