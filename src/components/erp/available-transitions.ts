@@ -76,6 +76,77 @@ export function useAvailableTransitions(
 }
 
 /**
+ * The moves a document's page draws beside the state it shows.
+ *
+ * The page reads its moves twice: with the document, and on their own so a
+ * guard that changes under the reader is followed. The live read is followed
+ * only while it holds an answer at least as new as the document's. A live
+ * read that failed keeps its last good answer, and one that landed before the
+ * document was read again answers for the state before it: either drew the
+ * new state with the old state's Approve and Reject (J-33). Otherwise the
+ * moves that came with the document are drawn, which are the shown state's.
+ * The database refuses a stale press regardless.
+ */
+export function movesToDraw(
+  live: { data: Transition[] | undefined; error: unknown; dataUpdatedAt: number },
+  document: { transitions: Transition[]; dataUpdatedAt: number },
+): Transition[] {
+  if (live.data === undefined || live.error) return document.transitions;
+  return live.dataUpdatedAt >= document.dataUpdatedAt ? live.data : document.transitions;
+}
+
+/**
+ * Whether an approval pressed on a document is still waiting on somebody
+ * else's decision, by the state the door answered with.
+ *
+ * Still waiting means the document kept its approve move and did not reach
+ * the state that move leads to. The moves are read again after the press, and
+ * once the document has moved on the approve move is gone from them: compared
+ * with a move that is not there, any state read as "still waiting", and the
+ * sentence stayed on an approved order (R-06, J-120).
+ */
+export function approvalStillWaiting(
+  answered: unknown,
+  transitions: readonly Pick<Transition, "code" | "to_state">[],
+): boolean {
+  if (typeof answered !== "string") return false;
+  const approve = transitions.find((t) => t.code === "approve");
+  return approve !== undefined && answered !== approve.to_state;
+}
+
+/**
+ * What a purchase order's own sections read, which a move or a send changes:
+ * the sends and how far they got, the supplier's confirmation, the orders
+ * awaiting one, and the order's shipping notices. Issuing an order to its
+ * supplier left the confirmation reading nothing and On its way without the
+ * order until the page was loaded again (J-52, J-53).
+ */
+export const ORDER_SECTION_READS: readonly string[] = [
+  "erp_purchase_order_sends",
+  "erp_purchase_order_confirmation",
+  "erp_awaiting_confirmations",
+  "erp_order_shipping_notices",
+];
+
+/** What a move pressed on a document is followed by: everything it can change on screen. */
+export const MOVE_READS_AGAIN: readonly string[] = [
+  "erp_document",
+  "erp_documents",
+  "erp_available_transitions",
+  "erp_document_approval_chain",
+  "erp_my_approvals",
+  ...ORDER_SECTION_READS,
+];
+
+/** What a move made with its reason is followed by. */
+export const EXPLAINED_MOVE_READS_AGAIN: readonly string[] = [
+  "erp_document",
+  "erp_documents",
+  "erp_available_transitions",
+  ...ORDER_SECTION_READS,
+];
+
+/**
  * Moves that another document or door makes, by document type, which are never
  * a button of their own.
  *

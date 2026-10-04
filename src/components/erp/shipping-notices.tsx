@@ -16,7 +16,7 @@ import { awaitingOrders } from "../../lib/supplier-confirmation";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
 import { AwaitingConfirmations } from "./awaiting-confirmations";
 import { InboundShipments } from "./inbound-shipments";
-import { Prose } from "./page";
+import { LoadingRows, Prose } from "./page";
 import { Pill, Table } from "./panel";
 import { useErpSession } from "./session-context";
 
@@ -208,16 +208,21 @@ export function OrderShippingNotices({
   const { ui } = useT();
   const { session } = useErpSession();
   const mayRead = hasPermission(session, "procurement.read");
-  const { data, error } = useQuery({
+  const { data, error, isPending } = useQuery({
     queryKey: ["erp_order_shipping_notices", { p_order: documentId }],
     queryFn: () => callErp<unknown>("erp_order_shipping_notices", { p_order: documentId }),
     enabled: mayRead,
   });
   if (!mayRead) return null;
-  if (error) return <ErrorNote error={error} />;
+  // What was read is kept while a later read fails, with the failure beside
+  // it, so a form open over the section is not taken away (J-34). Its place
+  // is held while it is first read, so the sections below it do not move
+  // under a pointer when it lands (J-128).
+  if (error && data === undefined) return <ErrorNote error={error} />;
+  if (isPending) return <LoadingRows rows={1} />;
   const { notices, open } = orderNotices(data);
   const anyOpen = open.some((o) => o.open > 0);
-  if (notices.length === 0 && !anyOpen) return null;
+  if (notices.length === 0 && !anyOpen) return <ErrorNote error={error} />;
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -239,6 +244,11 @@ export function OrderShippingNotices({
       {anyOpen ? (
         <div className="mt-3">
           <RecordNotice orderId={documentId} context={context} />
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mt-3">
+          <ErrorNote error={error} />
         </div>
       ) : null}
     </section>
@@ -359,6 +369,11 @@ export function OnItsWay() {
   // Said only once every read has answered: a list still being read is not
   // an empty one, and neither is one that failed.
   const answered = [awaiting, notified, inbound].every((q) => !q.isPending && !q.error);
+  // A list still being read holds its place, and what failed is said at the
+  // foot of the card: nothing arrives above a button already drawn, which
+  // moved "Receive what arrived" from under the pointer while a slow read
+  // landed (J-128).
+  const placeholder = <LoadingRows rows={1} className="py-4 first:pt-0 last:pb-0" />;
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -385,17 +400,18 @@ export function OnItsWay() {
           submitLabel="Receive"
         />
       </div>
-      <ErrorNote error={awaiting.error} />
-      <ErrorNote error={notified.error} />
-      <ErrorNote error={inbound.error} />
-      {nothing ? (
-        answered ? (
-          <p className="mt-3 text-sm text-muted-foreground">{ui("Nothing is on its way.")}</p>
-        ) : null
+      {nothing && answered ? (
+        <p className="mt-3 text-sm text-muted-foreground">{ui("Nothing is on its way.")}</p>
       ) : (
-        <div className="mt-3 flex flex-col divide-y divide-border">
-          {orders.length > 0 ? <AwaitingConfirmations orders={orders} /> : null}
-          {notices.length > 0 ? (
+        <div className="mt-3 flex flex-col divide-y divide-border empty:hidden">
+          {awaiting.isPending ? (
+            placeholder
+          ) : orders.length > 0 ? (
+            <AwaitingConfirmations orders={orders} />
+          ) : null}
+          {notified.isPending ? (
+            placeholder
+          ) : notices.length > 0 ? (
             <div className="min-w-0 py-4 first:pt-0 last:pb-0">
               <h3 className="text-sm font-medium">{ui("Shipping notices")}</h3>
               <Prose className="mt-0.5 text-xs text-muted-foreground">
@@ -438,9 +454,18 @@ export function OnItsWay() {
               </ul>
             </div>
           ) : null}
-          {shipments.length > 0 ? <InboundShipments shipments={shipments} /> : null}
+          {inbound.isPending ? (
+            placeholder
+          ) : shipments.length > 0 ? (
+            <InboundShipments shipments={shipments} />
+          ) : null}
         </div>
       )}
+      <div className="mt-3 flex flex-col gap-2 empty:hidden">
+        <ErrorNote error={awaiting.error} />
+        <ErrorNote error={notified.error} />
+        <ErrorNote error={inbound.error} />
+      </div>
     </section>
   );
 }

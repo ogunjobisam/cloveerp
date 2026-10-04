@@ -32,6 +32,23 @@ export type PurchaseOrderSends = {
   sends: PurchaseOrderSend[];
 };
 
+/**
+ * What a send changes, and so is read again after it: the sends, the order,
+ * and what a sent order starts — the supplier's confirmation, the orders
+ * awaiting one, and its shipping notices. The confirmation read before the
+ * send answers nothing, and without these it went on answering nothing until
+ * the page was loaded again (J-53).
+ */
+export const SEND_READS_AGAIN: readonly string[] = [
+  "erp_purchase_order_sends",
+  "erp_document",
+  "erp_documents",
+  "erp_available_transitions",
+  "erp_purchase_order_confirmation",
+  "erp_awaiting_confirmations",
+  "erp_order_shipping_notices",
+];
+
 type Row = Record<string, unknown>;
 
 const asRecord = (v: unknown): Row | null =>

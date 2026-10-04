@@ -5,9 +5,12 @@ import { useT } from "../../lib/i18n";
 import { byTone, transitionOutcome, transitionTone } from "../../lib/plain-words";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "./action";
 import {
+  approvalStillWaiting,
+  EXPLAINED_MOVE_READS_AGAIN,
   heldReasons,
   isCompletable,
   manualTransitions,
+  MOVE_READS_AGAIN,
   type Transition,
 } from "./available-transitions";
 import { TOUCH } from "./page";
@@ -107,13 +110,7 @@ export function DocumentTransitions({
   const { ui } = useT();
   const act = useErpAction({
     fn: "erp_transition_document",
-    invalidates: [
-      "erp_document",
-      "erp_documents",
-      "erp_available_transitions",
-      "erp_document_approval_chain",
-      "erp_my_approvals",
-    ],
+    invalidates: [...MOVE_READS_AGAIN],
     // A move said nothing once it was made (J-122): "PO-000143 is now
     // approved." An approval still waiting on somebody else's decision says so
     // below instead, and the document is not "now" anything new.
@@ -123,8 +120,7 @@ export function DocumentTransitions({
           ? (result as Record<string, unknown>)["state"]
           : undefined;
       const waiting =
-        args["p_transition_code"] === "approve" &&
-        state !== transitions.find((t) => t.code === "approve")?.to_state;
+        args["p_transition_code"] === "approve" && approvalStillWaiting(state, transitions);
       return waiting ? null : transitionOutcome(documentNumber, result);
     },
   });
@@ -139,8 +135,7 @@ export function DocumentTransitions({
   const stillWaiting =
     pressed?.["p_document_id"] === documentId &&
     pressed["p_transition_code"] === "approve" &&
-    typeof answered === "string" &&
-    answered !== transitions.find((t) => t.code === "approve")?.to_state;
+    approvalStillWaiting(answered, transitions);
   const explained = documentType ? EXPLAINED_MOVES[documentType] : undefined;
 
   // A way out (cancel, void, reject for good) is made on a second press. One
@@ -236,7 +231,7 @@ export function DocumentTransitions({
                   p_transition_code: t.code,
                   p_reason: v["p_reason"],
                 })}
-                invalidates={["erp_document", "erp_documents", "erp_available_transitions"]}
+                invalidates={[...EXPLAINED_MOVE_READS_AGAIN]}
                 submitLabel={move.submitLabel}
               />
             );
