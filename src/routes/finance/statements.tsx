@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { useCurrencies } from "../../components/erp/currencies";
 import { Gate } from "../../components/erp/gate";
@@ -9,7 +9,7 @@ import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
-import { statementCurrency } from "../../lib/report-figures";
+import { dateToRead, statementCurrency } from "../../lib/report-figures";
 
 export const Route = createFileRoute("/finance/statements")({
   head: () => ({
@@ -93,6 +93,32 @@ const moneyIn =
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** How long a typed date stands still before the statements read it. */
+const SETTLE_MS = 700;
+
+/**
+ * A date field and the date the statements read (J-137). Typing a date into a
+ * date field makes a valid date of every keystroke of the year (0002, 0020,
+ * 0202, 2026), and each one read the whole ledger again. The statements now
+ * read a date when the field is left, when Enter is pressed, or once it has
+ * stood still for a moment, which is also how a date picked from the calendar
+ * arrives.
+ */
+function useDateField(initial: string) {
+  const [typed, setTyped] = useState(initial);
+  const [read, setRead] = useState(initial);
+  useEffect(() => {
+    const timer = setTimeout(() => setRead((current) => dateToRead(typed, current)), SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [typed]);
+  const commit = () => {
+    const next = dateToRead(typed, read);
+    setRead(next);
+    setTyped(next);
+  };
+  return { typed, setTyped, read, commit };
+}
+
 function Section({
   title,
   lines,
@@ -145,8 +171,10 @@ function Section({
  */
 function Statements() {
   const { t, ui } = useT();
-  const [from, setFrom] = useState(startOfYear());
-  const [to, setTo] = useState(today());
+  const fromField = useDateField(startOfYear());
+  const toField = useDateField(today());
+  const from = fromField.read;
+  const to = toField.read;
   const [costCentre, setCostCentre] = useState("");
   const [detail, setDetail] = useState(false);
 
@@ -160,6 +188,8 @@ function Statements() {
 
   const pl = useQuery({
     queryKey: ["erp_profit_and_loss", from, to, cc],
+    // The statement on screen stays while the next range is read.
+    placeholderData: keepPreviousData,
     queryFn: () =>
       callErp<ProfitAndLoss>("erp_profit_and_loss", {
         p_from: from,
@@ -171,6 +201,7 @@ function Statements() {
 
   const bs = useQuery({
     queryKey: ["erp_balance_sheet", to, cc],
+    placeholderData: keepPreviousData,
     queryFn: () =>
       callErp<BalanceSheet>("erp_balance_sheet", {
         p_as_at: to,
@@ -182,6 +213,7 @@ function Statements() {
   const trial = useQuery({
     enabled: detail,
     queryKey: ["erp_trial_balance", from, to, cc],
+    placeholderData: keepPreviousData,
     queryFn: () =>
       callErp<TrialLine[]>("erp_trial_balance", {
         p_from: from,
@@ -215,8 +247,12 @@ function Statements() {
           {ui("From")}
           <input
             type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            value={fromField.typed}
+            onChange={(e) => fromField.setTyped(e.target.value)}
+            onBlur={fromField.commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") fromField.commit();
+            }}
             className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
           />
         </label>
@@ -224,8 +260,12 @@ function Statements() {
           {ui("To / as at")}
           <input
             type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
+            value={toField.typed}
+            onChange={(e) => toField.setTyped(e.target.value)}
+            onBlur={toField.commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") toField.commit();
+            }}
             className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground"
           />
         </label>
