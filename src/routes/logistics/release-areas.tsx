@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 
 import {
   ActionBar,
@@ -7,7 +8,6 @@ import {
   pickItem,
   pickItemClasses,
   pickLocation,
-  reason,
 } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -93,6 +93,10 @@ const pickWave = (name = "p_wave_id", label = "Wave") =>
 function ReleaseAreas() {
   const { ui } = useT();
   const invalidates = ["erp_release_areas", "erp_release_waves", "erp_release_wave_lines"];
+  // The wave being looked at. Chosen once, in Printing readiness, and read by
+  // the lines under it: the lines used to ask for no wave at all, which the
+  // door answers with nothing, so the table could never show a row.
+  const [waveId, setWaveId] = useState("");
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -246,17 +250,13 @@ function ReleaseAreas() {
             ],
             invalidates,
           },
+          // Allocating again is the same press: the door takes the wave and
+          // nothing else, so a short wave is re-allocated from here. Printing
+          // is under Printing readiness below, beside what would stop it.
           {
             label: "Allocate the wave",
             permission: "logistics.plan",
             fn: "erp_allocate_release_wave",
-            fields: [pickWave()],
-            invalidates,
-          },
-          {
-            label: "Print the wave",
-            permission: "logistics.despatch",
-            fn: "erp_print_release_wave",
             fields: [pickWave()],
             invalidates,
           },
@@ -372,57 +372,45 @@ function ReleaseAreas() {
         )}
       </DataPanel>
 
-      <WavePrintReadiness />
+      <WavePrintReadiness waveId={waveId} onWaveChange={setWaveId} />
 
-      <ActionBar
-        title="Cover for this wave"
-        note="Cover for a wave you are looking at."
-        actions={[
-          {
-            label: "Re-allocate a short wave",
-            permission: "logistics.plan",
-            fn: "erp_allocate_release_wave",
-            fields: [pickWave(), reason()],
-            invalidates,
-          },
-        ]}
-      />
-
-      <DataPanel<WaveLine>
-        title={ui("Wave lines")}
-        description={ui("Choose a wave above; lines show what allocated and what fell short.")}
-        fn="erp_release_wave_lines"
-        args={{ p_wave_id: null }}
-        empty={ui("Pick a wave to see its lines.")}
-      >
-        {(rows) => (
-          <Table
-            columns={[
-              ui("Product"),
-              ui("Name"),
-              ui("Wanted"),
-              ui("Allocated"),
-              ui("Short"),
-              ui("Cause"),
-              ui("Status"),
-            ]}
-          >
-            {rows.map((l) => (
-              <tr key={l.wave_line_id} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{l.item_code}</td>
-                <td className="py-2 pr-4">{l.item_name}</td>
-                <td className="py-2 pr-4 tabular-nums">{l.quantity}</td>
-                <td className="py-2 pr-4 tabular-nums">{l.allocated_quantity}</td>
-                <td className="py-2 pr-4 tabular-nums">{l.shortfall_quantity}</td>
-                <td className="py-2 pr-4">{l.shortfall_cause ?? "—"}</td>
-                <td className="py-2 pr-4">
-                  <Pill tone={l.status === "allocated" ? "ok" : "warn"}>{l.status}</Pill>
-                </td>
-              </tr>
-            ))}
-          </Table>
-        )}
-      </DataPanel>
+      {waveId !== "" ? (
+        <DataPanel<WaveLine>
+          title={ui("Wave lines")}
+          description={ui("Choose a wave above; lines show what allocated and what fell short.")}
+          fn="erp_release_wave_lines"
+          args={{ p_wave_id: waveId }}
+          empty={ui("Nothing added yet.")}
+        >
+          {(rows) => (
+            <Table
+              columns={[
+                ui("Product"),
+                ui("Name"),
+                ui("Wanted"),
+                ui("Allocated"),
+                ui("Short"),
+                ui("Cause"),
+                ui("Status"),
+              ]}
+            >
+              {rows.map((l) => (
+                <tr key={l.wave_line_id} className="border-b border-border/60 last:border-0">
+                  <td className="py-2 pr-4 font-mono text-xs">{l.item_code}</td>
+                  <td className="py-2 pr-4">{l.item_name}</td>
+                  <td className="py-2 pr-4 tabular-nums">{l.quantity}</td>
+                  <td className="py-2 pr-4 tabular-nums">{l.allocated_quantity}</td>
+                  <td className="py-2 pr-4 tabular-nums">{l.shortfall_quantity}</td>
+                  <td className="py-2 pr-4">{l.shortfall_cause ?? "—"}</td>
+                  <td className="py-2 pr-4">
+                    <Pill tone={l.status === "allocated" ? "ok" : "warn"}>{l.status}</Pill>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </DataPanel>
+      ) : null}
     </div>
   );
 }

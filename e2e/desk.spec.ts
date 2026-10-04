@@ -1872,3 +1872,85 @@ test.describe("the export", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a wave's lines are the lines of the wave chosen", () => {
+  // The lines panel asked its door for no wave at all, which the door answers
+  // with nothing, so the table sat on the page and could never show a row. The
+  // wave chosen under Printing readiness is the page's now: the lines are
+  // drawn once there is one, and asked for by its id.
+  const WAVE = "00000000-0000-4000-8000-00000000a001";
+
+  test("nothing is asked until a wave is chosen, and then that wave is", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_release_waves", [
+      {
+        wave_id: WAVE,
+        code: "W-001",
+        release_area: "LEE-DESPATCH",
+        site_code: "MAIN",
+        status: "allocated",
+        opened_at: "2026-10-01T09:00:00Z",
+        allocated_at: "2026-10-01T09:05:00Z",
+        printed_at: null,
+        lines: 1,
+        short_lines: 1,
+      },
+    ]);
+    backend.rpc("erp_wave_print_readiness", {
+      wave_code: "W-001",
+      status: "allocated",
+      gate_printing: true,
+      short_lines: 1,
+      can_print: false,
+      lines: [
+        {
+          item_code: "SKU-1",
+          item_name: "Widget",
+          wanted: 5,
+          allocated: 3,
+          short: 2,
+          cause: "no_stock",
+          explanation: "Nothing at the site.",
+        },
+      ],
+      replenishment_tasks: [],
+    });
+    backend.rpc("erp_release_wave_lines", [
+      {
+        wave_line_id: "l1",
+        item_code: "SKU-1",
+        item_name: "Widget",
+        quantity: 5,
+        allocated_quantity: 3,
+        shortfall_quantity: 2,
+        shortfall_cause: "no_stock",
+        status: "short",
+      },
+    ]);
+    await page.goto("/logistics/release-areas");
+
+    await expect(page.getByRole("heading", { name: "Printing readiness" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("heading", { name: "Wave lines" })).toHaveCount(0);
+    expect(backend.called).not.toContain("erp_release_wave_lines");
+
+    const asked = page.waitForRequest(/rpc\/erp_release_wave_lines$/);
+    await page.getByLabel("Wave").selectOption(WAVE);
+    expect((await asked).postDataJSON()).toEqual({ p_wave_id: WAVE });
+
+    const lines = page.locator("section", {
+      has: page.getByRole("heading", { name: "Wave lines" }),
+    });
+    await expect(lines.getByText("Widget")).toBeVisible();
+    await expect(lines.getByText("no_stock")).toBeVisible();
+
+    // Printing is offered once, beside what would stop it, and is stopped.
+    const print = page.getByRole("button", { name: "Print the wave" });
+    await expect(print).toHaveCount(1);
+    await expect(print).toBeDisabled();
+    expect(backend.crashes).toEqual([]);
+  });
+});

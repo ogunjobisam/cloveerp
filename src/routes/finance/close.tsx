@@ -2,14 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
-import { ActionBar } from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { useErpSession } from "../../components/erp/session-context";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { PERIOD_CLOSE_ACTIONS } from "../../lib/modules";
 import {
   checklistKeptOn,
   checkSaid,
@@ -71,6 +69,10 @@ const INVALIDATES = [
  *
  * A month's checklist is raised once, on the ledger its close was opened from,
  * so COMMIT's month reads as GL's, and says so.
+ *
+ * This screen is the month being worked and nothing else. Any other month is
+ * opened and closed from the Close step of the finance module page, which
+ * lists every period, and any task is waived from that page's actions.
  */
 function Close() {
   const { t, ui } = useT();
@@ -200,12 +202,6 @@ function Close() {
           )}
         </section>
       ) : null}
-
-      <ActionBar
-        actions={[...PERIOD_CLOSE_ACTIONS]}
-        title="Another period"
-        note="The same three doors, with the period or task chosen: for a month other than the one above."
-      />
     </div>
   );
 }

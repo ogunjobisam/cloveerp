@@ -63,18 +63,6 @@ type Run = {
   completed_at: string | null;
 };
 
-/** Shaped by erp_help_topics(): the product's guidance, one row per screen. */
-type Topic = {
-  screen_path: string;
-  nav_key: string;
-  title: string;
-  module_code: string;
-  summary: string;
-  steps: string[];
-  next_action: string | null;
-  actions: string[];
-};
-
 function when(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
@@ -88,8 +76,7 @@ function Adoption() {
       <PageHeader title="Guidance and adoption">
         Refusals teach, help sits beside every screen, and first steps are offered per role from
         Home. This screen holds the rest of Part 22: the signals that say where adoption is
-        stalling, training scenarios practised where nothing is real, and the product&apos;s
-        guidance in one place so an administrator can see what a new person will be told.
+        stalling, and training scenarios practised where nothing is real.
       </PageHeader>
 
       <DataPanel<Signal>
@@ -291,40 +278,6 @@ function Adoption() {
           },
         ]}
       />
-
-      <DataPanel<Topic>
-        title="Help topics"
-        description="The product's guidance, one topic per screen, as the help button shows it. The build fails when a screen has none. Your organisation's own notes sit beside these through the terminology overrides, under help.local."
-        fn="erp_help_topics"
-        empty="No help topics. Guidance is installed with the base content pack, and every screen's help comes from it."
-        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
-      >
-        {(rows) => (
-          <Table columns={["Screen", "Summary", "Steps", "Next"]}>
-            {rows.map((t) => (
-              <tr key={t.screen_path} className="border-b border-border/50 align-top last:border-0">
-                <td className="py-2 pr-4">
-                  <Link to={t.screen_path} className="text-sm underline-offset-2 hover:underline">
-                    {t.title}
-                  </Link>
-                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                    {t.screen_path}
-                  </div>
-                </td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">{t.summary}</td>
-                <td className="py-2 pr-4 text-xs text-muted-foreground">
-                  <ol className="list-decimal pl-4">
-                    {t.steps.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ol>
-                </td>
-                <td className="py-2 text-xs text-muted-foreground">{t.next_action ?? "—"}</td>
-              </tr>
-            ))}
-          </Table>
-        )}
-      </DataPanel>
     </div>
   );
 }
