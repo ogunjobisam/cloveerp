@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { GROUP_LABELS, allTiles } from "../../lib/modules";
+import { GROUP_LABELS, allTiles, areaOf } from "../../lib/modules";
 import { documentIdInPath } from "../../lib/plain-words";
 import { useConfirmLeave } from "./unsaved";
 
@@ -25,9 +25,7 @@ import { useConfirmLeave } from "./unsaved";
 const EXTRA_NAMES: Record<string, string> = {
   "/settings": "Settings",
   "/profile": "Your profile",
-  "/notifications": "Notifications",
   "/help": "Help and guides",
-  "/device": "This device",
   "/platform": "Platform",
 };
 
@@ -50,15 +48,29 @@ type Crumb = { to: string | null; label: string };
  */
 function trailFor(pathname: string, names: Readonly<Record<string, string>> = {}): Crumb[] {
   const crumbs: Crumb[] = [];
-  const tiles = allTiles();
-  const settings = pathname === "/settings" || pathname.startsWith("/settings/");
-
-  crumbs.push(settings ? { to: "/settings", label: "Settings" } : { to: "/", label: "Home" });
 
   // Every registered screen that this path sits on or under, outermost first.
-  const onPath = tiles
+  const onPath = allTiles()
     .filter((t) => pathname === t.path || pathname.startsWith(`${t.path}/`))
     .sort((a, b) => a.path.length - b.path.length);
+
+  // Where the outermost screen is filed: its area and its group, as the rail
+  // has them. A screen kept off the rail is filed nowhere — it is reached from
+  // the account menu, like the profile and the help — so its trail starts at
+  // Home and names no group.
+  const outermost = onPath[0];
+  const filed = outermost && !outermost.offRail ? outermost : undefined;
+
+  // The root is the home of the area the screen is filed in, never the URL's
+  // spelling: /administration/permissions is a Settings screen, and a trail
+  // that started it at the Work home sent "up" somewhere the rail beside it
+  // did not show.
+  const settings =
+    pathname === "/settings" ||
+    pathname.startsWith("/settings/") ||
+    (filed !== undefined && areaOf(filed.group) === "settings");
+
+  crumbs.push(settings ? { to: "/settings", label: "Settings" } : { to: "/", label: "Home" });
 
   // The group the outermost screen is filed under, said once, where the rail
   // says it. The trail used to be two trails: this one, Home > Stock, above
@@ -67,8 +79,9 @@ function trailFor(pathname: string, names: Readonly<Record<string, string>> = {}
   // has no module page — showed only Home / Purchasing, one level shallower
   // than Stock for no reason a person could see. One trail, every screen, the
   // same depth.
-  const outermost = onPath.find((t) => t.path !== crumbs[0]?.to);
-  if (outermost) crumbs.push({ to: null, label: GROUP_LABELS[outermost.group] });
+  if (filed && filed.path !== crumbs[0]?.to) {
+    crumbs.push({ to: null, label: GROUP_LABELS[filed.group] });
+  }
 
   for (const tile of onPath) {
     if (tile.path === crumbs[0]?.to) continue;

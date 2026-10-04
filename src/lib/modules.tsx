@@ -4873,6 +4873,15 @@ export type TileDef = {
    * that will be refused off the launchpad.
    */
   platformOnly?: boolean;
+  /**
+   * Reached from the account menu and the palette rather than filed in an
+   * area: kept out of the rail, the launchpads and the area counts. A screen
+   * every account may open would otherwise put an entry in every rail and,
+   * where it is a Settings screen, a whole area in front of somebody who has
+   * nothing else in it. The tile stays registered, so it keeps its help topic
+   * and its place in search.
+   */
+  offRail?: boolean;
 };
 
 export const EXTRA_TILES: TileDef[] = [
@@ -4943,6 +4952,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "What the product told you, your channel preferences and quiet hours, and the routes from events to audiences.",
     group: "records",
+    offRail: true,
   },
   {
     path: "/reporting/distribution",
@@ -5057,6 +5067,7 @@ export const EXTRA_TILES: TileDef[] = [
     blurb:
       "The accessibility statement: each WCAG 2.2 criterion, whether the product meets it, how, and the known exceptions.",
     group: "assure",
+    offRail: true,
   },
   {
     path: "/administration/commercial",
