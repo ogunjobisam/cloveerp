@@ -267,22 +267,6 @@ type Delegation = {
   status: string;
 };
 
-type AuditRow = {
-  stamp_id: number;
-  resolved_at: string;
-  object_type: string;
-  department_code: string | null;
-  requester: string | null;
-  seq: number;
-  source: string;
-  rule_id: string | null;
-  rule_version: number | null;
-  approver: string | null;
-  approver_of_record: string | null;
-  covered: boolean;
-  cover_kind: string | null;
-};
-
 type Department = {
   department_id: string;
   code: string;
@@ -1457,59 +1441,6 @@ function Organisation() {
                   <Pill tone={d.in_force ? "ok" : "muted"}>
                     {d.in_force ? ui("Yes") : ui("No")}
                   </Pill>
-                </td>
-              </tr>
-            ))}
-          </Table>
-        )}
-      </DataPanel>
-
-      <DataPanel<AuditRow>
-        title={ui("Approval audit")}
-        description={ui(
-          "Every resolved step, the rule version that chose it, who acted and who remained the approver of record.",
-        )}
-        fn="erp_approval_audit"
-        args={{ p_limit: 200 }}
-        empty={ui(
-          "No approvals have been resolved yet. Every step that is resolved is recorded here and cannot be edited afterwards.",
-        )}
-      >
-        {(rows) => (
-          <Table
-            columns={[
-              ui("When"),
-              ui("Object type"),
-              ui("Requester"),
-              ui("Step"),
-              ui("Chosen by"),
-              ui("Rule version"),
-              ui("Acted"),
-              ui("Of record"),
-              ui("Cover"),
-            ]}
-          >
-            {rows.map((r) => (
-              <tr
-                key={`${r.stamp_id}-${r.seq}`}
-                className="border-b border-border/60 last:border-0"
-              >
-                <td className="py-2 pr-4 tabular-nums">
-                  {r.resolved_at.slice(0, 16).replace("T", " ")}
-                </td>
-                <td className="py-2 pr-4">{r.object_type}</td>
-                <td className="py-2 pr-4">{r.requester ?? "—"}</td>
-                <td className="py-2 pr-4 tabular-nums">{r.seq}</td>
-                <td className="py-2 pr-4">{r.source}</td>
-                <td className="py-2 pr-4 tabular-nums">{r.rule_version ?? "—"}</td>
-                <td className="py-2 pr-4">{r.approver ?? "—"}</td>
-                <td className="py-2 pr-4">{r.approver_of_record ?? "—"}</td>
-                <td className="py-2 pr-4">
-                  {r.covered ? (
-                    <Pill tone="warn">{r.cover_kind ?? ui("Cover")}</Pill>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
                 </td>
               </tr>
             ))}

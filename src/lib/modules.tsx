@@ -1571,14 +1571,16 @@ export const INVENTORY: ModuleDef = {
  * shuts every ledger of the month together. What is left between them is a
  * task whose check failed, or one nothing checks, and that is the third verb.
  *
- * Declared once and offered in two places: the finance module page, where they
- * sit among everything else finance can do, and /finance/close, which draws
- * Open and Close for the month it shows, and a waiver on each task, only where
- * the doors would take them; these, with a period to choose, are how it
- * reaches any other month. Reopening a period and closing a fiscal year stay on
- * the module page — neither is part of working a close.
+ * Declared once and offered in one place: the finance module page, where they
+ * sit among everything else finance can do and take a period or a task to
+ * choose, which is how any month other than the current one is reached.
+ * /finance/close draws its own Open and Close for the month it shows, and a
+ * waiver on each task, only where the doors would take them; it used to repeat
+ * these three underneath as well, and the same verbs were on one screen twice.
+ * Reopening a period and closing a fiscal year stay on the module page —
+ * neither is part of working a close.
  */
-export const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
+const PERIOD_CLOSE_ACTIONS: ActionSpec[] = [
   {
     label: "Open the close",
     description:

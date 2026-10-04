@@ -43,29 +43,6 @@ type Commitment = {
   state: string;
 };
 
-/** Shaped by erp.incident_report(). `overdue` is true when a live incident has
- *  gone longer than its own severity's cadence without an update — §17.3's
- *  silence, which is invisible from the incident row alone. */
-type Incident = {
-  code: string;
-  severity_code: string;
-  title: string;
-  state: string;
-  declared_at: string;
-  resolved_at: string | null;
-  commander: string;
-  communications_owner: string;
-  scribe: string;
-  scope: string | null;
-  affects_all_tenants: boolean | null;
-  is_data_integrity: boolean;
-  review_url: string | null;
-  updates: number;
-  minutes_since_update: number | null;
-  cadence_minutes: number;
-  overdue: boolean;
-};
-
 /** Shaped by erp.support_access_report(). */
 type Access = {
   granted_at: string;
@@ -456,8 +433,7 @@ function Continuity() {
         What this platform has promised about staying up and getting back, and what has happened
         when it did not. Every row is read live from the registers the assertions police — a
         commitment reads as proved only when a drill actually restored and ran the invariant checks
-        against the restored data, and a live incident reads as overdue the moment it passes its own
-        severity&rsquo;s update cadence.
+        against the restored data.
       </PageHeader>
 
       <ServiceNotices />
@@ -498,73 +474,6 @@ function Continuity() {
                   ) : (
                     <Pill tone="bad">Never drilled</Pill>
                   )}
-                </td>
-              </tr>
-            ))}
-          </Table>
-        )}
-      </DataPanel>
-
-      <DataPanel<Incident>
-        title="Incidents"
-        description="Declared with a commander, a communications owner and a scribe, because deciding who is writing things down at three in the morning is the wrong time to decide it. A severity 1 or 2 cannot be resolved without its blameless review."
-        fn="erp_platform_incidents"
-        empty="No incident has been declared. This is a panel worth keeping empty."
-      >
-        {(rows) => (
-          <Table columns={["Incident", "Severity", "State", "Communication", "Roles"]}>
-            {rows.map((r) => (
-              <tr key={r.code} className="border-b border-border/50 align-top last:border-0">
-                <td className="py-2 pr-4">
-                  <div className="text-sm">{r.title}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {r.code} · declared {when(r.declared_at)}
-                  </div>
-                  {r.scope ? (
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      Scope: {r.scope}
-                      {r.affects_all_tenants ? " · every organisation" : ""}
-                    </div>
-                  ) : null}
-                  {r.is_data_integrity ? (
-                    <div className="mt-1">
-                      <Pill tone="bad">Data integrity</Pill>
-                    </div>
-                  ) : null}
-                </td>
-                <td className="py-2 pr-4 text-sm uppercase">{r.severity_code}</td>
-                <td className="py-2 pr-4">
-                  {r.state === "resolved" ? (
-                    <Pill tone="ok">Resolved</Pill>
-                  ) : r.state === "contained" ? (
-                    <Pill tone="muted">Contained</Pill>
-                  ) : (
-                    <Pill tone="bad">Live</Pill>
-                  )}
-                  {r.review_url ? (
-                    <div className="mt-1 text-xs text-muted-foreground">Review written</div>
-                  ) : null}
-                </td>
-                <td className="py-2 pr-4">
-                  <div className="text-sm">
-                    {r.updates} update{r.updates === 1 ? "" : "s"}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    Every {r.cadence_minutes} min
-                    {r.minutes_since_update !== null
-                      ? ` · last ${r.minutes_since_update} min ago`
-                      : ""}
-                  </div>
-                  {r.overdue ? (
-                    <div className="mt-1">
-                      <Pill tone="bad">Overdue an update</Pill>
-                    </div>
-                  ) : null}
-                </td>
-                <td className="py-2 text-xs text-muted-foreground">
-                  <div>Commander: {r.commander}</div>
-                  <div>Comms: {r.communications_owner}</div>
-                  <div>Scribe: {r.scribe}</div>
                 </td>
               </tr>
             ))}

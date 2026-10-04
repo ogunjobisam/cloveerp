@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
@@ -16,6 +15,9 @@ import { useErpSession } from "./session-context";
  * replenishment task open, or stock that cannot be moved in at all. The
  * printing button lives here rather than in the action bar so that the refusal
  * lands next to the evidence for it.
+ *
+ * The wave chosen is the page's, not this panel's: the lines drawn under it
+ * are that wave's, so one choice answers both.
  */
 
 type Wave = { wave_id: string; code: string; release_area: string; status: string };
@@ -40,11 +42,16 @@ type Readiness = {
   replenishment_tasks: { item_code: string; quantity: number; status: string }[];
 };
 
-export function WavePrintReadiness() {
+export function WavePrintReadiness({
+  waveId,
+  onWaveChange,
+}: {
+  waveId: string;
+  onWaveChange: (waveId: string) => void;
+}) {
   const { ui } = useT();
   const { session } = useErpSession();
   const queryClient = useQueryClient();
-  const [waveId, setWaveId] = useState("");
 
   const waves = useQuery({
     queryKey: ["erp_release_waves", { p_limit: 100 }],
@@ -82,7 +89,7 @@ export function WavePrintReadiness() {
           <select
             className="h-10 rounded-md border border-border bg-background px-2 text-sm"
             value={waveId}
-            onChange={(e) => setWaveId(e.target.value)}
+            onChange={(e) => onWaveChange(e.target.value)}
           >
             <option value="">{ui("Choose a wave")}</option>
             {(waves.data ?? []).map((w) => (

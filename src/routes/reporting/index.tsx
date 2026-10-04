@@ -39,22 +39,27 @@ export const Route = createFileRoute("/reporting/")({
  * index exists for the other case: knowing a report exists without knowing
  * which module owns it. It is generated from the same registry the module
  * pages render, so a report cannot appear in one and not the other.
+ *
+ * One link per module. Every report's name used to be a link too, each to the
+ * same place as the module's own, under a sentence saying it opened on the
+ * Reports tab, which a link cannot do: the tab is the page's own state and
+ * starts on Dashboard. The names are names now. Reporting itself is left out:
+ * its reports are on the Reports tab of this page, above.
  */
 function ReportCatalogue({ platformOperator }: { platformOperator: boolean }) {
   const { session } = useErpSession();
   const { t } = useT();
 
-  const visible = MODULES.filter((m) => !m.permission || hasPermission(session, m.permission)).map(
-    (m) => moduleForViewer(m, platformOperator),
-  );
+  const visible = MODULES.filter(
+    (m) => m.key !== REPORTING.key && (!m.permission || hasPermission(session, m.permission)),
+  ).map((m) => moduleForViewer(m, platformOperator));
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card">
       <header className="border-b border-border px-4 py-4 sm:px-5">
         <h2 className="text-sm font-semibold">All reports</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Every report this account can reach, by module. Each opens on its module&rsquo;s Reports
-          tab.
+          Every report this account can reach, by module.
         </p>
       </header>
 
@@ -72,13 +77,11 @@ function ReportCatalogue({ platformOperator }: { platformOperator: boolean }) {
             </div>
             <ul className="mt-1 flex flex-wrap gap-1.5">
               {m.reports.map((r) => (
-                <li key={`${m.key}-${r.title}`}>
-                  <Link
-                    to={m.path}
-                    className="inline-block rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                  >
-                    {r.title}
-                  </Link>
+                <li
+                  key={`${m.key}-${r.title}`}
+                  className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  {r.title}
                 </li>
               ))}
             </ul>
