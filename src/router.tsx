@@ -16,7 +16,14 @@ import { ErpError } from "./lib/erp";
 const decided = (error: unknown): boolean => {
   if (!(error instanceof ErpError)) return false;
   if (error.isPermissionDenied) return true;
-  return error.code === "PGRST202" || error.code === "PGRST301" || error.code === "42883";
+  // 57014: the statement timeout. Asked again at once it runs as long again,
+  // twice, on a database that was already too busy to answer.
+  return (
+    error.code === "PGRST202" ||
+    error.code === "PGRST301" ||
+    error.code === "42883" ||
+    error.code === "57014"
+  );
 };
 
 export const getRouter = () => {

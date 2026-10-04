@@ -51,7 +51,9 @@ export function KpiTile({ kpi }: { kpi: Kpi }) {
   const { data, isPending, error } = useQuery({
     queryKey: [kpi.fn, kpi.args ?? {}],
     queryFn: () => callErp<Row[]>(kpi.fn, kpi.args ?? {}),
-    refetchInterval: 60_000,
+    // Not while it is failing: a read that met the statement timeout, asked
+    // again every minute, keeps the database busy for nobody.
+    refetchInterval: (q) => (q.state.error ? false : 60_000),
   });
 
   const context: KpiContext = {
@@ -131,7 +133,7 @@ export function MiniBars({ chart }: { chart: Chart }) {
   const { data, isPending, error } = useQuery({
     queryKey: [chart.fn, chart.args ?? {}],
     queryFn: () => callErp<Row[]>(chart.fn, chart.args ?? {}),
-    refetchInterval: 60_000,
+    refetchInterval: (q) => (q.state.error ? false : 60_000),
   });
 
   // A money chart reads as money in each row's currency; see chartBars.
