@@ -410,6 +410,28 @@ const pickEntity = (name = "p_entity_id", label = "Company", required = true): F
 });
 
 /**
+ * A company that heads a group: one with a group ledger, which every
+ * consolidation read and the elimination ask for (20261006191000). The
+ * picker offered every company, and a company with no group was refused only
+ * once asked (J-94). "Add a company to a group" still offers every company,
+ * because that is how one becomes a parent.
+ */
+const pickGroupParent = (name: string, label: string): Field => ({
+  kind: "select",
+  name,
+  label,
+  required: true,
+  options: {
+    fn: "erp_entities",
+    value: "entity_id",
+    label: ["code", "name"],
+    keep: (row) => row["is_group_parent"] === true,
+    empty:
+      "No company heads a group yet. Use “Add a company to a group” to put a subsidiary under its parent.",
+  },
+});
+
+/**
  * A scenario's assumptions, from three boxes rather than a line of JSON.
  *
  * erp.run_planning honours demand_multiplier, lead_time_days_delta and
@@ -1818,12 +1840,15 @@ export const FINANCE: ModuleDef = {
           noun: "period",
           nounPlural: "periods",
           // The current period first, then the open ones already ended, oldest
-          // first. Periods not yet started wait behind the toggle: a calendar
-          // runs a year ahead, and the step opened on December next year.
+          // first. Closed periods and periods not yet started wait behind the
+          // toggle: a calendar runs a year ahead, and the step opened on
+          // December next year; and the step counts what it lists, so closed
+          // months read as work waiting ("Close 68", J-98).
           arrange: (rows, showFinished) => orderPeriods(rows, localIsoDate(), showFinished),
         },
-        // A period still being worked or reopenable; periods not yet started
-        // and permanently closed years are reached through the toggle.
+        // A period still being worked or reopenable. Closed periods, periods
+        // not yet started and permanently closed years are reached through the
+        // toggle, where Reopen still takes a closed one.
         states: ["future", "open", "closing", "closed"],
         showFinishedLabel: "Show future and finished periods",
         recordArg: "p_fiscal_period_id",
@@ -1844,7 +1869,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_consolidated_trial_balance",
       fields: [
-        pickEntity("p_parent_entity_id", "Parent company"),
+        pickGroupParent("p_parent_entity_id", "Parent company"),
         { kind: "date", name: "p_as_at", label: "As at" },
       ],
     },
@@ -1853,7 +1878,7 @@ export const FINANCE: ModuleDef = {
       description: "What has been eliminated in a group ledger, when, why and by which journal.",
       permission: "finance.read",
       fn: "erp_eliminations",
-      fields: [pickEntity("p_parent_entity_id", "Parent company")],
+      fields: [pickGroupParent("p_parent_entity_id", "Parent company")],
     },
     {
       label: "Settlement statement",
@@ -1922,7 +1947,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.post",
       fn: "erp_post_intercompany_elimination",
       fields: [
-        pickEntity("p_parent_entity_id", "Parent company"),
+        pickGroupParent("p_parent_entity_id", "Parent company"),
         { kind: "date", name: "p_as_at", label: "As at", required: true },
         reason("p_reason", "Reason", true),
       ],
