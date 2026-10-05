@@ -40,6 +40,18 @@ const CONVERSION_DEFAULTS = (key: string) => ({
   key,
 });
 
+/** Every order not yet despatched: the orders the Sales order step lists. */
+const ORDERS_STILL_TO_GO = [
+  "draft",
+  "pending_approval",
+  "confirmed",
+  "picking",
+  "partially_despatched",
+];
+
+/** Orders that can be picked, delivered and released: confirmed and not yet gone. */
+const ORDERS_TO_PICK = ["confirmed", "picking", "partially_despatched"];
+
 /**
  * Quotation to order to delivery.
  *
@@ -129,9 +141,15 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.order",
     fn: "erp_reserve_for_line",
     fields: [
-      // Open lines only: not on a closed or cancelled order. The line row keeps
+      // Open lines of the orders the Sales order step lists, each with its
+      // customer (J-81): not a line of an order despatched, invoiced or
+      // closed, which has nothing left to hold stock for. The line row keeps
       // no reservation; erp.reserve_for_line refuses a line that holds stock.
-      pickLine("sales_order", "p_document_line_id", "Order line", { openOnly: true }),
+      pickLine("sales_order", "p_document_line_id", "Order line", {
+        openOnly: true,
+        states: ORDERS_STILL_TO_GO,
+        withParty: true,
+      }),
       {
         kind: "text",
         name: "p_policy_code",
@@ -148,15 +166,19 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.despatch",
     fn: "erp_pick_document",
     fields: [
+      // Orders that can be picked, by number, state and customer (J-81).
+      // p_actionable offered every order not yet finished, an invoiced one
+      // among them, by its state's code.
       pickFrom(
         "erp_documents",
         "document_id",
-        ["document_number", "state"],
+        ["document_number", "state_name", "party"],
         "p_document_id",
         "Sales order",
-        { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
+        { p_type_code: "sales_order", p_limit: 100, p_states: ORDERS_TO_PICK },
       ),
-      pickLocation("p_location_id", "Pick from location", false),
+      // A place stock can be picked from, named with its site.
+      pickLocation("p_location_id", "Pick from location", false, { pickable: true }),
       pickBatch("p_batch_id", "Batch", false),
     ],
     invalidates: ["erp_documents", "erp_document"],
@@ -203,20 +225,22 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.credit_release",
     fn: "erp_release_credit_hold",
     fields: [
-      // A hold stops a confirmed order at picking and delivery, so those are
-      // the orders a release is for.
-      pickFrom(
-        "erp_documents",
-        "document_id",
-        ["document_number", "state"],
-        "p_document_id",
-        "Confirmed sales order",
-        {
-          p_type_code: "sales_order",
-          p_limit: 100,
-          p_states: ["confirmed", "picking", "partially_despatched"],
+      // The orders a hold stops at picking and delivery, by number and
+      // customer (J-79): held as erp.check_release_to_fulfilment holds them,
+      // read from the release sequence, one option per order.
+      {
+        kind: "select",
+        name: "p_document_id",
+        label: "Sales order",
+        required: true,
+        options: {
+          fn: "erp_release_sequence",
+          args: { p_limit: 500 },
+          value: "document_id",
+          label: ["document_number", "customer"],
+          keep: (row) => row["on_hold"] === true,
         },
-      ),
+      },
       reason("p_reason", "Reason", true),
     ],
     invalidates: ["erp_documents", "erp_release_sequence"],
@@ -317,7 +341,8 @@ const ORDER_TO_CASH: FlowSpec = {
       partyRole: "customer",
       recordArg: "p_document_id",
       actionFn: "erp_convert_document",
-      createFn: "erp_resolve_price",
+      // Find a price raises nothing, so it is not this step's: it is in the
+      // Actions sheet, and a quotation's own lines still price themselves.
     },
     {
       label: "Sales order",
@@ -328,19 +353,24 @@ const ORDER_TO_CASH: FlowSpec = {
       // Every order not yet despatched: a draft, one with its approvers,
       // one confirmed and one being picked.
       states: ["draft", "pending_approval", "confirmed", "picking", "partially_despatched"],
-      // A delivery comes from an order that can still be despatched.
+      // A delivery comes from an order that can still be despatched, and the
+      // same orders are picked and released from a credit hold.
       // Part despatched is still owed the rest (20260923800000).
-      actionStates: { deliver_this_order: ["confirmed", "picking", "partially_despatched"] },
+      actionStates: {
+        deliver_this_order: ["confirmed", "picking", "partially_despatched"],
+        erp_pick_document: ["confirmed", "picking", "partially_despatched"],
+        erp_release_credit_hold: ["confirmed", "picking", "partially_despatched"],
+      },
       partyRole: "customer",
       // The chosen order is the one the delivery is created from.
       recordArg: "p_order_id",
+      // Picking and releasing arrive holding the chosen order and still ask,
+      // so the order chosen here is the one picked (20261009010000) and, when
+      // it is held, the one released (20261009012000).
+      carriedArgs: { erp_pick_document: "p_document_id", erp_release_credit_hold: "p_document_id" },
       actionFn: "deliver_this_order",
+      actionFns: ["erp_pick_document", "erp_release_credit_hold"],
       createFn: "erp_promise_date",
-    },
-    {
-      label: "Pick",
-      hint: "Reserving and picking in one press: Pick the order takes what it needs and tells you what it could not cover.",
-      createFn: "erp_pick_document",
     },
     {
       label: "Delivery",
@@ -355,8 +385,8 @@ const ORDER_TO_CASH: FlowSpec = {
       states: ["draft"],
       partyRole: "customer",
       recordArg: "p_delivery_id",
-      to: "/logistics",
-      toLabel: "Open despatch",
+      // Posted where it is listed (J-17): Despatch lists posted deliveries
+      // only, so a draft sent there could not be posted.
     },
     {
       label: "Invoice",
@@ -369,14 +399,9 @@ const ORDER_TO_CASH: FlowSpec = {
       states: ["draft", "issued", "part_paid"],
       partyRole: "customer",
       recordArg: "p_invoice_id",
+      // Cash is applied on Financials' Cash in step, which this reaches.
       to: "/finance",
       toLabel: "Open finance",
-    },
-    {
-      label: "Cash",
-      hint: "Money received, applied against the invoices it settles.",
-      to: "/finance",
-      toLabel: "Apply cash",
     },
   ],
 };
