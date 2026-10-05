@@ -16,6 +16,7 @@ import {
   boxLines,
   exceptionsOf,
   exportFile,
+  groupFindings,
   nextReturns,
   normaliseObligations,
   statusTone,
@@ -291,8 +292,7 @@ function NextReturn({ row, can }: { row: VatObligation; can: (code: string) => b
       ),
   });
   const exceptions = findings.data ?? [];
-  const blocking = exceptions.filter((x) => x.blocks);
-  const flags = exceptions.filter((x) => !x.blocks);
+  const groups = groupFindings(exceptions);
 
   return (
     <div
@@ -361,20 +361,36 @@ function NextReturn({ row, can }: { row: VatObligation; can: (code: string) => b
           </p>
         ) : (
           <ul className="flex flex-col gap-1.5">
-            {[...blocking, ...flags].map((x, i) => (
-              <li
-                key={`${x.finding}-${x.reference ?? i}`}
-                className="text-xs"
-                data-vat-finding={x.blocks ? "blocks" : "flag"}
-              >
-                <Pill tone={x.blocks ? "bad" : "warn"}>
-                  {x.blocks ? ui("Blocks the return") : ui("Check")}
-                </Pill>{" "}
-                <span className={x.blocks ? "text-destructive" : "text-muted-foreground"}>
-                  {x.detail}
-                </span>
-              </li>
-            ))}
+            {groups.map((g, i) => {
+              const [first, ...rest] = g.items;
+              return (
+                <li
+                  key={`${g.finding}-${first?.reference ?? i}`}
+                  className="text-xs"
+                  data-vat-finding={g.blocks ? "blocks" : "flag"}
+                  data-vat-finding-count={g.items.length}
+                >
+                  <Pill tone={g.blocks ? "bad" : "warn"}>
+                    {g.blocks ? ui("Blocks the return") : ui("Check")}
+                  </Pill>{" "}
+                  <span className={g.blocks ? "text-destructive" : "text-muted-foreground"}>
+                    {first?.detail}
+                  </span>
+                  {rest.length > 0 ? (
+                    <details className="mt-1 pl-1">
+                      <summary className="cursor-pointer text-muted-foreground">
+                        {rest.length} {ui("more of the same kind")}
+                      </summary>
+                      <ul className="mt-1 flex flex-col gap-1 pl-4 text-muted-foreground">
+                        {rest.map((x, j) => (
+                          <li key={`${x.reference ?? ""}-${j}`}>{x.detail}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

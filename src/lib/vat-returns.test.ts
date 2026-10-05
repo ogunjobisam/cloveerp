@@ -8,6 +8,7 @@ import {
   boxLines,
   exceptionsOf,
   exportFile,
+  groupFindings,
   nextReturns,
   normaliseObligations,
   statusTone,
@@ -193,6 +194,47 @@ describe("the exceptions to read before finalising", () => {
     expect(exceptionsOf(answer, "nobody")).toEqual([]);
     expect(exceptionsOf(null, MAIN)).toEqual([]);
     expect(exceptionsOf([{ entity_id: MAIN }], MAIN)).toEqual([]);
+  });
+});
+
+describe("the findings as the next return lists them (J-99)", () => {
+  const abroad = "a purchase from abroad states no tax, and may need the reverse charge";
+  const exempt = "an exempt supply is in the period, and box 4 claims all input tax";
+  const flag = (finding: string, reference: string) => ({
+    finding,
+    blocks: false,
+    reference,
+    detail: `${reference} ${finding}`,
+  });
+  const block = (reference: string) => ({
+    finding: "the tax determined is not the tax the ledger carries",
+    blocks: true,
+    reference,
+    detail: `${reference} blocks`,
+  });
+
+  test("each finding that blocks keeps a line of its own, ahead of the checks", () => {
+    const groups = groupFindings([flag(abroad, "PINV-1"), block("INV-1"), block("INV-2")]);
+    expect(groups.map((g) => `${g.blocks} ${g.items.map((x) => x.reference).join(",")}`)).toEqual([
+      "true INV-1",
+      "true INV-2",
+      "false PINV-1",
+    ]);
+  });
+
+  test("the checks are one line per kind, counted, in the order the door gave them", () => {
+    const many = Array.from({ length: 63 }, (_, i) => flag(abroad, `PINV-${i + 1}`));
+    const groups = groupFindings([...many.slice(0, 30), flag(exempt, "INV-9"), ...many.slice(30)]);
+    expect(groups.map((g) => `${g.finding} ${g.items.length}`)).toEqual([
+      `${abroad} 63`,
+      `${exempt} 1`,
+    ]);
+    expect(groups[0]?.items[0]?.reference).toBe("PINV-1");
+    expect(groups[0]?.items.map((x) => x.reference)).toEqual(many.map((x) => x.reference));
+  });
+
+  test("nothing to check is no line at all", () => {
+    expect(groupFindings([])).toEqual([]);
   });
 });
 
