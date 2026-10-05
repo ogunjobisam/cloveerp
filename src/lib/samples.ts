@@ -19,6 +19,12 @@ export type Sample = {
   description: string;
   received: number;
   held: number;
+  /** What became of the rest (J-15, 20261008210000), each net of any reversal. */
+  returned: number;
+  kept: number;
+  bought: number;
+  /** The price each was bought at, in minor units; null while none is bought. */
+  boughtPriceMinor: number | null;
   purpose: SamplePurpose | null;
   dueBack: string | null;
   overdue: boolean;
@@ -57,6 +63,10 @@ export function sample(row: unknown): Sample | null {
     description: text(r["description"]) ?? text(r["item_code"]) ?? "a sample",
     received: finite(r["received"]) ?? held,
     held,
+    returned: finite(r["returned"]) ?? 0,
+    kept: finite(r["kept"]) ?? 0,
+    bought: finite(r["bought"]) ?? 0,
+    boughtPriceMinor: finite(r["bought_price_minor"]),
     purpose: PURPOSES.includes(purpose as SamplePurpose) ? (purpose as SamplePurpose) : null,
     dueBack: text(r["due_back"]),
     overdue: r["overdue"] === true,

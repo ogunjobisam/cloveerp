@@ -1786,50 +1786,32 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
-        // Being put together, or proposed and waiting for a second pair of eyes.
-        states: ["draft", "proposed"],
+        // What the chosen run pays, line by line, and what it holds and why
+        // (J-28, 20261007191000). A run used to show a total and nothing else.
+        lines: {
+          fn: "erp_payment_proposal_lines",
+          arg: "p_proposal_id",
+          id: "line_id",
+          title: ["supplier", "document_number"],
+          amount: "amount_minor",
+          due: "due_date",
+          held: "held",
+          heldReason: "hold_reason",
+        },
+        // One step for the whole run (20261007190000): being put together or
+        // proposed, then approved, then paid, each verb offered only in the
+        // state its door takes. It was three steps listing the same runs.
+        // Whoever proposed a run still may not approve it; the door refuses.
+        states: ["draft", "proposed", "approved"],
         recordArg: "p_proposal_id",
         createFn: "erp_propose_payment_run",
-      },
-      {
-        label: "Approve",
-        hint: "A second pair of eyes. The proposer cannot approve their own run.",
-        fedBy: "Runs appear here once one has been proposed at the payment run step.",
-
-        list: {
-          fn: "erp_payment_proposals",
-          args: { p_limit: 200 },
-          id: "proposal_id",
-          title: ["reference"],
-          subtitle: ["payment_date", "currency"],
-          status: "status",
-          noun: "payment run",
-          nounPlural: "payment runs",
+        actionFns: ["erp_approve_payment_run", "erp_pay_payment_run", "erp_withdraw_payment_run"],
+        actionStates: {
+          erp_approve_payment_run: ["proposed"],
+          erp_pay_payment_run: ["approved"],
+          // A run nobody has approved yet (J-106, 20261007192000).
+          erp_withdraw_payment_run: ["draft", "proposed"],
         },
-        // erp.approve_payment_run takes a proposed run and nothing else.
-        states: ["proposed"],
-        recordArg: "p_proposal_id",
-        actionFn: "erp_approve_payment_run",
-      },
-      {
-        label: "Pay",
-        hint: "Paying an approved run clears the payable and credits the bank.",
-        fedBy: "Runs appear here once a second approver has approved them.",
-
-        list: {
-          fn: "erp_payment_proposals",
-          args: { p_limit: 200 },
-          id: "proposal_id",
-          title: ["reference"],
-          subtitle: ["payment_date", "currency"],
-          status: "status",
-          noun: "payment run",
-          nounPlural: "payment runs",
-        },
-        // erp.pay_payment_run takes an approved run and nothing else.
-        states: ["approved"],
-        recordArg: "p_proposal_id",
-        actionFn: "erp_pay_payment_run",
       },
       {
         label: "Journals",
@@ -2129,6 +2111,10 @@ export const FINANCE: ModuleDef = {
     },
     {
       label: "Propose a payment run",
+      // The run takes what falls due in the week after the payment date as
+      // well, which read as more than was due when nothing said so (J-28).
+      description:
+        "Gathers what suppliers are owed by the payment date, or up to a week after it, and any prepayment an order asks for. A bill in dispute is listed but held, and one already on another run is left to it. Somebody else approves the run.",
       permission: "finance.approve_payment",
       fn: "erp_propose_payment_run",
       fields: [
@@ -2154,8 +2140,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       // A run proposed twice, or by mistake, set aside before anybody approves
-      // it (J-106, 20261006041000). Behind the header's Actions rather than on
-      // the Payment run step, so the Money strip's verbs are unchanged.
+      // it (J-106, 20261006041000). On the Payment run step, holding the run
+      // chosen there (20261007192000).
       label: "Withdraw a payment run",
       description:
         "For a run nobody has approved yet, such as one that repeats another. Its bills go on the next run. An approved or paid run cannot be withdrawn.",
@@ -5409,15 +5395,6 @@ export const EXTRA_TILES: TileDef[] = [
     group: "system",
   },
   {
-    path: "/administration/packs",
-    titleKey: "nav.administration_packs",
-    title: "Features and content",
-    blurb:
-      "Switch product features on and off, apply starter content packs, and see what this organisation cannot yet do.",
-    permission: "administration.configure",
-    group: "system",
-  },
-  {
     path: "/administration/onboarding",
     titleKey: "nav.administration_onboarding",
     title: "Onboarding interview",
@@ -5571,15 +5548,6 @@ export const EXTRA_TILES: TileDef[] = [
       "Accruals, prepayments and corrections typed by hand: raised by one person, approved and posted by another, reversed rather than changed.",
     permission: "finance.read",
     group: "settle",
-  },
-  {
-    path: "/finance/cost-centres",
-    titleKey: "nav.finance_cost_centres",
-    title: "Cost centres",
-    blurb:
-      "The cost centres postings are analysed by, derived from the document's cost centre, department or site.",
-    permission: "finance.read",
-    group: "money",
   },
   {
     path: "/administration/permissions",

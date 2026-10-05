@@ -39,12 +39,34 @@ describe("a supplier's sample", () => {
       description: "Wool dress, navy, medium",
       received: 3,
       held: 2,
+      returned: 0,
+      kept: 0,
+      bought: 0,
+      boughtPriceMinor: null,
       purpose: "shoot",
       dueBack: "2026-09-24",
       overdue: true,
       currency: "GBP",
       maySettle: true,
     });
+  });
+
+  test("reads what became of the rest: returned, kept, bought and the price each was bought at (J-15)", () => {
+    const s = sample(
+      row({
+        held: "0.000000",
+        returned: "1.000000",
+        kept: "1.000000",
+        bought: "1.000000",
+        bought_price_minor: 9000,
+      }),
+    );
+    expect(s?.returned).toBe(1);
+    expect(s?.kept).toBe(1);
+    expect(s?.bought).toBe(1);
+    expect(s?.boughtPriceMinor).toBe(9000);
+    expect(s?.held).toBe(0);
+    expect(sample(row({ bought_price_minor: null }))?.boughtPriceMinor).toBeNull();
   });
 
   test("offers Settle only where the reader may and something is still held", () => {

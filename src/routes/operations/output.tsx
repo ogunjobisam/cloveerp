@@ -575,7 +575,7 @@ function Output() {
         description="Every version of every template, newest first. A label version shows whether its test barcode decoded and to what; a document version shows its page and how many blocks it lays out."
         fn="erp_output_template_versions"
         empty="No output template is installed. The base content pack carries the standard documents and labels."
-        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
+        emptyAction={<GoTo to="/administration/configuration">Open Configuration</GoTo>}
       >
         {(rows) => (
           <Table columns={["Template", "Version", "Engine", "Decode check", "Effective", "State"]}>

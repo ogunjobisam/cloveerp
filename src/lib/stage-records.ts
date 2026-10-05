@@ -382,6 +382,74 @@ export function describeLine(line: DocumentLine): string {
 }
 
 /**
+ * Where the lines of a step's chosen record come from, when it is not a
+ * document.
+ *
+ * A document step shows the chosen document's first lines; any other step
+ * showed the record's own columns and nothing under them. A payment run read
+ * "£9,067.20" and could not say which bills that was, though
+ * public.erp_payment_proposal_lines had always answered (J-28).
+ */
+export type StageLines = {
+  /** The read, asked with the chosen record's identifier. */
+  fn: string;
+  /** The argument the identifier fills. */
+  arg: string;
+  /** The key holding a line's own identifier. */
+  id: string;
+  /** Keys joined to name a line: whose it is and what it is. */
+  title: string[];
+  /** The key holding a line's amount in minor units, in the record's currency. */
+  amount?: string;
+  /** The key holding the date a line falls due. */
+  due?: string;
+  /** The key that is true on a line held back, and the key saying why. */
+  held?: string;
+  heldReason?: string;
+};
+
+/** The read a step's lines are asked with, once a record is chosen; nothing before. */
+export function stageLinesRead(
+  spec: StageLines | undefined,
+  recordId: string,
+): { fn: string; args: Record<string, unknown> } | null {
+  if (!spec || recordId === "") return null;
+  return { fn: spec.fn, args: { [spec.arg]: recordId } };
+}
+
+/** One line of a step's chosen record, as a person reads it. */
+export type ShownLine = {
+  key: string;
+  name: string;
+  amountMinor: number | null;
+  due: string | null;
+  held: boolean;
+  reason: string | null;
+};
+
+/** The chosen record's lines, named, with their amount, when they fall due, and any hold. */
+export function shownLines(rows: Row[], spec: StageLines): ShownLine[] {
+  const present = (v: unknown) => v !== null && v !== undefined && v !== "";
+  return rows.map((row, index) => {
+    const amount = spec.amount ? row[spec.amount] : undefined;
+    const due = spec.due ? row[spec.due] : undefined;
+    const reason = spec.heldReason ? row[spec.heldReason] : undefined;
+    return {
+      key: present(row[spec.id]) ? String(row[spec.id]) : String(index),
+      name: spec.title
+        .map((k) => row[k])
+        .filter(present)
+        .map(shownValue)
+        .join(" — "),
+      amountMinor: present(amount) && Number.isFinite(Number(amount)) ? Number(amount) : null,
+      due: present(due) ? shownValue(due) : null,
+      held: spec.held ? row[spec.held] === true : false,
+      reason: present(reason) ? shownValue(reason) : null,
+    };
+  });
+}
+
+/**
  * Why a step is showing nothing.
  *
  * A step counts outstanding work. Empty means the work is done at least as often

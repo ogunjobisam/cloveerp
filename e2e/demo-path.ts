@@ -245,14 +245,14 @@ export const PURCHASE_TO_PAY: Flow = {
     },
     {
       path: "/finance",
-      stage: "Approve",
+      stage: "Payment run",
       does: "A second person approves the run. Whoever proposed it cannot.",
       doors: ["erp_approve_payment_run"],
       leaves: "The run, approved.",
     },
     {
       path: "/finance",
-      stage: "Pay",
+      stage: "Payment run",
       does: "Pay the approved run.",
       doors: ["erp_pay_payment_run"],
       leaves: "The run paid: the payable cleared and the bank credited.",
@@ -426,12 +426,12 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/administration/commercial":
     "The tenant's own agreement with the vendor: plan, seats and usage.",
   "/administration/configuration":
-    "Document types, numbering and lifecycles. Seeded before the demonstration.",
+    "Features, content packs, document types, numbering and lifecycles. Seeded before the demonstration.",
   "/administration/erasure": "Erasure requests under data protection, and what has been erased.",
   "/administration/onboarding":
     "The interview that stands a new organisation up. The demonstration organisation is already standing.",
   "/administration/organisation": "Companies, sites and departments. Seeded.",
-  "/administration/packs": "Which industry packs are installed. Seeded.",
+  "/administration/packs": "Redirects to Configuration, where features and content packs are kept.",
   "/administration/permissions":
     "Roles, grants and who holds what. Seeded, and proved by the grant suites rather than walked.",
   "/administration/tenant":
@@ -442,8 +442,9 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
     "The vendor's own quotes, on the platform's organisation. Not a tenant selling to its customers.",
   "/finance/account-determination":
     "Which nominal account each posting lands on. Seeded, and what the four ties then test.",
-  "/finance/dimensions": "Analysis dimensions and the rules over their combinations. Seeded.",
-  "/finance/cost-centres": "Cost centres, and what a posting is stamped with. Seeded.",
+  "/finance/dimensions":
+    "Cost centres and the other reporting tags, and the rules over their combinations. Seeded.",
+  "/finance/cost-centres": "Redirects to Extra reporting tags, where cost centres are kept.",
   "/finance/journals":
     "Accruals and corrections typed by hand. Financials draws it as a step, and neither flow needs one: every posting on the demo path comes from a document.",
   "/finance/vat":

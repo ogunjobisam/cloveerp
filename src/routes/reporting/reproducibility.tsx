@@ -179,7 +179,7 @@ function Reproducibility() {
         description="Every version of every report, newest first. The source is the governed view the version reads; a version that names none cannot run. The budget is what a run may spend before it is capped."
         fn="erp_report_versions"
         empty="No report has a version. A report is installed with its definition by a content pack and given a version through a change set; until then it cannot be run."
-        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
+        emptyAction={<GoTo to="/administration/configuration">Open Configuration</GoTo>}
       >
         {(rows) => (
           <Table columns={["Report", "Version", "Source", "Shape", "Parameters", "Budget", "Runs"]}>

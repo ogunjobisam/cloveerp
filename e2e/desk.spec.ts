@@ -1628,7 +1628,7 @@ test.describe("the cash documents are on the desk", () => {
     supplier_item_code: null,
   });
   const step = (page: Page, label: string) =>
-    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 7`) });
+    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 5`) });
 
   test("Cash in lists its receipts, and Apply cash names the receipt it made and opens it", async ({
     page,
@@ -1849,9 +1849,40 @@ test.describe("the cash documents are on the desk", () => {
       ],
     });
 
+    // What the run pays, drawn under it (J-28).
+    backend.rpc("erp_payment_proposal_lines", [
+      {
+        line_id: "00000000-0000-4000-8000-0000000061e1",
+        supplier: "Anvil Supplies",
+        document_number: "PINV-000007",
+        amount_minor: 50000,
+        due_date: "2026-09-27",
+        held: false,
+        hold_reason: null,
+      },
+      {
+        line_id: "00000000-0000-4000-8000-0000000061e2",
+        supplier: "Bolt Brothers",
+        document_number: "PINV-000009",
+        amount_minor: 12000,
+        due_date: "2026-09-30",
+        held: true,
+        hold_reason: "disputed",
+      },
+    ]);
+
     await page.goto("/finance");
-    await step(page, "Pay").click({ timeout: 20_000 });
+    await step(page, "Payment run").click({ timeout: 20_000 });
+    const linesAsked = page.waitForRequest(/rpc\/erp_payment_proposal_lines$/);
     await page.getByRole("button", { name: /^PAY-000003/ }).click();
+    expect((await linesAsked).postDataJSON()).toEqual({ p_proposal_id: RUN });
+    await expect(page.getByText("Anvil Supplies — PINV-000007")).toBeVisible();
+    await expect(page.getByText("Bolt Brothers — PINV-000009")).toBeVisible();
+    await expect(page.getByText(/Held: Disputed/)).toBeVisible();
+    // An approved run is paid, not approved or withdrawn again.
+    for (const name of ["Approve a payment run", "Withdraw a payment run"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
     await page.getByRole("button", { name: "Pay an approved run", exact: true }).click();
     const sent = page.waitForRequest(/rpc\/erp_pay_payment_run$/);
     await page
@@ -3277,5 +3308,66 @@ test.describe("a business partner's record keeps its details", () => {
     await expect(page.getByRole("button", { name: "End the contact" })).toBeVisible();
     expect(backend.called).toContain("erp_party_contacts");
     expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("features and content are kept on Configuration", () => {
+  // 20261007180000: a feature switch and a pack only ever prepared a change,
+  // and Configuration is where a change is approved and promoted, so the two
+  // screens became one. The old address still lands, on the section itself.
+  const feature = {
+    code: "multi_site",
+    title: "Several sites",
+    description: "More than one site, each with its own stock.",
+    seq: 1,
+    enabled: false,
+    requires: [],
+    required_by: [],
+    held_by: [],
+    history: [],
+  };
+  const section = (page: Page) =>
+    page.getByRole("heading", { level: 2, name: "Features and content", exact: true });
+
+  test("the old address lands on the section, ahead of installing modules", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_capabilities", [feature]);
+    await page.goto("/administration/packs");
+
+    await expect(page).toHaveURL(/\/administration\/configuration#features-and-content$/, {
+      timeout: 20_000,
+    });
+    await expect(section(page)).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Features", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("button", { name: "Switch on", exact: true })).toBeEnabled();
+    await expect.poll(() => backend.called.includes("erp_pack_acceptance")).toBe(true);
+    expect(backend.called).toContain("erp_change_sets");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("to somebody who may not configure the organisation", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "administration.configure"),
+      },
+    });
+
+    test("is shown read-only, as the old screen showed it", async ({ page, backend }) => {
+      backend.rpc("erp_capabilities", [feature]);
+      await page.goto("/administration/configuration");
+
+      await expect(section(page)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("button", { name: "Switch on", exact: true })).toBeDisabled();
+      await page.getByRole("tab", { name: "Content packs", exact: true }).click();
+      await expect.poll(() => backend.called.includes("erp_content_packs")).toBe(true);
+      expect(backend.called).not.toContain("erp_change_sets");
+      expect(backend.crashes).toEqual([]);
+    });
   });
 });

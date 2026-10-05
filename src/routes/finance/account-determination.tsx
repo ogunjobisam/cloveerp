@@ -321,7 +321,7 @@ function AccountDetermination() {
                       kind: "rows",
                       name: "p_dimensions",
                       label: "Dimensions",
-                      addLabel: "Add a dimension",
+                      addLabel: "Add a reporting tag",
                       hint: "One row per dimension: the dimension and the value a posting under this rule is stamped with. The account and its analysis come from one rule.",
                       columns: [
                         {
