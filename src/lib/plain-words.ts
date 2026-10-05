@@ -292,6 +292,7 @@ export function samplesOutcome(result: unknown): string | null {
 export function namedOutcome(fn: string | undefined, result: unknown): string | null {
   if (fn === "erp_set_freight_terms") return freightTermsOutcome(result);
   if (fn === "erp_settle_samples") return samplesOutcome(result);
+  if (fn === "erp_pick_document") return pickOutcome(result);
   return movedDocumentOutcome(fn, result);
 }
 
@@ -421,6 +422,9 @@ const COUNTED: Readonly<Record<string, (n: number) => string>> = {
   erp_generate_count_tasks: (n) => `${n} count ${plural(n, "task", "tasks")} raised.`,
 };
 
+/** The routines whose number is an amount of money, not rows raised. */
+const ANSWERS_AN_AMOUNT: ReadonlySet<string> = new Set(["erp_approve_payment_run"]);
+
 /**
  * What just happened, in a sentence.
  *
@@ -447,6 +451,9 @@ export function actionOutcome(
   if (answer) return answer;
 
   const record = asRecord(result);
+  // An amount is not a count: approving a payment run answers with its total
+  // in pence, which read as "21300 records created" (5 October re-test).
+  if (fn && ANSWERS_AN_AMOUNT.has(fn)) return `${label} — done.`;
   const count =
     typeof result === "number"
       ? result
@@ -665,6 +672,106 @@ export function paymentRunOutcome(result: unknown, label: string): Outcome | nul
       ? ` ${held} ${plural(held, "line was", "lines were")} held and not paid.`
       : "";
   return { message: `${sentence}${heldNote}`, documents: payments };
+}
+
+/**
+ * A payment run proposed or approved, by its reference and what it pays, from
+ * its row in erp_payment_proposals (5 October re-test). Proposing answers with
+ * the run's id alone and said "Propose a payment run — done."; approving
+ * answers with the run's total in pence, which the count rule read as
+ * "21300 records created". Null when the run's row could not be read.
+ */
+export function paymentProposalOutcome(
+  done: "proposed" | "approved",
+  row: unknown,
+  totalMinor?: unknown,
+): string | null {
+  const r = asRecord(row);
+  const reference = r ? text(r, "reference") : null;
+  if (!r || !reference) return null;
+  const answered = Number(totalMinor);
+  const total =
+    Number.isFinite(answered) && totalMinor !== null ? answered : Number(r["total_minor"]);
+  const currency = text(r, "currency") ?? "GBP";
+  return Number.isFinite(total)
+    ? `${reference} ${done}: ${formatMinor(total, currency)} to pay.`
+    : `${reference} ${done}.`;
+}
+
+/**
+ * What picking an order did, from erp_pick_document's answer: the order, the
+ * lines picked, and what could not be covered. The step promises it "tells you
+ * what it could not cover", and the outcome said "Pick the order — done."
+ * (5 October re-test).
+ */
+export function pickOutcome(result: unknown): string | null {
+  const r = asRecord(result);
+  const number = r ? text(r, "document_number") : null;
+  if (!r || !number) return null;
+  const picked = Number(r["picked"]);
+  const short = Number(r["shortfall"]);
+  if (!Number.isFinite(picked)) return null;
+  const shortWords =
+    Number.isFinite(short) && short > 0 ? `${quantityWords(short)} could not be covered` : null;
+  if (picked === 0)
+    return shortWords
+      ? `${number}: nothing picked, ${shortWords}.`
+      : `${number}: nothing was left to pick.`;
+  const lines = `${picked} ${plural(picked, "line", "lines")} picked`;
+  return `${number}: ${shortWords ? `${lines}, ${shortWords}` : `${lines}, nothing short`}.`;
+}
+
+/**
+ * What receiving against a shipping notice made, from the notice the door
+ * answers with: the goods receipt, the order it receives, and how many lines
+ * arrived different from the notice. "Receive what arrived — done." named the
+ * order and not the receipt it had just posted (5 October re-test).
+ */
+export function noticeReceiptOutcome(result: unknown): Outcome | null {
+  const r = asRecord(result);
+  const receipt = r ? text(r, "receipt") : null;
+  const receiptId = r?.["receipt_id"];
+  if (!r || !receipt || typeof receiptId !== "string" || receiptId === "") return null;
+  const order = text(r, "order");
+  const differ = Array.isArray(r["differences"]) ? r["differences"].length : 0;
+  const notice = text(r, "notice");
+  const differs =
+    differ > 0
+      ? ` ${differ} ${plural(differ, "line differs", "lines differ")} from ${notice ?? "the notice"}.`
+      : "";
+  return {
+    message: `${receipt} received${order ? ` against ${order}` : ""}.${differs}`,
+    documents: [{ documentId: receiptId, number: receipt }],
+  };
+}
+
+/** A line of a document, as a sentence names it. */
+type NamedLine = { line_no: number; item?: string | null; item_name?: string | null };
+
+/**
+ * Which line a form acts on: "PO-000149 · line 20 · RM-310 Washer M10". The
+ * confirmation before a line is removed did not say which line (5 October
+ * re-test).
+ */
+export function lineContext(documentNumber: string | null | undefined, line: NamedLine): string {
+  const product = [line.item, line.item_name]
+    .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+    .join(" ");
+  return [documentNumber?.trim() || null, `line ${line.line_no}`, product || null]
+    .filter((x): x is string => x !== null)
+    .join(" · ");
+}
+
+/**
+ * A line taken off a draft: "Line 20 removed from PO-000149." The outcome took
+ * the confirmation's title, question mark and all: "Remove this line? — done."
+ */
+export function lineRemovedOutcome(
+  documentNumber: string | null | undefined,
+  line: NamedLine,
+): string {
+  const from = documentNumber?.trim() ? ` from ${documentNumber.trim()}` : "";
+  return `Line ${line.line_no} removed${from}.`;
 }
 
 function joinAnd(words: readonly string[]): string {
@@ -890,6 +997,105 @@ export function approvalChoice(row: Row): string {
   return [approvalSubject(row), text(row, "partner"), amount, text(row, "requested_by")]
     .filter((x): x is string => x !== null && x !== "" && x !== "—")
     .join(" — ");
+}
+
+/**
+ * A document as a picker offers it, from its row in erp_documents: its number,
+ * who it is with, what it is worth and its date — "GRN-000143 — Anchor
+ * Fasteners — £213.00 — 5 Oct 2026". Bill a receipt offered "GRN-000143 —
+ * posted" a hundred times over, every one of them posted (5 October re-test).
+ */
+export function documentChoice(row: Row): string {
+  const value = text(row, "total_minor");
+  const currency = text(row, "currency");
+  const amount =
+    value !== null && Number.isFinite(Number(value)) && currency
+      ? formatMinor(Number(value), currency)
+      : null;
+  return [text(row, "document_number"), text(row, "party"), amount, shortDate(row["document_date"])]
+    .filter((x): x is string => x !== null && x !== "")
+    .join(" — ");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Related documents
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How another document relates to this one, by the relation's kind and which
+ * way it points. A relation is written from the later document to the earlier
+ * one — an order converts its requisition, a receipt fulfils its order, a bill
+ * invoices both — and erp.document_lineage() calls the earlier "downstream" of
+ * the later. "to · converts · REQ-000072" was that read aloud (5 October
+ * re-test); this says it: "Converted from REQ-000072", "Fulfilled by
+ * GRN-000143".
+ */
+const RELATION_WORDS: Readonly<Record<string, { towards: string; back: string }>> = {
+  converts: { towards: "Converted from", back: "Converted into" },
+  fulfils: { towards: "Fulfils", back: "Fulfilled by" },
+  invoices: { towards: "Invoices", back: "Invoiced by" },
+  credits: { towards: "Credits", back: "Credited by" },
+  returns: { towards: "Returns", back: "Returned by" },
+  consumes: { towards: "Consumes", back: "Consumed by" },
+  corrects: { towards: "Corrects", back: "Corrected by" },
+  consolidates: { towards: "Consolidates", back: "Consolidated into" },
+  mirrors: { towards: "Mirrors", back: "Mirrored by" },
+};
+
+/** One relation in words; one this does not know, as the database names it. */
+export function relationWords(direction: string, relation: string | null | undefined): string {
+  const kind = (relation ?? "").trim();
+  const words = RELATION_WORDS[kind];
+  if (words) return direction === "upstream" ? words.back : words.towards;
+  return `${direction === "upstream" ? "from" : "to"} · ${kind === "" ? "related" : prettifyField(kind).toLowerCase()}`;
+}
+
+/** A lineage row as the document page reads it. */
+export type LineageRow = {
+  depth: number;
+  direction: string;
+  document_id: string;
+  relation: string | null;
+};
+
+/** A related document, once, with what relates it to this one. */
+export type RelatedDocument<T extends LineageRow> = { row: T; words: string };
+
+/**
+ * The Related documents card's rows: each document once, at its nearest.
+ *
+ * A bill raised from a receipt invoices the receipt and its order, and the
+ * receipt fulfils the order, so the lineage reaches the order twice — once
+ * directly and once through the receipt — and the bill's page listed PO-000149
+ * twice (5 October re-test). A document is listed once, by its nearest
+ * relations; one it relates to directly two ways says both. One reached only
+ * through another document is "Also related": the relation the walk arrived
+ * by is between those two, not between it and this one.
+ */
+export function relatedDocuments<T extends LineageRow>(
+  lineage: readonly T[],
+): RelatedDocument<T>[] {
+  const byDocument = new Map<string, T[]>();
+  for (const row of lineage) {
+    if (row.direction === "self") continue;
+    const seen = byDocument.get(row.document_id);
+    if (!seen) byDocument.set(row.document_id, [row]);
+    else if (row.depth < (seen[0]?.depth ?? Infinity)) byDocument.set(row.document_id, [row]);
+    else if (row.depth === seen[0]?.depth) seen.push(row);
+  }
+  return [...byDocument.values()]
+    .map((rows) => {
+      const first = rows[0] as T;
+      if (first.depth > 1) return { row: first, words: "Also related" };
+      const words = [...new Set(rows.map((r) => relationWords(r.direction, r.relation)))];
+      return {
+        row: first,
+        words: words
+          .map((w, i) => (i === 0 ? w : w.charAt(0).toLowerCase() + w.slice(1)))
+          .join(", "),
+      };
+    })
+    .sort((a, b) => a.row.depth - b.row.depth);
 }
 
 /**

@@ -48,6 +48,8 @@ import {
   actionOutcome,
   documentOutcome,
   paymentRunOutcome,
+  paymentProposalOutcome,
+  noticeReceiptOutcome,
   lookupOutcome,
   namedOutcome,
   planningOutcome,
@@ -68,6 +70,7 @@ import { Prose, TOUCH } from "./page";
 import { useUnsavedGuard } from "./unsaved";
 import { fill } from "../../lib/interview";
 import { missingRequired } from "../../lib/required-fields";
+import { outcomeToastId } from "../../lib/toast-age";
 
 /**
  * The write surface.
@@ -724,12 +727,30 @@ function RowCell({
   value,
   onChange,
   formValues,
+  fillSource,
 }: {
   column: RowColumn;
   value: string;
   onChange: (v: string, pick?: OptionPick) => void;
   formValues?: Record<string, string>;
+  /** For a column that fills from a picker in its row: that picker's list. */
+  fillSource?: OptionSource | undefined;
 }) {
+  // What the row's pick put in this cell, while it still holds it. Clicked
+  // into, the box takes the whole of it, so what is typed replaces the
+  // product's words instead of landing in the middle of them: "Acme wRT2-
+  // widget 250mmidget, 250mm…" (5 October re-test). Tabbing in selects it
+  // already; a click put the caret where the pointer was.
+  const { rows: fillRows } = useOptions(fillSource, formValues);
+  const from = column.fillFrom;
+  const filled = from
+    ? asText(
+        fillRows.find((r) => r.value === (formValues?.[from.column] ?? ""))?.record?.[from.key],
+      )
+    : "";
+  const holdsFill = filled !== "" && value === filled;
+  const selectOnClick = useRef(false);
+
   if (column.kind === "select" && column.options)
     return (
       <SelectField
@@ -760,6 +781,24 @@ function RowCell({
       value={value}
       placeholder={column.placeholder ?? ""}
       onChange={(e) => onChange(e.target.value)}
+      onFocus={(e) => {
+        if (!holdsFill) return;
+        e.currentTarget.select();
+        selectOnClick.current = true;
+      }}
+      // The click that focused the box would put the caret where it landed
+      // and undo the selection; this once, it does not.
+      onMouseUp={(e) => {
+        if (!selectOnClick.current) return;
+        selectOnClick.current = false;
+        e.preventDefault();
+      }}
+      onKeyDown={() => {
+        selectOnClick.current = false;
+      }}
+      onBlur={() => {
+        selectOnClick.current = false;
+      }}
       className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
     />
   );
@@ -891,6 +930,11 @@ function RowsField({
               </span>
               <RowCell
                 column={c}
+                fillSource={
+                  c.fillFrom
+                    ? field.columns.find((other) => other.name === c.fillFrom?.column)?.options
+                    : undefined
+                }
                 formValues={{ ...row, ...formValues }}
                 value={row[c.name] ?? ""}
                 onChange={(v, pick) =>
@@ -1070,6 +1114,17 @@ const FOLLOW_UP_BY_FN: Record<
   // The run, what left the bank, and the payment each supplier was sent
   // (20260930200000), whose page prints its remittance advice.
   erp_pay_payment_run: (result, _args, label) => Promise.resolve(paymentRunOutcome(result, label)),
+  // Proposing a run answers with its id, and approving one with its total in
+  // pence: the run's reference is on its row (5 October re-test).
+  erp_propose_payment_run: async (result) =>
+    typeof result === "string"
+      ? paymentProposalOutcome("proposed", await paymentProposal(result))
+      : null,
+  erp_approve_payment_run: async (result, args) =>
+    paymentProposalOutcome("approved", await paymentProposal(args["p_proposal_id"]), result),
+  // The goods receipt a notice was received on, which the outcome named
+  // nothing of (5 October re-test), and a way to it.
+  erp_receive_as_notified: (result) => Promise.resolve(noticeReceiptOutcome(result)),
   // What a credit on account allocated, to which invoice, and what that
   // invoice still owes (20260930400000).
   erp_allocate_on_account: (result) => Promise.resolve(allocationOutcome(result)),
@@ -1114,6 +1169,32 @@ const FOLLOW_UP_BY_FN: Record<
   },
 };
 
+/**
+ * The follow-ups whose sentence names the record the form acted on, so the
+ * line saying what it acted on is not said again under it (J-124).
+ */
+const FOLLOW_UP_NAMES: ReadonlySet<string> = new Set([
+  "erp_propose_payment_run",
+  "erp_approve_payment_run",
+]);
+
+/** A payment run's row, by its id; null when it cannot be read. */
+function paymentProposal(id: unknown): Promise<unknown> {
+  if (typeof id !== "string" || id === "") return Promise.resolve(null);
+  return callErp<unknown>("erp_payment_proposals", { p_limit: 200 }).then(
+    (rows) =>
+      Array.isArray(rows)
+        ? ((rows as unknown[]).find(
+            (r) =>
+              typeof r === "object" &&
+              r !== null &&
+              (r as Record<string, unknown>)["proposal_id"] === id,
+          ) ?? null)
+        : null,
+    () => null,
+  );
+}
+
 /** A document's number, read from its page; null when it cannot be read. */
 function documentNumber(id: unknown): Promise<string | null> {
   if (typeof id !== "string" || id === "") return Promise.resolve(null);
@@ -1147,14 +1228,19 @@ function sayOutcome(
   message: string | Outcome,
   also: { description?: string; linger?: boolean } = {},
 ) {
+  // Raised with an id that says when, so a change of page takes it unless it
+  // is the outcome of the press that changed the page (src/lib/toast-age.ts).
+  const id = outcomeToastId();
   if (typeof message !== "string" && message.documents.length > 0) {
     toast(message.message, {
+      id,
       description: <OutcomeLinks documents={message.documents} />,
       duration: OUTCOME_LINGER_MS,
     });
     return;
   }
   toast(typeof message === "string" ? message : message.message, {
+    id,
     ...(also.description ? { description: also.description } : {}),
     ...(also.linger ? { duration: OUTCOME_LINGER_MS } : {}),
   });
@@ -1195,6 +1281,7 @@ export function ActionDialog({
   invalidates,
   submitLabel = "Save",
   alsoSubmit,
+  outcome,
   onDone,
 }: {
   trigger: ReactNode;
@@ -1251,6 +1338,13 @@ export function ActionDialog({
    * document on. Two buttons on one form beat one button and a second visit.
    */
   alsoSubmit?: { label: string; args: Record<string, unknown> };
+  /**
+   * What the press did, in a sentence, where the caller knows it better than
+   * the door's answer says it: a line removed answers with the draft's new
+   * total, and the outcome took the dialog's title, "Remove this line? —
+   * done." (5 October re-test). Null falls back to the door's answer.
+   */
+  outcome?: (result: unknown, args: Record<string, unknown>) => string | Outcome | null;
   onDone?: (result: unknown) => void;
 }) {
   const { session } = useErpSession();
@@ -1454,18 +1548,21 @@ export function ActionDialog({
       // A toast that names the record it made or acted on needs no second line
       // saying what the form acted on: that line was written before the press
       // (J-124).
-      const plain = outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn], fn);
-      const names = documentOutcome(result) !== null || namedOutcome(fn, result) !== null;
-      const say = (message: string | Outcome) =>
+      const own = outcome?.(result, args) ?? null;
+      const plain = own ?? outcomeOf(ui(title), result, emptyNote ?? EMPTY_BY_FN[fn], fn);
+      const names =
+        own !== null || documentOutcome(result) !== null || namedOutcome(fn, result) !== null;
+      const say = (message: string | Outcome, named = names) =>
         sayOutcome(message, {
-          ...(context && !names ? { description: context } : {}),
+          ...(context && !named ? { description: context } : {}),
           // A lookup's answer is the point of asking: it stays to be read.
           linger: lookupOutcome(fn, "", result) !== null,
         });
-      const followUp = FOLLOW_UP_BY_FN[fn];
+      const followUp = own === null ? FOLLOW_UP_BY_FN[fn] : undefined;
       if (followUp)
         void followUp(result, args, ui(title)).then(
-          (message) => say(message ?? plain),
+          (message) =>
+            message === null ? say(plain) : say(message, names || FOLLOW_UP_NAMES.has(fn)),
           () => say(plain),
         );
       else say(plain);

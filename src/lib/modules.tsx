@@ -2119,7 +2119,18 @@ export const FINANCE: ModuleDef = {
       fn: "erp_propose_payment_run",
       fields: [
         { kind: "date", name: "p_payment_date", label: "Payment date" },
-        pickCurrency("p_currency", "Currency", false),
+        // Arrives holding the base currency of the company the run is
+        // proposed for — the first by code, as erp.propose_payment_run takes
+        // it, and the currency it uses when none is sent. It arrived empty
+        // over twenty-five currencies (5 October re-test).
+        {
+          kind: "select",
+          name: "p_currency",
+          label: "Currency",
+          required: false,
+          options: { fn: "erp_currencies", value: "code", label: ["code", "name"] },
+          defaultFrom: { fn: "erp_entities", key: "base_currency", first: true },
+        },
       ],
       invalidates: ["erp_payment_proposals"],
     },
@@ -2454,7 +2465,11 @@ export const FINANCE: ModuleDef = {
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
       rowKey: (r, i) => `${String(r["order_line_id"] ?? i)}-${i}`,
       columns: [
-        { header: "Order", cell: "order_number" },
+        // Usually a purchase order; for the supplier's own stock that came
+        // with no order — consigned goods used, samples bought — the receipt
+        // they came on (erp.grni_report), which sat under "Order" as
+        // GRN-000135 (5 October re-test).
+        { header: "Document", cell: "order_number" },
         { header: "Supplier", cell: "party_name" },
         { header: "Product", cell: "item_code" },
         { header: "Quantity", cell: "open_quantity", numeric: true },

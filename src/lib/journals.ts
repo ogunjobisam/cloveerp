@@ -119,19 +119,32 @@ export function journalName(
 
 /**
  * The company a new journal starts on: the draft's own, else the one chosen in
- * the header when it is one of the companies offered, else the only company
- * there is, else none (J-102). It opened on "Choose…" in an organisation with
- * two companies, whatever the header said, and the account picker stayed empty.
+ * the header when it is one of the companies offered, else the organisation's
+ * primary company (J-102). It opened on "Choose…" in an organisation with two
+ * companies, whatever the header said, and the account picker stayed empty;
+ * with the header on All it still did (5 October re-test).
+ *
+ * The primary company is the first by code: the one the finance installer and
+ * the chart pack set up first (20260905030000, which renames a demonstration's
+ * trading company so that it sorts first) and the one a payment run is
+ * proposed for (erp.propose_payment_run). It stays the person's to change.
  */
 export function startingCompany(
   draftEntityId: string | null,
   headerEntityId: string,
-  entities: readonly { entity_id: string }[],
+  entities: readonly { entity_id: string; code?: string }[],
 ): string {
   if (draftEntityId) return draftEntityId;
   if (headerEntityId && entities.some((e) => e.entity_id === headerEntityId)) return headerEntityId;
-  if (entities.length === 1) return entities[0]?.entity_id ?? "";
-  return "";
+  return primaryCompany(entities)?.entity_id ?? "";
+}
+
+/** The organisation's primary company: the first by code; see startingCompany. */
+export function primaryCompany<E extends { entity_id: string; code?: string }>(
+  entities: readonly E[],
+): E | null {
+  const byCode = [...entities].sort((a, b) => (a.code ?? "").localeCompare(b.code ?? ""));
+  return byCode[0] ?? null;
 }
 
 /**

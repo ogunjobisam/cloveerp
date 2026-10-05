@@ -267,6 +267,13 @@ export type FieldDefault = DependentSource & {
   fn: string;
   /** The key of the door's record that the field takes. */
   key: string;
+  /**
+   * The door answers with a list, and the field takes the first record's
+   * `key`. erp_entities lists the companies by code, and the first is the one
+   * a payment run is proposed for, in its base currency
+   * (erp.propose_payment_run). Any other list is no answer.
+   */
+  first?: boolean;
 };
 
 /**
@@ -282,7 +289,9 @@ export function defaultedValues(
   let next = values;
   for (const f of fields) {
     if (!f.defaultFrom || f.name in values) continue;
-    const answer = answers[f.name];
+    // A default declared `first` reads the first record of a list.
+    const raw = answers[f.name];
+    const answer = f.defaultFrom.first && Array.isArray(raw) ? raw[0] : raw;
     const record =
       typeof answer === "object" && answer !== null && !Array.isArray(answer)
         ? (answer as Record<string, unknown>)
