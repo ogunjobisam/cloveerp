@@ -24,6 +24,7 @@ import { friendlyError } from "../../lib/errors";
 import { fieldsFor } from "../../lib/form-fields";
 import {
   clearDependentCells,
+  coveringTicks,
   defaultedValues,
   dependentFields,
   dropDefaultedValues,
@@ -37,6 +38,7 @@ import {
   seededRows,
   type FieldDefault,
   type RowSeed,
+  type TickCover,
 } from "../../lib/dependent-options";
 import { useT } from "../../lib/i18n";
 import { priceLookupArgs, rowPrice, type ResolvedPrice } from "../../lib/line-price";
@@ -52,6 +54,7 @@ import {
   qualityEventOutcome,
   receiptIds,
   receiptOutcome,
+  settledInvoices,
   OUTCOME_LINGER_MS,
   type Outcome,
 } from "../../lib/plain-words";
@@ -343,6 +346,13 @@ export type Field =
        * Ticking boxes is still the right control; this is only how it is sent.
        */
       join?: string;
+      /**
+       * Arrive ticked: in the list's order, as many options as it takes for
+       * their `key` to reach the money field `field`, until the person ticks
+       * or unticks one. Apply cash ticks the invoices the cash would pay
+       * oldest first (20261010021000). See coveringTicks.
+       */
+      covers?: TickCover;
     } & FieldBase)
 
   /** A list of records, added a row at a time. Sent as an array of objects. */
@@ -1037,7 +1047,8 @@ const FOLLOW_UP_BY_FN: Record<
   },
   // A receipt's rows say what it applied, wrote off and kept on account
   // (20260929400000), in the currency the form sent, and name the receipt
-  // they were written on (20260930000000), whose number is read from it.
+  // they were written on (20260930000000), whose number is read from it, with
+  // the invoices it paid, which its page lists as settled (20261010021000).
   erp_apply_cash: async (result, args) => {
     const currency = typeof args["p_currency"] === "string" ? args["p_currency"] : "GBP";
     const receipts = await Promise.all(
@@ -1045,7 +1056,11 @@ const FOLLOW_UP_BY_FN: Record<
         callErp<{ document: { document_number?: string } | null }>("erp_document", {
           p_document_id: documentId,
         }).then(
-          (p) => ({ documentId, number: p.document?.document_number ?? null }),
+          (p) => ({
+            documentId,
+            number: p.document?.document_number ?? null,
+            invoices: settledInvoices(p),
+          }),
           () => ({ documentId, number: null }),
         ),
       ),
@@ -1375,6 +1390,50 @@ export function ActionDialog({
   );
   const { currencies, error: currencyError } = useCurrencies(takesMoney);
 
+  // The ticked list that arrives covering an amount, read once the choices
+  // its list follows are made (20261010021000). Until the person ticks or
+  // unticks one, the ticks shown and sent are the ones the amount pays, and
+  // they follow the amount as it is typed; the first change makes them the
+  // person's. The read is the list's own, so the picker shares it.
+  const covering = fields.find(
+    (f): f is Extract<Field, { kind: "multi" }> => f.kind === "multi" && f.covers !== undefined,
+  );
+  const coverSource = covering?.options;
+  const coverArgs = coverSource ? optionArgs(coverSource, formValues) : null;
+  const coverQuery = useQuery({
+    queryKey: [coverSource?.fn ?? "no-cover", coverArgs ?? {}],
+    queryFn: () =>
+      coverSource && coverArgs
+        ? callErp<unknown>(coverSource.fn, coverArgs)
+        : Promise.resolve(null as unknown),
+    enabled: open && coverSource !== undefined && coverArgs !== null,
+  });
+  const coverMoney = covering?.covers
+    ? fields.find(
+        (f): f is Extract<Field, { kind: "money" }> =>
+          f.kind === "money" && f.name === covering.covers?.field,
+      )
+    : undefined;
+  const coverAmount = coverMoney
+    ? toMinor(heldValues[coverMoney.name] ?? "", minorUnitsOf(currencies, coverMoney.currency))
+    : null;
+  const heldLists: Record<string, string[]> =
+    covering?.covers &&
+    coverSource &&
+    coverArgs !== null &&
+    lists[covering.name] === undefined &&
+    coverQuery.data !== undefined &&
+    coverQuery.data !== null
+      ? {
+          ...lists,
+          [covering.name]: coveringTicks(
+            pickerOptions(coverSource, optionList(coverSource, coverQuery.data, formValues), ui),
+            covering.covers.key,
+            coverAmount,
+          ),
+        }
+      : lists;
+
   const action = useMutation({
     mutationFn: async (extra: Record<string, unknown> = {}) => {
       const args = buildArgs(extra);
@@ -1417,12 +1476,16 @@ export function ActionDialog({
 
   function buildArgs(extra: Record<string, unknown> = {}): Record<string, unknown> {
     if (mapArgs)
-      return { ...mapArgs(heldValues, { lists, rows: heldRows }), ...(prefill ?? {}), ...extra };
+      return {
+        ...mapArgs(heldValues, { lists: heldLists, rows: heldRows }),
+        ...(prefill ?? {}),
+        ...extra,
+      };
     const args: Record<string, unknown> = {};
 
     for (const f of fields) {
       if (f.kind === "multi") {
-        const chosen = lists[f.name] ?? [];
+        const chosen = heldLists[f.name] ?? [];
         if (chosen.length > 0) args[f.name] = f.join ? chosen.join(f.join) : chosen;
         continue;
       }
@@ -1499,7 +1562,7 @@ export function ActionDialog({
 
   // What is still missing, worked out afresh on every keystroke once Create has
   // been pressed, so a mark goes away the moment its field is answered.
-  const missing = attempted ? missingRequired(shown, heldValues, heldRows, lists) : [];
+  const missing = attempted ? missingRequired(shown, heldValues, heldRows, heldLists) : [];
 
   /**
    * Submit, or say what is missing and go to it. Create on an empty form used
@@ -1509,7 +1572,7 @@ export function ActionDialog({
    */
   function submit(extra: Record<string, unknown> = {}) {
     setAttempted(true);
-    const gaps = missingRequired(shown, heldValues, heldRows, lists);
+    const gaps = missingRequired(shown, heldValues, heldRows, heldLists);
     if (gaps.length > 0) {
       const first = formRef.current?.querySelector<HTMLElement>(`[data-field="${gaps[0]}"]`);
       first?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1596,7 +1659,7 @@ export function ActionDialog({
               ) : f.kind === "multi" ? (
                 <MultiField
                   field={f}
-                  value={lists[f.name] ?? []}
+                  value={heldLists[f.name] ?? []}
                   onChange={(v) => setLists((prev) => ({ ...prev, [f.name]: v }))}
                   formValues={formValues}
                 />

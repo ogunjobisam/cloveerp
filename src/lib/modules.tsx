@@ -26,7 +26,7 @@ import {
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
 import { fill } from "./interview";
-import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
+import { localIsoDate, openInvoiceWords, orderPeriods, quarterToDate } from "./plain-words";
 import type { InstallableModule } from "./installed-modules";
 import { receivableLineWords } from "./shipping-notices";
 
@@ -2185,6 +2185,28 @@ export const FINANCE: ModuleDef = {
           // foreign currency until translation is built.
           choices: [{ value: "GBP", label: "GBP — pound sterling" }],
         },
+        // The invoices it pays, chosen (20261010021000). The cash used to pay
+        // the oldest first and nothing else, so £795 sent for last week's
+        // invoice settled one from June. The list arrives ticked the way the
+        // cash would go if nobody chose — oldest first, as many as the amount
+        // pays — and what is not applied stays on the customer's account.
+        {
+          kind: "multi",
+          name: "p_invoice_ids",
+          label: "Invoices",
+          required: true,
+          hint: "The oldest are ticked, as many as the amount pays. Untick any it should not pay, or tick others: what is not applied stays on the customer's account.",
+          options: {
+            fn: "erp_open_invoices",
+            argsFrom: { p_party_id: "p_party_id", p_currency: "p_currency" },
+            value: "document_id",
+            label: ["document_number", "owing_minor", "due_date"],
+            describe: (row, ui) => fill(ui("{invoice}: {owes}, due {due}"), openInvoiceWords(row)),
+            empty:
+              "This customer owes nothing in this currency, so there is no invoice for the cash to pay.",
+          },
+          covers: { field: "p_amount_minor", key: "owing_minor" },
+        },
         {
           kind: "text",
           name: "p_reference",
@@ -2194,6 +2216,7 @@ export const FINANCE: ModuleDef = {
         },
       ],
       invalidates: [
+        "erp_open_invoices",
         "erp_receivables_ageing",
         "erp_dunning_worklist",
         "erp_trial_balance",

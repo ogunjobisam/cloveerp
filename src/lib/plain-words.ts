@@ -478,8 +478,17 @@ export function actionOutcome(
  * beyond it. "Cash applied to 2 open items" said none of that, and counted the
  * remainder as an item. A database older than 20260929400000 does not say what
  * it wrote off or kept, and only the leftover is named.
+ *
+ * Given the invoices the receipt paid, they are named: "£795.00 applied to
+ * INV-000441", not "applied to 1 open invoice", which named none and let cash
+ * meant for one invoice settle another unseen (20261010021000). Without them
+ * the invoices are counted, as before.
  */
-export function cashOutcome(result: unknown, currency: string): string | null {
+export function cashOutcome(
+  result: unknown,
+  currency: string,
+  invoices: readonly string[] = [],
+): string | null {
   if (!Array.isArray(result)) return null;
   const rows = result.map(asRecord).filter((r): r is Row => r !== null);
   const minor = (r: Row, key: string) => {
@@ -499,7 +508,9 @@ export function cashOutcome(result: unknown, currency: string): string | null {
   const says = rows.some((r) => "on_account_minor" in r || "written_off_minor" in r);
 
   const parts = [
-    `${money(applied)} applied to ${items.length} open ${plural(items.length, "invoice", "invoices")}`,
+    invoices.length > 0
+      ? `${money(applied)} applied to ${joinAnd(invoices)}`
+      : `${money(applied)} applied to ${items.length} open ${plural(items.length, "invoice", "invoices")}`,
   ];
   if (writtenOff > 0) parts.push(`${money(writtenOff)} written off within the tolerance`);
   if (onAccount > 0) parts.push(`${money(onAccount)} on account`);
@@ -539,25 +550,80 @@ export function receiptIds(result: unknown): string[] {
 }
 
 /**
+ * The invoices a receipt paid, from its page (20261010021000): the documents
+ * its lineage names one step down by `settles`. Empty for a database that does
+ * not link them, or a page that could not be read.
+ */
+export function settledInvoices(page: unknown): OutcomeDocument[] {
+  const lineage = asRecord(page)?.["lineage"];
+  if (!Array.isArray(lineage)) return [];
+  const out: OutcomeDocument[] = [];
+  for (const row of lineage.map(asRecord)) {
+    if (!row || row["relation"] !== "settles" || row["direction"] !== "downstream") continue;
+    if (Number(row["depth"]) !== 1) continue;
+    const id = row["document_id"];
+    const number = text(row, "document_number");
+    if (typeof id === "string" && number && !out.some((d) => d.documentId === id))
+      out.push({ documentId: id, number });
+  }
+  return out;
+}
+
+/** How many invoices an outcome links to beside its receipt; more are on the receipt's page. */
+const LINKED_INVOICES = 3;
+
+/**
  * What a receipt did, led by the receipt it made: "RCPT-000012: £600.00
- * applied to 1 open invoice and £100.00 on account." A receipt whose number
+ * applied to INV-000041 and £100.00 on account." A receipt whose number
  * could not be read is still linked, as "the receipt"; rows that name no
- * receipt say what they did and nothing more.
+ * receipt say what they did and nothing more. The invoices it paid are named,
+ * and linked when there are no more than three (20261010021000); otherwise the
+ * receipt's page lists them.
  */
 export function receiptOutcome(
   result: unknown,
   currency: string,
-  receipts: readonly { documentId: string; number: string | null }[],
+  receipts: readonly {
+    documentId: string;
+    number: string | null;
+    invoices?: readonly OutcomeDocument[];
+  }[],
 ): Outcome | null {
-  const did = cashOutcome(result, currency);
+  const invoices: OutcomeDocument[] = [];
+  for (const r of receipts)
+    for (const i of r.invoices ?? [])
+      if (!invoices.some((d) => d.documentId === i.documentId)) invoices.push(i);
+  const did = cashOutcome(
+    result,
+    currency,
+    invoices.map((i) => i.number),
+  );
   if (did === null) return null;
-  const documents = receipts.map((r, i) => ({
+  const made = receipts.map((r, i) => ({
     documentId: r.documentId,
     number: r.number ?? (receipts.length === 1 ? "the receipt" : `receipt ${i + 1}`),
   }));
-  const numbered = documents.filter((_, i) => receipts[i]?.number);
+  const documents = invoices.length <= LINKED_INVOICES ? [...made, ...invoices] : made;
+  const numbered = made.filter((_, i) => receipts[i]?.number);
   if (numbered.length === 0) return { message: did, documents };
   return { message: `${joinAnd(numbered.map((d) => d.number))}: ${did}`, documents };
+}
+
+/**
+ * An open invoice as Apply cash offers it, from erp_open_invoices' row:
+ * "INV-000441: £795.00, due 4 Nov 2026" (20261010021000).
+ */
+export function openInvoiceWords(row: Record<string, unknown>): {
+  invoice: string;
+  owes: string;
+  due: string;
+} {
+  const owes = Number(row["owing_minor"]);
+  return {
+    invoice: text(row, "document_number") ?? "",
+    owes: formatMinor(Number.isFinite(owes) ? owes : 0, text(row, "currency") ?? "GBP"),
+    due: shortDate(row["due_date"]) ?? "",
+  };
 }
 
 /**
