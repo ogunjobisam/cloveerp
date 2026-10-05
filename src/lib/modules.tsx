@@ -2874,6 +2874,27 @@ export const PLANNING: ModuleDef = {
       invalidates: ["erp_planning_runs"],
     },
     {
+      // No step of its own: the run reads only products planned at a site,
+      // and this is where one is planned (J-23).
+      label: "Plan a product at a site",
+      description:
+        "Planning orders only the products planned at a site. Plan one here, and the next run orders it when open orders or the forecast need it.",
+      permission: "planning.run",
+      fn: "erp_plan_item_at_site",
+      fields: [
+        pickItem(),
+        pickSite(),
+        {
+          kind: "text",
+          name: "p_policy_code",
+          label: "Planning policy",
+          placeholder: "standard",
+          hint: "Leave empty for the standard policy.",
+        },
+      ],
+      invalidates: ["erp_planner_workbench"],
+    },
+    {
       label: "Confirm a planned order",
       description:
         "A bought item becomes a purchase order of the type you name; a made item becomes a works order, released to the floor once it is due to start, unless its material is short or releasing is not yours to do.",
@@ -2989,8 +3010,13 @@ export const PLANNING: ModuleDef = {
           value: "forecast",
           label: ["forecast", "forecast_name"],
         }),
-        { kind: "number", name: "p_periods", label: "Periods ahead" },
-        { kind: "number", name: "p_buckets", label: "Past weeks or months to use" },
+        { kind: "number", name: "p_periods", label: "Periods ahead", hint: "Default 6." },
+        {
+          kind: "number",
+          name: "p_buckets",
+          label: "Past weeks or months to use",
+          hint: "Default 24.",
+        },
       ],
       invalidates: ["erp_planner_workbench", "erp_planned_orders", "erp_forecast_versions"],
     },
@@ -3690,7 +3716,7 @@ export const QUALITY: ModuleDef = {
       },
       {
         label: "Close",
-        hint: "An event closes once you have decided what happens to it and logged the actions.",
+        hint: "An event closes with why it happened and what was done to fix it and stop it recurring.",
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
         recordArg: "p_event_id",
