@@ -4,10 +4,20 @@ import { useRef, useState } from "react";
 import { dependentFields, optionArgs, optionList } from "../../lib/dependent-options";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import {
+  asTable,
+  cellKind,
+  currencyOf,
+  fieldHeading,
+  isEmptyAnswer,
+  shownEntries,
+} from "../../lib/inquiry-table";
 import { fill } from "../../lib/interview";
 import { formatMinor } from "../../lib/money";
 import { missingRequired } from "../../lib/required-fields";
 import { ActionButton, ComboField, ErrorNote, MultiField, type Field } from "./action";
+import { shortDate } from "./auto";
+import { Table } from "./panel";
 import { useErpSession } from "./session-context";
 import { Prose, TOUCH } from "./page";
 
@@ -37,13 +47,60 @@ export type InquirySpec = {
    * document, before the document) is not an argument of the door.
    */
   mapArgs?: (values: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * What an empty answer means, said in place of "None" when the answer is an
+   * empty list or nothing (J-95): a bare "None" leaves the reader to guess
+   * whether they asked wrongly or there is simply nothing.
+   */
+  empty?: string;
 };
+
+/**
+ * One field of an answer. An amount in minor units is money, in the record's
+ * own currency where it says one: "Resolve a purchase price" answered AMOUNT
+ * MINOR 1850 for a price of £18.50; minor units belong to the door, never to
+ * the screen. A date is shown short.
+ */
+function AnswerField({
+  name,
+  value,
+  currency,
+}: {
+  name: string;
+  value: unknown;
+  currency: string;
+}) {
+  const kind = cellKind(name, value);
+  if (kind === "money") {
+    return <span className="tabular-nums">{formatMinor(value as number, currency)}</span>;
+  }
+  if (kind === "date") return <span className="whitespace-nowrap">{shortDate(value)}</span>;
+  return <Value value={value} />;
+}
 
 function Value({ value }: { value: unknown }) {
   if (value === null || value === undefined || value === "") return <span>—</span>;
   if (typeof value === "boolean") return <span>{value ? "Yes" : "No"}</span>;
   if (Array.isArray(value)) {
     if (value.length === 0) return <span className="text-muted-foreground">None</span>;
+    // Rows that share their fields are a table, read down a column (J-92):
+    // a projection drawn as a card per day read as a stack of forms.
+    const table = asTable(value);
+    if (table) {
+      return (
+        <Table columns={table.columns.map((c) => c.heading)}>
+          {table.rows.map((row, i) => (
+            <tr key={i} className="border-b border-border/60 last:border-0">
+              {table.columns.map((c) => (
+                <td key={c.key} className="py-1.5 pr-4 align-top">
+                  <AnswerField name={c.key} value={row[c.key]} currency={currencyOf(row)} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </Table>
+      );
+    }
     return (
       <ul className="flex flex-col gap-1">
         {value.map((v, i) => (
@@ -56,29 +113,21 @@ function Value({ value }: { value: unknown }) {
   }
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    // An amount in minor units is money, in the record's own currency where it
-    // says one. "Resolve a purchase price" answered AMOUNT MINOR 1850 for a
-    // price of £18.50; minor units belong to the door, never to the screen.
-    const currency = typeof record["currency"] === "string" ? record["currency"] : "GBP";
+    const currency = currencyOf(record);
+    // Every field but the identifiers: ITEM SUPPLIER ID, PARTY ID and SITE ID
+    // printed as UUIDs said nothing to the reader (J-109, J-105).
     return (
       <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-        {Object.entries(record).map(([k, v]) => {
-          const money = k.endsWith("_minor") && typeof v === "number" && Number.isFinite(v);
-          return (
-            <div key={k} className="min-w-0">
-              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {k.replace(/_minor$/, "").replace(/_/g, " ")}
-              </dt>
-              <dd className="break-words text-sm">
-                {money ? (
-                  <span className="tabular-nums">{formatMinor(v, currency)}</span>
-                ) : (
-                  <Value value={v} />
-                )}
-              </dd>
-            </div>
-          );
-        })}
+        {shownEntries(record).map(([k, v]) => (
+          <div key={k} className="min-w-0">
+            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              {fieldHeading(k)}
+            </dt>
+            <dd className="break-words text-sm">
+              <AnswerField name={k} value={v} currency={currency} />
+            </dd>
+          </div>
+        ))}
       </dl>
     );
   }
@@ -272,8 +321,12 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
         {ask.error ? <ErrorNote error={ask.error} /> : null}
 
         {ask.data !== undefined && !ask.error ? (
-          <div className="rounded-md border border-border p-3">
-            <Value value={ask.data} />
+          <div className="min-w-0 rounded-md border border-border p-3">
+            {spec.empty && isEmptyAnswer(ask.data) ? (
+              <Prose className="text-sm text-muted-foreground">{ui(spec.empty)}</Prose>
+            ) : (
+              <Value value={ask.data} />
+            )}
           </div>
         ) : null}
       </div>
