@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ActionButtons, pickDocument } from "../../components/erp/actions-bar";
+import { shortDate } from "../../components/erp/auto";
 import { DecisionMoves } from "../../components/erp/decision-moves";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -39,6 +40,9 @@ type TransferRow = {
   document_id: string;
   document_number: string;
   state: string | null;
+  state_name: string | null;
+  their_reference: string | null;
+  products: string | null;
   from_site: string | null;
   to_site: string | null;
   document_date: string;
@@ -87,7 +91,13 @@ function SiteTransfers() {
                   "Takes the goods off the despatching site's shelves and stands them in that site's transit place. They are still that site's stock and still its value until they arrive.",
                 permission: "inventory.move",
                 fn: "erp_despatch_transfer",
-                fields: [pickDocument("transfer_order", "p_document_id", "Transfer order")],
+                // Offered what is approved and not yet loaded: never one on the
+                // road or already received (J-84).
+                fields: [
+                  pickDocument("transfer_order", "p_document_id", "Transfer order", true, {
+                    states: ["approved", "issued"],
+                  }),
+                ],
                 invalidates,
               },
               {
@@ -97,7 +107,12 @@ function SiteTransfers() {
                   "Books the goods onto the receiving site's shelves. The quantity and the value both cross here, for the same figure, so the company holds exactly what it held before.",
                 permission: "inventory.move",
                 fn: "erp_receive_transfer",
-                fields: [pickDocument("transfer_order", "p_document_id", "Transfer order")],
+                // Offered what is on the road, which is what can arrive (J-84).
+                fields: [
+                  pickDocument("transfer_order", "p_document_id", "Transfer order", true, {
+                    transition: "received",
+                  }),
+                ],
                 invalidates,
               },
             ]}
@@ -121,6 +136,9 @@ function SiteTransfers() {
           <Table
             columns={[
               ui("Number"),
+              ui("Date"),
+              ui("Reference"),
+              ui("Products"),
               ui("From"),
               ui("To"),
               ui("State"),
@@ -131,11 +149,25 @@ function SiteTransfers() {
           >
             {rows.map((r) => (
               <tr key={r.document_id} className="border-b border-border/60 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{r.document_number}</td>
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {/* Opens the transfer, which a number in a list should (J-84). */}
+                  <Link
+                    to="/documents/$documentId"
+                    params={{ documentId: r.document_id }}
+                    className="underline underline-offset-2"
+                  >
+                    {r.document_number}
+                  </Link>
+                </td>
+                <td className="whitespace-nowrap py-2 pr-4 tabular-nums">
+                  {shortDate(r.document_date)}
+                </td>
+                <td className="py-2 pr-4">{r.their_reference ?? "—"}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{r.products ?? "—"}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{r.from_site ?? "—"}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{r.to_site ?? "—"}</td>
                 <td className="py-2 pr-4">
-                  <Pill tone={stateTone(r.state)}>{r.state ?? "—"}</Pill>
+                  <Pill tone={stateTone(r.state)}>{r.state_name ?? r.state ?? "—"}</Pill>
                   {/* Approve and Reject, on a transfer over its threshold,
                       to the people its approval asked (PR11 M6). */}
                   <DecisionMoves
