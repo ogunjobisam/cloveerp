@@ -2950,3 +2950,67 @@ test.describe("report runs say where they come from", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a supplier's price is kept where its terms are", () => {
+  // J-108: no screen set what a supplier charges, and the supplier's own code
+  // was answered but never drawn. Product-suppliers now shows both.
+  test("Product-suppliers shows the supplier's own code and each supplier's price, and offers to set one (J-108)", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_item_suppliers", [
+      {
+        item_supplier_id: "00000000-0000-4000-8000-0000000051a1",
+        item_id: "00000000-0000-4000-8000-0000000051a2",
+        item_code: "BOLT-10",
+        item_name: "Bolt, 10 mm",
+        party_id: "00000000-0000-4000-8000-0000000051a3",
+        supplier: "Northwind Fasteners",
+        site_id: null,
+        site_code: null,
+        preference_rank: 1,
+        is_default: true,
+        split_pct: null,
+        is_approved_for_use: true,
+        supplier_item_code: "NW-4471",
+        lead_time_days: 5,
+        min_order_quantity: 100,
+        valid_from: "2026-01-01",
+        valid_to: null,
+        status: "active",
+      },
+    ]);
+    backend.rpc("erp_supplier_prices", [
+      {
+        item_price_id: "00000000-0000-4000-8000-0000000051a4",
+        item_id: "00000000-0000-4000-8000-0000000051a2",
+        item_code: "BOLT-10",
+        item_name: "Bolt, 10 mm",
+        party_id: "00000000-0000-4000-8000-0000000051a3",
+        supplier: "Northwind Fasteners",
+        amount_minor: 1250,
+        currency: "GBP",
+        minor_units: 2,
+        per_quantity: 1,
+        min_quantity: 0,
+        valid_from: "2026-10-01",
+        valid_to: null,
+        state: "in_force",
+      },
+    ]);
+
+    await page.goto("/master-data/item-supply");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("columnheader", { name: "Supplier's own code" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "NW-4471" })).toBeVisible();
+
+    const prices = page.getByRole("heading", { name: "Supplier prices", exact: true }).first();
+    await prices.scrollIntoViewIfNeeded();
+    await expect.poll(() => backend.called.includes("erp_supplier_prices")).toBe(true);
+    await expect(page.getByRole("cell", { name: "£12.50" })).toBeVisible();
+    await expect(page.getByText("In force", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set the supplier's price" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "End a supplier's price" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+});
