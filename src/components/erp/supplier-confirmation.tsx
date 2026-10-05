@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
+import { lineName } from "../../lib/line-name";
+import { orderLineWords } from "../../lib/shipping-notices";
 import { whenText } from "../../lib/when";
 import {
   confirmationWords,
@@ -11,6 +14,7 @@ import {
   type OrderConfirmation,
 } from "../../lib/supplier-confirmation";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
+import { LineProduct } from "./line-product";
 import { LoadingRows, Prose } from "./page";
 import { Pill, Table } from "./panel";
 import { useErpSession } from "./session-context";
@@ -85,7 +89,9 @@ export function SupplierConfirmation({
             {c.lines.map((l) => (
               <tr key={l.lineId} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-4 tabular-nums">{l.lineNo}</td>
-                <td className="py-2 pr-4">{l.description}</td>
+                <td className="py-2 pr-4">
+                  <LineProduct name={lineName(l.itemCode, l.itemName, l.description)} />
+                </td>
                 <td className="py-2 pr-4 tabular-nums">{l.quantity}</td>
                 <td className="py-2 pr-4 tabular-nums">{l.confirmedQuantity ?? "—"}</td>
                 <td className="py-2 tabular-nums">{l.confirmedDate ?? l.requiredDate ?? "—"}</td>
@@ -284,6 +290,8 @@ function RecordAnswer({ c, context }: { c: OrderConfirmation; context: string })
             args: { p_document_id: c.orderId, p_limit: 500 },
             value: "line_id",
             label: ["item", "quantity"],
+            // "RM-300 — 6" did not say the 6 was what was ordered (J-61).
+            describe: (row) => fill(ui("{item}: {quantity} ordered"), orderLineWords(row).words),
           },
         },
         { name: "quantity", label: "They can send", kind: "number", placeholder: "8" },

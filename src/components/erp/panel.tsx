@@ -172,8 +172,9 @@ export function Table({ columns, children }: { columns: string[]; children: Reac
     // The table keeps its minimum width and scrolls within this box. That is
     // deliberate: a seven-column operational table reflowed into a phone width
     // is unreadable, and a horizontal scroll confined to the table is much
-    // better than one that moves the whole page.
-    <div className="w-full max-w-full overflow-x-auto">
+    // better than one that moves the whole page. A shadow at an edge says
+    // there is more that way, which a clipped column never did (J-88).
+    <div className="scroll-shadow-x w-full max-w-full overflow-x-auto">
       <table className="w-full min-w-[36rem] text-left text-sm">
         <thead>
           <tr className="border-b border-border">

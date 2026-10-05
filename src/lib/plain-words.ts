@@ -610,7 +610,10 @@ function joinAnd(words: readonly string[]): string {
  * What a planning run produced, from its row in erp_planning_runs.
  *
  * The run returns only its id, and "Run planning — done." says nothing about
- * whether anything needs ordering. The run's own row counts what it raised.
+ * whether anything needs ordering. The run's own row counts what it raised,
+ * and the outcome says only that: "Nothing at that site runs short" was said
+ * of products the run never looked at, because nothing planned them there
+ * (J-23). Those are the run's exceptions now (20261007151000).
  */
 export function planningOutcome(label: string, run: unknown): string | null {
   const r = asRecord(run);
@@ -619,7 +622,7 @@ export function planningOutcome(label: string, run: unknown): string | null {
   const exceptions = Number(r["exceptions_raised"]);
   if (!Number.isFinite(orders) || !Number.isFinite(exceptions)) return null;
   if (orders === 0 && exceptions === 0)
-    return `${label}: no planned orders and no exceptions. Nothing at that site runs short within the horizon. Planning orders a stocked product only when its planning policy reorders and open orders or the forecast take its projected stock below the reorder point.`;
+    return `${label}: no planned orders and no exceptions. Planning orders a stocked product only when its planning policy reorders and open orders or the forecast take its projected stock below the reorder point.`;
   const parts = [
     `${orders} planned ${plural(orders, "order", "orders")}`,
     `${exceptions} ${plural(exceptions, "exception", "exceptions")}`,

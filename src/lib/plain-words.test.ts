@@ -287,6 +287,8 @@ describe("a toast names what was made", () => {
     });
     expect(nothing).toStartWith("Run planning: no planned orders and no exceptions.");
     expect(nothing).toContain("reorder point");
+    // It says what the run counted, not that nothing runs short (J-23).
+    expect(nothing).not.toContain("runs short");
     expect(planningOutcome("Run planning", undefined)).toBeNull();
     expect(planningOutcome("Run planning", { run_id: "r" })).toBeNull();
   });

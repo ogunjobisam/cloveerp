@@ -29,6 +29,7 @@ import {
   dropDefaultedValues,
   dropSeededRows,
   emptyReason,
+  followsField,
   optionArgs,
   optionList,
   pickerOptions,
@@ -291,7 +292,7 @@ export type OptionSource = {
    * warehouse task reads "FG-5000 Acme widget from Goods in to Bulk store,
    * 100", not "putaway — FG-5000 — RECV — BULK". `label` stays the fallback.
    */
-  describe?: (row: Record<string, unknown>) => string;
+  describe?: (row: Record<string, unknown>, ui: (text: string) => string) => string;
   /** Only the rows worth offering, when the door lists more: open tasks, not done ones. */
   keep?: (row: Record<string, unknown>) => boolean;
   /**
@@ -454,6 +455,10 @@ function asText(v: unknown): string {
  * theirs, so changing the product changes it too. Choosing nothing, or a
  * product with nothing to give, leaves the column blank for the database to
  * decide.
+ *
+ * A column whose picker follows the changed cell is emptied when it changes:
+ * the batches of the order line chosen before are not the batches of the one
+ * chosen now (J-58).
  */
 export function pickIntoRow(
   row: Record<string, string>,
@@ -463,6 +468,9 @@ export function pickIntoRow(
   pick?: OptionPick,
 ): Record<string, string> {
   const next: Record<string, string> = { ...row, [changed]: value };
+  if ((row[changed] ?? "") !== value)
+    for (const c of columns)
+      if (c.name !== changed && followsField(c.options, changed)) next[c.name] = "";
   if (!pick) return next;
   for (const c of columns) {
     const from = c.fillFrom;
@@ -476,6 +484,7 @@ export function pickIntoRow(
 }
 
 function useOptions(source: OptionSource | undefined, values: Record<string, string> = {}) {
+  const { ui } = useT();
   // Null while a choice this picker follows has not been made: there is
   // nothing to ask for yet.
   const args = source ? optionArgs(source, values) : {};
@@ -494,7 +503,7 @@ function useOptions(source: OptionSource | undefined, values: Record<string, str
   const list = source ? optionList(source, data, values) : data;
 
   // A row per option, each value once; see pickerOptions.
-  const rows = source ? pickerOptions(source, list) : [];
+  const rows = source ? pickerOptions(source, list, ui) : [];
 
   return { rows, isPending: Boolean(source) && !waiting && isPending, error, waiting };
 }
@@ -692,7 +701,14 @@ export function MultiField({
   );
 }
 
-/** One cell of a row editor: a picker where the value names a record. */
+/**
+ * One cell of a row editor: a picker where the value names a record.
+ *
+ * Its picker is handed the form's answers and its own row's: a row's Location
+ * and Batch follow the order line chosen in that row, not one chosen on the
+ * form (J-58). The form's answer wins where both name the same thing, so every
+ * picker that followed the form follows it still.
+ */
 function RowCell({
   column,
   value,
@@ -865,7 +881,7 @@ function RowsField({
               </span>
               <RowCell
                 column={c}
-                {...(formValues ? { formValues } : {})}
+                formValues={{ ...row, ...formValues }}
                 value={row[c.name] ?? ""}
                 onChange={(v, pick) =>
                   onChange(

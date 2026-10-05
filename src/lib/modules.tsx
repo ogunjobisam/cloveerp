@@ -25,8 +25,10 @@ import {
 } from "../components/erp/actions-bar";
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
+import { fill } from "./interview";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
 import type { InstallableModule } from "./installed-modules";
+import { receivableLineWords } from "./shipping-notices";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -2858,6 +2860,27 @@ export const PLANNING: ModuleDef = {
       invalidates: ["erp_planning_runs"],
     },
     {
+      // No step of its own: the run reads only products planned at a site,
+      // and this is where one is planned (J-23).
+      label: "Plan a product at a site",
+      description:
+        "Planning orders only the products planned at a site. Plan one here, and the next run orders it when open orders or the forecast need it.",
+      permission: "planning.run",
+      fn: "erp_plan_item_at_site",
+      fields: [
+        pickItem(),
+        pickSite(),
+        {
+          kind: "text",
+          name: "p_policy_code",
+          label: "Planning policy",
+          placeholder: "standard",
+          hint: "Leave empty for the standard policy.",
+        },
+      ],
+      invalidates: ["erp_planner_workbench"],
+    },
+    {
       label: "Confirm a planned order",
       description:
         "A bought item becomes a purchase order of the type you name; a made item becomes a works order, released to the floor once it is due to start, unless its material is short or releasing is not yours to do.",
@@ -2973,8 +2996,13 @@ export const PLANNING: ModuleDef = {
           value: "forecast",
           label: ["forecast", "forecast_name"],
         }),
-        { kind: "number", name: "p_periods", label: "Periods ahead" },
-        { kind: "number", name: "p_buckets", label: "Past weeks or months to use" },
+        { kind: "number", name: "p_periods", label: "Periods ahead", hint: "Default 6." },
+        {
+          kind: "number",
+          name: "p_buckets",
+          label: "Past weeks or months to use",
+          hint: "Default 24.",
+        },
       ],
       invalidates: ["erp_planner_workbench", "erp_planned_orders", "erp_forecast_versions"],
     },
@@ -3674,7 +3702,7 @@ export const QUALITY: ModuleDef = {
       },
       {
         label: "Close",
-        hint: "An event closes once you have decided what happens to it and logged the actions.",
+        hint: "An event closes with why it happened and what was done to fix it and stop it recurring.",
         list: QUALITY_EVENT_LIST,
         states: QUALITY_EVENT_OPEN,
         recordArg: "p_event_id",
@@ -4244,7 +4272,7 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
     name: "p_lines",
     label: "Lines to receive",
     addLabel: "Add a line",
-    hint: "Each line with something left to receive arrives holding what is left. Lower a quantity to receive part of a line, remove a line to leave it for a later delivery, or add the same line twice for two batches. A batch-controlled product needs its batch before the receipt posts.",
+    hint: "Each line with something left to receive arrives holding what is left. Lower a quantity to receive part of a line, remove a line to leave it for a later delivery, or add the same line twice for two batches. A batch-controlled product needs its batch before the receipt posts. A line with no location goes to the site's goods-in.",
     columns: [
       {
         name: "line_id",
@@ -4256,6 +4284,9 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
           argsFrom: { p_order_id: "p_order_id" },
           value: "line_id",
           label: ["line_no", "item", "description", "open_quantity"],
+          // The number on its own read as the ordered quantity (J-61).
+          describe: (row, ui) =>
+            fill(ui("Line {line}: {item}, {open} left to receive"), receivableLineWords(row)),
           // The owner met this picker empty and was told the list was empty
           // for the organisation, of an organisation with hundreds of order
           // lines. It is scoped to the order and to nothing else, so this is
@@ -4265,17 +4296,34 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
         },
       },
       { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
+      // Each row's places and batches are its own line's (J-58): the order's
+      // site's locations, less despatch and in transit, and the batches of the
+      // line's product, none when it is not batch-controlled. Every
+      // organisation's locations and batches were offered on every row.
       {
         name: "location_id",
         label: "Location",
         kind: "select",
-        options: { fn: "erp_locations", value: "location_id", label: ["site", "code", "name"] },
+        options: {
+          fn: "erp_receivable_lines",
+          argsFrom: { p_order_id: "p_order_id" },
+          within: { field: "line_id", key: "line_id", path: "locations" },
+          value: "location_id",
+          label: ["code", "name"],
+        },
       },
       {
         name: "batch_id",
         label: "Batch",
         kind: "select",
-        options: { fn: "erp_batches", value: "batch_id", label: ["batch_number", "item"] },
+        options: {
+          fn: "erp_receivable_lines",
+          argsFrom: { p_order_id: "p_order_id" },
+          within: { field: "line_id", key: "line_id", path: "batches" },
+          value: "batch_id",
+          label: ["batch_number", "expires_on"],
+          empty: "No batch to choose: this product is not batch-controlled, or has no batch yet.",
+        },
       },
     ],
     seed: {
@@ -4345,6 +4393,127 @@ export const RECEIVE_THIS_ORDER: ActionSpec = {
   code: "receive_this_order",
   label: "Receive this order",
   title: "Receive this order",
+};
+
+/**
+ * A carrier's service, chosen from its rate card within the carrier chosen
+ * above (J-64). It was typed, with "standard" suggested, which no carrier's
+ * rate card names, so a booking left without a cost was refused for want of a
+ * tariff.
+ */
+const SERVICE_OF_THE_CARRIER = {
+  fn: "erp_carriers",
+  within: { field: "p_carrier_code", key: "code", path: "service_options" },
+  value: "code",
+  label: ["code"],
+  empty: "No service to choose: this carrier's rate card names none.",
+};
+
+/**
+ * Who brings an order's goods (20261004955000): the supplier, at their cost,
+ * or us, which lets a collection be booked for it. On Purchasing's Actions,
+ * where the order is chosen, and on the order's own page, where it is the
+ * order shown (J-63). Every order not finished is offered: that is what
+ * erp.set_freight_terms accepts.
+ */
+export const SET_FREIGHT_TERMS: ActionSpec = {
+  label: "Set freight terms",
+  description:
+    "Who brings the goods: the supplier, delivered at their cost, or us, collected at ours.",
+  permission: "procurement.order",
+  fn: "erp_set_freight_terms",
+  fields: [
+    pickFrom(
+      "erp_documents",
+      "document_id",
+      ["document_number", "party", "state_name"],
+      "p_order",
+      "Purchase order",
+      { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
+    ),
+    {
+      kind: "choice",
+      name: "p_terms",
+      label: "Freight terms",
+      required: true,
+      choices: [
+        { value: "supplier_delivers", label: "The supplier delivers" },
+        { value: "we_collect", label: "We collect" },
+      ],
+    },
+  ],
+  invalidates: ["erp_documents", "erp_document", "erp_orders_to_collect"],
+};
+
+/**
+ * The collection of an order we collect (20261004955000): an inbound shipment,
+ * booked with the carrier. Receiving the goods delivers it. The orders offered
+ * are the ones erp.ship_inbound books: sent, We collect, and not already being
+ * collected (J-65).
+ */
+export const BOOK_A_COLLECTION: ActionSpec = {
+  label: "Book a collection",
+  description:
+    "Books a carrier to collect an order we collect from the supplier. When the goods are received it arrives, and the carrier's bill lands on them.",
+  permission: "logistics.plan",
+  fn: "erp_ship_inbound",
+  fields: [
+    {
+      kind: "select",
+      name: "p_order",
+      label: "Purchase order",
+      required: true,
+      options: {
+        fn: "erp_orders_to_collect",
+        value: "document_id",
+        label: ["document_number", "party", "state_name"],
+        empty:
+          "No order is waiting to be collected. Set an order's freight terms to We collect and send it to the supplier, and it is offered here until its collection is booked.",
+      },
+    },
+    {
+      kind: "select",
+      name: "p_carrier_code",
+      label: "Carrier",
+      required: true,
+      options: { fn: "erp_carriers", value: "code", label: ["code", "name"] },
+    },
+    {
+      kind: "select",
+      name: "p_service_code",
+      label: "Service",
+      required: true,
+      options: SERVICE_OF_THE_CARRIER,
+    },
+    {
+      kind: "money",
+      name: "p_cost_minor",
+      label: "Cost",
+      currency: "GBP",
+      hint: "Leave empty to take the rate card's price.",
+    },
+    { kind: "date", name: "p_expected_arrival", label: "Expected arrival" },
+    {
+      kind: "text",
+      name: "p_tracking_reference",
+      label: "Tracking reference",
+      hint: "Leave empty when the carrier is booked through EasyPost: its label brings one.",
+    },
+    {
+      kind: "number",
+      name: "p_weight_g",
+      label: "Weight (g)",
+      placeholder: "12500",
+      hint: "The consignment as weighed. Leave empty to take the items' own weights; a carrier booked through EasyPost needs one or the other.",
+    },
+  ],
+  invalidates: [
+    "erp_inbound_shipments",
+    "erp_shipments",
+    "erp_documents",
+    "erp_document",
+    "erp_orders_to_collect",
+  ],
 };
 
 export const LOGISTICS: ModuleDef = {
@@ -4456,12 +4625,12 @@ export const LOGISTICS: ModuleDef = {
           },
         },
         {
-          kind: "text",
+          kind: "select",
           name: "p_service_code",
           label: "Service",
           required: false,
-          placeholder: "NEXT_DAY",
           hint: "Leave empty to take the carrier's recommended service.",
+          options: SERVICE_OF_THE_CARRIER,
         },
         {
           kind: "money",
@@ -4514,12 +4683,12 @@ export const LOGISTICS: ModuleDef = {
           },
         },
         {
-          kind: "text",
+          kind: "select",
           name: "p_service_code",
           label: "Service",
           required: true,
-          placeholder: "NEXT-DAY",
           hint: "The carrier's own service code, from their rate card.",
+          options: SERVICE_OF_THE_CARRIER,
         },
         {
           kind: "money",

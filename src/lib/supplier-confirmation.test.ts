@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   awaitingOrders,
@@ -130,6 +132,38 @@ describe("an order's answer on its page", () => {
     expect(c?.proposal[0]?.quantity).toBe(8);
     expect(c?.mayCancel).toBe(false);
     expect(orderConfirmation({})).toBeNull();
+  });
+
+  test("a line typed over still carries its product's code and name (J-157)", () => {
+    const c = orderConfirmation({
+      order_id: "o1",
+      order: "PO-000001",
+      status: "confirmed",
+      lines: [
+        {
+          line_id: "l1",
+          line_no: 10,
+          description: "JT-A added line",
+          item_code: "COAT",
+          item_name: "Wool coat",
+          quantity: "10.000000",
+          confirmed_quantity: 10,
+        },
+      ],
+    });
+    expect(c?.lines[0]).toMatchObject({
+      description: "JT-A added line",
+      itemCode: "COAT",
+      itemName: "Wool coat",
+      quantity: 10,
+    });
+    const panel = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "supplier-confirmation.tsx"),
+      "utf8",
+    );
+    expect(panel).toContain(
+      "<LineProduct name={lineName(l.itemCode, l.itemName, l.description)} />",
+    );
   });
 
   test("a proposal is decided while it waits, kept once accepted, and gone once answered again (J-62)", () => {

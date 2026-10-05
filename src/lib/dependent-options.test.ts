@@ -288,6 +288,16 @@ describe("what a picker offers", () => {
     expect(pickerOptions({ value: "n", label: ["missing"] }, [{ n: 7 }])[0]?.label).toBe("7");
   });
 
+  test("a description is handed the screen's translator, and without one reads as written", () => {
+    const describe = (row: Record<string, unknown>, ui: (text: string) => string) =>
+      `${ui("Line")} ${String(row["n"])}`;
+    const ui = (text: string) => (text === "Line" ? "Zeile" : text);
+    expect(pickerOptions({ value: "n", label: [], describe }, [{ n: 1 }], ui)[0]?.label).toBe(
+      "Zeile 1",
+    );
+    expect(pickerOptions({ value: "n", label: [], describe }, [{ n: 1 }])[0]?.label).toBe("Line 1");
+  });
+
   test("nothing, when the door answered with no list", () => {
     expect(pickerOptions(boms, null)).toEqual([]);
     expect(pickerOptions(boms, { lines: [] })).toEqual([]);

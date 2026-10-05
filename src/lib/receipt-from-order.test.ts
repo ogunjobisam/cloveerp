@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { emptyReason, optionArgs, optionList, pickerOptions } from "./dependent-options";
 import {
   RECEIPT_FROM_ORDER_FIELDS,
   RECEIVE_AN_ORDER,
@@ -116,5 +117,80 @@ describe("the order-line picker names the order when it has nothing", () => {
 
   test("and the sentence says what is true of a receive order", () => {
     expect(line?.options?.empty).toContain("nothing left to receive");
+  });
+});
+
+/**
+ * Each row's Location and Batch are its own line's (J-58).
+ *
+ * They listed every location of the organisation, another site's and Despatch
+ * among them, and every batch of every product, and on a plain product said
+ * the list was empty for the organisation. erp_receivable_lines now answers
+ * each line's places and batches; the columns read the row's own.
+ */
+describe("a row offers its own line's places and batches", () => {
+  const rows = fields.find((f) => f.kind === "rows");
+  const column = (name: string) =>
+    rows && rows.kind === "rows" ? rows.columns.find((c) => c.name === name) : undefined;
+  const B1 = { batch_id: "b1", batch_number: "B1", expires_on: "2027-01-01" };
+  const ANSWER = [
+    {
+      line_id: "a",
+      line_no: 1,
+      item: "SER-1",
+      open_quantity: 6,
+      locations: [{ location_id: "bulk", code: "BULK", name: "Shelf" }],
+      batches: [B1],
+    },
+    {
+      line_id: "p",
+      line_no: 2,
+      item: "BOX-1",
+      open_quantity: 4,
+      locations: [{ location_id: "bulk", code: "BULK", name: "Shelf" }],
+      batches: [],
+    },
+  ];
+
+  test("both read the order's receivable lines, within the row's line", () => {
+    for (const [name, path] of [
+      ["location_id", "locations"],
+      ["batch_id", "batches"],
+    ] as const) {
+      const options = column(name)?.options;
+      expect(options?.fn).toBe("erp_receivable_lines");
+      expect(options?.argsFrom).toEqual({ p_order_id: "p_order_id" });
+      expect(options?.within).toEqual({ field: "line_id", key: "line_id", path });
+    }
+  });
+
+  test("a row's batches are its line's, and a plain product's are none, said in its own words", () => {
+    const batch = column("batch_id")?.options;
+    if (!batch) throw new Error("no batch picker");
+    const values = { p_order_id: "o1", line_id: "a" };
+    expect(optionArgs(batch, values)).toEqual({ p_order_id: "o1" });
+    expect(pickerOptions(batch, optionList(batch, ANSWER, values))).toEqual([
+      { value: "b1", label: "B1 — 2027-01-01", record: B1 },
+    ]);
+    expect(optionList(batch, ANSWER, { ...values, line_id: "p" })).toEqual([]);
+    expect(emptyReason(batch)).toBe(
+      "No batch to choose: this product is not batch-controlled, or has no batch yet.",
+    );
+  });
+
+  test("a row with no line chosen waits for it", () => {
+    const location = column("location_id")?.options;
+    if (!location) throw new Error("no location picker");
+    expect(optionArgs(location, { p_order_id: "o1" })).toBeNull();
+    expect(optionList(location, ANSWER, { p_order_id: "o1", line_id: "a" })).toEqual(
+      ANSWER[0]!.locations,
+    );
+  });
+
+  test("the order line says its number is what is left to receive (J-61)", () => {
+    const line = column("line_id")?.options;
+    if (!line) throw new Error("no line picker");
+    const ui = (text: string) => text;
+    expect(pickerOptions(line, ANSWER, ui)[0]?.label).toBe("Line 1: SER-1, 6 left to receive");
   });
 });
