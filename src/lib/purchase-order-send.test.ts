@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { purchaseOrderSends, SEND_READS_AGAIN, sendStatus } from "./purchase-order-send";
 
@@ -105,5 +107,26 @@ describe("what a send reads again", () => {
     ]) {
       expect(SEND_READS_AGAIN).toContain(key);
     }
+  });
+});
+
+describe("the order's email section", () => {
+  test("says emailed, not sent, so it is not taken for issuing the order (J-51)", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "purchase-order-sends.tsx"),
+      "utf8",
+    );
+    for (const words of [
+      'ui("Emailed to the supplier")',
+      'ui("Email again") : ui("Email to supplier")',
+      'title="Email this order to the supplier"',
+      'description="Emails the order with its PDF attached. An approved order is issued by the same press. Replies come to you."',
+      'submitLabel="Email"',
+      'ui("Not emailed yet. Email it from here, or download the PDF and send it yourself.")',
+    ])
+      expect(src).toContain(words);
+    // Issuing is the lifecycle's own step ("Issue to supplier", then "Issued");
+    // the email section names neither a Send button nor a Sent state.
+    expect(src).not.toMatch(/ui\("Sen[dt] |title="Send |submitLabel="Send"|moves to Sent/);
   });
 });
