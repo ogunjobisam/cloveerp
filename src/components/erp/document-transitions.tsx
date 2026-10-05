@@ -195,7 +195,7 @@ export function DocumentTransitions({
       <p className="mt-4 text-xs text-muted-foreground">
         {transitions.length === 0
           ? committed || terminal
-            ? "This document has reached a state its lifecycle does not continue from."
+            ? ui("Nothing more happens to this document.")
             : "This document's type has no lifecycle configured, so there is nothing to move it through."
           : "Nothing here is offered to this account. The transitions this document has all require a permission it does not hold."}
       </p>

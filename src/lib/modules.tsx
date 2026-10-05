@@ -991,6 +991,16 @@ export const INVENTORY: ModuleDef = {
           "p_programme_code",
           "Programme",
         ),
+        // One place or one product, as on Stock audit (J-86).
+        {
+          ...pickLocation("p_location_id", "Location", false),
+          hint: "Leave unchosen to count every place the programme covers.",
+        },
+        {
+          ...pickItem("p_item_id", "Product"),
+          required: false,
+          hint: "Leave unchosen to count every product the programme covers.",
+        },
       ],
       invalidates: ["erp_count_tasks", "erp_count_accuracy"],
     },
@@ -1879,6 +1889,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_eliminations",
       fields: [pickGroupParent("p_parent_entity_id", "Parent company")],
+      empty: "Nothing has been eliminated in this group yet.",
     },
     {
       label: "Settlement statement",
@@ -1912,6 +1923,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_budget_position",
       fields: [codeField("p_code", "Budget code", "OPEX-2026")],
+      empty: "No budget in use has that code this year.",
     },
   ],
   key: "finance",
@@ -2424,7 +2436,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Received, not yet billed",
-      description: "Received against a purchase order, still awaiting an invoice.",
+      // Only a posted goods receipt receives (20261006131000).
+      description: "Posted goods receipts against a purchase order, still awaiting an invoice.",
       fn: "erp_grni",
       empty:
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
@@ -4960,7 +4973,8 @@ export const SALES_KPIS: Kpi[] = [
 
 export const PURCHASING_KPIS: Kpi[] = [
   {
-    label: "Received, not yet billed",
+    // How many lines; the tile after it says what they are worth (J-48).
+    label: "Lines received, not yet billed",
     fn: "erp_grni",
     compute: (rows) => {
       if (rows.length === 0) return { value: "0", hint: "nothing awaiting an invoice", tone: "ok" };
@@ -4973,7 +4987,7 @@ export const PURCHASING_KPIS: Kpi[] = [
     },
   },
   {
-    label: "Received, not yet billed",
+    label: "Value received, not yet billed",
     fn: "erp_grni",
     compute: (rows, { money }) =>
       rows.length === 0

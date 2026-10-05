@@ -7,6 +7,7 @@ import {
   actionOutcome,
   approvalChoice,
   cashOutcome,
+  countApprovalChoice,
   countOutcome,
   freightTermsOutcome,
   movedDocumentOutcome,
@@ -29,6 +30,7 @@ import {
   article,
   localIsoDate,
   quarterToDate,
+  shortDate,
   movedOnWord,
   orderPeriods,
   periodRank,
@@ -959,5 +961,49 @@ describe("an approval waiting on me says what it is worth (J-56)", () => {
   test("the approvals picker uses it", () => {
     const src = readFileSync(join(ROOT, "src", "routes", "procurement", "index.tsx"), "utf8");
     expect(src).toContain("describe: approvalChoice");
+  });
+});
+
+describe("a count waiting on my approval is named by what was counted where (J-20)", () => {
+  test("a day reads as a person writes it, and nothing else reads as one", () => {
+    expect(shortDate("2026-10-04T12:00:00Z")).toBe("4 Oct 2026");
+    expect(shortDate("2026-10-04")).toBe("4 Oct 2026");
+    expect(shortDate("not a day")).toBeNull();
+    expect(shortDate(null)).toBeNull();
+  });
+
+  test("the product, the place, what was found against what was expected, who and when", () => {
+    expect(
+      countApprovalChoice({
+        object_type: "count_task",
+        item: "PK-010",
+        item_name: "Packing box",
+        location: "RECV",
+        site: "MAIN",
+        context: { counted: 50, expected: "100.000000", variance: "-50.000000" },
+        requested_by: "Samuel Ogunjobi",
+        requested_at: "2026-10-04T12:15:14.717477+00:00",
+      }),
+    ).toBe("PK-010 Packing box at RECV — counted 50, expected 100 — Samuel Ogunjobi — 4 Oct 2026");
+  });
+
+  test("a count with no place or figures still says what it is, and never the raw kind or time", () => {
+    const words = countApprovalChoice({
+      object_type: "count_task",
+      item: "PK-010",
+      site: "MAIN",
+      context: null,
+      requested_by: "Sam",
+      requested_at: "2026-10-04T12:15:14Z",
+    });
+    expect(words).toBe("PK-010 at MAIN — Sam — 4 Oct 2026");
+    expect(words).not.toContain("count_task");
+    expect(words).not.toContain("T12:15");
+  });
+
+  test("Decide a count difference offers counts only, named this way", () => {
+    const src = readFileSync(join(ROOT, "src", "routes", "inventory", "audit.tsx"), "utf8");
+    expect(src).toContain('keep: (r) => r["object_type"] === "count_task"');
+    expect(src).toContain("describe: countApprovalChoice");
   });
 });
