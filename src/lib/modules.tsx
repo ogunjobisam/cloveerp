@@ -4362,6 +4362,127 @@ export const RECEIVE_THIS_ORDER: ActionSpec = {
   title: "Receive this order",
 };
 
+/**
+ * A carrier's service, chosen from its rate card within the carrier chosen
+ * above (J-64). It was typed, with "standard" suggested, which no carrier's
+ * rate card names, so a booking left without a cost was refused for want of a
+ * tariff.
+ */
+const SERVICE_OF_THE_CARRIER = {
+  fn: "erp_carriers",
+  within: { field: "p_carrier_code", key: "code", path: "service_options" },
+  value: "code",
+  label: ["code"],
+  empty: "No service to choose: this carrier's rate card names none.",
+};
+
+/**
+ * Who brings an order's goods (20261004955000): the supplier, at their cost,
+ * or us, which lets a collection be booked for it. On Purchasing's Actions,
+ * where the order is chosen, and on the order's own page, where it is the
+ * order shown (J-63). Every order not finished is offered: that is what
+ * erp.set_freight_terms accepts.
+ */
+export const SET_FREIGHT_TERMS: ActionSpec = {
+  label: "Set freight terms",
+  description:
+    "Who brings the goods: the supplier, delivered at their cost, or us, collected at ours.",
+  permission: "procurement.order",
+  fn: "erp_set_freight_terms",
+  fields: [
+    pickFrom(
+      "erp_documents",
+      "document_id",
+      ["document_number", "party", "state_name"],
+      "p_order",
+      "Purchase order",
+      { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
+    ),
+    {
+      kind: "choice",
+      name: "p_terms",
+      label: "Freight terms",
+      required: true,
+      choices: [
+        { value: "supplier_delivers", label: "The supplier delivers" },
+        { value: "we_collect", label: "We collect" },
+      ],
+    },
+  ],
+  invalidates: ["erp_documents", "erp_document", "erp_orders_to_collect"],
+};
+
+/**
+ * The collection of an order we collect (20261004955000): an inbound shipment,
+ * booked with the carrier. Receiving the goods delivers it. The orders offered
+ * are the ones erp.ship_inbound books: sent, We collect, and not already being
+ * collected (J-65).
+ */
+export const BOOK_A_COLLECTION: ActionSpec = {
+  label: "Book a collection",
+  description:
+    "Books a carrier to collect an order we collect from the supplier. When the goods are received it arrives, and the carrier's bill lands on them.",
+  permission: "logistics.plan",
+  fn: "erp_ship_inbound",
+  fields: [
+    {
+      kind: "select",
+      name: "p_order",
+      label: "Purchase order",
+      required: true,
+      options: {
+        fn: "erp_orders_to_collect",
+        value: "document_id",
+        label: ["document_number", "party", "state_name"],
+        empty:
+          "No order is waiting to be collected. Set an order's freight terms to We collect and send it to the supplier, and it is offered here until its collection is booked.",
+      },
+    },
+    {
+      kind: "select",
+      name: "p_carrier_code",
+      label: "Carrier",
+      required: true,
+      options: { fn: "erp_carriers", value: "code", label: ["code", "name"] },
+    },
+    {
+      kind: "select",
+      name: "p_service_code",
+      label: "Service",
+      required: true,
+      options: SERVICE_OF_THE_CARRIER,
+    },
+    {
+      kind: "money",
+      name: "p_cost_minor",
+      label: "Cost",
+      currency: "GBP",
+      hint: "Leave empty to take the rate card's price.",
+    },
+    { kind: "date", name: "p_expected_arrival", label: "Expected arrival" },
+    {
+      kind: "text",
+      name: "p_tracking_reference",
+      label: "Tracking reference",
+      hint: "Leave empty when the carrier is booked through EasyPost: its label brings one.",
+    },
+    {
+      kind: "number",
+      name: "p_weight_g",
+      label: "Weight (g)",
+      placeholder: "12500",
+      hint: "The consignment as weighed. Leave empty to take the items' own weights; a carrier booked through EasyPost needs one or the other.",
+    },
+  ],
+  invalidates: [
+    "erp_inbound_shipments",
+    "erp_shipments",
+    "erp_documents",
+    "erp_document",
+    "erp_orders_to_collect",
+  ],
+};
+
 export const LOGISTICS: ModuleDef = {
   flow: {
     code: "despatch",
@@ -4471,12 +4592,12 @@ export const LOGISTICS: ModuleDef = {
           },
         },
         {
-          kind: "text",
+          kind: "select",
           name: "p_service_code",
           label: "Service",
           required: false,
-          placeholder: "NEXT_DAY",
           hint: "Leave empty to take the carrier's recommended service.",
+          options: SERVICE_OF_THE_CARRIER,
         },
         {
           kind: "money",
@@ -4529,12 +4650,12 @@ export const LOGISTICS: ModuleDef = {
           },
         },
         {
-          kind: "text",
+          kind: "select",
           name: "p_service_code",
           label: "Service",
           required: true,
-          placeholder: "NEXT-DAY",
           hint: "The carrier's own service code, from their rate card.",
+          options: SERVICE_OF_THE_CARRIER,
         },
         {
           kind: "money",

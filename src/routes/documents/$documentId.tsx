@@ -27,8 +27,10 @@ import {
   DELIVERY_FROM_ORDER_FIELDS,
   deliveryFromOrderArgs,
   RECEIPT_FROM_ORDER_FIELDS,
+  BOOK_A_COLLECTION,
   RECEIVE_THIS_ORDER,
   receiptFromOrderArgs,
+  SET_FREIGHT_TERMS,
 } from "../../lib/modules";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "../../components/erp/currencies";
@@ -110,6 +112,11 @@ type Doc = {
    * refuses that by name (J-69).
    */
   is_sample?: boolean;
+  /**
+   * Who brings a purchase order's goods (erp.order_freight_terms): the
+   * supplier, by default, or us. Null on any other document (J-63).
+   */
+  freight_terms?: string | null;
 };
 
 type Line = {
@@ -280,6 +287,22 @@ function Document() {
         (doc.state === "sent" || doc.state === "partially_received") ? (
           <ReceiveThisOrder
             documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
+
+        {/* Who brings the goods, said on the order, and the two verbs that act
+            on it, here where the order is rather than only in Purchasing's
+            Actions (J-63). Set freight terms is offered on an order not
+            finished; Book a collection only where the order is one
+            erp_orders_to_collect offers. The database refuses the rest by
+            name. */}
+        {doc.document_type === "purchase_order" && doc.freight_terms ? (
+          <OrderFreight
+            documentId={documentId}
+            terms={doc.freight_terms}
+            state={doc.state}
+            finished={doc.is_terminal}
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
         ) : null}
@@ -567,6 +590,80 @@ function ReceiveThisOrder({ documentId, context }: { documentId: string; context
             void navigate({ to: "/documents/$documentId", params: { documentId: made } });
         }}
       />
+    </div>
+  );
+}
+
+/** The words for an order's freight terms, as Set freight terms offers them. */
+const FREIGHT_TERMS_WORDS: Record<string, string> = {
+  supplier_delivers: "The supplier delivers",
+  we_collect: "We collect",
+};
+
+/**
+ * Who brings this order's goods, and the verbs that change it or act on it
+ * (J-63): Set freight terms, and Book a collection where the order is waiting
+ * to be collected. Both are the forms Purchasing's Actions carry, with the
+ * order already chosen, so the outcome names it.
+ */
+function OrderFreight({
+  documentId,
+  terms,
+  state,
+  finished,
+  context,
+}: {
+  documentId: string;
+  terms: string;
+  state: string | null;
+  finished: boolean;
+  context: string;
+}) {
+  const { ui } = useT();
+  // Only an order sent and collected by us can be waiting; asking the door
+  // settles whether a collection is already planned or booked for it.
+  const mayCollect = terms === "we_collect" && (state === "sent" || state === "partially_received");
+  const waiting = useQuery({
+    queryKey: ["erp_orders_to_collect", { p_order: documentId }],
+    queryFn: () => callErp<unknown[]>("erp_orders_to_collect", { p_order: documentId }),
+    enabled: mayCollect,
+  });
+  const collectable = mayCollect && (waiting.data?.length ?? 0) > 0;
+  const words = FREIGHT_TERMS_WORDS[terms];
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">
+        {ui("Freight terms")}: {words ? ui(words) : terms}
+      </span>
+      {!finished ? (
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui(SET_FREIGHT_TERMS.label)}</ActionButton>}
+          title={SET_FREIGHT_TERMS.label}
+          {...(SET_FREIGHT_TERMS.description ? { description: SET_FREIGHT_TERMS.description } : {})}
+          permission={SET_FREIGHT_TERMS.permission ?? null}
+          fn={SET_FREIGHT_TERMS.fn}
+          fields={SET_FREIGHT_TERMS.fields ?? []}
+          prefill={{ p_order: documentId }}
+          context={context}
+          invalidates={SET_FREIGHT_TERMS.invalidates ?? []}
+          submitLabel={SET_FREIGHT_TERMS.label}
+        />
+      ) : null}
+      {collectable ? (
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui(BOOK_A_COLLECTION.label)}</ActionButton>}
+          title={BOOK_A_COLLECTION.label}
+          {...(BOOK_A_COLLECTION.description ? { description: BOOK_A_COLLECTION.description } : {})}
+          permission={BOOK_A_COLLECTION.permission ?? null}
+          fn={BOOK_A_COLLECTION.fn}
+          fields={BOOK_A_COLLECTION.fields ?? []}
+          prefill={{ p_order: documentId }}
+          context={context}
+          invalidates={BOOK_A_COLLECTION.invalidates ?? []}
+          submitLabel={BOOK_A_COLLECTION.label}
+        />
+      ) : null}
     </div>
   );
 }
