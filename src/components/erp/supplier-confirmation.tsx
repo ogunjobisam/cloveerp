@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
+import { orderLineWords } from "../../lib/shipping-notices";
 import { whenText } from "../../lib/when";
 import {
   confirmationWords,
@@ -284,6 +286,8 @@ function RecordAnswer({ c, context }: { c: OrderConfirmation; context: string })
             args: { p_document_id: c.orderId, p_limit: 500 },
             value: "line_id",
             label: ["item", "quantity"],
+            // "RM-300 — 6" did not say the 6 was what was ordered (J-61).
+            describe: (row) => fill(ui("{item}: {quantity} ordered"), orderLineWords(row).words),
           },
         },
         { name: "quantity", label: "They can send", kind: "number", placeholder: "8" },

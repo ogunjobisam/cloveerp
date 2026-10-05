@@ -25,7 +25,9 @@ import {
 } from "../components/erp/actions-bar";
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
+import { fill } from "./interview";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
+import { receivableLineWords } from "./shipping-notices";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -4237,7 +4239,7 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
     name: "p_lines",
     label: "Lines to receive",
     addLabel: "Add a line",
-    hint: "Each line with something left to receive arrives holding what is left. Lower a quantity to receive part of a line, remove a line to leave it for a later delivery, or add the same line twice for two batches. A batch-controlled product needs its batch before the receipt posts.",
+    hint: "Each line with something left to receive arrives holding what is left. Lower a quantity to receive part of a line, remove a line to leave it for a later delivery, or add the same line twice for two batches. A batch-controlled product needs its batch before the receipt posts. A line with no location goes to the site's goods-in.",
     columns: [
       {
         name: "line_id",
@@ -4249,6 +4251,9 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
           argsFrom: { p_order_id: "p_order_id" },
           value: "line_id",
           label: ["line_no", "item", "description", "open_quantity"],
+          // The number on its own read as the ordered quantity (J-61).
+          describe: (row, ui) =>
+            fill(ui("Line {line}: {item}, {open} left to receive"), receivableLineWords(row)),
           // The owner met this picker empty and was told the list was empty
           // for the organisation, of an organisation with hundreds of order
           // lines. It is scoped to the order and to nothing else, so this is
@@ -4258,17 +4263,34 @@ export const RECEIPT_FROM_ORDER_FIELDS: Field[] = [
         },
       },
       { name: "quantity", label: "Quantity", kind: "number", placeholder: "10" },
+      // Each row's places and batches are its own line's (J-58): the order's
+      // site's locations, less despatch and in transit, and the batches of the
+      // line's product, none when it is not batch-controlled. Every
+      // organisation's locations and batches were offered on every row.
       {
         name: "location_id",
         label: "Location",
         kind: "select",
-        options: { fn: "erp_locations", value: "location_id", label: ["site", "code", "name"] },
+        options: {
+          fn: "erp_receivable_lines",
+          argsFrom: { p_order_id: "p_order_id" },
+          within: { field: "line_id", key: "line_id", path: "locations" },
+          value: "location_id",
+          label: ["code", "name"],
+        },
       },
       {
         name: "batch_id",
         label: "Batch",
         kind: "select",
-        options: { fn: "erp_batches", value: "batch_id", label: ["batch_number", "item"] },
+        options: {
+          fn: "erp_receivable_lines",
+          argsFrom: { p_order_id: "p_order_id" },
+          within: { field: "line_id", key: "line_id", path: "batches" },
+          value: "batch_id",
+          label: ["batch_number", "expires_on"],
+          empty: "No batch to choose: this product is not batch-controlled, or has no batch yet.",
+        },
       },
     ],
     seed: {

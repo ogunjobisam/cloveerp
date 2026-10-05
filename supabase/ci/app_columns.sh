@@ -279,20 +279,28 @@ def harvest(src, kind, rel, consts, out, unread):
         element of that element's candidates. Returns the prefix and the names
         the path declaration itself reads."""
         pm = PATH_KEY.search(text)
-        if not pm or kind[base + pm.start()] != "c":
-            return "", []
-        outer, extra = pm.group(1), [pm.group(1)]
+        if pm and kind[base + pm.start()] != "c":
+            pm = None
         wm = WITHIN_KEY.search(text)
-        if not wm or kind[base + wm.start()] != "c":
-            return outer + ".", extra
+        if wm and kind[base + wm.start()] != "c":
+            wm = None
+        if not pm and not wm:
+            return "", []
+        # An answer that is already a list has no path; `within` then reads a
+        # list inside the element chosen — erp_receivable_lines' locations and
+        # batches, the row's own line's.
+        outer = pm.group(1) + "." if pm else ""
+        extra = [pm.group(1)] if pm else []
+        if not wm:
+            return outer, extra
         o = src.index("{", base + wm.end() - 1)
         inner = {m.group(1): m.group(2) for m in IN_WITHIN.finditer(src, o, balanced_brace(o))}
         if "key" in inner:
-            extra.append(outer + "." + inner["key"])
+            extra.append(outer + inner["key"])
         if "path" not in inner:
-            return outer + ".", extra
-        extra.append(outer + "." + inner["path"])
-        return outer + "." + inner["path"] + ".", extra
+            return outer, extra
+        extra.append(outer + inner["path"])
+        return outer + inner["path"] + ".", extra
 
     # 1. every declaration that names a door and says how its rows are shown
     scopes = []

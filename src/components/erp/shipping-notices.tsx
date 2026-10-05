@@ -3,13 +3,17 @@ import { Link } from "@tanstack/react-router";
 
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
 import { inboundShipments } from "../../lib/inbound-shipments";
 import {
   differenceWords,
+  arrivedSeed,
+  noticeCartonsTyped,
   noticeLineSummary,
   noticeLinesTyped,
   noticeOpen,
   noticeWords,
+  orderLineWords,
   orderNotices,
   recordNoticeSeed,
   shippingNotices,
@@ -40,14 +44,26 @@ const INVALIDATES = [
   "erp_document_lines",
 ];
 
-/** What arrived, line by line, when it was not what the notice said. */
-function arrivedFields(orderId: string): Field[] {
+/**
+ * What arrived, line by line, when it was not what the notice said.
+ *
+ * A notice still wholly on its way arrives holding its own lines at what it
+ * said, ready to correct (J-59); untouched, they are received as notified,
+ * which is what leaving them out meant. A part-received notice arrives empty:
+ * what is left of each of its lines is not the quantity it said, and a line
+ * left out is still taken as what is left of it.
+ */
+function arrivedFields(
+  n: Pick<ShippingNotice, "orderId" | "status">,
+  ui: (text: string) => string,
+): Field[] {
   return [
     {
       kind: "rows",
       name: "lines",
       label: "What arrived",
       hint: "Lines left out are taken as notified. A line the notice did not hold can be added.",
+      ...(n.status === "notified" ? { seed: arrivedSeed(n.orderId) } : {}),
       columns: [
         {
           name: "order_line_id",
@@ -55,9 +71,10 @@ function arrivedFields(orderId: string): Field[] {
           kind: "select",
           options: {
             fn: "erp_document_lines",
-            args: { p_document_id: orderId, p_limit: 500 },
+            args: { p_document_id: n.orderId, p_limit: 500 },
             value: "line_id",
             label: ["item", "quantity"],
+            describe: (row) => fill(ui("{item}: {quantity} ordered"), orderLineWords(row).words),
           },
         },
         { name: "quantity", label: "Arrived", kind: "number", placeholder: "3" },
@@ -100,7 +117,9 @@ function ReceiveMoves({ n, context }: { n: ShippingNotice; context: string }) {
         description="For a delivery that differs from its notice. The differences are kept on the notice and the buyer is told; the order stays open for anything short."
         permission="procurement.receive"
         fn="erp_receive_as_notified"
-        fields={arrivedFields(n.orderId)}
+        fields={arrivedFields(n, ui)}
+        // The notice the editor's rows are read from; sent as the door's own.
+        prefill={{ p_notice: n.noticeId }}
         mapArgs={(_v, picked) => arrivedArgs(n.noticeId, picked)}
         context={context}
         invalidates={INVALIDATES}
@@ -251,7 +270,7 @@ export function OrderShippingNotices({
       )}
       {anyOpen ? (
         <div className="mt-3">
-          <RecordNotice orderId={documentId} context={context} />
+          <RecordNotice orderId={documentId} open={open} context={context} />
         </div>
       ) : null}
       {error ? (
@@ -263,8 +282,31 @@ export function OrderShippingNotices({
   );
 }
 
-function RecordNotice({ orderId, context }: { orderId: string; context: string }) {
+function RecordNotice({
+  orderId,
+  open,
+  context,
+}: {
+  orderId: string;
+  /** What of each line is still open for a notice, as the order's page read it. */
+  open: readonly { orderLineId: string; open: number }[];
+  context: string;
+}) {
   const { ui } = useT();
+  const openByLine = new Map(open.map((o) => [o.orderLineId, o.open]));
+  const lineOptions = {
+    fn: "erp_document_lines",
+    args: { p_document_id: orderId, p_limit: 500 },
+    value: "line_id",
+    label: ["item", "quantity"],
+    // "RM-300 — 6" said neither that 6 was ordered nor what was open (J-61).
+    describe: (row: Record<string, unknown>) => {
+      const { words, open: left } = orderLineWords(row, openByLine);
+      return left === null
+        ? fill(ui("{item}: {quantity} ordered"), words)
+        : fill(ui("{item}: {open} of {quantity} still open"), { ...words, open: left });
+    },
+  };
   const fields: Field[] = [
     { kind: "date", name: "ship_date", label: "Sent on" },
     { kind: "date", name: "expected_arrival", label: "Arrives on", required: true },
@@ -290,20 +332,24 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
       required: true,
       seed: recordNoticeSeed(orderId),
       columns: [
-        {
-          name: "order_line_id",
-          label: "Line",
-          kind: "select",
-          options: {
-            fn: "erp_document_lines",
-            args: { p_document_id: orderId, p_limit: 500 },
-            value: "line_id",
-            label: ["item", "quantity"],
-          },
-        },
+        { name: "order_line_id", label: "Line", kind: "select", options: lineOptions },
         { name: "quantity", label: "Quantity", kind: "number", placeholder: "6" },
       ],
       addLabel: "Add a line",
+    },
+    // A buyer can say which carton holds what, as the supplier's link can, so
+    // goods-in can receive a carton by its label (J-70).
+    {
+      kind: "rows",
+      name: "cartons",
+      label: "Cartons",
+      hint: "Optional. For cartons with an SSCC label: a row for each line a carton holds. Together the cartons must hold exactly what the lines above say.",
+      columns: [
+        { name: "sscc", label: "SSCC", kind: "text", placeholder: "(00)350123451234567894" },
+        { name: "order_line_id", label: "Line", kind: "select", options: lineOptions },
+        { name: "quantity", label: "Quantity", kind: "number", placeholder: "6" },
+      ],
+      addLabel: "Add a carton",
     },
   ];
   return (
@@ -318,6 +364,7 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
         // mapArgs is handed what was typed: the quantities as text. A line
         // the editor arrived holding at nought is already notified in full.
         const lines = noticeLinesTyped(picked?.rows["lines"] ?? []);
+        const cartons = noticeCartonsTyped(picked?.rows["cartons"] ?? []);
         const opt = (k: string) => (v[k] ? { [k]: v[k] } : {});
         return {
           p_order: orderId,
@@ -328,6 +375,7 @@ function RecordNotice({ orderId, context }: { orderId: string; context: string }
             ...opt("tracking_reference"),
             ...opt("supplier_reference"),
             lines,
+            ...(cartons.length > 0 ? { cartons } : {}),
           },
         };
       }}

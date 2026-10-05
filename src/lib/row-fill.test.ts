@@ -156,3 +156,53 @@ describe("every other row editor is unchanged", () => {
       ),
     ).toEqual({ item_id: "b", pack: "12" }));
 });
+
+/**
+ * A cell whose picker follows another cell of its row is emptied when that
+ * cell changes: the batches of the order line chosen before are not those of
+ * the line chosen now (J-58).
+ */
+describe("changing a row's line empties the cells that follow it", () => {
+  const RECEIVE: RowColumn[] = [
+    {
+      name: "line_id",
+      label: "Order line",
+      kind: "select",
+      options: { fn: "erp_receivable_lines", value: "line_id", label: ["item"] },
+    },
+    { name: "quantity", label: "Quantity", kind: "number" },
+    {
+      name: "batch_id",
+      label: "Batch",
+      kind: "select",
+      options: {
+        fn: "erp_receivable_lines",
+        within: { field: "line_id", key: "line_id", path: "batches" },
+        value: "batch_id",
+        label: ["batch_number"],
+      },
+    },
+  ];
+
+  test("a new line empties the batch and keeps the rest", () =>
+    expect(
+      pickIntoRow({ line_id: "a", quantity: "4", batch_id: "b1" }, RECEIVE, "line_id", "p", {
+        picked: { line_id: "p" },
+        previous: { line_id: "a" },
+      }),
+    ).toEqual({ line_id: "p", quantity: "4", batch_id: "" }));
+
+  test("choosing the same line again keeps the batch", () =>
+    expect(
+      pickIntoRow({ line_id: "a", batch_id: "b1" }, RECEIVE, "line_id", "a", {
+        picked: { line_id: "a" },
+        previous: { line_id: "a" },
+      }),
+    ).toEqual({ line_id: "a", batch_id: "b1" }));
+
+  test("choosing a batch empties nothing", () =>
+    expect(pickIntoRow({ line_id: "a", batch_id: "" }, RECEIVE, "batch_id", "b2")).toEqual({
+      line_id: "a",
+      batch_id: "b2",
+    }));
+});

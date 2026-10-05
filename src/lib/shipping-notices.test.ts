@@ -5,12 +5,16 @@ import { join } from "node:path";
 import { seededRows } from "./dependent-options";
 import { missingRequired } from "./required-fields";
 import {
+  arrivedSeed,
+  noticeCartonsTyped,
   noticeLineSummary,
   noticeLinesTyped,
   noticeOpen,
   noticePayload,
+  orderLineWords,
   recordNoticeSeed,
   orderNotices,
+  receivableLineWords,
   shippingNotice,
   shippingNotices,
   ssccIsValid,
@@ -234,5 +238,122 @@ describe("a notice the buyer records holds lines (J-60)", () => {
     expect(
       missingRequired([{ name: "lines", kind: "rows", required: true }], {}, { lines: [] }),
     ).toEqual(["lines"]);
+  });
+});
+
+const SHIPPING_NOTICES_TSX = () =>
+  readFileSync(join(import.meta.dir, "..", "components", "erp", "shipping-notices.tsx"), "utf8");
+
+describe("a buyer's notice carries its cartons (J-70)", () => {
+  test("rows are grouped into cartons by their label, a scan read as eighteen digits", () => {
+    expect(
+      noticeCartonsTyped([
+        { sscc: "(00)350123451234567894", order_line_id: "l1", quantity: "6" },
+        { sscc: "350123451234567900", order_line_id: "l2", quantity: "4" },
+        { sscc: "350123451234567894", order_line_id: "l2", quantity: "2.5" },
+      ]),
+    ).toEqual([
+      {
+        sscc: "350123451234567894",
+        contents: [
+          { order_line_id: "l1", quantity: 6 },
+          { order_line_id: "l2", quantity: 2.5 },
+        ],
+      },
+      { sscc: "350123451234567900", contents: [{ order_line_id: "l2", quantity: 4 }] },
+    ]);
+  });
+
+  test("a row with no label, no line or nothing above nought is left out, and none means no cartons", () => {
+    expect(
+      noticeCartonsTyped([
+        { sscc: "", order_line_id: "l1", quantity: "6" },
+        { sscc: "350123451234567894", order_line_id: "", quantity: "6" },
+        { sscc: "350123451234567894", order_line_id: "l1", quantity: "0" },
+        { sscc: "350123451234567894", order_line_id: "l1", quantity: "" },
+      ]),
+    ).toEqual([]);
+    expect(noticeCartonsTyped([])).toEqual([]);
+  });
+
+  test("a label that is not a scan is sent as typed, for the database to refuse by name", () => {
+    expect(noticeCartonsTyped([{ sscc: " BOX-1 ", order_line_id: "l1", quantity: "1" }])).toEqual([
+      { sscc: "BOX-1", contents: [{ order_line_id: "l1", quantity: 1 }] },
+    ]);
+  });
+
+  test("the buyer's dialog asks for cartons and sends them only when there are some", () => {
+    const record = SHIPPING_NOTICES_TSX().slice(
+      SHIPPING_NOTICES_TSX().indexOf("function RecordNotice"),
+    );
+    expect(record).toMatch(/name: "cartons",\s*label: "Cartons",/);
+    expect(record).toContain('addLabel: "Add a carton"');
+    expect(record).toContain("noticeCartonsTyped(");
+    expect(record).toContain("...(cartons.length > 0 ? { cartons } : {})");
+  });
+});
+
+describe("receiving what arrived arrives holding the notice's lines (J-59)", () => {
+  test("the editor holds the notice's own lines at what it said, and only that notice's", () => {
+    const second = { ...NOTICE, notice_id: "n2", lines: [{ order_line_id: "l9", quantity: 3 }] };
+    const order = { ...ORDER, notices: [NOTICE, second] };
+    expect(seededRows(arrivedSeed("o1"), order, { p_notice: "n1" })).toEqual([
+      { order_line_id: "l1", quantity: "6.000000" },
+      { order_line_id: "l2", quantity: "10" },
+    ]);
+    expect(seededRows(arrivedSeed("o1"), order, { p_notice: "n2" })).toEqual([
+      { order_line_id: "l9", quantity: "3" },
+    ]);
+    expect(seededRows(arrivedSeed("o1"), order, {})).toEqual([]);
+  });
+
+  test("only a notice still wholly on its way is seeded, and the dialog names its notice", () => {
+    const src = SHIPPING_NOTICES_TSX();
+    expect(src).toContain('...(n.status === "notified" ? { seed: arrivedSeed(n.orderId) } : {})');
+    const receive = src.slice(src.indexOf('title="Receive what arrived"'));
+    expect(receive.slice(0, 600)).toContain("prefill={{ p_notice: n.noticeId }}");
+  });
+});
+
+describe("a line picker says what its number is (J-61)", () => {
+  test("an order line names its product and what was ordered", () => {
+    expect(
+      orderLineWords({ line_id: "l1", item: "RM-300", description: "Hex bolt", quantity: 6 }),
+    ).toEqual({ words: { item: "RM-300 Hex bolt", quantity: "6" }, open: null });
+  });
+
+  test("and what is still open, where the screen knows it", () => {
+    const open = new Map([
+      ["l1", 2],
+      ["l2", 0],
+    ]);
+    expect(orderLineWords({ line_id: "l1", item: "RM-300", quantity: "6.0000" }, open)).toEqual({
+      words: { item: "RM-300", quantity: "6" },
+      open: "2",
+    });
+    expect(orderLineWords({ line_id: "l2", item: "RM-301", quantity: 1.5 }, open).open).toBe("0");
+    expect(orderLineWords({ line_id: "l3", item: "RM-302", quantity: 1 }, open).open).toBeNull();
+  });
+
+  test("a line to receive names its number, its product and what is left", () => {
+    expect(
+      receivableLineWords({
+        line_no: 1,
+        item: "RM-300",
+        description: "Hex bolt",
+        open_quantity: "4.500000",
+      }),
+    ).toEqual({ line: "1", item: "RM-300 Hex bolt", open: "4.5" });
+  });
+
+  test("each picker puts the word beside the number", () => {
+    const notices = SHIPPING_NOTICES_TSX();
+    expect(notices).toContain('ui("{item}: {open} of {quantity} still open")');
+    expect(notices).toContain('ui("{item}: {quantity} ordered")');
+    const answer = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "supplier-confirmation.tsx"),
+      "utf8",
+    );
+    expect(answer).toContain('ui("{item}: {quantity} ordered")');
   });
 });

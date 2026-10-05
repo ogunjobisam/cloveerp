@@ -141,7 +141,12 @@ export type PickerOption = { value: string; label: string; record?: Record<strin
 export type OptionShape = {
   value: string;
   label: string[];
-  describe?: (row: Record<string, unknown>) => string;
+  /**
+   * The words for one option. Handed the screen's translator, so a sentence
+   * declared beside a form's fields, away from any component, still reads in
+   * the reader's words: "Line 1: RM-300, 6 left to receive".
+   */
+  describe?: (row: Record<string, unknown>, ui: (text: string) => string) => string;
   keep?: (row: Record<string, unknown>) => boolean;
 };
 
@@ -168,7 +173,11 @@ function optionLabel(row: Record<string, unknown>, keys: string[]): string {
  * options with the same key. The value is what is sent, so which of its rows
  * it came from does not matter.
  */
-export function pickerOptions(shape: OptionShape, list: unknown): PickerOption[] {
+export function pickerOptions(
+  shape: OptionShape,
+  list: unknown,
+  ui: (text: string) => string = (text) => text,
+): PickerOption[] {
   const rows = Array.isArray(list) ? (list as unknown[]) : [];
   const options = rows.flatMap((row): PickerOption[] => {
     if (typeof row === "string" || typeof row === "number")
@@ -179,7 +188,7 @@ export function pickerOptions(shape: OptionShape, list: unknown): PickerOption[]
     return [
       {
         value,
-        label: shape.describe?.(record) || optionLabel(record, shape.label) || value,
+        label: shape.describe?.(record, ui) || optionLabel(record, shape.label) || value,
         record,
       },
     ];
