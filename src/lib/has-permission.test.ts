@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { allTiles } from "./modules";
-import { emptySession, hasPermission, type ErpSession } from "./erp";
+import { emptySession, hasModule, hasPermission, type ErpSession } from "./erp";
 
 function holding(...permissions: string[]): ErpSession {
   return { ...emptySession, permissions };
@@ -34,5 +34,20 @@ describe("a permission the session holds", () => {
     expect(hasPermission(holding("inventory.scan", "inventory.read"), permission)).toBe(true);
     expect(hasPermission(holding("inventory.move"), permission)).toBe(true);
     expect(hasPermission(holding("inventory.read"), permission)).toBe(false);
+  });
+});
+
+describe("a module the organisation has installed", () => {
+  test("a session that does not say hides nothing", () => {
+    expect(hasModule(emptySession, "quality")).toBe(true);
+    expect(hasModule(null, "quality")).toBe(true);
+  });
+
+  test("a session that says names the modules in force, and only those", () => {
+    expect(hasModule({ ...emptySession, modules: [] }, "quality")).toBe(false);
+    expect(hasModule({ ...emptySession, modules: ["finance", "quality"] }, "quality")).toBe(true);
+    expect(hasModule({ ...emptySession, modules: ["finance", "quality"] }, "production")).toBe(
+      false,
+    );
   });
 });

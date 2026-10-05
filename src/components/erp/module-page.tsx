@@ -1,14 +1,16 @@
 import { useState, type ReactNode } from "react";
 
+import { hasModule, hasPermission } from "../../lib/erp";
 import { moduleActions, pageActions } from "../../lib/flow-actions";
 import { useT } from "../../lib/i18n";
 import { reportPanelCount, type ModuleDef, type Panel } from "../../lib/modules";
+import { GoTo } from "./action";
 import { ActionBar, ActionButtons, HeaderActions } from "./actions-bar";
 import { AutoPanel } from "./auto";
 import { InquiryBoard } from "./inquiry";
 import { KpiRow, MiniBars } from "./kpi";
-import { HowItWorksLink, RefreshButton, TOUCH, useHowItWorks } from "./page";
-import { useScope } from "./session-context";
+import { HowItWorksLink, PageHeader, RefreshButton, TOUCH, useHowItWorks } from "./page";
+import { useErpSession, useScope } from "./session-context";
 import { ProcessFlow } from "./process-flow";
 
 /**
@@ -74,6 +76,48 @@ function panelOf(p: Panel, lazy = false) {
 }
 
 export function ModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNode }) {
+  const { session } = useErpSession();
+  if (def.module && !hasModule(session, def.module)) return <ModuleNotInstalled def={def} />;
+  return <InstalledModulePage def={def} actions={actions} />;
+}
+
+/**
+ * A module the organisation has not installed, reached by an address typed or
+ * kept (J-89). The rail, the home page and the palette no longer offer it, so
+ * this is the one way here: it says so, and where to install it to somebody
+ * who may, rather than drawing a page whose every verb is refused. None of the
+ * module's reads runs.
+ */
+function ModuleNotInstalled({ def }: { def: ModuleDef }) {
+  const { t, ui } = useT();
+  const { session } = useErpSession();
+  const canInstall = hasPermission(session, "administration.configure");
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader title={t(def.titleKey, def.title)}>
+        {ui("This module is not installed in this organisation.")}
+      </PageHeader>
+      <section className="flex min-w-0 flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 sm:p-5">
+        {canInstall ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {ui(
+                "Install it on the Configuration screen. Its screens appear here once the change is in force.",
+              )}
+            </p>
+            <GoTo to="/administration/configuration">{ui("Open Configuration")}</GoTo>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {ui("Ask an administrator to install it on the Configuration screen if you need it.")}
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function InstalledModulePage({ def, actions }: { def: ModuleDef; actions?: ReactNode }) {
   const { t, ui } = useT();
   const [tab, setTab] = useState<Tab>("dashboard");
   const title = t(def.titleKey, def.title);

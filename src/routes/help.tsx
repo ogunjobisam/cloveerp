@@ -5,6 +5,8 @@ import { GoTo } from "../components/erp/action";
 import { Gate } from "../components/erp/gate";
 import { PageHeader } from "../components/erp/page";
 import { DataPanel, Pill } from "../components/erp/panel";
+import { useErpSession } from "../components/erp/session-context";
+import { moduleOffered } from "../lib/installed-modules";
 
 /**
  * Help: frequently asked questions and the user guides.
@@ -180,6 +182,7 @@ function GuideTopic({ topic }: { topic: Topic }) {
 
 function Help() {
   const [query, setQuery] = useState("");
+  const { session } = useErpSession();
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -222,6 +225,9 @@ function Help() {
         {(rows) => (
           <GuideList
             rows={rows.filter((t) => {
+              // A module the organisation has not installed has no guide here,
+              // as it has no screen (J-05).
+              if (!moduleOffered(session, t.module_code)) return false;
               if (!query.trim()) return true;
               const q = query.trim().toLowerCase();
               return (
