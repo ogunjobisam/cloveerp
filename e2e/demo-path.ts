@@ -426,12 +426,12 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/administration/commercial":
     "The tenant's own agreement with the vendor: plan, seats and usage.",
   "/administration/configuration":
-    "Document types, numbering and lifecycles. Seeded before the demonstration.",
+    "Features, content packs, document types, numbering and lifecycles. Seeded before the demonstration.",
   "/administration/erasure": "Erasure requests under data protection, and what has been erased.",
   "/administration/onboarding":
     "The interview that stands a new organisation up. The demonstration organisation is already standing.",
   "/administration/organisation": "Companies, sites and departments. Seeded.",
-  "/administration/packs": "Which industry packs are installed. Seeded.",
+  "/administration/packs": "Redirects to Configuration, where features and content packs are kept.",
   "/administration/permissions":
     "Roles, grants and who holds what. Seeded, and proved by the grant suites rather than walked.",
   "/administration/tenant":

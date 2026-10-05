@@ -10,6 +10,9 @@ import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader, Prose, TOUCH } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { Acceptance } from "../../components/packs/acceptance";
+import { Capabilities } from "../../components/packs/capabilities";
+import { Packs } from "../../components/packs/packs";
 import { callErp, hasPermission } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
@@ -295,37 +298,45 @@ function Configuration() {
   const invalidate = () => queryClient.invalidateQueries();
 
   if (!allowed) {
+    // Features and content read without administration.configure, as
+    // /administration/packs showed them; every switch and pack is withheld.
     return (
       <div className="flex min-w-0 flex-col gap-6">
-        <PageHeader title="Configuration">
+        <PageHeader title="Configuration" howItWorks={FEATURES_HOW_IT_WORKS}>
           Installing a module authors a change set; promoting it puts the configuration in force.
         </PageHeader>
         <PermissionNote code="administration.configure" />
+        <FeaturesAndContent mayConfigure={false} />
       </div>
     );
   }
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title="Configuration">
+      <PageHeader title="Configuration" howItWorks={FEATURES_HOW_IT_WORKS}>
         A module is content, not code: installing one authors a change set of rules, lifecycles and
         approval chains, and promoting that set is what puts them in force.
       </PageHeader>
 
       <BootstrapNotice sets={data ?? []} />
 
+      <FeaturesAndContent mayConfigure />
+
       <ModulesPanel onDone={invalidate} />
 
-      {isPending ? (
-        <p className="text-sm text-muted-foreground">Loading change sets…</p>
-      ) : error ? (
-        <div role="alert" className="rounded-xl border border-border bg-card p-5">
-          <p className="text-sm font-medium text-destructive">Change sets did not load.</p>
-          <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
-        </div>
-      ) : (
-        <ChangeSetsPanel sets={data ?? []} onDone={invalidate} highlight={change ?? null} />
-      )}
+      {/* The features and packs section links here once it has prepared a change. */}
+      <div id="change-sets" className="min-w-0">
+        {isPending ? (
+          <p className="text-sm text-muted-foreground">Loading change sets…</p>
+        ) : error ? (
+          <div role="alert" className="rounded-xl border border-border bg-card p-5">
+            <p className="text-sm font-medium text-destructive">Change sets did not load.</p>
+            <p className="mt-1 text-xs text-muted-foreground">{friendlyError(error).title}</p>
+          </div>
+        ) : (
+          <ChangeSetsPanel sets={data ?? []} onDone={invalidate} highlight={change ?? null} />
+        )}
+      </div>
 
       <DataPanel<ModuleInstallation>
         title="Installed modules"
@@ -568,6 +579,79 @@ function Configuration() {
  * approve is one the database is holding for a second administrator, and a
  * waiting change the reader may approve is simply waiting for them.
  */
+/**
+ * Features and content, kept here since 20261007180000 (it was
+ * /administration/packs, which now redirects to this section).
+ *
+ * Readiness first, because it answers "what can this organisation not do yet?"
+ * and every answer it gives points at one of the two tabs below it. Then
+ * features, because a pack's contents depend on which are on. Then packs.
+ *
+ * Nothing in this section promotes. A feature switch and a pack prepare a
+ * change; approving and promoting it is the change sets panel further down,
+ * under its own permission.
+ */
+const FEATURES_HOW_IT_WORKS =
+  "A feature decides three things at once — the navigation somebody sees, the fields a form shows, and the rules the engine evaluates — so switching one off is not merely hiding it: its rules stop running. That is why one with live data behind it cannot be switched off at all.";
+
+const TABS = [
+  { key: "features", label: "Features" },
+  { key: "packs", label: "Content packs" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
+function FeaturesAndContent({ mayConfigure }: { mayConfigure: boolean }) {
+  const { t, ui } = useT();
+  const [tab, setTab] = useState<TabKey>("features");
+
+  return (
+    <section
+      id="features-and-content"
+      aria-labelledby="features-and-content-title"
+      className="flex min-w-0 scroll-mt-4 flex-col gap-6"
+    >
+      <h2 id="features-and-content-title" className="text-base font-semibold">
+        {t("module.packs", "Features and content")}
+      </h2>
+
+      <Acceptance />
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Features and content">
+        {TABS.map((x) => (
+          <button
+            key={x.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === x.key}
+            className={`${TOUCH} rounded-md px-4 text-sm font-medium ${
+              tab === x.key
+                ? "bg-primary text-primary-foreground"
+                : "border border-input text-muted-foreground"
+            }`}
+            onClick={() => setTab(x.key)}
+          >
+            {ui(x.label)}
+          </button>
+        ))}
+      </div>
+
+      {tab === "features" ? (
+        <Capabilities mayConfigure={mayConfigure} />
+      ) : (
+        <Packs mayConfigure={mayConfigure} />
+      )}
+
+      <Prose className="text-xs text-muted-foreground">
+        Once this organisation has gone live, a feature switch and a pack both prepare a change
+        rather than taking effect immediately. That is deliberate: what the rules do is
+        configuration, and configuration moves through promotion so that there is a diff to read and
+        a point to roll back to.
+      </Prose>
+    </section>
+  );
+}
+
 function BootstrapNotice({ sets }: { sets: ChangeSet[] }) {
   const { ui } = useT();
   const waiting = sets.filter((s) => s.status === "ready" || s.status === "approved");

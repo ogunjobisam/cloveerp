@@ -3177,3 +3177,64 @@ test.describe("a business partner's record keeps its details", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("features and content are kept on Configuration", () => {
+  // 20261007180000: a feature switch and a pack only ever prepared a change,
+  // and Configuration is where a change is approved and promoted, so the two
+  // screens became one. The old address still lands, on the section itself.
+  const feature = {
+    code: "multi_site",
+    title: "Several sites",
+    description: "More than one site, each with its own stock.",
+    seq: 1,
+    enabled: false,
+    requires: [],
+    required_by: [],
+    held_by: [],
+    history: [],
+  };
+  const section = (page: Page) =>
+    page.getByRole("heading", { level: 2, name: "Features and content", exact: true });
+
+  test("the old address lands on the section, ahead of installing modules", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_capabilities", [feature]);
+    await page.goto("/administration/packs");
+
+    await expect(page).toHaveURL(/\/administration\/configuration#features-and-content$/, {
+      timeout: 20_000,
+    });
+    await expect(section(page)).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Features", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("button", { name: "Switch on", exact: true })).toBeEnabled();
+    await expect.poll(() => backend.called.includes("erp_pack_acceptance")).toBe(true);
+    expect(backend.called).toContain("erp_change_sets");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("to somebody who may not configure the organisation", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "administration.configure"),
+      },
+    });
+
+    test("is shown read-only, as the old screen showed it", async ({ page, backend }) => {
+      backend.rpc("erp_capabilities", [feature]);
+      await page.goto("/administration/configuration");
+
+      await expect(section(page)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("button", { name: "Switch on", exact: true })).toBeDisabled();
+      await page.getByRole("tab", { name: "Content packs", exact: true }).click();
+      await expect.poll(() => backend.called.includes("erp_content_packs")).toBe(true);
+      expect(backend.called).not.toContain("erp_change_sets");
+      expect(backend.crashes).toEqual([]);
+    });
+  });
+});
