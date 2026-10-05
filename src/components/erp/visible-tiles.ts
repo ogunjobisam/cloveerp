@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { hasPermission } from "../../lib/erp";
+import { tileOffered } from "../../lib/installed-modules";
 import { allTiles, type TileDef } from "../../lib/modules";
 import { usePlatformOrganisation } from "../../lib/platform-organisation";
 import { useErpSession } from "./session-context";
@@ -14,9 +14,11 @@ import { useErpSession } from "./session-context";
  * book and Quotes by search — two screens the rail hid and the database
  * refuses. One hook, so the navigators cannot disagree about what exists.
  *
- * A tile is offered when the permission behind it is held and, where it is
- * platform-only, the organisation in session is the platform's own. That is a
- * courtesy and nothing more: the database is what refuses.
+ * A tile is offered when the permission behind it is held, where it is
+ * platform-only the organisation in session is the platform's own, and where
+ * it belongs to a module the organisation must install, the session names that
+ * module as in force (J-05). That is a courtesy and nothing more: the database
+ * is what refuses.
  *
  * Tiles marked `offRail` are included. They are still screens the account may
  * open, and search still finds them; the rail and the launchpads leave them
@@ -26,12 +28,7 @@ export function useVisibleTiles(): TileDef[] {
   const { session } = useErpSession();
   const platform = usePlatformOrganisation(Boolean(session.tenant_id));
   return useMemo(
-    () =>
-      allTiles().filter(
-        (tile) =>
-          (!tile.permission || hasPermission(session, tile.permission)) &&
-          (!tile.platformOnly || platform),
-      ),
+    () => allTiles().filter((tile) => tileOffered(tile, session, platform)),
     [session, platform],
   );
 }

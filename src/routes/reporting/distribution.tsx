@@ -437,7 +437,7 @@ function Distribution() {
         )}
         fn="erp_report_subscriptions"
         empty={ui(
-          "Nobody is subscribed to a report. Subscribe to one under Actions above and it is produced on a cadence and delivered.",
+          "Nobody is subscribed to a report. Subscribe to one under Subscriptions, packs and the analytics contract above and it is produced on a cadence and delivered.",
         )}
       >
         {(rows) => (
@@ -481,7 +481,9 @@ function Distribution() {
           "A pack is a defined artefact with a manifest: which reports, which versions, which parameters, and the as-at time and checksum of each figure.",
         )}
         fn="erp_report_packs"
-        empty={ui("No pack is defined. Define one under Actions above, then add reports to it.")}
+        empty={ui(
+          "No pack is defined. Define one under Subscriptions, packs and the analytics contract above, then add reports to it.",
+        )}
       >
         {(rows) => (
           <ul className="flex flex-col gap-4">

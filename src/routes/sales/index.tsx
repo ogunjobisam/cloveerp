@@ -99,13 +99,23 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.price",
     fn: "erp_resolve_price",
     fields: [
-      pickItem(),
+      // Only a product with a selling price in force can be priced, so only
+      // those are offered (J-73); a quotation's own lines still offer every
+      // product, since a price can be typed there.
+      pickFrom("erp_items", "item_id", ["code", "name"], "p_item_id", "Product", {
+        p_sales_priced: true,
+      }),
       pickParty("customer"),
       { kind: "number", name: "p_quantity", label: "Quantity" },
+      // The site's company decides which of its prices applies, as it does
+      // on the line (J-72). Left empty, only a price for no company does.
+      pickSite("p_site_id", "Site", false),
     ],
   },
   {
     label: "Promise a date",
+    description:
+      "Checks one product at one site: the earliest day this many could be ready, from stock not already promised and supply on its way. No order is changed.",
     permission: "sales.order",
     fn: "erp_promise_date",
     fields: [

@@ -5,10 +5,12 @@ import { ArrowRight, Check, ChevronDown, Circle, Compass, Eye } from "lucide-rea
 
 import { friendlyError } from "@/lib/errors";
 
-import { callErp } from "../../lib/erp";
+import { callErp, hasModule } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { moduleOfPath } from "../../lib/installed-modules";
 import { useErpAction } from "./action";
 import { Prose, TOUCH } from "./page";
+import { useErpSession } from "./session-context";
 
 /**
  * Role-based first-run guidance (specification v1.5 §22.2).
@@ -186,6 +188,7 @@ function StepRow({ step }: { step: Step }) {
 
 export function FirstRun() {
   const { ui } = useT();
+  const { session } = useErpSession();
   const [showAll, setShowAll] = useState(false);
   const guide = useQuery({
     queryKey: ["erp_first_run_guide", {}],
@@ -204,7 +207,14 @@ export function FirstRun() {
     );
   }
 
-  const steps = guide.data ?? [];
+  // A step on a module the organisation has not installed is not offered: its
+  // screen is not, and nothing on it could be done (J-05). The counts and the
+  // next step come from what is left; whether a step is complete stays the
+  // database's word.
+  const steps = (guide.data ?? []).filter((s) => {
+    const m = moduleOfPath(s.screen_path);
+    return !m || hasModule(session, m);
+  });
   if (steps.length === 0) return null;
   const done = steps.filter((s) => s.complete).length;
   if (done === steps.length) return null;
