@@ -220,7 +220,7 @@ function Help() {
         description="Every screen's guide, grouped by module. This is the same content the ? button shows, read end to end."
         fn="erp_help_topics"
         empty="No guides are published yet. The product's own help is installed with the base content pack."
-        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
+        emptyAction={<GoTo to="/administration/configuration">Open Configuration</GoTo>}
       >
         {(rows) => (
           <GuideList

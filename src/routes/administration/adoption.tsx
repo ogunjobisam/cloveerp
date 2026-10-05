@@ -129,7 +129,7 @@ function Adoption() {
         description="The product's, in the order they are best taken, then this organisation's own. Start is offered only where the caller holds the scenario's permission."
         fn="erp_training_scenarios"
         empty="No scenarios. The product's own are installed with the base content pack, and an organisation can add its own on top."
-        emptyAction={<GoTo to="/administration/packs">Open Packs</GoTo>}
+        emptyAction={<GoTo to="/administration/configuration">Open Configuration</GoTo>}
       >
         {(rows) => (
           <Table columns={["Scenario", "Starting state", "Task", "Complete when", "Actions"]}>
