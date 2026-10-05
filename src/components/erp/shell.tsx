@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Briefcase, Building2, ChevronDown, Menu, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -20,6 +20,7 @@ import {
   type TileGroup,
 } from "../../lib/modules";
 import { iconFor } from "../../lib/module-icons";
+import { railParent } from "../../lib/rail";
 import { useBrand, useBrandedFavicon } from "../../lib/brand";
 import { ApprovalsWaitingBadge } from "./approvals-waiting";
 import { CommandPalette } from "./command-palette";
@@ -66,12 +67,21 @@ type NavItem = {
   label: string;
   group: "home" | TileGroup;
   area: Area;
+  /** The entry this one folds under on the rail (src/lib/rail.ts), or null at the top of its group. */
+  parent: string | null;
 };
 
 /** Each area's home. Neither needs a permission: the rail shows the one for the area you are in. */
 const HOMES: NavItem[] = [
-  { to: "/", labelKey: "nav.overview", label: "Home", group: "home", area: "work" },
-  { to: "/settings", labelKey: "nav.settings", label: "Settings", group: "home", area: "settings" },
+  { to: "/", labelKey: "nav.overview", label: "Home", group: "home", area: "work", parent: null },
+  {
+    to: "/settings",
+    labelKey: "nav.settings",
+    label: "Settings",
+    group: "home",
+    area: "settings",
+    parent: null,
+  },
 ];
 
 /**
@@ -79,13 +89,14 @@ const HOMES: NavItem[] = [
  * launchpads render, in the same groups, filtered by the same hook, so the
  * navigations cannot disagree about what exists or where it lives.
  */
-function railItem(tile: TileDef): NavItem {
+function railItem(tile: TileDef, parent: string | null): NavItem {
   return {
     to: tile.path,
     labelKey: tile.titleKey,
     label: tile.title,
     group: tile.group,
     area: areaOf(tile.group),
+    parent,
   };
 }
 
@@ -251,13 +262,20 @@ function NavList({
     .sort((a, b) => b.to.length - a.to.length)[0]?.to;
 
   /*
-   * Settings folds; work does not.
+   * Settings folds by section; work folds by screen.
    *
    * Twenty-six settings screens listed at once is a wall, and it is a wall in
    * front of somebody who came here to do one thing. So each settings section
    * is a heading you open, and the one holding the screen you are on is the
-   * one already open. The work rail is left alone: those sections are the job
-   * itself, and a person doing the job wants to see the whole of it.
+   * one already open.
+   *
+   * The work sections are the job itself and stay open, but a screen that is
+   * part of another — Journals and VAT are parts of Financials, Site transfers
+   * a part of Stock — sits under it rather than beside it (src/lib/rail.ts).
+   * The entry holding them has a toggle that says how many it holds; it is
+   * open on the entry's own screen and anything below it, and a person can
+   * open or close it by keyboard like any other button. Nothing folded is lost:
+   * the palette, the launchpad and the trail still reach every one.
    */
   const holding = (group: NavItem["group"]) =>
     items.some(
@@ -265,6 +283,88 @@ function NavList({
         i.group === group && (pathname === i.to || pathname.startsWith(`${i.to}/`)) && i.to !== "/",
     );
   const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const [unfolded, setUnfolded] = useState<Record<string, boolean>>({});
+  const idPrefix = useId();
+
+  const childrenOf = (to: string) => items.filter((i) => i.area === area && i.parent === to);
+  const under = (to: string) => pathname === to || pathname.startsWith(`${to}/`);
+
+  const renderItem = (item: NavItem): ReactNode => {
+    const active = item.to === current;
+    const Icon = iconFor(item.to);
+    const children = childrenOf(item.to);
+    const holdsCurrent = !active && current !== undefined && current.startsWith(`${item.to}/`);
+    const open = unfolded[item.to] ?? under(item.to);
+    const listId = `${idPrefix}-${item.to}`;
+    return (
+      <li key={item.to}>
+        <div className="flex items-center gap-0.5">
+          <Link
+            to={item.to}
+            onClick={onNavigate}
+            // The router marks a link current by itself, and by
+            // prefix unless told otherwise: it wrote
+            // aria-current="page" on Stock for every screen under
+            // /inventory, over whatever is said on the next line.
+            // Exact leaves it agreeing with `active` on the screen
+            // itself and silent everywhere below it.
+            activeOptions={{ exact: true }}
+            aria-current={active ? "page" : undefined}
+            className={[
+              TOUCH,
+              "flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
+              active
+                ? dark
+                  ? "bg-sidebar-active font-medium text-sidebar-foreground shadow-[inset_3px_0_0_var(--accent)]"
+                  : "bg-accent/10 font-medium text-foreground shadow-[inset_3px_0_0_var(--accent)]"
+                : dark
+                  ? "text-sidebar-muted hover:bg-sidebar-active/60 hover:text-sidebar-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              holdsCurrent ? "font-medium" : "",
+            ].join(" ")}
+          >
+            <Icon
+              className={`size-4 shrink-0 ${active ? "text-accent" : quiet}`}
+              aria-hidden="true"
+            />
+            <span className="truncate">{t(item.labelKey, item.label)}</span>
+          </Link>
+          {children.length > 0 ? (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={listId}
+              aria-label={t(item.labelKey, item.label)}
+              onClick={() => setUnfolded((prev) => ({ ...prev, [item.to]: !open }))}
+              className={`${TOUCH} inline-flex shrink-0 items-center gap-1 rounded-lg px-2 text-[10px] transition-colors ${
+                dark
+                  ? "text-sidebar-muted hover:bg-sidebar-active/60 hover:text-sidebar-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <span className="font-mono opacity-70" aria-hidden="true">
+                {children.length}
+              </span>
+              <ChevronDown
+                className={`size-3.5 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
+                aria-hidden="true"
+              />
+            </button>
+          ) : null}
+        </div>
+        {children.length > 0 ? (
+          <ul
+            id={listId}
+            className={`mt-0.5 ml-4 flex flex-col gap-0.5 border-l pl-2 ${
+              dark ? "border-sidebar-muted/30" : "border-border"
+            } ${open ? "" : "hidden"}`}
+          >
+            {children.map(renderItem)}
+          </ul>
+        ) : null}
+      </li>
+    );
+  };
 
   return (
     <>
@@ -297,43 +397,7 @@ function NavList({
               </p>
             )}
             <ul className={`flex flex-col gap-0.5 ${shown ? "" : "hidden"}`}>
-              {inGroup.map((item) => {
-                const active = item.to === current;
-                const Icon = iconFor(item.to);
-                return (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      onClick={onNavigate}
-                      // The router marks a link current by itself, and by
-                      // prefix unless told otherwise: it wrote
-                      // aria-current="page" on Stock for every screen under
-                      // /inventory, over whatever is said on the next line.
-                      // Exact leaves it agreeing with `active` on the screen
-                      // itself and silent everywhere below it.
-                      activeOptions={{ exact: true }}
-                      aria-current={active ? "page" : undefined}
-                      className={[
-                        TOUCH,
-                        "flex items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
-                        active
-                          ? dark
-                            ? "bg-sidebar-active font-medium text-sidebar-foreground shadow-[inset_3px_0_0_var(--accent)]"
-                            : "bg-accent/10 font-medium text-foreground shadow-[inset_3px_0_0_var(--accent)]"
-                          : dark
-                            ? "text-sidebar-muted hover:bg-sidebar-active/60 hover:text-sidebar-foreground"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      ].join(" ")}
-                    >
-                      <Icon
-                        className={`size-4 shrink-0 ${active ? "text-accent" : quiet}`}
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">{t(item.labelKey, item.label)}</span>
-                    </Link>
-                  </li>
-                );
-              })}
+              {inGroup.filter((item) => item.parent === null).map(renderItem)}
             </ul>
           </div>
         );
@@ -489,11 +553,13 @@ export function Shell({
 
   // The same tiles the launchpads and the palette offer, less the ones that
   // are reached from the account menu instead of the rail.
+  // A screen folds under the visible entry of its own group whose path holds
+  // it, so a sub-screen whose parent this account cannot open stays at the top.
   const tiles = useVisibleTiles();
-  const rail = useMemo(
-    () => [...HOMES, ...tiles.filter((tile) => !tile.offRail).map(railItem)],
-    [tiles],
-  );
+  const rail = useMemo(() => {
+    const onRail = tiles.filter((tile) => !tile.offRail);
+    return [...HOMES, ...onRail.map((tile) => railItem(tile, railParent(tile.path, onRail)))];
+  }, [tiles]);
   const area = areaOfPath(pathname);
   const hasSettings = rail.some((n) => n.area === "settings" && n.group !== "home");
 

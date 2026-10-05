@@ -33,6 +33,44 @@ test.describe("navigation", () => {
     expect(backend.crashes).toEqual([]);
   });
 
+  test("a sub-screen folds under its parent, behind a toggle the keyboard opens", async ({
+    page,
+    backend,
+  }) => {
+    await page.goto("/");
+    const sections = page.getByRole("navigation", { name: "Sections" }).first();
+    const toggle = sections.getByRole("button", { name: "Financials", exact: true });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false", { timeout: 20_000 });
+    await expect(sections.getByRole("link", { name: "Journals", exact: true })).toBeHidden();
+
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await sections.getByRole("link", { name: "Journals", exact: true }).click();
+    await expect(page).toHaveURL(/\/finance\/journals\/?$/);
+
+    // On the sub-screen it is the current page, its parent is open and is not.
+    await expect(sections.getByRole("link", { name: "Journals", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(
+      sections.getByRole("link", { name: "Financials", exact: true }),
+    ).not.toHaveAttribute("aria-current", "page");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("the trail files a screen where the rail does (J-130)", async ({ page }) => {
+    await page.goto("/inventory/warehouse");
+    const trail = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(trail).toBeVisible({ timeout: 20_000 });
+    await expect(trail.getByRole("listitem")).toHaveText([
+      "Settings",
+      "Products and places",
+      "Warehouse layout",
+    ]);
+  });
+
   test("the browser's back button returns to the previous screen", async ({ page }) => {
     // Three navigations, each of which may be the first time this dev server
     // has compiled that route. The default thirty seconds is a budget for one.
