@@ -41,6 +41,14 @@ import {
   transitionTone,
   madeDocumentId,
   OUTCOME_LINGER_MS,
+  documentChoice,
+  lineContext,
+  lineRemovedOutcome,
+  noticeReceiptOutcome,
+  paymentProposalOutcome,
+  pickOutcome,
+  relatedDocuments,
+  relationWords,
 } from "./plain-words";
 import { rowsAtStage } from "./stage-records";
 
@@ -1005,5 +1013,201 @@ describe("a count waiting on my approval is named by what was counted where (J-2
     const src = readFileSync(join(ROOT, "src", "routes", "inventory", "audit.tsx"), "utf8");
     expect(src).toContain('keep: (r) => r["object_type"] === "count_task"');
     expect(src).toContain("describe: countApprovalChoice");
+  });
+});
+
+describe("the 5 October re-test: an outcome names what it did", () => {
+  const gbp = (n: number) => formatMinor(n, "GBP");
+  const run = {
+    proposal_id: "p1",
+    reference: "PAY-20261005142957795",
+    payment_date: "2026-10-05",
+    currency: "GBP",
+    total_minor: 21300,
+    status: "proposed",
+  };
+
+  test("a payment run proposed is named, with what it pays", () => {
+    expect(paymentProposalOutcome("proposed", run)).toBe(
+      `PAY-20261005142957795 proposed: ${gbp(21300)} to pay.`,
+    );
+    expect(paymentProposalOutcome("proposed", null)).toBeNull();
+    expect(paymentProposalOutcome("proposed", { proposal_id: "p1" })).toBeNull();
+  });
+
+  test("a payment run approved says so, and its total is not a count of records", () => {
+    expect(paymentProposalOutcome("approved", run, 21300)).toBe(
+      `PAY-20261005142957795 approved: ${gbp(21300)} to pay.`,
+    );
+    // Without the run's row the door's bare total is never "21300 records created".
+    expect(
+      actionOutcome("Approve a payment run", 21300, undefined, "erp_approve_payment_run"),
+    ).toBe("Approve a payment run — done.");
+    // A count still counts for a routine whose number is a count.
+    expect(actionOutcome("Raise putaway tasks", 2, undefined, "erp_raise_putaway_tasks")).toBe(
+      "2 putaway tasks raised.",
+    );
+  });
+
+  test("picking an order names it and says what it could not cover", () => {
+    const answer = {
+      document_number: "SO-000460",
+      reserved: 2,
+      picked: 2,
+      pick_lines: 1,
+      shortfall: 5,
+    };
+    expect(pickOutcome(answer)).toBe("SO-000460: 2 lines picked, 5 could not be covered.");
+    expect(pickOutcome({ ...answer, shortfall: 0 })).toBe(
+      "SO-000460: 2 lines picked, nothing short.",
+    );
+    expect(pickOutcome({ ...answer, picked: 1, shortfall: 0 })).toBe(
+      "SO-000460: 1 line picked, nothing short.",
+    );
+    expect(pickOutcome({ ...answer, picked: 0, shortfall: 0 })).toBe(
+      "SO-000460: nothing was left to pick.",
+    );
+    expect(pickOutcome({ ...answer, picked: 0, shortfall: 3 })).toBe(
+      "SO-000460: nothing picked, 3 could not be covered.",
+    );
+    expect(pickOutcome({ picked: 2 })).toBeNull();
+    // The action form reads it as a named outcome, so no "— done." and no
+    // second line repeating what the form acted on.
+    expect(actionOutcome("Pick the order", answer, undefined, "erp_pick_document")).toBe(
+      "SO-000460: 2 lines picked, 5 could not be covered.",
+    );
+    expect(namedOutcome("erp_pick_document", answer)).not.toBeNull();
+  });
+
+  test("receiving against a notice names the goods receipt it posted, and links it", () => {
+    const answer = {
+      notice_id: "n1",
+      notice: "ASN-PO-000149-1",
+      order_id: "o1",
+      order: "PO-000149",
+      status: "received",
+      receipt: "GRN-000143",
+      receipt_id: "g1",
+      differences: [],
+    };
+    expect(noticeReceiptOutcome(answer)).toEqual({
+      message: "GRN-000143 received against PO-000149.",
+      documents: [{ documentId: "g1", number: "GRN-000143" }],
+    });
+    expect(
+      noticeReceiptOutcome({
+        ...answer,
+        differences: [{ kind: "short" }, { kind: "over" }],
+      })?.message,
+    ).toBe("GRN-000143 received against PO-000149. 2 lines differ from ASN-PO-000149-1.");
+    expect(noticeReceiptOutcome({ ...answer, receipt: null, receipt_id: null })).toBeNull();
+  });
+
+  test("removing a line says which, and the confirmation names it", () => {
+    const line = { line_no: 20, item: "RM-310", item_name: "Washer M10, box of 100" };
+    expect(lineRemovedOutcome("PO-000149", line)).toBe("Line 20 removed from PO-000149.");
+    expect(lineRemovedOutcome("", line)).toBe("Line 20 removed.");
+    expect(lineContext("PO-000149", line)).toBe(
+      "PO-000149 · line 20 · RM-310 Washer M10, box of 100",
+    );
+    expect(lineContext("PO-000149", { line_no: 30, item: null })).toBe("PO-000149 · line 30");
+    // Not the dialog's question.
+    expect(lineRemovedOutcome("PO-000149", line)).not.toContain("?");
+  });
+
+  test("the document page wires them", () => {
+    const page = readFileSync(join(ROOT, "src", "routes", "documents", "$documentId.tsx"), "utf8");
+    const remove = page.slice(page.indexOf('title="Remove this line?"'));
+    expect(remove.slice(0, 900)).toContain("context={lineContext(documentNumber, l)}");
+    expect(remove.slice(0, 900)).toContain("outcome={() => lineRemovedOutcome(documentNumber, l)}");
+    const action = readFileSync(join(ROOT, "src", "components", "erp", "action.tsx"), "utf8");
+    for (const fn of [
+      "erp_propose_payment_run",
+      "erp_approve_payment_run",
+      "erp_receive_as_notified",
+    ])
+      expect(action).toContain(`  ${fn}:`);
+  });
+});
+
+describe("a goods receipt as Bill a receipt offers it (5 October re-test)", () => {
+  test("by its supplier, value and date, not its state", () => {
+    expect(
+      documentChoice({
+        document_id: "g1",
+        document_number: "GRN-000143",
+        party: "Anchor Fasteners",
+        total_minor: 21300,
+        currency: "GBP",
+        document_date: "2026-10-05",
+        state: "posted",
+      }),
+    ).toBe(`GRN-000143 — Anchor Fasteners — ${formatMinor(21300, "GBP")} — 5 Oct 2026`);
+    expect(documentChoice({ document_number: "GRN-000144" })).toBe("GRN-000144");
+  });
+
+  test("the form uses it", () => {
+    const procurement = readFileSync(
+      join(ROOT, "src", "routes", "procurement", "index.tsx"),
+      "utf8",
+    );
+    const bill = procurement.slice(procurement.indexOf('label: "Bill a receipt"'));
+    expect(bill.slice(0, 1500)).toContain("describe: documentChoice");
+  });
+});
+
+describe("related documents (5 October re-test)", () => {
+  const row = (
+    depth: number,
+    direction: string,
+    id: string,
+    relation: string | null,
+  ): { depth: number; direction: string; document_id: string; relation: string | null } => ({
+    depth,
+    direction,
+    document_id: id,
+    relation,
+  });
+
+  test("a relation reads as words, whichever way it points", () => {
+    // The order converts its requisition: on the order, the requisition.
+    expect(relationWords("downstream", "converts")).toBe("Converted from");
+    // On the requisition, the order.
+    expect(relationWords("upstream", "converts")).toBe("Converted into");
+    expect(relationWords("upstream", "fulfils")).toBe("Fulfilled by");
+    expect(relationWords("downstream", "invoices")).toBe("Invoices");
+    expect(relationWords("upstream", "invoices")).toBe("Invoiced by");
+    // One this does not know, as the database names it.
+    expect(relationWords("downstream", "settles")).toBe("to · settles");
+    expect(relationWords("upstream", null)).toBe("from · related");
+  });
+
+  test("a bill lists the order it invoices once, not again through its receipt", () => {
+    // PINV-000116: invoices GRN-000143 and PO-000149; the receipt fulfils the
+    // order, so the walk reaches the order a second time; the order converts
+    // its requisition.
+    const lineage = [
+      row(0, "self", "pinv", null),
+      row(1, "downstream", "grn", "invoices"),
+      row(1, "downstream", "po", "invoices"),
+      row(2, "downstream", "po", "fulfils"),
+      row(3, "downstream", "req", "converts"),
+    ];
+    const listed = relatedDocuments(lineage);
+    expect(listed.map((r) => r.row.document_id)).toEqual(["grn", "po", "req"]);
+    expect(listed.map((r) => r.words)).toEqual(["Invoices", "Invoices", "Also related"]);
+  });
+
+  test("a document related directly two ways is listed once, saying both", () => {
+    const listed = relatedDocuments([
+      row(1, "downstream", "bill", "invoices"),
+      row(1, "downstream", "bill", "fulfils"),
+    ]);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.words).toBe("Invoices, fulfils");
+  });
+
+  test("the page itself is never listed", () => {
+    expect(relatedDocuments([row(0, "self", "me", null)])).toEqual([]);
   });
 });

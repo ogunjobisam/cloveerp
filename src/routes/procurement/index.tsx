@@ -32,7 +32,7 @@ import {
   SET_FREIGHT_TERMS,
 } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
-import { approvalChoice } from "../../lib/plain-words";
+import { approvalChoice, documentChoice } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/procurement/")({
   head: () => ({
@@ -306,15 +306,22 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     fn: "erp_bill_from_receipt",
     fields: [
       // Only posted receipts: erp.bill_from_receipt bills nothing else, and
-      // posted is terminal, so p_actionable would offer none.
-      pickFrom(
-        "erp_documents",
-        "document_id",
-        ["document_number", "state"],
-        "p_receipt_id",
-        "Goods receipt",
-        { p_type_code: "goods_receipt", p_limit: 100, p_states: ["posted"] },
-      ),
+      // posted is terminal, so p_actionable would offer none. Each by its
+      // supplier, value and date: every one of them is posted, so "GRN-000143
+      // — posted" a hundred times over named none of them (5 October re-test).
+      {
+        kind: "select",
+        name: "p_receipt_id",
+        label: "Goods receipt",
+        required: true,
+        options: {
+          fn: "erp_documents",
+          args: { p_type_code: "goods_receipt", p_limit: 100, p_states: ["posted"] },
+          value: "document_id",
+          label: ["document_number", "party", "total_minor", "document_date"],
+          describe: documentChoice,
+        },
+      },
       {
         kind: "text",
         name: "p_their_reference",
