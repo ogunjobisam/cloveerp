@@ -4,6 +4,9 @@
  * public.erp_shipment_tracking. Neither ever carries a key.
  */
 
+/** A document a shipment carries: a collection's order, an outbound shipment's deliveries. */
+export type Carried = { documentId: string; documentNumber: string };
+
 export type CarrierAccount = {
   provider: string;
   connected: boolean;
@@ -28,6 +31,13 @@ export type ShipmentTracking = {
   labelCommandStatus: string | null;
   /** Grams, as weighed or as its items weigh; null when nothing says. */
   weightG: number | null;
+  /** As it was booked (J-66, 20261007060000): the carrier's name, null until one is booked. */
+  carrier: string | null;
+  serviceCode: string | null;
+  /** The freight cost booked, in minor units of currency. */
+  costMinor: number | null;
+  expectedArrival: string | null;
+  carries: Carried[];
 };
 
 type Row = Record<string, unknown>;
@@ -84,6 +94,16 @@ export function shipmentTracking(result: unknown): ShipmentTracking | null {
     provider: text(r["provider"]),
     labelCommandStatus: text(r["label_command_status"]),
     weightG: grams(r["weight_g"]),
+    carrier: text(r["carrier"]),
+    serviceCode: text(r["service_code"]),
+    costMinor: typeof r["cost_minor"] === "number" ? r["cost_minor"] : null,
+    expectedArrival: text(r["expected_arrival"]),
+    carries: (Array.isArray(r["carries"]) ? (r["carries"] as unknown[]) : []).flatMap((c) => {
+      const x = asRecord(c);
+      const documentId = text(x?.["document_id"]);
+      const documentNumber = text(x?.["document_number"]);
+      return documentId !== null && documentNumber !== null ? [{ documentId, documentNumber }] : [];
+    }),
   };
 }
 
