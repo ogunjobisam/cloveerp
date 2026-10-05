@@ -92,6 +92,9 @@ type Printer = {
  *  render's latest delivery, newest first. */
 type Request = {
   id: string;
+  /** The latest render's id, which Route a render and Reprint pick; null
+   *  until the request is rendered. */
+  render_id: string | null;
   template_code: string;
   version: number | null;
   object_type: string;
@@ -258,13 +261,20 @@ function Output() {
                   permission: "administration.read",
                   fn: "erp_route_print",
                   fields: [
+                    // Picked from the requests this page lists, by document,
+                    // template and time; a request not rendered yet has no
+                    // render to offer (20261009020000).
                     {
-                      kind: "text",
+                      kind: "select",
                       name: "p_render_id",
                       label: "Render id",
                       required: true,
-                      placeholder: "0f9c1a2e-…",
-                      hint: "Copy it from the render listed in Recent output on this page.",
+                      options: {
+                        fn: "erp_output_requests",
+                        value: "render_id",
+                        label: ["document_reference", "template_code", "rendered_at"],
+                        keep: (row) => typeof row["render_id"] === "string",
+                      },
                     },
                     { kind: "site", name: "p_site_id", label: "Site", required: false },
                     {
@@ -366,13 +376,20 @@ function Output() {
                   permission: "inventory.read",
                   fn: "erp_reprint_output",
                   fields: [
+                    // Picked from the requests this page lists, by document,
+                    // template and time; a request not rendered yet has no
+                    // render to offer (20261009020000).
                     {
-                      kind: "text",
+                      kind: "select",
                       name: "p_render_id",
                       label: "Render id",
                       required: true,
-                      placeholder: "0f9c1a2e-…",
-                      hint: "Copy it from the render listed in Recent output on this page.",
+                      options: {
+                        fn: "erp_output_requests",
+                        value: "render_id",
+                        label: ["document_reference", "template_code", "rendered_at"],
+                        keep: (row) => typeof row["render_id"] === "string",
+                      },
                     },
                     pickFrom("erp_printers", "code", ["code", "name"], "p_printer_code", "Printer"),
                   ],
