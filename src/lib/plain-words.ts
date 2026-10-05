@@ -745,8 +745,13 @@ export function periodRank(row: Row, today: string): number {
  * The door lists the calendar newest first, and a demonstration's calendar
  * runs a year ahead, so the step opened on December next year. It opens on
  * the current period, then the open periods that have ended, oldest first —
- * the next to close — then closed ones, latest first. Periods not yet started
- * and years closed for good wait behind "Show future and finished".
+ * the next to close. Closed periods, latest first, periods not yet started
+ * and years closed for good wait behind "Show future and finished", where
+ * Reopen still reaches a closed one.
+ *
+ * The step counts what this returns, so a closed period is not work waiting:
+ * the demonstration's Financials step read "Close 68", every closed month of
+ * every ledger, while one month was open (J-98).
  */
 export function orderPeriods<T extends Row>(
   rows: readonly T[],
@@ -755,7 +760,7 @@ export function orderPeriods<T extends Row>(
 ): T[] {
   return rows
     .map((row) => ({ row, rank: periodRank(row, today), starts: text(row, "starts_on") ?? "" }))
-    .filter((x) => includeLater || x.rank < 3)
+    .filter((x) => includeLater || x.rank < 2)
     .sort((a, b) => {
       if (a.rank !== b.rank) return a.rank - b.rank;
       const newestFirst = a.rank === 2 || a.rank === 4;

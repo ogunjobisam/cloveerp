@@ -58,6 +58,18 @@ export type Sibling = {
   ledger: string;
 };
 
+/**
+ * The month closed most recently in the organisation, whichever month the
+ * checklist is about (20261006190000): its period, when, and who closed it.
+ */
+export type LastClosed = {
+  fiscal_period_id: string;
+  code: string;
+  ledger: string;
+  closed_at: string | null;
+  closed_by: string | null;
+};
+
 export type Checklist = {
   period: ClosePeriod | null;
   tasks: CloseTask[];
@@ -73,6 +85,8 @@ export type Checklist = {
   siblings: Sibling[];
   /** Where the month's checklist is kept: this period, or the sibling it was opened from. */
   checklist_period: { fiscal_period_id: string; code: string; ledger: string } | null;
+  /** Null while nothing has been closed, and from a door older than 20261006190000. */
+  last_closed: LastClosed | null;
 };
 
 type Raw = Record<string, unknown>;
@@ -152,6 +166,8 @@ export function normaliseChecklist(raw: unknown): Checklist {
     : [];
   const home = record(r["checklist_period"]);
   const homeId = home ? text(home["fiscal_period_id"]) : null;
+  const last = record(r["last_closed"]);
+  const lastId = last ? text(last["fiscal_period_id"]) : null;
   return {
     period: period(r["period"]),
     tasks,
@@ -169,6 +185,16 @@ export function normaliseChecklist(raw: unknown): Checklist {
             fiscal_period_id: homeId,
             code: text(home["code"]) ?? "",
             ledger: text(home["ledger"]) ?? "",
+          }
+        : null,
+    last_closed:
+      last && lastId
+        ? {
+            fiscal_period_id: lastId,
+            code: text(last["code"]) ?? "",
+            ledger: text(last["ledger"]) ?? "",
+            closed_at: text(last["closed_at"]),
+            closed_by: text(last["closed_by"]),
           }
         : null,
   };
@@ -250,4 +276,18 @@ export function checklistKeptOn(c: Checklist): string | null {
   const home = c.checklist_period;
   if (!home || !c.period || home.fiscal_period_id === c.period.fiscal_period_id) return null;
   return `${home.ledger} ${home.code}`.trim();
+}
+
+/**
+ * The month closed last, as "GL 2026-09 · 2026-10-01 · Dana Finch": the period,
+ * the day it was closed and who closed it, each where the door says it. Null
+ * while nothing has been closed (J-98: September had been closed, and the
+ * screen said nothing about it).
+ */
+export function lastClosedSays(c: Checklist): string | null {
+  const last = c.last_closed;
+  if (!last) return null;
+  return [`${last.ledger} ${last.code}`.trim(), last.closed_at?.slice(0, 10), last.closed_by]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
 }
