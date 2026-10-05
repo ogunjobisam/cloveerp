@@ -102,6 +102,11 @@ export type LineEdit = { quantity: string; date: string };
 /** The answer erp_supplier_respond and erp_record_supplier_confirmation take. */
 export type SupplierAnswer = {
   decision: "confirm" | "decline";
+  /**
+   * Said to come with changes (20261007020000, J-62): the database refuses it
+   * when no line is changed, rather than take it as the order as it stands.
+   */
+  with_changes?: true;
   supplier_reference?: string;
   note?: string;
   lines?: { line_id: string; quantity?: number; date?: string }[];
@@ -210,6 +215,50 @@ export function supplierAnswer(
   }
   if (lines.length > 0) answer.lines = lines;
   return answer;
+}
+
+/**
+ * The answer a buyer records for the supplier, from the form on the order's
+ * page: "They will send it", "They will send it, with changes" or "They cannot
+ * take it", each line they changed, their reference and what they said. With
+ * changes is a confirmation that names it (J-62); the door is the same.
+ */
+export function recordedAnswer(
+  values: Readonly<Record<string, string>>,
+  rows: readonly Readonly<Record<string, string>>[],
+): SupplierAnswer {
+  const choice = values["decision"] ?? "confirm";
+  const answer: SupplierAnswer = { decision: choice === "decline" ? "decline" : "confirm" };
+  if (choice === "with_changes") answer.with_changes = true;
+  const reference = (values["supplier_reference"] ?? "").trim();
+  const note = (values["note"] ?? "").trim();
+  if (reference !== "") answer.supplier_reference = reference;
+  if (note !== "") answer.note = note;
+  // What was typed: the quantities arrive as text.
+  const lines = rows
+    .filter((row) => (row["line_id"] ?? "") !== "")
+    .map((row) => ({
+      line_id: row["line_id"] ?? "",
+      ...((row["quantity"] ?? "") !== "" ? { quantity: Number(row["quantity"]) } : {}),
+      ...(row["date"] ? { date: row["date"] } : {}),
+    }));
+  if (lines.length > 0) answer.lines = lines;
+  return answer;
+}
+
+/**
+ * Where the supplier's proposal shows on the order's page: to be decided while
+ * it waits, and kept once accepted, so what was ordered before the change is
+ * still to be read beside what they could send (J-62). An answer given again
+ * replaces it, so an accepted one is the last the order had.
+ */
+export function proposalShown(
+  c: Pick<OrderConfirmation, "status" | "proposal">,
+): "to_decide" | "accepted" | null {
+  if (c.proposal.length === 0) return null;
+  if (c.status === "changes_proposed") return "to_decide";
+  if (c.status === "confirmed") return "accepted";
+  return null;
 }
 
 /** A sent order's answer, as its page reads it, or null when it has none. */
