@@ -64,6 +64,33 @@ describe("a shipment's tracking", () => {
     expect(shipmentTracking({ nope: 1 })).toBeNull();
   });
 
+  test("reads the shipment as it was booked: carrier, service, cost, expected arrival and what it carries (J-66)", () => {
+    const t = shipmentTracking({
+      shipment_id: "s3",
+      direction: "inbound",
+      currency: "GBP",
+      weight_g: null,
+      carrier: "Road Haulier",
+      service_code: "ECONOMY",
+      cost_minor: 4500,
+      expected_arrival: "2026-10-20",
+      carries: [
+        { document_id: "po1", document_number: "PO-000137" },
+        { document_id: null, document_number: "nothing" },
+      ],
+    });
+    expect(t?.carrier).toBe("Road Haulier");
+    expect(t?.serviceCode).toBe("ECONOMY");
+    expect(t?.costMinor).toBe(4500);
+    expect(t?.expectedArrival).toBe("2026-10-20");
+    expect(t?.carries).toEqual([{ documentId: "po1", documentNumber: "PO-000137" }]);
+    // A shipment not yet booked reads as no carrier and carrying nothing.
+    const bare = shipmentTracking({ shipment_id: "s4" });
+    expect(bare?.carrier).toBeNull();
+    expect(bare?.costMinor).toBeNull();
+    expect(bare?.carries).toEqual([]);
+  });
+
   test("every status reads in words, and one nobody knows reads as not yet tracked", () => {
     expect(trackingWords("delivered")).toEqual({ words: "Delivered", tone: "ok" });
     expect(trackingWords("return_to_sender").tone).toBe("bad");
