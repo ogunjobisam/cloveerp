@@ -17,9 +17,11 @@ import { useErpSession } from "./session-context";
 /**
  * A purchase order on its way to its supplier (20261004920000).
  *
- * Send to supplier emails the order with its PDF attached, through
- * public.erp_send_purchase_order: an approved order moves to Sent by the same
- * press, and replies go to the buyer. It is offered where
+ * Email to supplier emails the order with its PDF attached, through
+ * public.erp_send_purchase_order: an approved order is issued by the same
+ * press, and replies go to the buyer. The section says "emailed", not "sent",
+ * because issuing the order is its own step with its own name, and an issued
+ * order may not have been emailed yet (J-51). It is offered where
  * public.erp_purchase_order_sends says the reader may send, and asks why only
  * when the order has gone already. Download PDF draws the same document from
  * the order as it reads now, for sending by hand. Every send is listed with how
@@ -144,7 +146,7 @@ export function PurchaseOrderSends({
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">{ui("Sent to the supplier")}</h2>
+          <h2 className="text-sm font-semibold">{ui("Emailed to the supplier")}</h2>
           <Prose className="mt-0.5 text-xs text-muted-foreground">
             {ui(
               "The order as the supplier receives it: emailed from here with its PDF attached, or downloaded and sent by hand.",
@@ -166,18 +168,18 @@ export function PurchaseOrderSends({
             <ActionDialog
               trigger={
                 <ActionButton>
-                  {sends.sends.length > 0 ? ui("Send again") : ui("Send to supplier")}
+                  {sends.sends.length > 0 ? ui("Email again") : ui("Email to supplier")}
                 </ActionButton>
               }
-              title="Send this order to the supplier"
-              description="Emails the order with its PDF attached. An approved order moves to Sent. Replies come to you."
+              title="Email this order to the supplier"
+              description="Emails the order with its PDF attached. An approved order is issued by the same press. Replies come to you."
               permission="procurement.order"
               fn="erp_send_purchase_order"
               fields={fields}
               prefill={{ p_order: documentId }}
               context={context}
               invalidates={[...SEND_READS_AGAIN]}
-              submitLabel="Send"
+              submitLabel="Email"
             />
           ) : null}
         </div>
@@ -186,7 +188,7 @@ export function PurchaseOrderSends({
 
       {sends.sends.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          {ui("Not sent yet. Send it from here, or download the PDF and send it yourself.")}
+          {ui("Not emailed yet. Email it from here, or download the PDF and send it yourself.")}
         </p>
       ) : (
         <ul className="mt-3 flex flex-col gap-2 text-sm">
