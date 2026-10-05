@@ -128,6 +128,19 @@ export const ORDER_SECTION_READS: readonly string[] = [
   "erp_order_shipping_notices",
 ];
 
+/**
+ * What posting or cancelling a goods receipt moves elsewhere on screen: what
+ * is received and not yet billed, the bills matched against it, and what is
+ * left to receive on its order. Only a posted receipt receives
+ * (20261006131000), and posting matches a bill raised already
+ * (20261006141000), so these change as the receipt moves.
+ */
+export const RECEIPT_SECTION_READS: readonly string[] = [
+  "erp_grni",
+  "erp_match_workbench",
+  "erp_receivable_lines",
+];
+
 /** What a move pressed on a document is followed by: everything it can change on screen. */
 export const MOVE_READS_AGAIN: readonly string[] = [
   "erp_document",
@@ -136,6 +149,7 @@ export const MOVE_READS_AGAIN: readonly string[] = [
   "erp_document_approval_chain",
   "erp_my_approvals",
   ...ORDER_SECTION_READS,
+  ...RECEIPT_SECTION_READS,
 ];
 
 /** What a move made with its reason is followed by. */
@@ -144,6 +158,7 @@ export const EXPLAINED_MOVE_READS_AGAIN: readonly string[] = [
   "erp_documents",
   "erp_available_transitions",
   ...ORDER_SECTION_READS,
+  ...RECEIPT_SECTION_READS,
 ];
 
 /**
@@ -337,6 +352,8 @@ export const HELD_BECAUSE: Readonly<Record<string, string>> = {
   // An order approved with its requisition and changed since (20261006110000).
   CLOVEERP_CARRIED_ORDER_CHANGED:
     "Changed since it was approved with its requisition. Take it back to draft and submit it for its own approval.",
+  // A quotation with a line at no price (20261006121000).
+  CLOVEERP_QUOTATION_NOT_PRICED: "A line has no price yet. Give it one with Change, then send it.",
 };
 
 /** Said once when a move is held on its guard rather than on a refusal. */

@@ -428,9 +428,10 @@ describe("money on a tile", () => {
 });
 
 describe("every word the strip, the record and the help sheet say has a row", () => {
-  // The harvest in supabase/ci/screen_strings.sh reads ui("…") on one line,
-  // and prettier wraps a long one, so this reads the wrapped form too and
-  // checks the words against every migration that seeds erp_ref.resource.
+  // The harvest in supabase/ci/screen_strings.sh read ui("…") on one line
+  // until J-172, and prettier wraps a long one, so this reads the wrapped form
+  // too and checks the words against every migration that seeds
+  // erp_ref.resource.
   const MIGRATIONS = join(ROOT, "supabase", "migrations");
   const seeds = readdirSync(MIGRATIONS)
     .filter((f) => f.endsWith(".sql"))
@@ -972,6 +973,14 @@ describe("a move is drawn only where it can be completed", () => {
     expect(isCompletable(send)).toBe(false);
     expect(heldReasons([send])).toEqual([
       "Changed since it was approved with its requisition. Take it back to draft and submit it for its own approval.",
+    ]);
+  });
+
+  test("a quotation with a line at no price says so instead of Send", () => {
+    const send = move({ code: "send", refused: "CLOVEERP_QUOTATION_NOT_PRICED" });
+    expect(isCompletable(send)).toBe(false);
+    expect(heldReasons([send])).toEqual([
+      "A line has no price yet. Give it one with Change, then send it.",
     ]);
   });
 

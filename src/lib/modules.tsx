@@ -26,6 +26,7 @@ import {
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
+import type { InstallableModule } from "./installed-modules";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -306,6 +307,11 @@ export type ModuleDef = {
    */
   howItWorks?: string;
   permission?: string;
+  /**
+   * The module the organisation must have installed. Offered only once it is
+   * installed; the database refuses its verbs before then regardless.
+   */
+  module?: InstallableModule;
   group: TileGroup;
   kpis: Kpi[];
   chart?: Chart;
@@ -985,6 +991,16 @@ export const INVENTORY: ModuleDef = {
           "p_programme_code",
           "Programme",
         ),
+        // One place or one product, as on Stock audit (J-86).
+        {
+          ...pickLocation("p_location_id", "Location", false),
+          hint: "Leave unchosen to count every place the programme covers.",
+        },
+        {
+          ...pickItem("p_item_id", "Product"),
+          required: false,
+          hint: "Leave unchosen to count every product the programme covers.",
+        },
       ],
       invalidates: ["erp_count_tasks", "erp_count_accuracy"],
     },
@@ -1873,6 +1889,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_eliminations",
       fields: [pickGroupParent("p_parent_entity_id", "Parent company")],
+      empty: "Nothing has been eliminated in this group yet.",
     },
     {
       label: "Settlement statement",
@@ -1906,6 +1923,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_budget_position",
       fields: [codeField("p_code", "Budget code", "OPEX-2026")],
+      empty: "No budget in use has that code this year.",
     },
   ],
   key: "finance",
@@ -2418,7 +2436,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Received, not yet billed",
-      description: "Received against a purchase order, still awaiting an invoice.",
+      // Only a posted goods receipt receives (20261006131000).
+      description: "Posted goods receipts against a purchase order, still awaiting an invoice.",
       fn: "erp_grni",
       empty:
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
@@ -2786,6 +2805,7 @@ export const PLANNING: ModuleDef = {
     },
   ],
   key: "planning",
+  module: "planning",
   path: "/planning",
   titleKey: "module.planning",
   title: "Planning",
@@ -3202,6 +3222,7 @@ export const PRODUCTION: ModuleDef = {
     },
   ],
   key: "production",
+  module: "production",
   path: "/production",
   titleKey: "module.production",
   title: "Manufacturing",
@@ -3697,6 +3718,7 @@ export const QUALITY: ModuleDef = {
     },
   ],
   key: "quality",
+  module: "quality",
   path: "/quality",
   titleKey: "module.quality",
   title: "Quality control",
@@ -4827,6 +4849,9 @@ export const REPORTING: ModuleDef = {
         { header: "Score", cell: "score", numeric: true },
         { header: "Errors", cell: "errors", numeric: true },
         { header: "Warnings", cell: "warnings", numeric: true },
+        // The messages of the rules the record fails, errors first
+        // (20261007110000); a count alone gave nobody anything to fix.
+        { header: "Finding", cell: "failing" },
       ],
     },
 
@@ -4922,7 +4947,8 @@ export const SALES_KPIS: Kpi[] = [
 
 export const PURCHASING_KPIS: Kpi[] = [
   {
-    label: "Received, not yet billed",
+    // How many lines; the tile after it says what they are worth (J-48).
+    label: "Lines received, not yet billed",
     fn: "erp_grni",
     compute: (rows) => {
       if (rows.length === 0) return { value: "0", hint: "nothing awaiting an invoice", tone: "ok" };
@@ -4935,7 +4961,7 @@ export const PURCHASING_KPIS: Kpi[] = [
     },
   },
   {
-    label: "Received, not yet billed",
+    label: "Value received, not yet billed",
     fn: "erp_grni",
     compute: (rows, { money }) =>
       rows.length === 0
@@ -4995,6 +5021,11 @@ export type TileDef = {
    * that will be refused off the launchpad.
    */
   platformOnly?: boolean;
+  /**
+   * The module the organisation must have installed. Offered only once it is
+   * installed; the database refuses its verbs before then regardless.
+   */
+  module?: InstallableModule;
   /**
    * Reached from the account menu and the palette rather than filed in an
    * area: kept out of the rail, the launchpads and the area counts. A screen
@@ -5481,6 +5512,7 @@ export function allTiles(): TileDef[] {
     title: m.title,
     blurb: m.blurb,
     ...(m.permission ? { permission: m.permission } : {}),
+    ...(m.module ? { module: m.module } : {}),
     group: m.group,
   }));
   return [...fromModules, ...EXTRA_TILES];

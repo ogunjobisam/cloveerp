@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { MODULES as MODULE_LIST } from "./modules";
+
 /**
  * An empty state says what to do, and the way it offers leads somewhere.
  *
@@ -118,5 +120,59 @@ describe("an empty state is a sentence", () => {
     );
     const unfinished = empties.filter((e) => !/[.?!]$/.test(e));
     expect(unfinished).toEqual([]);
+  });
+});
+
+/**
+ * An empty state that sends you to a card above names a card the screen draws.
+ *
+ * Action cards were once all headed "Actions", and empty states said "Define
+ * one under Actions above". The cards are now headed by what they act on, so
+ * on Notifications that sentence pointed at a heading the screen no longer
+ * had (J-163). "Actions" is still right where the page header carries the
+ * button of that name, which HeaderActions draws when it is given no label.
+ */
+describe("an empty state names a card its screen draws", () => {
+  test("every 'under … above' names an action card's heading on the same screen", () => {
+    const sentences: { file: string; heading: string }[] = [];
+    for (const file of sourceFiles()) {
+      const src = readFileSync(file, "utf8");
+      for (const m of src.matchAll(/under ([A-Z][A-Za-z ,'-]*?) above/g)) {
+        sentences.push({ file, heading: m[1]! });
+      }
+    }
+    expect(sentences.length).toBeGreaterThan(5);
+    const nowhere = sentences
+      .filter(({ file, heading }) => {
+        const src = readFileSync(file, "utf8");
+        if (heading === "Actions") return !src.includes("<HeaderActions>");
+        return !src.includes(`title="${heading}"`) && !src.includes(`title={ui("${heading}")}`);
+      })
+      .map(({ file, heading }) => `${heading} in ${file}`);
+    expect(nowhere).toEqual([]);
+  });
+});
+
+describe("an inquiry that can answer nothing says what nothing means", () => {
+  /**
+   * J-95: Eliminations, for a group with nothing eliminated yet, and Budget
+   * position, for a code no budget in use carries this year, each answered a
+   * bare "None". Each door answers an empty list when there is nothing, so
+   * each inquiry says what that means instead.
+   */
+  const finance = MODULE_LIST.find((m) => m.path === "/finance");
+
+  test("Eliminations and Budget position each say why their answer is empty", () => {
+    const says = (fn: string) => (finance?.inquiries ?? []).find((i) => i.fn === fn)?.empty;
+    expect(says("erp_eliminations")).toBe("Nothing has been eliminated in this group yet.");
+    expect(says("erp_budget_position")).toBe("No budget in use has that code this year.");
+  });
+
+  test("every inquiry's empty answer is a finished sentence", () => {
+    const empties = MODULE_LIST.flatMap((m) => m.inquiries ?? []).flatMap((i) =>
+      i.empty === undefined ? [] : [i.empty],
+    );
+    expect(empties.length).toBeGreaterThan(1);
+    expect(empties.filter((e) => !/[.?!]$/.test(e))).toEqual([]);
   });
 });

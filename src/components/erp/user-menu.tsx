@@ -16,6 +16,7 @@ import { usePlatformMe } from "../../lib/platform";
 import { useT } from "../../lib/i18n";
 import { rolesLabel } from "../../lib/roles-label";
 import { TOUCH } from "./page";
+import { PersonaMenuSection } from "./persona";
 
 type MyTenant = {
   tenant_id: string;
@@ -176,6 +177,8 @@ export function UserMenu({
             ))}
           </>
         ) : null}
+
+        {session.tenant_id ? <PersonaMenuSection /> : null}
 
         {mayAdminister ? (
           <>

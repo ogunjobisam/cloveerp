@@ -33,6 +33,44 @@ test.describe("navigation", () => {
     expect(backend.crashes).toEqual([]);
   });
 
+  test("a sub-screen folds under its parent, behind a toggle the keyboard opens", async ({
+    page,
+    backend,
+  }) => {
+    await page.goto("/");
+    const sections = page.getByRole("navigation", { name: "Sections" }).first();
+    const toggle = sections.getByRole("button", { name: "Financials", exact: true });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false", { timeout: 20_000 });
+    await expect(sections.getByRole("link", { name: "Journals", exact: true })).toBeHidden();
+
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await sections.getByRole("link", { name: "Journals", exact: true }).click();
+    await expect(page).toHaveURL(/\/finance\/journals\/?$/);
+
+    // On the sub-screen it is the current page, its parent is open and is not.
+    await expect(sections.getByRole("link", { name: "Journals", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(
+      sections.getByRole("link", { name: "Financials", exact: true }),
+    ).not.toHaveAttribute("aria-current", "page");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("the trail files a screen where the rail does (J-130)", async ({ page }) => {
+    await page.goto("/inventory/warehouse");
+    const trail = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(trail).toBeVisible({ timeout: 20_000 });
+    await expect(trail.getByRole("listitem")).toHaveText([
+      "Settings",
+      "Products and places",
+      "Warehouse layout",
+    ]);
+  });
+
   test("the browser's back button returns to the previous screen", async ({ page }) => {
     // Three navigations, each of which may be the first time this dev server
     // has compiled that route. The default thirty seconds is a budget for one.
@@ -83,6 +121,77 @@ test.describe("the command palette", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("a module the organisation has not installed", () => {
+  // The session names the modules in force (erp_session's `modules`). This one
+  // has not installed Manufacturing, Planning or Quality, as the demonstration
+  // has not (J-05, J-89).
+  test.use({
+    session: {
+      ...DEMO_SESSION,
+      modules: ["finance", "inventory", "logistics", "master_data", "procurement", "sales"],
+    },
+  });
+
+  test("is not offered by the rail, the home page or the palette", async ({ page, backend }) => {
+    await page.goto("/");
+    const sections = page.getByRole("navigation", { name: "Sections" }).first();
+    await expect(sections.getByRole("link", { name: "Sales" }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    for (const name of ["Manufacturing", "Planning", "Quality control"]) {
+      await expect(sections.getByRole("link", { name, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole("heading", { name: "The flow" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Make", exact: true })).toHaveCount(0);
+
+    await page.keyboard.press("ControlOrMeta+k");
+    const dialog = page.getByRole("dialog", { name: "Search screens" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("textbox").first().fill("works order");
+    await expect(dialog.getByRole("listitem").filter({ hasText: "Manufacturing" })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("says so at its address, and where to install it", async ({ page, backend }) => {
+    const reads: string[] = [];
+    page.on("request", (r) => {
+      const m = /rpc\/(erp_[a-z_]+)$/.exec(r.url());
+      if (m) reads.push(m[1]!);
+    });
+    await page.goto("/production");
+    await expect(page.getByText("This module is not installed in this organisation.")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("heading", { name: "Manufacturing", level: 1 })).toBeVisible();
+    const open = page.getByRole("link", { name: "Open Configuration" });
+    await expect(open).toHaveAttribute("href", "/administration/configuration");
+    await expect(page.getByRole("button", { name: "Start making something" })).toHaveCount(0);
+    expect(reads.filter((fn) => fn.startsWith("erp_works_order"))).toEqual([]);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("to somebody who may not configure the organisation", () => {
+    test.use({
+      session: {
+        ...DEMO_SESSION,
+        permissions: DEMO_SESSION.permissions.filter((p) => p !== "administration.configure"),
+        modules: ["finance", "inventory", "procurement", "sales"],
+      },
+    });
+
+    test("says whom to ask instead", async ({ page, backend }) => {
+      await page.goto("/quality");
+      await expect(
+        page.getByText(
+          "Ask an administrator to install it on the Configuration screen if you need it.",
+        ),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("link", { name: "Open Configuration" })).toHaveCount(0);
+      expect(backend.crashes).toEqual([]);
+    });
   });
 });
 
@@ -2867,6 +2976,148 @@ test.describe("report runs say where they come from", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
     await expect.poll(() => backend.called.includes("erp_analytics_contract")).toBe(true);
     await expect(page.getByText(NOT_INSTALLED)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("a supplier's price is kept where its terms are", () => {
+  // J-108: no screen set what a supplier charges, and the supplier's own code
+  // was answered but never drawn. Product-suppliers now shows both.
+  test("Product-suppliers shows the supplier's own code and each supplier's price, and offers to set one (J-108)", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_item_suppliers", [
+      {
+        item_supplier_id: "00000000-0000-4000-8000-0000000051a1",
+        item_id: "00000000-0000-4000-8000-0000000051a2",
+        item_code: "BOLT-10",
+        item_name: "Bolt, 10 mm",
+        party_id: "00000000-0000-4000-8000-0000000051a3",
+        supplier: "Northwind Fasteners",
+        site_id: null,
+        site_code: null,
+        preference_rank: 1,
+        is_default: true,
+        split_pct: null,
+        is_approved_for_use: true,
+        supplier_item_code: "NW-4471",
+        lead_time_days: 5,
+        min_order_quantity: 100,
+        valid_from: "2026-01-01",
+        valid_to: null,
+        status: "active",
+      },
+    ]);
+    backend.rpc("erp_supplier_prices", [
+      {
+        item_price_id: "00000000-0000-4000-8000-0000000051a4",
+        item_id: "00000000-0000-4000-8000-0000000051a2",
+        item_code: "BOLT-10",
+        item_name: "Bolt, 10 mm",
+        party_id: "00000000-0000-4000-8000-0000000051a3",
+        supplier: "Northwind Fasteners",
+        amount_minor: 1250,
+        currency: "GBP",
+        minor_units: 2,
+        per_quantity: 1,
+        min_quantity: 0,
+        valid_from: "2026-10-01",
+        valid_to: null,
+        state: "in_force",
+      },
+    ]);
+
+    await page.goto("/master-data/item-supply");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("columnheader", { name: "Supplier's own code" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "NW-4471" })).toBeVisible();
+
+    const prices = page.getByRole("heading", { name: "Supplier prices", exact: true }).first();
+    await prices.scrollIntoViewIfNeeded();
+    await expect.poll(() => backend.called.includes("erp_supplier_prices")).toBe(true);
+    await expect(page.getByRole("cell", { name: "£12.50" })).toBeVisible();
+    await expect(page.getByText("In force", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set the supplier's price" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "End a supplier's price" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("a business partner's record keeps its details", () => {
+  // J-107: the role lists and the record's Roles printed database codes, and
+  // nothing on the desk could keep a partner's VAT number, payment terms or
+  // contacts. The record now reads them, in words, and offers to keep them.
+  test("a partner's roles read as words, and its VAT number, terms and contacts are shown with a way to keep each (J-107)", async ({
+    page,
+    backend,
+  }) => {
+    const PARTY = "00000000-0000-4000-8000-0000000107a1";
+    backend.rpc("erp_parties", [
+      {
+        party_id: PARTY,
+        code: "CONS-01",
+        name: "Harbour Consignee Ltd",
+        legal_name: null,
+        country_code: "GB",
+        status: "active",
+        roles: ["consignee", "customer"],
+      },
+    ]);
+    backend.rpc("erp_party_details", {
+      party_id: PARTY,
+      code: "CONS-01",
+      tax_identifier: "GB123456789",
+      is_company: false,
+      is_merged: false,
+      terms: [
+        {
+          role: "customer",
+          payment_terms_code: "NET30",
+          payment_terms_name: "Net 30 days",
+          payment_days: 30,
+          valid_from: "2026-10-01",
+          valid_to: null,
+        },
+      ],
+    });
+    backend.rpc("erp_party_contacts", [
+      {
+        contact_id: "00000000-0000-4000-8000-0000000107a2",
+        party_id: PARTY,
+        kind: "purchasing",
+        name: "Orders desk",
+        email: "orders@harbour.example",
+        phone: "01904 123456",
+        role_title: null,
+        is_default: true,
+        valid_from: "2026-10-01",
+        valid_to: null,
+        state: "current",
+        erased: false,
+      },
+    ]);
+
+    await page.goto("/master-data");
+    await expect(page.getByRole("heading", { name: "Business partners" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await page
+      .getByRole("button", { name: /CONS-01/ })
+      .first()
+      .click();
+
+    await expect(page.getByText("Consignee", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("consignee", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("GB123456789")).toBeVisible();
+    await expect(page.getByText("Net 30 days")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "orders@harbour.example" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Purchase orders" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set the VAT number" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set payment terms" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add a contact" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "End the contact" })).toBeVisible();
+    expect(backend.called).toContain("erp_party_contacts");
     expect(backend.crashes).toEqual([]);
   });
 });
