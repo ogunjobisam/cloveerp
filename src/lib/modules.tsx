@@ -985,6 +985,16 @@ export const INVENTORY: ModuleDef = {
           "p_programme_code",
           "Programme",
         ),
+        // One place or one product, as on Stock audit (J-86).
+        {
+          ...pickLocation("p_location_id", "Location", false),
+          hint: "Leave unchosen to count every place the programme covers.",
+        },
+        {
+          ...pickItem("p_item_id", "Product"),
+          required: false,
+          hint: "Leave unchosen to count every product the programme covers.",
+        },
       ],
       invalidates: ["erp_count_tasks", "erp_count_accuracy"],
     },

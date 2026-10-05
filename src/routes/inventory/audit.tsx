@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionButtons, pickChangeSet, pickFrom } from "../../components/erp/actions-bar";
+import {
+  ActionButtons,
+  pickChangeSet,
+  pickFrom,
+  pickItem,
+  pickLocation,
+} from "../../components/erp/actions-bar";
 import { CountWorklist } from "../../components/erp/count-worklist";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -148,7 +154,9 @@ function StockAudit() {
                 permission: "inventory.count",
                 fn: "erp_raise_count_tasks",
                 // The door refuses a programme that is not active, so the status
-                // is shown beside the code.
+                // is shown beside the code. One place or one product narrows
+                // what the programme raises (J-86); left unchosen, it raises
+                // everything it covers, as it always did.
                 fields: [
                   pickFrom(
                     "erp_count_programmes",
@@ -157,6 +165,15 @@ function StockAudit() {
                     "p_programme_code",
                     "Programme",
                   ),
+                  {
+                    ...pickLocation("p_location_id", "Location", false),
+                    hint: "Leave unchosen to count every place the programme covers.",
+                  },
+                  {
+                    ...pickItem("p_item_id", "Product"),
+                    required: false,
+                    hint: "Leave unchosen to count every product the programme covers.",
+                  },
                 ],
                 invalidates,
               },
