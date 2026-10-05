@@ -1076,7 +1076,7 @@ export type Database = {
         Returns: Json
       }
       erp_items: {
-        Args: { p_limit?: number; p_search?: string }
+        Args: { p_limit?: number; p_sales_priced?: boolean; p_search?: string }
         Returns: Json
       }
       erp_job_handlers: { Args: never; Returns: Json }
@@ -2293,7 +2293,13 @@ export type Database = {
         Returns: Json
       }
       erp_resolve_price: {
-        Args: { p_item_id: string; p_party_id: string; p_quantity?: number }
+        Args: {
+          p_item_id: string
+          p_on?: string
+          p_party_id: string
+          p_quantity?: number
+          p_site_id?: string
+        }
         Returns: Json
       }
       erp_resolve_purchase_price: {
