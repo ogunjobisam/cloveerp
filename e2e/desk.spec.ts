@@ -1026,6 +1026,35 @@ test.describe("stock's decisions are on the rows, and its page carries its day",
     expect(backend.crashes).toEqual([]);
   });
 
+  test("each transfer says what it moves, by its state's name, and its number opens it", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_transfer_orders", [
+      {
+        ...transfer(4, "in_transit", 7),
+        state_name: "In transit",
+        their_reference: "ZZ-REF-4",
+        products: "ZZ-T, ZZ-U",
+      },
+      transfer(5, "closed", 2),
+    ]);
+    backend.rpc("erp_available_transitions", []);
+    await page.goto("/inventory/transfers");
+
+    const row = page.getByRole("row", { name: /TRF-000004/ });
+    await expect(row).toContainText("ZZ-REF-4", { timeout: 20_000 });
+    await expect(row).toContainText("ZZ-T, ZZ-U");
+    await expect(row).toContainText("In transit");
+    await expect(row.getByRole("link", { name: "TRF-000004" })).toHaveAttribute(
+      "href",
+      `/documents/${doc(4)}`,
+    );
+    // With no name to say, the state reads as its code, as before.
+    await expect(page.getByRole("row", { name: /TRF-000005/ })).toContainText("closed");
+    expect(backend.crashes).toEqual([]);
+  });
+
   test("an adjustment waiting for approval gets the same decision, with nothing named for it", async ({
     page,
     backend,
