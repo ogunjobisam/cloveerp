@@ -1,6 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionButtons, pickChangeSet, pickFrom } from "../../components/erp/actions-bar";
+import {
+  ActionButtons,
+  pickChangeSet,
+  pickFrom,
+  pickItem,
+  pickLocation,
+} from "../../components/erp/actions-bar";
 import { CountWorklist } from "../../components/erp/count-worklist";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
@@ -9,6 +15,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { countPostingArgs } from "../../lib/modules";
 import { formatMinor } from "../../lib/money";
+import { countApprovalChoice } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/inventory/audit")({
   head: () => ({
@@ -147,7 +154,9 @@ function StockAudit() {
                 permission: "inventory.count",
                 fn: "erp_raise_count_tasks",
                 // The door refuses a programme that is not active, so the status
-                // is shown beside the code.
+                // is shown beside the code. One place or one product narrows
+                // what the programme raises (J-86); left unchosen, it raises
+                // everything it covers, as it always did.
                 fields: [
                   pickFrom(
                     "erp_count_programmes",
@@ -156,6 +165,15 @@ function StockAudit() {
                     "p_programme_code",
                     "Programme",
                   ),
+                  {
+                    ...pickLocation("p_location_id", "Location", false),
+                    hint: "Leave unchosen to count every place the programme covers.",
+                  },
+                  {
+                    ...pickItem("p_item_id", "Product"),
+                    required: false,
+                    hint: "Leave unchosen to count every product the programme covers.",
+                  },
                 ],
                 invalidates,
               },
@@ -171,13 +189,22 @@ function StockAudit() {
                 // caller, and a code here would hide it from an assignee who lacks it.
                 fn: "erp_decide_approval",
                 fields: [
-                  pickFrom(
-                    "erp_my_approvals",
-                    "task_id",
-                    ["object_type", "requested_by", "requested_at"],
-                    "p_task_id",
-                    "Approval waiting on me",
-                  ),
+                  // Counts only, each named by what was counted where and what
+                  // was found (J-20): a document's approval is decided where
+                  // the document is, not here.
+                  {
+                    kind: "select",
+                    name: "p_task_id",
+                    label: "Approval waiting on me",
+                    required: true,
+                    options: {
+                      fn: "erp_my_approvals",
+                      value: "task_id",
+                      label: ["item", "location", "requested_by"],
+                      keep: (r) => r["object_type"] === "count_task",
+                      describe: countApprovalChoice,
+                    },
+                  },
                   {
                     kind: "choice",
                     name: "p_approve",

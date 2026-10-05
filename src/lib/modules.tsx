@@ -27,8 +27,8 @@ import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
 import { fill } from "./interview";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
-import { receivableLineWords } from "./shipping-notices";
 import type { InstallableModule } from "./installed-modules";
+import { receivableLineWords } from "./shipping-notices";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -993,6 +993,16 @@ export const INVENTORY: ModuleDef = {
           "p_programme_code",
           "Programme",
         ),
+        // One place or one product, as on Stock audit (J-86).
+        {
+          ...pickLocation("p_location_id", "Location", false),
+          hint: "Leave unchosen to count every place the programme covers.",
+        },
+        {
+          ...pickItem("p_item_id", "Product"),
+          required: false,
+          hint: "Leave unchosen to count every product the programme covers.",
+        },
       ],
       invalidates: ["erp_count_tasks", "erp_count_accuracy"],
     },
@@ -1881,6 +1891,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_eliminations",
       fields: [pickGroupParent("p_parent_entity_id", "Parent company")],
+      empty: "Nothing has been eliminated in this group yet.",
     },
     {
       label: "Settlement statement",
@@ -1914,6 +1925,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_budget_position",
       fields: [codeField("p_code", "Budget code", "OPEX-2026")],
+      empty: "No budget in use has that code this year.",
     },
   ],
   key: "finance",

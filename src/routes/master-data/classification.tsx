@@ -431,7 +431,7 @@ function Classification() {
         description={ui("A mandatory axis must be answered before a product can be created.")}
         fn="erp_classification_axes"
         empty={ui(
-          "No axes yet. Define one under Actions above; until one exists, products carry no structured meaning.",
+          "No axes yet. Define one under Axes and values above; until one exists, products carry no structured meaning.",
         )}
       >
         {(rows) => (
@@ -470,7 +470,7 @@ function Classification() {
         description={ui("The permitted answers, and the abbreviation each contributes to a code.")}
         fn="erp_classification_values"
         empty={ui(
-          "No values yet. A value belongs to an axis, so define an axis first and add its values under Actions above.",
+          "No values yet. A value belongs to an axis, so define an axis first and add its values under Axes and values above.",
         )}
       >
         {(rows) => (
