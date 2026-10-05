@@ -2,7 +2,7 @@
   "ai_tables": 2,
   "api_only_doors": 23,
   "assertions": 124,
-  "catalogue_checks": 442,
+  "catalogue_checks": 444,
   "de_strings": 767,
   "definer_allowances": 216,
   "diagnostic_checks": 133,
@@ -20,7 +20,7 @@
   "legislation_packs": 4,
   "locales_with_strings": 3,
   "meta_tables": 79,
-  "migrations": 684,
+  "migrations": 686,
   "modules": 13,
   "part5_absent": 1,
   "part5_built": 97,
@@ -36,8 +36,8 @@
   "promotable_surfaces": 43,
   "ref_tables": 78,
   "spec_version": "v1.6",
-  "sql_lines": 433224,
-  "suites": 340,
+  "sql_lines": 434050,
+  "suites": 342,
   "triggers": 857,
   "write_allowances": 563
 }
