@@ -3117,6 +3117,91 @@ test.describe("a supplier's price is kept where its terms are", () => {
   });
 });
 
+test.describe("the Settings home", () => {
+  // The page is one list. For whoever configures the organisation that is the
+  // setup order, once erp_setup_progress has answered; until then, if it
+  // fails, or if it answers nothing, it is the launchpad, so the page is never
+  // blank. On live that read has taken nine to twenty-six seconds (J-38).
+  const launchpad = (page: Page) =>
+    page.getByRole("heading", { level: 2, name: "People and organisation", exact: true });
+  const setupList = (page: Page) =>
+    page.getByRole("heading", { level: 2, name: "Set up, step by step", exact: true });
+
+  const onboarding = {
+    screen_path: "/administration/onboarding",
+    seq: 1,
+    title: "Onboarding interview",
+    blurb: "Answer a few questions and the organisation is set up from them.",
+    total: 2,
+    complete: 1,
+    next: { code: "onboarding.answer", title: "Answer the interview", action_label: "Start" },
+  };
+
+  test("is the launchpad while the setup order is read, and the order once it answers", async ({
+    page,
+    backend,
+  }) => {
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    await page.route("**/rest/v1/rpc/erp_setup_progress", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fallback();
+      await answered;
+      return route.fallback();
+    });
+    backend.rpc("erp_setup_progress", [onboarding]);
+    await page.goto("/settings");
+
+    await expect(launchpad(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByRole("link", { name: /^Audit log/ })).toBeVisible();
+    await expect(setupList(page)).toHaveCount(0);
+
+    answer();
+    await expect(setupList(page)).toBeVisible();
+    await expect(launchpad(page)).toHaveCount(0);
+
+    // One list: the order's own screen, numbered, then every Settings screen
+    // the order does not name, so none is lost with the launchpad.
+    const list = page
+      .getByRole("list")
+      .filter({ has: page.getByRole("link", { name: "Onboarding interview" }) });
+    await expect(list.getByRole("listitem").first()).toContainText("1.");
+    await expect(list.getByRole("link", { name: "Audit log", exact: true })).toBeVisible();
+    await expect(
+      list.getByRole("link", { name: "People and permissions", exact: true }),
+    ).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("is the launchpad when the setup order cannot be read", async ({ page, backend }) => {
+    backend.fail("erp_setup_progress", {
+      status: 500,
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+    await page.goto("/settings");
+
+    await expect(launchpad(page)).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => backend.called.includes("erp_setup_progress")).toBe(true);
+    await expect(launchpad(page)).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: /^Audit log/ })).toBeVisible();
+    await expect(setupList(page)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("is the launchpad when the setup order answers nothing", async ({ page, backend }) => {
+    backend.rpc("erp_setup_progress", []);
+    await page.goto("/settings");
+
+    await expect.poll(() => backend.called.includes("erp_setup_progress")).toBe(true);
+    await expect(launchpad(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByRole("link", { name: /^Audit log/ })).toBeVisible();
+    await expect(setupList(page)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+});
+
 test.describe("a business partner's record keeps its details", () => {
   // J-107: the role lists and the record's Roles printed database codes, and
   // nothing on the desk could keep a partner's VAT number, payment terms or

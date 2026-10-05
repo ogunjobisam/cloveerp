@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, Check, Circle, Compass, EyeOff, Lock, RefreshCw } from "lucide-react";
-import { useContext, useState } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { friendlyError } from "@/lib/errors";
 import { callErp, hasPermission } from "../../lib/erp";
@@ -11,6 +11,7 @@ import {
   completeCount,
   nextScreen,
   nextStep,
+  settingsHomeRows,
   stepState,
   tileFor,
   type SetupScreenProgress,
@@ -21,6 +22,7 @@ import { useErpAction } from "./action";
 import { hasActionOpener, openAction } from "./action-registry";
 import { TOUCH } from "./page";
 import { ErpSessionContext } from "./session-context";
+import { useVisibleTiles } from "./visible-tiles";
 
 /**
  * The Settings walkthrough (specification Part 22).
@@ -348,27 +350,30 @@ function StepCard({
   );
 }
 
-/** The Settings home: every screen in the order, how far along, and what is next. */
-export function SetupOverview() {
-  const { ui } = useT();
+/**
+ * The Settings home: every screen in the order, how far along, and what is
+ * next, then any Settings screen the order does not name.
+ *
+ * It is the page's one list for whoever configures the organisation. Until the
+ * order has been read, when it cannot be read, or when it comes back empty,
+ * the page shows `fallback` (the launchpad) instead, so it is never blank and
+ * nobody waits on erp_setup_progress to reach a screen.
+ */
+export function SetupOverview({ fallback }: { fallback: ReactNode }) {
+  const { t, ui } = useT();
   const mayConfigure = useMayConfigure();
+  const tiles = useVisibleTiles();
   const progress = useQuery({
     queryKey: ["erp_setup_progress"],
     queryFn: () => callErp<SetupScreenProgress[]>("erp_setup_progress"),
     enabled: mayConfigure,
   });
 
-  if (!mayConfigure) return null;
-  if (progress.isPending) {
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {ui("Loading…")}
-      </p>
-    );
-  }
-  if (progress.error || !progress.data) return null;
+  if (!mayConfigure || progress.isPending || progress.error) return <>{fallback}</>;
+  if (!Array.isArray(progress.data) || progress.data.length === 0) return <>{fallback}</>;
 
   const screens = [...progress.data].sort((a, b) => a.seq - b.seq);
+  const rows = settingsHomeRows(screens, tiles);
   const next = nextScreen(screens);
   const total = screens.reduce((n, s) => n + s.total, 0);
   const complete = screens.reduce((n, s) => n + s.complete, 0);
@@ -404,19 +409,30 @@ export function SetupOverview() {
       )}
 
       <ol className="mt-4 grid gap-1.5 sm:grid-cols-2">
-        {screens.map((s) => (
-          <li key={s.screen_path} className="flex items-center gap-2 text-sm">
-            <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{s.seq}.</span>
-            <Link to={s.screen_path} className="min-w-0 flex-1 truncate underline">
-              {s.title}
-            </Link>
-            <span
-              className={`shrink-0 text-xs ${s.next ? "text-muted-foreground" : "text-emerald-700"}`}
-            >
-              {s.complete} / {s.total}
-            </span>
-          </li>
-        ))}
+        {rows.map((row) =>
+          row.kind === "setup" ? (
+            <li key={row.screen.screen_path} className="flex items-center gap-2 text-sm">
+              <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">
+                {row.screen.seq}.
+              </span>
+              <Link to={row.screen.screen_path} className="min-w-0 flex-1 truncate underline">
+                {row.screen.title}
+              </Link>
+              <span
+                className={`shrink-0 text-xs ${row.screen.next ? "text-muted-foreground" : "text-emerald-700"}`}
+              >
+                {row.screen.complete} / {row.screen.total}
+              </span>
+            </li>
+          ) : (
+            <li key={row.tile.path} className="flex items-center gap-2 text-sm">
+              <span className="w-5 shrink-0" aria-hidden="true" />
+              <Link to={row.tile.path} className="min-w-0 flex-1 truncate underline">
+                {t(row.tile.titleKey, row.tile.title)}
+              </Link>
+            </li>
+          ),
+        )}
       </ol>
     </section>
   );
