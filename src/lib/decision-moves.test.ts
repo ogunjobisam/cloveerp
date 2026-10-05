@@ -209,4 +209,12 @@ describe("what a move reads again", () => {
     expect(MOVE_READS_AGAIN).toContain("erp_document_approval_chain");
     expect(MOVE_READS_AGAIN).toContain("erp_my_approvals");
   });
+
+  test("a goods receipt's: posting or cancelling one refreshes received-not-billed, the matching workbench and what is left to receive", () => {
+    for (const reads of [MOVE_READS_AGAIN, EXPLAINED_MOVE_READS_AGAIN]) {
+      for (const key of ["erp_grni", "erp_match_workbench", "erp_receivable_lines"]) {
+        expect(reads).toContain(key);
+      }
+    }
+  });
 });

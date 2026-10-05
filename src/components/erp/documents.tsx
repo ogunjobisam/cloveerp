@@ -325,11 +325,15 @@ export function NewDocumentAction({
                 ? {
                     priceFrom: {
                       fn: "erp_resolve_price",
+                      // The site's company decides which of its prices
+                      // applies, as it does when the line is saved (J-72).
                       args: {
                         p_item_id: "item_id",
                         p_quantity: "quantity",
                         p_party_id: "form.p_party_id",
+                        p_site_id: "form.p_site_id",
                       },
+                      fixed: { p_site_id: effectiveSite },
                       needs: ["p_item_id", "p_party_id"],
                       amount: "amount_minor",
                       note: "source",
