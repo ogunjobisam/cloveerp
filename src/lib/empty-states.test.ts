@@ -123,6 +123,36 @@ describe("an empty state is a sentence", () => {
   });
 });
 
+/**
+ * An empty state that sends you to a card above names a card the screen draws.
+ *
+ * Action cards were once all headed "Actions", and empty states said "Define
+ * one under Actions above". The cards are now headed by what they act on, so
+ * on Notifications that sentence pointed at a heading the screen no longer
+ * had (J-163). "Actions" is still right where the page header carries the
+ * button of that name, which HeaderActions draws when it is given no label.
+ */
+describe("an empty state names a card its screen draws", () => {
+  test("every 'under … above' names an action card's heading on the same screen", () => {
+    const sentences: { file: string; heading: string }[] = [];
+    for (const file of sourceFiles()) {
+      const src = readFileSync(file, "utf8");
+      for (const m of src.matchAll(/under ([A-Z][A-Za-z ,'-]*?) above/g)) {
+        sentences.push({ file, heading: m[1]! });
+      }
+    }
+    expect(sentences.length).toBeGreaterThan(5);
+    const nowhere = sentences
+      .filter(({ file, heading }) => {
+        const src = readFileSync(file, "utf8");
+        if (heading === "Actions") return !src.includes("<HeaderActions>");
+        return !src.includes(`title="${heading}"`) && !src.includes(`title={ui("${heading}")}`);
+      })
+      .map(({ file, heading }) => `${heading} in ${file}`);
+    expect(nowhere).toEqual([]);
+  });
+});
+
 describe("an inquiry that can answer nothing says what nothing means", () => {
   /**
    * J-95: Eliminations, for a group with nothing eliminated yet, and Budget
