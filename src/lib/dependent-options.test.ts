@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   clearDependentCells,
+  coveringTicks,
   dependentFields,
   dropSeededRows,
   emptyReason,
@@ -340,5 +341,30 @@ describe("an inquiry's picker that follows a choice (J-97)", () => {
     const inquiry = readFileSync(join(import.meta.dir, "../components/erp/inquiry.tsx"), "utf8");
     expect(inquiry).toContain("optionArgs(spec.options, values)");
     expect(inquiry).toContain("dependentFields(spec.fields, name)");
+  });
+});
+
+describe("a list that arrives ticked to cover an amount (20261010021000)", () => {
+  const invoices = [
+    { value: "a", record: { owing_minor: 79500 } },
+    { value: "b", record: { owing_minor: 20000 } },
+    { value: "c", record: { owing_minor: 5000 } },
+  ];
+
+  test("the oldest are ticked, as many as the amount pays, in the list's order", () => {
+    expect(coveringTicks(invoices, "owing_minor", 79500)).toEqual(["a"]);
+    expect(coveringTicks(invoices, "owing_minor", 79501)).toEqual(["a", "b"]);
+    expect(coveringTicks(invoices, "owing_minor", 99500)).toEqual(["a", "b"]);
+    expect(coveringTicks(invoices, "owing_minor", 1_000_000)).toEqual(["a", "b", "c"]);
+  });
+
+  test("with no amount yet, only the oldest; with nothing to offer, nothing", () => {
+    expect(coveringTicks(invoices, "owing_minor", null)).toEqual(["a"]);
+    expect(coveringTicks(invoices, "owing_minor", 0)).toEqual(["a"]);
+    expect(coveringTicks([], "owing_minor", 5000)).toEqual([]);
+  });
+
+  test("an option that does not say what it owes counts as nothing", () => {
+    expect(coveringTicks([{ value: "x" }, { value: "y" }], "owing_minor", 100)).toEqual(["x", "y"]);
   });
 });

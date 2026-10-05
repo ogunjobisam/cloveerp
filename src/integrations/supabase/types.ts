@@ -147,7 +147,9 @@ export type Database = {
       erp_apply_cash: {
         Args: {
           p_amount_minor: number
+          p_amounts_minor?: number[]
           p_currency: string
+          p_invoice_ids?: string[]
           p_party_id: string
           p_reference?: string
         }
@@ -1101,6 +1103,7 @@ export type Database = {
             | "corrects"
             | "consolidates"
             | "mirrors"
+            | "settles"
           p_quantity?: number
           p_to_document_id: string
         }
@@ -1240,6 +1243,10 @@ export type Database = {
           p_selector: Json
         }
         Returns: string
+      }
+      erp_open_invoices: {
+        Args: { p_currency?: string; p_party_id: string }
+        Returns: Json
       }
       erp_open_period_close: {
         Args: { p_fiscal_period_id: string }
