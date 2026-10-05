@@ -12,6 +12,7 @@ import {
   lineAmounts,
   minorToInput,
   readJournals,
+  primaryCompany,
   startingCompany,
   stateLabel,
   stateTone,
@@ -239,7 +240,12 @@ describe("a reversal waiting for approval (J-101)", () => {
 });
 
 describe("the company a journal starts on (J-102)", () => {
-  const two = [{ entity_id: "acme" }, { entity_id: "acme-eu" }];
+  // As erp_entities answers, and in the other order, so the test sees which
+  // rule chose: the demonstration has ACME and ACME-EU.
+  const two = [
+    { entity_id: "acme-eu", code: "ACME-EU" },
+    { entity_id: "acme", code: "ACME" },
+  ];
 
   test("a draft keeps its own company", () => {
     expect(startingCompany("acme-eu", "acme", two)).toBe("acme-eu");
@@ -250,13 +256,17 @@ describe("the company a journal starts on (J-102)", () => {
   });
 
   test("a header company that is not offered is not taken", () => {
-    expect(startingCompany(null, "gone", two)).toBe("");
+    expect(startingCompany(null, "gone", two)).toBe("acme");
   });
 
-  test("with no choice in the header, the only company, else none", () => {
+  // The header on All, in an organisation with two companies, opened the form
+  // on "Choose…" with no accounts (5 October re-test).
+  test("with no choice in the header, the organisation's primary company: the first by code", () => {
     expect(startingCompany(null, "", [{ entity_id: "acme" }])).toBe("acme");
-    expect(startingCompany(null, "", two)).toBe("");
+    expect(startingCompany(null, "", two)).toBe("acme");
     expect(startingCompany(null, "", [])).toBe("");
+    expect(primaryCompany(two)?.entity_id).toBe("acme");
+    expect(primaryCompany([])).toBeNull();
   });
 });
 
