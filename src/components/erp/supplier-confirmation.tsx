@@ -6,6 +6,8 @@ import { whenText } from "../../lib/when";
 import {
   confirmationWords,
   orderConfirmation,
+  proposalShown,
+  recordedAnswer,
   type OrderConfirmation,
 } from "../../lib/supplier-confirmation";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
@@ -18,8 +20,9 @@ import { useErpSession } from "./session-context";
  * (20261004990000): awaiting, confirmed, changes proposed or declined, who
  * answered and how, what each line was confirmed at, and the buyer's moves —
  * accept or reject proposed changes, record an answer given by phone or reply,
- * and cancel an order nothing has been received against. The database refuses
- * regardless.
+ * and cancel an order nothing has been received against. Changes once
+ * accepted stay shown, with what was ordered before them (J-62). The database
+ * refuses regardless.
  */
 
 const INVALIDATES = [
@@ -55,6 +58,7 @@ export function SupplierConfirmation({
   const c = orderConfirmation(data);
   if (!c) return <ErrorNote error={error} />;
   const status = confirmationWords(c.status);
+  const proposal = proposalShown(c);
   const open = c.state === "sent" || c.state === "partially_received";
 
   return (
@@ -73,9 +77,7 @@ export function SupplierConfirmation({
 
       <Facts c={c} />
 
-      {c.status === "changes_proposed" && c.proposal.length > 0 ? (
-        <Proposal c={c} context={context} />
-      ) : null}
+      {proposal ? <Proposal c={c} context={context} decide={proposal === "to_decide"} /> : null}
 
       {c.lines.some((l) => l.confirmedQuantity !== null) ? (
         <div className="mt-3">
@@ -160,7 +162,16 @@ function Facts({ c }: { c: OrderConfirmation }) {
   );
 }
 
-function Proposal({ c, context }: { c: OrderConfirmation; context: string }) {
+function Proposal({
+  c,
+  context,
+  decide,
+}: {
+  c: OrderConfirmation;
+  context: string;
+  /** Waiting for the buyer; once accepted it is read, not decided again. */
+  decide: boolean;
+}) {
   const { ui } = useT();
   return (
     <div className="mt-4 rounded-lg border border-border p-3">
@@ -186,7 +197,7 @@ function Proposal({ c, context }: { c: OrderConfirmation; context: string }) {
           ))}
         </Table>
       </div>
-      {c.mayRecord ? (
+      {decide && c.mayRecord ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <ActionDialog
             trigger={<ActionButton>{ui("Accept the changes")}</ActionButton>}
@@ -237,6 +248,10 @@ function RecordAnswer({ c, context }: { c: OrderConfirmation; context: string })
       required: true,
       choices: [
         { value: "confirm", label: "They will send it" },
+        // Said, not implied by a changed line below (J-62). Sent as a
+        // confirmation that names it; the database refuses it with no line
+        // changed.
+        { value: "with_changes", label: "They will send it, with changes" },
         { value: "decline", label: "They cannot take it" },
       ],
     },
@@ -258,6 +273,7 @@ function RecordAnswer({ c, context }: { c: OrderConfirmation; context: string })
       kind: "rows",
       name: "lines",
       label: "Lines they changed",
+      hint: "Needed when they will send it with changes.",
       columns: [
         {
           name: "line_id",
@@ -286,25 +302,10 @@ function RecordAnswer({ c, context }: { c: OrderConfirmation; context: string })
       permission="procurement.order"
       fn="erp_record_supplier_confirmation"
       fields={fields}
-      mapArgs={(v, picked) => {
-        // mapArgs is handed what was typed: the quantities as text.
-        const lines = (picked?.rows["lines"] ?? [])
-          .filter((row) => (row["line_id"] ?? "") !== "")
-          .map((row) => ({
-            line_id: row["line_id"],
-            ...((row["quantity"] ?? "") !== "" ? { quantity: Number(row["quantity"]) } : {}),
-            ...(row["date"] ? { date: row["date"] } : {}),
-          }));
-        return {
-          p_order: c.orderId,
-          p_response: {
-            decision: v["decision"] ?? "confirm",
-            ...(v["supplier_reference"] ? { supplier_reference: v["supplier_reference"] } : {}),
-            ...(v["note"] ? { note: v["note"] } : {}),
-            ...(lines.length > 0 ? { lines } : {}),
-          },
-        };
-      }}
+      mapArgs={(v, picked) => ({
+        p_order: c.orderId,
+        p_response: recordedAnswer(v, picked?.rows["lines"] ?? []),
+      })}
       context={context}
       invalidates={INVALIDATES}
       submitLabel="Record"
