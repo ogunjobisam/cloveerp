@@ -1803,10 +1803,12 @@ export const FINANCE: ModuleDef = {
         states: ["draft", "proposed", "approved"],
         recordArg: "p_proposal_id",
         createFn: "erp_propose_payment_run",
-        actionFns: ["erp_approve_payment_run", "erp_pay_payment_run"],
+        actionFns: ["erp_approve_payment_run", "erp_pay_payment_run", "erp_withdraw_payment_run"],
         actionStates: {
           erp_approve_payment_run: ["proposed"],
           erp_pay_payment_run: ["approved"],
+          // A run nobody has approved yet (J-106, 20261007192000).
+          erp_withdraw_payment_run: ["draft", "proposed"],
         },
       },
       {
@@ -2136,8 +2138,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       // A run proposed twice, or by mistake, set aside before anybody approves
-      // it (J-106, 20261006041000). Behind the header's Actions rather than on
-      // the Payment run step, so the Money strip's verbs are unchanged.
+      // it (J-106, 20261006041000). On the Payment run step, holding the run
+      // chosen there (20261007192000).
       label: "Withdraw a payment run",
       description:
         "For a run nobody has approved yet, such as one that repeats another. Its bills go on the next run. An approved or paid run cannot be withdrawn.",

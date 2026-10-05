@@ -1777,10 +1777,10 @@ test.describe("the cash documents are on the desk", () => {
     await expect(page.getByText("Anvil Supplies — PINV-000007")).toBeVisible();
     await expect(page.getByText("Bolt Brothers — PINV-000009")).toBeVisible();
     await expect(page.getByText(/Held: Disputed/)).toBeVisible();
-    // An approved run is paid, not approved again.
-    await expect(
-      page.getByRole("button", { name: "Approve a payment run", exact: true }),
-    ).toHaveCount(0);
+    // An approved run is paid, not approved or withdrawn again.
+    for (const name of ["Approve a payment run", "Withdraw a payment run"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
     await page.getByRole("button", { name: "Pay an approved run", exact: true }).click();
     const sent = page.waitForRequest(/rpc\/erp_pay_payment_run$/);
     await page

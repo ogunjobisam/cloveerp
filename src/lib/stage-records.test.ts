@@ -1037,7 +1037,7 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     ]);
   });
 
-  test("a payment run is proposed, approved and paid on one step, each verb in the state its door takes", () => {
+  test("a payment run is proposed, approved, paid and withdrawn on one step, each verb in the state its door takes", () => {
     const money = MODULES.find((m) => m.flow?.code === "money")?.flow;
     expect(money?.stages.map((s) => s.label)).toEqual([
       "Invoice",
@@ -1051,10 +1051,15 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     expect(run?.states).toEqual(["draft", "proposed", "approved"]);
     expect(run?.createFn).toBe("erp_propose_payment_run");
     expect(run?.recordArg).toBe("p_proposal_id");
-    expect(run?.actionFns).toEqual(["erp_approve_payment_run", "erp_pay_payment_run"]);
+    expect(run?.actionFns).toEqual([
+      "erp_approve_payment_run",
+      "erp_pay_payment_run",
+      "erp_withdraw_payment_run",
+    ]);
     expect(run?.actionStates).toEqual({
       erp_approve_payment_run: ["proposed"],
       erp_pay_payment_run: ["approved"],
+      erp_withdraw_payment_run: ["draft", "proposed"],
     });
     // Each verb is offered only where its door would take the run.
     const offered = (fn: string, state: string) =>
@@ -1070,6 +1075,8 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     expect(offered("erp_approve_payment_run", "approved")).toBe("hide");
     expect(offered("erp_pay_payment_run", "approved")).toBe("offer");
     expect(offered("erp_pay_payment_run", "proposed")).toBe("hide");
+    expect(offered("erp_withdraw_payment_run", "proposed")).toBe("offer");
+    expect(offered("erp_withdraw_payment_run", "approved")).toBe("hide");
   });
 });
 
