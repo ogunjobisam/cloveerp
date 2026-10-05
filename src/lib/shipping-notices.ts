@@ -11,6 +11,7 @@
  */
 
 import type { RowSeed } from "./dependent-options";
+import { lineName } from "./line-name";
 
 export type NoticeStatus = "notified" | "part_received" | "received" | "cancelled";
 
@@ -18,6 +19,9 @@ export type NoticeLine = {
   orderLineId: string;
   lineNo: number;
   description: string;
+  /** The product's code and name, whatever was typed over its description (J-157). */
+  itemCode: string | null;
+  itemName: string | null;
   quantity: number;
   receivedQuantity: number | null;
 };
@@ -128,6 +132,8 @@ export function shippingNotice(v: unknown): ShippingNotice | null {
         orderLineId: text(l["order_line_id"]) ?? "",
         lineNo: num(l["line_no"]) ?? 0,
         description: text(l["description"]) ?? "",
+        itemCode: text(l["item_code"]),
+        itemName: text(l["item_name"]),
         quantity: num(l["quantity"]) ?? 0,
         receivedQuantity: num(l["received_quantity"]),
       }))
@@ -177,9 +183,11 @@ export function noticeLineSummary(lines: readonly NoticeLine[], shown = 2): stri
   const amount = (q: number) => (Number.isInteger(q) ? String(q) : String(Number(q.toFixed(4))));
   const said = lines
     .slice(0, shown)
-    .map((l) =>
-      l.description === "" ? amount(l.quantity) : `${amount(l.quantity)} × ${l.description}`,
-    )
+    .map((l) => {
+      // The product as every panel names it (J-157).
+      const product = lineName(l.itemCode, l.itemName, l.description).product;
+      return product === "" ? amount(l.quantity) : `${amount(l.quantity)} × ${product}`;
+    })
     .join(", ");
   const rest = lines.length - shown;
   return rest > 0 ? `${said} +${rest}` : said;

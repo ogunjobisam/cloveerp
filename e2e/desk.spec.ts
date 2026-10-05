@@ -626,6 +626,73 @@ test.describe("a document offers only what can be completed", () => {
     expect(backend.crashes).toEqual([]);
   });
 
+  test("a related document is captioned by its own type, and a line names its product by code and name (R-07, J-157)", async ({
+    page,
+    backend,
+  }) => {
+    const invoiceType = (code: string, name: string) => ({
+      document_type_id: `00000000-0000-4000-8000-0000000071${code.length}${name.length}`,
+      code,
+      name,
+      base_type_code: "invoice_reference",
+      requires_party: true,
+      requires_site: false,
+      currency: "GBP",
+      create_permission: "procurement.invoice",
+    });
+    // Three types on one base, carrier_bill first by code: the base alone
+    // captioned every invoice "Carrier bill".
+    backend.rpc("erp_document_types", [
+      invoiceType("carrier_bill", "Carrier bill"),
+      invoiceType("purchase_invoice", "Supplier bill"),
+      invoiceType("sales_invoice", "Sales invoice"),
+    ]);
+    const related = (n: number, number: string, documentType: string, relation: string) => ({
+      depth: 1,
+      direction: "downstream",
+      document_id: `00000000-0000-4000-8000-00000000e0${String(n).padStart(2, "0")}`,
+      document_number: number,
+      base_type: "invoice_reference",
+      document_type: documentType,
+      relation,
+    });
+    const bill = related(1, "PINV-000113", "purchase_invoice", "invoices");
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      lines: [
+        { ...ORDER_PAGE.lines[0]!, item_name: "Blue widget", description: "JT-A added line" },
+      ],
+      lineage: [
+        bill,
+        // The same bill relates a second way: listed once for each.
+        { ...bill, relation: "fulfils" },
+        related(2, "CB-000004", "carrier_bill", "consumes"),
+        related(3, "INV-000440", "sales_invoice", "mirrors"),
+      ],
+    });
+
+    await page.goto(`/documents/${DOC_ID}`);
+    await expect(page.getByRole("heading", { name: "PO-000042" })).toBeVisible({ timeout: 20_000 });
+
+    const lineage = page.locator("section", {
+      has: page.getByRole("heading", { name: "Related documents" }),
+    });
+    const row = (number: string) => lineage.locator("li", { hasText: number });
+    await expect(row("PINV-000113")).toHaveCount(2);
+    await expect(row("PINV-000113").first()).toContainText("Supplier bill");
+    await expect(row("PINV-000113").last()).toContainText("Supplier bill");
+    await expect(row("CB-000004")).toContainText("Carrier bill");
+    await expect(row("INV-000440")).toContainText("Sales invoice");
+    await expect(lineage.getByText("Carrier bill")).toHaveCount(1);
+
+    // The Lines card names the product by its code and its name, beside
+    // what was typed over its description.
+    const line = page.locator("tr", { hasText: "JT-A added line" });
+    await expect(line).toContainText("WID");
+    await expect(line).toContainText("Blue widget");
+    expect(backend.crashes).toEqual([]);
+  });
+
   test("a stamp that resolved a step draws the routing card, which carries the one stamp button", async ({
     page,
     backend,

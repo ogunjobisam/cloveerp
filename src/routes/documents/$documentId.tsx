@@ -127,6 +127,8 @@ type Line = {
   unit_price_minor: number;
   net_minor: number;
   item: string | null;
+  /** The product's name beside its code (J-157, 20261007051000). */
+  item_name?: string | null;
   /** What the supplier calls the product, stamped on the line when it was raised. */
   supplier_item_code: string | null;
 };
@@ -137,6 +139,13 @@ type Lineage = {
   document_id: string;
   document_number: string;
   base_type: string;
+  /**
+   * The organisation's own type of the related document (R-07,
+   * 20261007050000). Several types share one base — a supplier bill, a
+   * carrier's bill and a sales invoice are all invoices — so the base alone
+   * named every one of them by whichever came first.
+   */
+  document_type?: string | null;
   relation: string;
 };
 
@@ -493,7 +502,13 @@ function Document() {
       <ApprovalDecisions documentId={documentId} />
 
       {data.lineage.length > 0 ? (
-        <LineagePanel lineage={data.lineage} documentId={documentId} typeName={typeNames.ofBase} />
+        <LineagePanel
+          lineage={data.lineage}
+          documentId={documentId}
+          typeName={(r) =>
+            r.document_type ? typeNames.ofType(r.document_type) : typeNames.ofBase(r.base_type)
+          }
+        />
       ) : null}
     </div>
   );
@@ -1111,7 +1126,18 @@ function Lines({
             {lines.map((l) => (
               <tr key={l.line_id} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{l.line_no}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{l.item ?? "—"}</td>
+                {/* The product by its code and name, as Supplier
+                    confirmation and Shipping notices name it (J-157). */}
+                <td className="py-2 pr-4">
+                  {l.item ? (
+                    <>
+                      <span className="font-mono text-xs">{l.item}</span>
+                      {l.item_name ? <span className="ml-2">{l.item_name}</span> : null}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 {/* What the supplier calls it. Blank on anything they do not
                     supply, which is every sales line. */}
                 <td className="py-2 pr-4 font-mono text-xs">{l.supplier_item_code ?? "—"}</td>
@@ -1267,7 +1293,7 @@ function LineagePanel({
 }: {
   lineage: Lineage[];
   documentId: string;
-  typeName: (base: string) => string;
+  typeName: (row: Lineage) => string;
 }) {
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -1340,7 +1366,9 @@ function LineagePanel({
         {lineage
           .filter((r) => r.direction !== "self")
           .map((r) => (
-            <li key={`${r.direction}-${r.document_id}`} className="min-w-0">
+            // A document can relate two ways — an order a bill both
+            // invoices and fulfils — so the relation is part of the key.
+            <li key={`${r.direction}-${r.document_id}-${r.relation}`} className="min-w-0">
               <span className="text-xs text-muted-foreground">
                 {r.direction === "upstream" ? "from" : "to"} · {r.relation} ·{" "}
               </span>
@@ -1351,7 +1379,7 @@ function LineagePanel({
               >
                 {r.document_number}
               </Link>{" "}
-              <span className="text-xs text-muted-foreground">{typeName(r.base_type)}</span>
+              <span className="text-xs text-muted-foreground">{typeName(r)}</span>
             </li>
           ))}
       </ul>

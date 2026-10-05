@@ -78,6 +78,9 @@ export type OrderConfirmation = {
     lineId: string;
     lineNo: number;
     description: string;
+    /** The product's code and name, whatever was typed over its description (J-157). */
+    itemCode: string | null;
+    itemName: string | null;
     quantity: number;
     requiredDate: string | null;
     confirmedQuantity: number | null;
@@ -291,6 +294,8 @@ export function orderConfirmation(result: unknown): OrderConfirmation | null {
       lineId: text(l["line_id"]) ?? "",
       lineNo: num(l["line_no"]) ?? 0,
       description: text(l["description"]) ?? "",
+      itemCode: text(l["item_code"]),
+      itemName: text(l["item_name"]),
       quantity: num(l["quantity"]) ?? 0,
       requiredDate: text(l["required_date"]),
       confirmedQuantity: num(l["confirmed_quantity"]),
