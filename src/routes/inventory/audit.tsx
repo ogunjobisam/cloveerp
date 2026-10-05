@@ -9,6 +9,7 @@ import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { useT } from "../../lib/i18n";
 import { countPostingArgs } from "../../lib/modules";
 import { formatMinor } from "../../lib/money";
+import { countApprovalChoice } from "../../lib/plain-words";
 
 export const Route = createFileRoute("/inventory/audit")({
   head: () => ({
@@ -171,13 +172,22 @@ function StockAudit() {
                 // caller, and a code here would hide it from an assignee who lacks it.
                 fn: "erp_decide_approval",
                 fields: [
-                  pickFrom(
-                    "erp_my_approvals",
-                    "task_id",
-                    ["object_type", "requested_by", "requested_at"],
-                    "p_task_id",
-                    "Approval waiting on me",
-                  ),
+                  // Counts only, each named by what was counted where and what
+                  // was found (J-20): a document's approval is decided where
+                  // the document is, not here.
+                  {
+                    kind: "select",
+                    name: "p_task_id",
+                    label: "Approval waiting on me",
+                    required: true,
+                    options: {
+                      fn: "erp_my_approvals",
+                      value: "task_id",
+                      label: ["item", "location", "requested_by"],
+                      keep: (r) => r["object_type"] === "count_task",
+                      describe: countApprovalChoice,
+                    },
+                  },
                   {
                     kind: "choice",
                     name: "p_approve",

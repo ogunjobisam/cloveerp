@@ -820,6 +820,46 @@ export function approvalChoice(row: Row): string {
     .join(" — ");
 }
 
+/**
+ * A day as a person writes it, "4 Oct 2026", from a timestamp or a date. Null
+ * for anything that is not one.
+ */
+export function shortDate(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * A count waiting on my approval, as its picker offers it: what was counted
+ * where, what was found against what was expected, who counted and when —
+ * "PK-010 Packing box at RECV — counted 50, expected 100 — Sam — 4 Oct 2026",
+ * not "count_task — Sam — 2026-10-04T03:15:14.717477+00:00" (J-20).
+ */
+export function countApprovalChoice(row: Row): string {
+  const item = [text(row, "item"), text(row, "item_name")]
+    .filter((x): x is string => x !== null)
+    .join(" ");
+  const place = text(row, "location") ?? text(row, "site");
+  let what = item === "" ? "Count" : item;
+  if (place) what += ` at ${place}`;
+  const context = row["context"];
+  const figure = (key: string): string | null => {
+    if (context === null || typeof context !== "object") return null;
+    const raw = text(context as Row, key);
+    const n = Number(raw);
+    return raw !== null && Number.isFinite(n) ? quantityWords(n) : null;
+  };
+  const counted = figure("counted");
+  const expected = figure("expected");
+  const figures =
+    counted !== null && expected !== null ? `counted ${counted}, expected ${expected}` : null;
+  return [what, figures, text(row, "requested_by"), shortDate(row["requested_at"])]
+    .filter((x): x is string => x !== null && x !== "")
+    .join(" — ");
+}
+
 /** The step of an approval, by its name, and by its code only as words. */
 export function approvalStep(row: Row): string {
   const name = text(row, "step_name");
