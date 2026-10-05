@@ -367,3 +367,35 @@ export function clearDependentCells(
   }
   return next;
 }
+
+/**
+ * Where a list of ticks arrives already ticked: a money field on the same form
+ * and the key of each option's record that counts against it.
+ */
+export type TickCover = { field: string; key: string };
+
+/**
+ * The options a ticked list arrives holding (20261010021000).
+ *
+ * Apply cash lists a customer's open invoices oldest first, and the cash pays
+ * the oldest first when nobody chooses. So the list arrives ticked the way the
+ * cash would go: in the list's own order, as many as it takes for what they
+ * owe to reach the amount, and the first alone while no amount is given. The
+ * person unticks any it should not pay, or ticks others, and what they chose
+ * is sent.
+ */
+export function coveringTicks(
+  options: ReadonlyArray<{ value: string; record?: Record<string, unknown> }>,
+  key: string,
+  amount: number | null,
+): string[] {
+  const ticked: string[] = [];
+  let covered = 0;
+  for (const option of options) {
+    if (ticked.length > 0 && (amount === null || covered >= amount)) break;
+    ticked.push(option.value);
+    const owes = Number(option.record?.[key]);
+    covered += Number.isFinite(owes) ? owes : 0;
+  }
+  return ticked;
+}

@@ -18,6 +18,8 @@ import {
   paymentRunOutcome,
   receiptIds,
   receiptOutcome,
+  openInvoiceWords,
+  settledInvoices,
   approvalStep,
   approvalSubject,
   asSentence,
@@ -710,6 +712,84 @@ describe("a cash document says what it is (PR13 M4)", () => {
     ).toBe(`RCPT-000012 and RCPT-000013: ${gbp(300)} applied to 2 open invoices.`);
   });
 
+  // Defect C, 5 October: "applied to 1 open invoice" named none, and the cash
+  // had settled an invoice from June (20261010021000).
+  test("Apply cash names the invoices its receipt paid, and links to them", () => {
+    const page = {
+      document: { document_number: "RCPT-000001" },
+      lineage: [
+        {
+          depth: 1,
+          direction: "downstream",
+          document_id: "inv-441",
+          document_number: "INV-000441",
+          relation: "settles",
+        },
+        {
+          depth: 2,
+          direction: "downstream",
+          document_id: "dn-444",
+          document_number: "DN-000444",
+          relation: "invoices",
+        },
+        {
+          depth: 1,
+          direction: "downstream",
+          document_id: "inv-441",
+          document_number: "INV-000441",
+          relation: "settles",
+        },
+        {
+          depth: 1,
+          direction: "upstream",
+          document_id: "x",
+          document_number: "JNL",
+          relation: "settles",
+        },
+      ],
+    };
+    const invoices = settledInvoices(page);
+    expect(invoices).toEqual([{ documentId: "inv-441", number: "INV-000441" }]);
+    expect(settledInvoices(null)).toEqual([]);
+    expect(settledInvoices({ lineage: "no" })).toEqual([]);
+
+    expect(
+      receiptOutcome([row(R1, 79500)], "GBP", [
+        { documentId: R1, number: "RCPT-000001", invoices },
+      ]),
+    ).toEqual({
+      message: `RCPT-000001: ${gbp(79500)} applied to INV-000441.`,
+      documents: [
+        { documentId: R1, number: "RCPT-000001" },
+        { documentId: "inv-441", number: "INV-000441" },
+      ],
+    });
+    // Many invoices are named, and the receipt's page lists them for following.
+    const many = ["1", "2", "3", "4"].map((n) => ({
+      documentId: `i${n}`,
+      number: `INV-00000${n}`,
+    }));
+    const told = receiptOutcome([row(R1, 100), row(R1, 100), row(R1, 100), row(R1, 100)], "GBP", [
+      { documentId: R1, number: "RCPT-000002", invoices: many },
+    ]);
+    expect(told?.message).toBe(
+      `RCPT-000002: ${gbp(400)} applied to INV-000001, INV-000002, INV-000003 and INV-000004.`,
+    );
+    expect(told?.documents).toEqual([{ documentId: R1, number: "RCPT-000002" }]);
+  });
+
+  test("an open invoice reads as its number, what it owes and when it falls due", () => {
+    const words = openInvoiceWords({
+      document_number: "INV-000441",
+      owing_minor: 79500,
+      currency: "GBP",
+      due_date: "2026-11-04",
+    });
+    expect(words.invoice).toBe("INV-000441");
+    expect(words.owes).toBe(gbp(79500));
+    expect(words.due).toMatch(/Nov 2026$/);
+  });
+
   test("a receipt whose number could not be read is still linked, and no receipt says only what the cash did", () => {
     expect(receiptOutcome([row(R1, 500)], "GBP", [{ documentId: R1, number: null }])).toEqual({
       message: `${gbp(500)} applied to 1 open invoice.`,
@@ -1177,8 +1257,11 @@ describe("related documents (5 October re-test)", () => {
     expect(relationWords("upstream", "fulfils")).toBe("Fulfilled by");
     expect(relationWords("downstream", "invoices")).toBe("Invoices");
     expect(relationWords("upstream", "invoices")).toBe("Invoiced by");
+    // A payment settles the bill it paid; on the bill, the payment (B2).
+    expect(relationWords("downstream", "settles")).toBe("Settles");
+    expect(relationWords("upstream", "settles")).toBe("Settled by");
     // One this does not know, as the database names it.
-    expect(relationWords("downstream", "settles")).toBe("to · settles");
+    expect(relationWords("downstream", "binds")).toBe("to · binds");
     expect(relationWords("upstream", null)).toBe("from · related");
   });
 

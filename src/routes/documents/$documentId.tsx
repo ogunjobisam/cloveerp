@@ -97,6 +97,11 @@ type Doc = {
   currency: string;
   party: string | null;
   their_reference: string | null;
+  /**
+   * When it falls due: a bill from its supplier's terms when it is raised, an
+   * invoice from its customer's when it is issued (B1, 20261010011000).
+   */
+  due_date?: string | null;
   total_minor: number;
   state: string | null;
   state_name: string | null;
@@ -120,6 +125,18 @@ type Doc = {
    * supplier, by default, or us. Null on any other document (J-63).
    */
   freight_terms?: string | null;
+  /**
+   * What it still waits for from another document once its own moves are
+   * over (erp.document_awaiting): a posted receipt its supplier's bill, a
+   * posted delivery its invoice (B4, 20261010011000).
+   */
+  awaiting?: "bill" | "invoice" | null;
+  /**
+   * The run a supplier payment was made by (B2, 20261010012000). A run is not
+   * a document, so Related documents cannot name it; the bills it paid are
+   * there.
+   */
+  payment_run?: string | null;
 };
 
 type Line = {
@@ -269,6 +286,12 @@ function Document() {
           {doc.their_reference ? (
             <span className="text-xs text-muted-foreground">their ref {doc.their_reference}</span>
           ) : null}
+          {doc.due_date ? (
+            <span className="text-xs text-muted-foreground">due {doc.due_date}</span>
+          ) : null}
+          {doc.payment_run ? (
+            <span className="text-xs text-muted-foreground">paid by run {doc.payment_run}</span>
+          ) : null}
         </div>
 
         <DocumentTransitions
@@ -281,6 +304,7 @@ function Document() {
           })}
           committed={doc.is_committed}
           terminal={doc.is_terminal}
+          awaiting={doc.awaiting ?? null}
         />
 
         {/* An order that can still be despatched is where its delivery comes
