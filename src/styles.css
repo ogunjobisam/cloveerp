@@ -215,3 +215,22 @@
     page: sheet;
   }
 }
+
+/* An outcome is read, not pressed (5 October re-test). Top centre put it over
+   the process strip, where it hid the Approval step and took the click meant
+   for it, and over the first label of the next form. So a toast lets the
+   pointer through to whatever is under it, except its own links and close
+   button; and while a form or any other dialog is open, no toast is drawn
+   over it. A toast still on the screen when the page changes goes with the
+   page (src/lib/toast-age.ts). */
+[data-sonner-toast] {
+  pointer-events: none;
+}
+
+[data-sonner-toast] :is(a, button) {
+  pointer-events: auto;
+}
+
+body:has([role="dialog"], [role="alertdialog"]) [data-sonner-toaster] {
+  display: none;
+}

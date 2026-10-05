@@ -47,6 +47,7 @@ import { DocumentTransitions } from "../../components/erp/document-transitions";
 import { RenderedPrint } from "../../components/erp/count-sheet-print";
 import { useErpSession } from "../../components/erp/session-context";
 import { usePrintRendered } from "../../components/erp/use-print-rendered";
+import { lineContext, lineRemovedOutcome, relatedDocuments } from "../../lib/plain-words";
 
 /**
  * One document, whatever kind of document it is.
@@ -446,6 +447,7 @@ function Document() {
       {shipment ? null : (
         <Lines
           documentId={documentId}
+          documentNumber={doc.document_number}
           lines={data.lines}
           committed={doc.is_committed}
           open={doc.lines_open}
@@ -1040,6 +1042,7 @@ const LINE_READS = [
 
 function Lines({
   documentId,
+  documentNumber,
   lines,
   committed,
   open,
@@ -1051,6 +1054,8 @@ function Lines({
   sample,
 }: {
   documentId: string;
+  /** The document's own number, for which line a removal names. */
+  documentNumber: string;
   lines: Line[];
   committed: boolean;
   /** A draft whose lines the database takes: added, priced, changed and removed. */
@@ -1276,6 +1281,11 @@ function Lines({
                         description="It comes off the draft, and anything it was raised from is open again."
                         fn="erp_remove_document_line"
                         fields={[]}
+                        // Which line, before and after (5 October re-test):
+                        // the outcome took the title, "Remove this line? —
+                        // done.", and the confirmation named no line.
+                        context={lineContext(documentNumber, l)}
+                        outcome={() => lineRemovedOutcome(documentNumber, l)}
                         mapArgs={() => ({ p_line_id: l.line_id })}
                         invalidates={[...LINE_READS]}
                         submitLabel="Remove"
@@ -1412,29 +1422,23 @@ function LineagePanel({
       </div>
       <ul className="mt-3 flex flex-col gap-1 text-sm">
         {/* erp.document_lineage() returns the document itself (direction
-            'self', no relation) beside what it came from ('upstream') and
-            what came of it ('downstream'). The self row is not a related
-            document, and "ancestor" was never a direction it returned, so
-            every row read "to" and the page listed itself (J-155). */}
-        {lineage
-          .filter((r) => r.direction !== "self")
-          .map((r) => (
-            // A document can relate two ways — an order a bill both
-            // invoices and fulfils — so the relation is part of the key.
-            <li key={`${r.direction}-${r.document_id}-${r.relation}`} className="min-w-0">
-              <span className="text-xs text-muted-foreground">
-                {r.direction === "upstream" ? "from" : "to"} · {r.relation} ·{" "}
-              </span>
-              <Link
-                to="/documents/$documentId"
-                params={{ documentId: r.document_id }}
-                className="underline underline-offset-2"
-              >
-                {r.document_number}
-              </Link>{" "}
-              <span className="text-xs text-muted-foreground">{typeName(r)}</span>
-            </li>
-          ))}
+            'self', no relation) beside the documents related to it either
+            way. The self row is not a related document (J-155). Each other
+            document is listed once, at its nearest, with what relates it
+            in words; see relatedDocuments. */}
+        {relatedDocuments(lineage).map(({ row: r, words }) => (
+          <li key={r.document_id} className="min-w-0">
+            <span className="text-xs text-muted-foreground">{words} · </span>
+            <Link
+              to="/documents/$documentId"
+              params={{ documentId: r.document_id }}
+              className="underline underline-offset-2"
+            >
+              {r.document_number}
+            </Link>{" "}
+            <span className="text-xs text-muted-foreground">{typeName(r)}</span>
+          </li>
+        ))}
       </ul>
     </section>
   );
