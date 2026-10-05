@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 
 import {
+  ACT_AS_BY_KEY,
   ACT_AS_HEADER,
   ACT_AS_KEY,
   actingAs,
   isDatabaseRequest,
+  keepTabPersonaFor,
   personaChoices,
   readTabPersona,
   withActAs,
@@ -125,4 +127,32 @@ test("the header names whom the tab acts as and keeps every other header", () =>
   expect(headers.get("authorization")).toBe("Bearer t");
   expect(headers.get("apikey")).toBe("k");
   expect(withActAs(new Headers([["x-client-info", "a"]]), PRIYA).get("x-client-info")).toBe("a");
+});
+
+test("a choice is kept only for the sign-in that made it", () => {
+  const store = memoryStore();
+  writeTabPersona(store, PRIYA, "user-a");
+  expect(store.items.get(ACT_AS_BY_KEY)).toBe("user-a");
+
+  // The same sign-in again (a token refresh, a reload): kept.
+  keepTabPersonaFor(store, "user-a");
+  expect(readTabPersona(store)).toBe(PRIYA);
+
+  // Somebody else signs in in this tab: forgotten, both halves.
+  keepTabPersonaFor(store, "user-b");
+  expect(readTabPersona(store)).toBeNull();
+  expect(store.items.has(ACT_AS_BY_KEY)).toBe(false);
+
+  // Signed out, or a choice with no sign-in recorded: forgotten.
+  writeTabPersona(store, PRIYA, "user-a");
+  keepTabPersonaFor(store, null);
+  expect(readTabPersona(store)).toBeNull();
+  writeTabPersona(store, PRIYA);
+  keepTabPersonaFor(store, "user-a");
+  expect(readTabPersona(store)).toBeNull();
+
+  // Going back to yourself forgets who chose, too.
+  writeTabPersona(store, PRIYA, "user-a");
+  writeTabPersona(store, null);
+  expect(store.items.size).toBe(0);
 });

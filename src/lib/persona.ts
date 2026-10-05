@@ -25,6 +25,9 @@ export const ACT_AS_HEADER = "x-clove-act-as";
 /** Where the tab keeps whom it acts as: sessionStorage, which is the tab's own. */
 export const ACT_AS_KEY = "clove.act-as";
 
+/** Beside it, the sign-in that chose: a choice is never carried over to somebody else. */
+export const ACT_AS_BY_KEY = "clove.act-as.by";
+
 /** The part of Storage this needs, so a test can pass a plain object. */
 export type TabStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -42,17 +45,42 @@ export function readTabPersona(store: TabStore | null | undefined): string | nul
   }
 }
 
-/** Keep whom this tab acts as, or forget it with null. */
+/**
+ * Keep whom this tab acts as, and which sign-in chose her, or forget both with
+ * null.
+ */
 export function writeTabPersona(
   store: TabStore | null | undefined,
   personaId: string | null,
+  chosenBy: string | null = null,
 ): void {
   if (!store) return;
   try {
-    if (personaId && UUID.test(personaId)) store.setItem(ACT_AS_KEY, personaId);
-    else store.removeItem(ACT_AS_KEY);
+    if (personaId && UUID.test(personaId)) {
+      store.setItem(ACT_AS_KEY, personaId);
+      if (chosenBy) store.setItem(ACT_AS_BY_KEY, chosenBy);
+      else store.removeItem(ACT_AS_BY_KEY);
+    } else {
+      store.removeItem(ACT_AS_KEY);
+      store.removeItem(ACT_AS_BY_KEY);
+    }
   } catch {
     // Storage blocked: nothing is kept, and the tab acts as the person.
+  }
+}
+
+/**
+ * The sign-in this tab now holds. A choice made under another sign-in, or
+ * under none that was recorded, is forgotten: whoever signs in next in this
+ * tab is themselves until they choose.
+ */
+export function keepTabPersonaFor(store: TabStore | null | undefined, userId: string | null): void {
+  if (!store) return;
+  try {
+    if (store.getItem(ACT_AS_KEY) === null) return;
+    if (!userId || store.getItem(ACT_AS_BY_KEY) !== userId) writeTabPersona(store, null);
+  } catch {
+    // Storage blocked: nothing was kept.
   }
 }
 

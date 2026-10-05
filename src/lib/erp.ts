@@ -13,7 +13,13 @@ import type {
   ResendRequest,
   ResendResponse,
 } from "./invitation-email";
-import { isDatabaseRequest, readTabPersona, withActAs, writeTabPersona } from "./persona";
+import {
+  isDatabaseRequest,
+  keepTabPersonaFor,
+  readTabPersona,
+  withActAs,
+  writeTabPersona,
+} from "./persona";
 
 /**
  * The single point at which the front end touches the database.
@@ -90,9 +96,12 @@ export function tabPersona(): string | null {
   return readTabPersona(tabStore());
 }
 
-/** Keep whom this tab acts as, or go back to yourself with null. */
+/** The sign-in this tab holds, as the last auth event said. */
+let signedInUser: string | null = null;
+
+/** Keep whom this tab acts as, under the sign-in that chose her, or go back to yourself with null. */
 export function setTabPersona(personaId: string | null): void {
-  writeTabPersona(tabStore(), personaId);
+  writeTabPersona(tabStore(), personaId, signedInUser);
 }
 
 /**
@@ -117,10 +126,12 @@ export const supabase = isConfigured
     })
   : null;
 
-// Signing out ends the tab's choice too, so whoever signs in next is themselves.
+// Signing out ends the tab's choice, and so does a sign-in other than the one
+// that chose: whoever signs in next in this tab is themselves.
 if (supabase && typeof window !== "undefined") {
-  supabase.auth.onAuthStateChange((event) => {
-    if (event === "SIGNED_OUT") setTabPersona(null);
+  supabase.auth.onAuthStateChange((event, session) => {
+    signedInUser = event === "SIGNED_OUT" ? null : (session?.user.id ?? null);
+    keepTabPersonaFor(tabStore(), signedInUser);
   });
 }
 
