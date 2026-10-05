@@ -333,7 +333,7 @@ function PackPlan({ pack, mayConfigure }: { pack: Pack; mayConfigure: boolean })
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Nothing has changed yet. Approve and promote it on{" "}
-            <a className="underline" href="/administration/configuration">
+            <a className="underline" href="#change-sets">
               Configuration
             </a>
             , where the diff and the rollback point live.

@@ -102,7 +102,7 @@ export const GROUP_BLURBS: Record<TileDef["group"], string> = {
   people: "Who is here, what they may do, who approves what, and the plan you are on.",
   system: "The modules you have switched on, and the words this organisation uses.",
   catalogue: "How your products, warehouse and despatch areas are laid out.",
-  money: "Where postings land: accounts, cost centres and analysis dimensions.",
+  money: "Where postings land: accounts, cost centres and the other reporting tags.",
   operate: "What runs on its own, and what this is joined to: tasks, gateways, devices, printing.",
   assure: "Proof of what happened: the audit log, personal data, checks and accessibility.",
 };

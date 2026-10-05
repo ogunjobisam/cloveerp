@@ -212,7 +212,7 @@ function SwitchOutcome({ outcome, onDismiss }: { outcome: SwitchResult; onDismis
           {isChangeSet ? (
             <p className="mt-2 text-xs text-muted-foreground">
               Preview and promote it on{" "}
-              <a className="underline" href="/administration/configuration">
+              <a className="underline" href="#change-sets">
                 Configuration
               </a>
               . Nothing has changed until you do.

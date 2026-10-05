@@ -6,6 +6,7 @@ import { Gate } from "../../components/erp/gate";
 import { InvoiceIssue } from "../../components/erp/invoice-issue";
 import { OrderPrepayment } from "../../components/erp/order-prepayment";
 import { PurchaseOrderSends } from "../../components/erp/purchase-order-sends";
+import { SampleReceipt } from "../../components/erp/samples";
 import { ShipmentTracking } from "../../components/erp/shipment-tracking";
 import { OrderShippingNotices } from "../../components/erp/shipping-notices";
 import { SupplierConfirmation } from "../../components/erp/supplier-confirmation";
@@ -22,6 +23,7 @@ import { whenText } from "../../lib/when";
 import { callErp, hasPermission } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
 import {
   DELIVER_THIS_ORDER,
   DELIVERY_FROM_ORDER_FIELDS,
@@ -244,6 +246,10 @@ function Document() {
     (doc.document_type === "sales_invoice" || doc.document_type === "purchase_invoice") &&
     doc.is_committed;
   const reversed = postedInvoice ? data.reversal[0] : undefined;
+  // A shipment has no lines and no value of its own: what it costs, and what
+  // it carries, are on its Carriage card (J-66). The page said "£0.00" and
+  // "Lines (0)" above it.
+  const shipment = base === "shipment" && data.lines.length === 0;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -258,7 +264,7 @@ function Document() {
           <Pill tone={documentTone(base ?? doc.document_type, doc.state, doc.is_committed)}>
             {doc.state_name ?? doc.state ?? "—"}
           </Pill>
-          <span className="text-sm tabular-nums">{money(doc.total_minor)}</span>
+          {shipment ? null : <span className="text-sm tabular-nums">{money(doc.total_minor)}</span>}
           {doc.their_reference ? (
             <span className="text-xs text-muted-foreground">their ref {doc.their_reference}</span>
           ) : null}
@@ -413,17 +419,24 @@ function Document() {
 
       {/* The lines are the body of every document, so they come straight
           after its summary; what belongs to one kind of document follows. */}
-      <Lines
-        documentId={documentId}
-        lines={data.lines}
-        committed={doc.is_committed}
-        open={doc.lines_open}
-        writtenByDoor={doorOpened}
-        amendment={data.amendment ?? null}
-        money={money}
-        minorUnits={minorUnits}
-        currency={doc.currency}
-      />
+      {shipment ? null : (
+        <Lines
+          documentId={documentId}
+          lines={data.lines}
+          committed={doc.is_committed}
+          open={doc.lines_open}
+          writtenByDoor={doorOpened}
+          amendment={data.amendment ?? null}
+          money={money}
+          minorUnits={minorUnits}
+          currency={doc.currency}
+          sample={doc.is_sample === true}
+        />
+      )}
+
+      {/* What became of the samples on a receipt of them: returned, kept,
+          bought and at what price, and what is still held (J-15). */}
+      {doc.is_sample ? <SampleReceipt receiptId={documentId} /> : null}
 
       {/* A sales invoice is issued here: its permanent number and the PDF the
           customer receives, through the numbered issue path. */}
@@ -1011,6 +1024,7 @@ function Lines({
   money,
   minorUnits,
   currency,
+  sample,
 }: {
   documentId: string;
   lines: Line[];
@@ -1023,6 +1037,11 @@ function Lines({
   money: (m: number) => string;
   minorUnits: number;
   currency: string;
+  /**
+   * A receipt of samples (J-15): they arrived at no price, so a line's net
+   * is nothing, and its price is the one each was bought at, for those bought.
+   */
+  sample: boolean;
 }) {
   const price = useErpAction({
     fn: "erp_price_document_line",
@@ -1143,8 +1162,18 @@ function Lines({
                 <td className="py-2 pr-4 font-mono text-xs">{l.supplier_item_code ?? "—"}</td>
                 <td className="py-2 pr-4">{l.description ?? "—"}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{l.quantity}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{money(l.unit_price_minor)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{money(l.net_minor)}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">
+                  {!sample
+                    ? money(l.unit_price_minor)
+                    : l.unit_price_minor > 0
+                      ? fill(ui("{price} each, for those bought"), {
+                          price: money(l.unit_price_minor),
+                        })
+                      : "—"}
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums">
+                  {sample ? "—" : money(l.net_minor)}
+                </td>
                 <td className="py-2 pr-4">
                   {writtenByDoor ? null : editable ? (
                     <div className="flex flex-wrap items-center gap-x-3">

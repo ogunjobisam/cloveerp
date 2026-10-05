@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   clearDependentCells,
@@ -299,5 +301,44 @@ describe("what a picker offers", () => {
   test("nothing, when the door answered with no list", () => {
     expect(pickerOptions(boms, null)).toEqual([]);
     expect(pickerOptions(boms, { lines: [] })).toEqual([]);
+  });
+});
+
+describe("an inquiry's picker that follows a choice (J-97)", () => {
+  // "Preview a document's reporting tags": the kind of document first, then
+  // that kind's documents. The inquiry form reads its pickers through the same
+  // rules as the action forms.
+  const documents = {
+    args: { p_limit: 100, p_exclude_cancelled: true },
+    argsFrom: { p_type_code: "p_type_code" },
+  };
+  const fields = [{ name: "p_type_code" }, { name: "p_document_id", options: documents }];
+
+  test("it asks nothing until the kind of document is chosen", () => {
+    expect(optionArgs(documents, {})).toBeNull();
+    expect(optionArgs(documents, { p_type_code: "" })).toBeNull();
+  });
+
+  test("then asks for that kind's documents only", () => {
+    expect(optionArgs(documents, { p_type_code: "PO" })).toEqual({
+      p_limit: 100,
+      p_exclude_cancelled: true,
+      p_type_code: "PO",
+    });
+  });
+
+  test("changing the kind clears the document chosen", () => {
+    expect(dependentFields(fields, "p_type_code")).toEqual(["p_document_id"]);
+    expect(dependentFields(fields, "p_document_id")).toEqual([]);
+  });
+
+  test("the screen declares it that way, and the inquiry honours it", () => {
+    const screen = readFileSync(join(import.meta.dir, "../routes/finance/dimensions.tsx"), "utf8");
+    const preview = screen.slice(screen.indexOf('fn: "erp_preview_dimensions"'));
+    expect(preview).toContain('argsFrom: { p_type_code: "p_type_code" }');
+    expect(preview).toContain('mapArgs: (v) => ({ p_document_id: v["p_document_id"] })');
+    const inquiry = readFileSync(join(import.meta.dir, "../components/erp/inquiry.tsx"), "utf8");
+    expect(inquiry).toContain("optionArgs(spec.options, values)");
+    expect(inquiry).toContain("dependentFields(spec.fields, name)");
   });
 });
