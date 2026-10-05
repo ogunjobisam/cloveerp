@@ -130,6 +130,12 @@ type Doc = {
    * posted delivery its invoice (B4, 20261010011000).
    */
   awaiting?: "bill" | "invoice" | null;
+  /**
+   * The run a supplier payment was made by (B2, 20261010012000). A run is not
+   * a document, so Related documents cannot name it; the bills it paid are
+   * there.
+   */
+  payment_run?: string | null;
 };
 
 type Line = {
@@ -281,6 +287,9 @@ function Document() {
           ) : null}
           {doc.due_date ? (
             <span className="text-xs text-muted-foreground">due {doc.due_date}</span>
+          ) : null}
+          {doc.payment_run ? (
+            <span className="text-xs text-muted-foreground">paid by run {doc.payment_run}</span>
           ) : null}
         </div>
 

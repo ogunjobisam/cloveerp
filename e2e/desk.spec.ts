@@ -863,6 +863,54 @@ test.describe("a document offers only what can be completed", () => {
     await expect(page.getByText("due 2026-11-04")).toBeVisible();
     expect(backend.crashes).toEqual([]);
   });
+
+  test("a supplier payment names its run and lists the bill it paid (B2)", async ({
+    page,
+    backend,
+  }) => {
+    const PMT_ID = "00000000-0000-4000-8000-00000000d0ca";
+    const BILL_ID = "00000000-0000-4000-8000-00000000d0cb";
+    backend.rpc("erp_available_transitions", []);
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      document: {
+        ...ORDER_PAGE.document,
+        document_id: PMT_ID,
+        document_number: "PMT-000001",
+        document_type: "cash_payment",
+        state: "posted",
+        state_name: "Posted",
+        is_committed: true,
+        is_terminal: true,
+        lines_open: false,
+        payment_run: "PAY-20261005142957795",
+      },
+      amendment: null,
+      lineage: [
+        {
+          depth: 1,
+          direction: "downstream",
+          document_id: BILL_ID,
+          document_number: "PINV-000116",
+          base_type: "invoice_reference",
+          document_type: "purchase_invoice",
+          relation: "settles",
+        },
+      ],
+      available_transitions: [],
+    });
+
+    await page.goto(`/documents/${PMT_ID}`);
+    await expect(page.getByRole("heading", { name: "PMT-000001" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("paid by run PAY-20261005142957795")).toBeVisible();
+    const related = page.locator("section", {
+      has: page.getByRole("heading", { name: "Related documents" }),
+    });
+    await expect(related.getByRole("link", { name: "PINV-000116" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
 });
 
 test.describe("the counter works down a list", () => {
