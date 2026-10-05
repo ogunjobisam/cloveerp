@@ -337,6 +337,8 @@ export const HELD_BECAUSE: Readonly<Record<string, string>> = {
   // An order approved with its requisition and changed since (20261006110000).
   CLOVEERP_CARRIED_ORDER_CHANGED:
     "Changed since it was approved with its requisition. Take it back to draft and submit it for its own approval.",
+  // A quotation with a line at no price (20261006121000).
+  CLOVEERP_QUOTATION_NOT_PRICED: "A line has no price yet. Give it one with Change, then send it.",
 };
 
 /** Said once when a move is held on its guard rather than on a refusal. */
