@@ -4,6 +4,8 @@ import {
   awaitingOrders,
   confirmationWords,
   orderConfirmation,
+  proposalShown,
+  recordedAnswer,
   supplierAnswer,
   supplierOrder,
   tokenFromFragment,
@@ -128,6 +130,52 @@ describe("an order's answer on its page", () => {
     expect(c?.proposal[0]?.quantity).toBe(8);
     expect(c?.mayCancel).toBe(false);
     expect(orderConfirmation({})).toBeNull();
+  });
+
+  test("a proposal is decided while it waits, kept once accepted, and gone once answered again (J-62)", () => {
+    const proposal = [
+      {
+        lineId: "l1",
+        lineNo: 10,
+        orderedQuantity: 10,
+        quantity: 8,
+        requiredDate: "2026-10-20",
+        date: "2026-10-27",
+      },
+    ];
+    expect(proposalShown({ status: "changes_proposed", proposal })).toBe("to_decide");
+    // Accepted: the line now reads 8, and the 10 that was ordered is kept here.
+    expect(proposalShown({ status: "confirmed", proposal })).toBe("accepted");
+    // Confirmed as ordered, rejected and waiting, or declined: nothing to show.
+    expect(proposalShown({ status: "confirmed", proposal: [] })).toBeNull();
+    expect(proposalShown({ status: "awaiting", proposal })).toBeNull();
+    expect(proposalShown({ status: "declined", proposal: [] })).toBeNull();
+  });
+
+  test("the buyer records with changes as a confirmation that names it, and the other two as before (J-62)", () => {
+    const rows = [
+      { line_id: "l1", quantity: "8", date: "2026-10-27" },
+      { line_id: "", quantity: "3", date: "" },
+    ];
+    expect(
+      recordedAnswer({ decision: "with_changes", supplier_reference: " SO-77 ", note: "" }, rows),
+    ).toEqual({
+      decision: "confirm",
+      with_changes: true,
+      supplier_reference: "SO-77",
+      lines: [{ line_id: "l1", quantity: 8, date: "2026-10-27" }],
+    });
+    // With changes and no line: sent as said, for the database to refuse.
+    expect(recordedAnswer({ decision: "with_changes" }, [])).toEqual({
+      decision: "confirm",
+      with_changes: true,
+    });
+    expect(recordedAnswer({ decision: "confirm" }, [])).toEqual({ decision: "confirm" });
+    expect(recordedAnswer({}, [])).toEqual({ decision: "confirm" });
+    expect(recordedAnswer({ decision: "decline", note: "Discontinued" }, [])).toEqual({
+      decision: "decline",
+      note: "Discontinued",
+    });
   });
 
   test("the waiting list keeps its order and marks the overdue", () => {
