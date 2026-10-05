@@ -111,7 +111,8 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
   },
   {
     label: "Work out who approves",
-    title: "Route this requisition for approval",
+    // The toast says the title (J-50): "Work out who approves: Andy Approver."
+    title: "Work out who approves",
     description:
       "Records the approval chain the value and the department resolve to. It asks nobody to approve.",
     permission: "procurement.requisition",

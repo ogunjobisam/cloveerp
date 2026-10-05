@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { isValidElement } from "react";
 
 import type { Column } from "../components/erp/auto";
@@ -11,7 +13,7 @@ import {
   reportPanelCount,
   type Row,
 } from "./modules";
-import { chartBars, statementCurrency } from "./report-figures";
+import { chartBars, dateToRead, statementCurrency } from "./report-figures";
 
 /**
  * Financials → Reports reads as reports.
@@ -203,5 +205,30 @@ describe("the number on the Reports tab (J-161)", () => {
       const drawn = def.reports.length + (def.chart ? 1 : 0);
       expect(reportPanelCount(def), def.key).toBe(drawn);
     }
+  });
+});
+
+describe("the dates the statements read (J-137)", () => {
+  test("a whole date that exists is read", () => {
+    expect(dateToRead("2026-09-30", "2026-10-04")).toBe("2026-09-30");
+    expect(dateToRead(" 2024-02-29 ", "2026-10-04")).toBe("2024-02-29");
+  });
+
+  test("a cleared, half-typed or impossible date leaves the statement where it was", () => {
+    expect(dateToRead("", "2026-10-04")).toBe("2026-10-04");
+    expect(dateToRead("2026-09", "2026-10-04")).toBe("2026-10-04");
+    expect(dateToRead("2026-02-30", "2026-10-04")).toBe("2026-10-04");
+    expect(dateToRead("2025-02-29", "2026-10-04")).toBe("2026-10-04");
+  });
+
+  test("the statements read a date once it is committed, and keep the last statement meanwhile", () => {
+    const page = readFileSync(join(import.meta.dir, "../routes/finance/statements.tsx"), "utf8");
+    // Every keystroke of a year typed into a date field is a valid date, and
+    // each one read the whole ledger: the fields write a draft, not the read.
+    expect(page).not.toMatch(/onChange=\{\(e\) => set(From|To)\(/);
+    expect(page.match(/onBlur=\{(from|to)Field\.commit\}/g)?.length).toBe(2);
+    expect(page.match(/placeholderData: keepPreviousData/g)?.length).toBe(3);
+    expect(page).toContain('queryKey: ["erp_balance_sheet", to, cc]');
+    expect(page).toContain("const to = toField.read;");
   });
 });

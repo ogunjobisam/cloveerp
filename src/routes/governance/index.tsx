@@ -12,7 +12,6 @@ import { AutoPanel, StatusPill, moneyCell, shortDate } from "../../components/er
 
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
-import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { approvalStep, approvalSubject } from "../../lib/plain-words";
 
@@ -277,21 +276,23 @@ function Governance() {
         beside the tasks it becomes history of, so the two halves of one
         question sit on one screen.
 
-        It is the routing record: each step of each approval, the person it
-        went to, and the person it would have gone to had nobody been covering
-        for them. What was decided is kept against the record itself, so the
-        subject links to it — a document page says "Approved by …" for every
-        step of its own approval.
+        It is read from the approval requests and their tasks (20261007010000,
+        J-29): each step each approval reached, the person it went to, and the
+        person they covered for. It read the routing stamp until then, which
+        only "Work out who approves" writes, so a submitted document's approval
+        was never in it. What was decided is kept against the record itself,
+        so the subject links to it — a document page says "Approved by …" for
+        every step of its own approval.
 
         The door asks for the audit permission and the panel says so plainly
         when the account does not hold it. That is deliberate: an approver who
         cannot read the history should be told the history exists, not shown a
         screen that pretends it does not.
 
-        It is now the only place the door is read. The organisation screen
-        drew the same rows a second time, and the two things only it showed
-        came here with them: what chose each approver, and the version of the
-        rule that did. The kind of cover is said beside who was covered for.
+        What chose each approver, and the version of the rule that did, are on
+        the routing stamp and not on a request, so they are not columns here;
+        a document's stamp is on its own page. The kind of cover is said
+        beside who was covered for.
       */}
       <AutoPanel
         title="Approval history"
@@ -299,9 +300,9 @@ function Governance() {
         fn="erp_approval_audit"
         args={{ p_limit: 200 }}
         empty="Nothing has been through approval yet. Once something has, every step of it is kept here — what it was for, who asked, and who it went to."
-        rowKey={(r) => `${String(r["stamp_id"])}-${String(r["seq"])}`}
+        rowKey={(r) => `${String(r["request_id"])}-${String(r["seq"])}-${String(r["step_code"])}`}
         columns={[
-          { header: "When", cell: (r) => shortDate(r["resolved_at"]) },
+          { header: "Requested", cell: (r) => shortDate(r["requested_at"]) },
           {
             header: "Approving",
             cell: (r) =>
@@ -319,12 +320,7 @@ function Governance() {
           },
           { header: "Value", cell: moneyCell("value_minor", "currency"), numeric: true },
           { header: "Requested by", cell: "requester" },
-          { header: "Step", cell: "seq", numeric: true },
-          {
-            header: "Chosen by",
-            cell: (r) => (typeof r["source"] === "string" ? prettifyField(r["source"]) : "—"),
-          },
-          { header: "Rule version", cell: "rule_version", numeric: true },
+          { header: "Step", cell: (r) => approvalStep(r) },
           { header: "Went to", cell: "approver" },
           {
             header: "Covering for",
@@ -339,9 +335,8 @@ function Governance() {
         ]}
       />
 
-      {/* The panel above reads the routing stamp, which is written when a
-          request is captured, so it can say who each step went to and not what
-          they decided. This one reads the decision itself. */}
+      {/* The panel above says who each step went to, and not what they
+          decided. This one reads the decision itself. */}
       <AutoPanel
         title="Decisions"
         description="Every approval decided in this organisation, newest first."

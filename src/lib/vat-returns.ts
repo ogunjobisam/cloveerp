@@ -179,6 +179,38 @@ export function exceptionsOf(raw: unknown, entityId: string): VatException[] {
     .sort((a, b) => Number(b.blocks) - Number(a.blocks));
 }
 
+/** One line of what to check: a finding that blocks, or every check of one kind. */
+export type VatFindingGroup = {
+  finding: string;
+  blocks: boolean;
+  /** The first is drawn on the line; the rest unfold beneath it. */
+  items: VatException[];
+};
+
+/**
+ * The findings as the next return lists them (J-99): each one that blocks the
+ * return on a line of its own, then the ones that only ask to be checked,
+ * one line per kind of finding in the order the door gave them. A period of
+ * weekly purchases from abroad has dozens of the same check; read one by one
+ * they pushed Finalise off the screen.
+ */
+export function groupFindings(list: VatException[]): VatFindingGroup[] {
+  const blocking = list
+    .filter((x) => x.blocks)
+    .map((x) => ({ finding: x.finding, blocks: true, items: [x] }));
+  const flags = new Map<string, VatException[]>();
+  for (const x of list) {
+    if (x.blocks) continue;
+    const kind = flags.get(x.finding);
+    if (kind) kind.push(x);
+    else flags.set(x.finding, [x]);
+  }
+  return [
+    ...blocking,
+    ...[...flags].map(([finding, items]) => ({ finding, blocks: false, items })),
+  ];
+}
+
 // ── The two presses ─────────────────────────────────────────────────────────
 
 /** What both doors ask (D13): the person who closes the books. */

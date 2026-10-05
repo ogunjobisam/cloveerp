@@ -343,6 +343,45 @@ describe("a lookup says its answer", () => {
     );
   });
 
+  test("working out who approves names them, in order, and says when nobody is named (J-50)", () => {
+    const step = (approver: string, extra: Record<string, unknown> = {}) => ({
+      seq: 1,
+      approver_user_id: "00000000-0000-4000-8000-0000000000a1",
+      approver,
+      approver_of_record: approver,
+      covered: false,
+      ...extra,
+    });
+    expect(
+      actionOutcome(
+        "Work out who approves",
+        { steps: [step("Andy Approver"), step("Bea Boss")], exhausted: false },
+        undefined,
+        "erp_stamp_document_approval",
+      ),
+    ).toBe("Work out who approves: Andy Approver, then Bea Boss.");
+    expect(
+      actionOutcome(
+        "Work out who approves",
+        {
+          steps: [step("Carol Cover", { approver_of_record: "Andy Approver", covered: true })],
+        },
+        undefined,
+        "erp_stamp_document_approval",
+      ),
+    ).toBe("Work out who approves: Carol Cover (for Andy Approver).");
+    expect(
+      actionOutcome(
+        "Work out who approves",
+        { steps: [], exhausted: true },
+        undefined,
+        "erp_stamp_document_approval",
+      ),
+    ).toBe("Work out who approves: no value band or named approver applies at this value.");
+    expect(lookupOutcome("erp_stamp_document_approval", "", { steps: [] })).not.toBeNull();
+    expect(lookupOutcome("erp_stamp_document_approval", "", "unexpected")).toBeNull();
+  });
+
   test("any other routine keeps its sentence", () => {
     expect(lookupOutcome("erp_apply_cash", "Apply cash", [])).toBeNull();
     expect(lookupOutcome(undefined, "Anything", "2026-10-12")).toBeNull();
