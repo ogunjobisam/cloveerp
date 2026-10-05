@@ -537,6 +537,8 @@ test.describe("a document offers only what can be completed", () => {
               rule_version: 3,
               approver_user_id: "00000000-0000-4000-8000-0000000000a1",
               approver_of_record_user_id: "00000000-0000-4000-8000-0000000000a1",
+              approver: "Priya Approver",
+              approver_of_record: "Priya Approver",
               covered: false,
               cover_kind: null,
               cover_trail: [],
@@ -551,6 +553,9 @@ test.describe("a document offers only what can be completed", () => {
       timeout: 20_000,
     });
     await expect(page.getByText("Named assignment")).toBeVisible();
+    // The approver by name, not by id (J-50).
+    await expect(page.getByRole("cell", { name: "Priya Approver" })).toHaveCount(2);
+    await expect(page.getByText("00000000-0000-4000-8000-0000000000a1")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Stamp the approval chain" })).toHaveCount(1);
     expect(backend.crashes).toEqual([]);
   });
