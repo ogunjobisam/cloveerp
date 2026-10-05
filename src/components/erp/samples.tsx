@@ -239,7 +239,7 @@ export function Samples() {
 
 /**
  * What became of a supplier's samples, on their receipt's own page (J-15,
- * 20261007061000): what for, when they are due back, and for each line what
+ * 20261008210000): what for, when they are due back, and for each line what
  * was received, returned, kept free, bought and at what price each, and what
  * is still held. The receipt's lines alone said none of it: a bought sample's
  * line carries the price it was bought at and a net of nothing.

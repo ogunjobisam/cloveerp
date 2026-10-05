@@ -1,7 +1,9 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261007061000  A sample receipt says what became of it
+-- 20261008210000  A sample receipt says what became of it
+-- (First written as 20261007061000; it follows 20261007081000, which also
+-- edits erp.settle_samples, so a build in version order meets the body it expects.)
 -- -----------------------------------------------------------------------------
 -- Found walking the demonstration on live, 4 October (J-15). Samples were
 -- received, then one was returned, one kept free and one bought at a price.
@@ -58,18 +60,18 @@ $o$            d.party_id, v_company, v_company, d.id, l.id)$o$];
 $n$      owner_party_id, custody_party_id, to_owner_party_id, document_id, document_line_id, cost_context)$n$,
 $n$            d.party_id, v_company, v_company, d.id, l.id,
             -- Kept or bought, and at what price, said on the movement itself
-            -- (20261007061000, J-15): under standard costing its unit cost
+            -- (20261008210000, J-15): under standard costing its unit cost
             -- is the standard, whichever it was.
             jsonb_build_object('sample_outcome', v_outcome, 'price_minor', v_price))$n$];
   v_def2 text;
   i      integer;
 begin
-  if strpos(v_src, '20261007061000') > 0 then
+  if strpos(v_src, '20261008210000') > 0 then
     raise notice '% already says kept or bought on the movement; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> 'c2bccfdae4e594cd3bfd560105c6f2fb' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261007061000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261008210000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   v_def2 := v_def;
   for i in 1 .. array_length(v_old, 1) loop
@@ -85,7 +87,7 @@ $settle$;
 comment on function erp.settle_samples(uuid, text, numeric, bigint, text) is
   'What becomes of some or all of a sample line (20261004930000): returned to the supplier, kept free or bought '
   'at the agreed price, each one movement naming the line; a movement for one kept or bought says which, and at '
-  'what price (20261007061000). Authorises procurement.order at the receipt''s site.';
+  'what price (20261008210000). Authorises procurement.order at the receipt''s site.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- B. What became of each line
@@ -103,14 +105,14 @@ $o$    left join erp.item i on i.tenant_id = l.tenant_id and i.id = l.item_id$o$
   v_new  text[] := array[
 $n$ may_settle boolean, returned numeric, kept numeric, bought numeric, bought_price_minor bigint)$n$,
 $n$         erp.sample_line_held(l.id) > 0 and erp.has_permission('procurement.order', d.entity_id, d.site_id),
-         -- What became of the line (20261007061000, J-15): returned, kept
+         -- What became of the line (20261008210000, J-15): returned, kept
          -- free and bought, and the price each was bought at, which is the
          -- line's: every purchase of it is at the price it was first bought at.
          o.returned, o.kept, o.bought,
          case when o.bought > 0 then nullif(l.unit_price_minor, 0) end$n$,
 $n$    left join erp.item i on i.tenant_id = l.tenant_id and i.id = l.item_id
     -- The line's movements, each net of its reversal. Kept or bought is what
-    -- the movement says (20261007061000); one written before it said is
+    -- the movement says (20261008210000); one written before it said is
     -- bought where it carries a cost and kept where it does not.
     cross join lateral (
       select coalesce(sum(x.q) filter (where x.movement_type = 'return_to_supplier'), 0) as returned,
@@ -128,12 +130,12 @@ $n$    left join erp.item i on i.tenant_id = l.tenant_id and i.id = l.item_id
   v_def2 text;
   i      integer;
 begin
-  if strpos(v_src, '20261007061000') > 0 then
+  if strpos(v_src, '20261008210000') > 0 then
     raise notice '% already says what became of each line; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> 'afd1fecd013656a8f179a13b80870776' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261007061000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261008210000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   v_def2 := v_def;
   for i in 1 .. array_length(v_old, 1) loop
@@ -154,7 +156,7 @@ revoke all on function erp.samples(boolean) from public, anon;
 comment on function erp.samples(boolean) is
   'The lines of suppliers'' samples, what is still held, where, for what, due back when, overdue or not, and '
   'whether the reader may settle them (20261004930000); and what became of each: returned, kept, bought and at '
-  'what price each (20261007061000).';
+  'what price each (20261008210000).';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- C. The words
@@ -162,7 +164,7 @@ comment on function erp.samples(boolean) is
 
 insert into erp_ref.resource (key, locale, value, description)
 select erp_ref.ui_key(v.text), 'en', v.text,
-       'A screen string, rendered through ui(). A sample receipt says what became of it (20261007061000).'
+       'A screen string, rendered through ui(). A sample receipt says what became of it (20261008210000).'
   from (values
     ('Returned'),
     ('Kept'),
@@ -186,11 +188,11 @@ $o$,
 $o$    -- ── 8. What may not be settled ──────────────────────────────────────────
 $o$];
   v_new  text[] := array[
-$n$  -- Eleven until 20261007061000, which added what became of each line.
+$n$  -- Eleven until 20261008210000, which added what became of each line.
   c_expected constant integer := 12;
   v_bag    jsonb;
 $n$,
-$n$    -- ── 7b. What became of each line (20261007061000, J-15) ───────────────
+$n$    -- ── 7b. What became of each line (20261008210000, J-15) ───────────────
     v_step := 'reading the receipt''s lines once one dress went back, one was kept and one was bought';
     select x into v_row from jsonb_array_elements(public.erp_samples(true)) x where x ->> 'line_id' = v_line::text;
     select x into v_bag from jsonb_array_elements(public.erp_samples(true)) x where x ->> 'line_id' = v_line2::text;
@@ -220,12 +222,12 @@ $n$];
   v_def2 text;
   i      integer;
 begin
-  if strpos(v_src, '20261007061000') > 0 then
+  if strpos(v_src, '20261008210000') > 0 then
     raise notice '% already reads what became of each line; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> '8beeb939782194fc566a8c8652d78006' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261007061000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261008210000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   v_def2 := v_def;
   for i in 1 .. array_length(v_old, 1) loop
@@ -246,17 +248,17 @@ declare
   v_old  constant text := $o$  if v_total <> 11 then
     raise exception 'CLOVEERP_SUPPLIER_SAMPLES_SUITE_SHRANK: % case(s), expected 11', v_total
 $o$;
-  v_new  constant text := $n$  -- Eleven until 20261007061000, which added what became of each line.
+  v_new  constant text := $n$  -- Eleven until 20261008210000, which added what became of each line.
   if v_total <> 12 then
     raise exception 'CLOVEERP_SUPPLIER_SAMPLES_SUITE_SHRANK: % case(s), expected 12', v_total
 $n$;
 begin
-  if strpos(v_src, '20261007061000') > 0 then
+  if strpos(v_src, '20261008210000') > 0 then
     raise notice '% already counts 12; left as it is', v_sig;
     return;
   end if;
   if md5(v_src) <> '4d5ef4e62ef4744772dc22c93a76a057' then
-    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261007061000 expects (md5 %)', v_sig, md5(v_src);
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % is not the body 20261008210000 expects (md5 %)', v_sig, md5(v_src);
   end if;
   if (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 then
     raise exception 'CLOVEERP_ANCHOR_MOVED: % anchor found other than once', v_sig;

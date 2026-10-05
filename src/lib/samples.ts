@@ -19,7 +19,7 @@ export type Sample = {
   description: string;
   received: number;
   held: number;
-  /** What became of the rest (J-15, 20261007061000), each net of any reversal. */
+  /** What became of the rest (J-15, 20261008210000), each net of any reversal. */
   returned: number;
   kept: number;
   bought: number;
