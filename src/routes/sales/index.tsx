@@ -317,7 +317,8 @@ const ORDER_TO_CASH: FlowSpec = {
       partyRole: "customer",
       recordArg: "p_document_id",
       actionFn: "erp_convert_document",
-      createFn: "erp_resolve_price",
+      // Find a price raises nothing, so it is not this step's: it is in the
+      // Actions sheet, and a quotation's own lines still price themselves.
     },
     {
       label: "Sales order",
@@ -328,19 +329,22 @@ const ORDER_TO_CASH: FlowSpec = {
       // Every order not yet despatched: a draft, one with its approvers,
       // one confirmed and one being picked.
       states: ["draft", "pending_approval", "confirmed", "picking", "partially_despatched"],
-      // A delivery comes from an order that can still be despatched.
+      // A delivery comes from an order that can still be despatched, and the
+      // same orders are picked.
       // Part despatched is still owed the rest (20260923800000).
-      actionStates: { deliver_this_order: ["confirmed", "picking", "partially_despatched"] },
+      actionStates: {
+        deliver_this_order: ["confirmed", "picking", "partially_despatched"],
+        erp_pick_document: ["confirmed", "picking", "partially_despatched"],
+      },
       partyRole: "customer",
       // The chosen order is the one the delivery is created from.
       recordArg: "p_order_id",
+      // Picking arrives holding the chosen order and still asks, so the order
+      // chosen here is the one picked (20261009010000).
+      carriedArgs: { erp_pick_document: "p_document_id" },
       actionFn: "deliver_this_order",
+      actionFns: ["erp_pick_document"],
       createFn: "erp_promise_date",
-    },
-    {
-      label: "Pick",
-      hint: "Reserving and picking in one press: Pick the order takes what it needs and tells you what it could not cover.",
-      createFn: "erp_pick_document",
     },
     {
       label: "Delivery",
@@ -355,8 +359,8 @@ const ORDER_TO_CASH: FlowSpec = {
       states: ["draft"],
       partyRole: "customer",
       recordArg: "p_delivery_id",
-      to: "/logistics",
-      toLabel: "Open despatch",
+      // Posted where it is listed (J-17): Despatch lists posted deliveries
+      // only, so a draft sent there could not be posted.
     },
     {
       label: "Invoice",
@@ -369,14 +373,9 @@ const ORDER_TO_CASH: FlowSpec = {
       states: ["draft", "issued", "part_paid"],
       partyRole: "customer",
       recordArg: "p_invoice_id",
+      // Cash is applied on Financials' Cash in step, which this reaches.
       to: "/finance",
       toLabel: "Open finance",
-    },
-    {
-      label: "Cash",
-      hint: "Money received, applied against the invoices it settles.",
-      to: "/finance",
-      toLabel: "Apply cash",
     },
   ],
 };
