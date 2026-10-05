@@ -27,8 +27,10 @@ import {
   DELIVERY_FROM_ORDER_FIELDS,
   deliveryFromOrderArgs,
   RECEIPT_FROM_ORDER_FIELDS,
+  BOOK_A_COLLECTION,
   RECEIVE_THIS_ORDER,
   receiptFromOrderArgs,
+  SET_FREIGHT_TERMS,
 } from "../../lib/modules";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { useCurrencies } from "../../components/erp/currencies";
@@ -110,6 +112,11 @@ type Doc = {
    * refuses that by name (J-69).
    */
   is_sample?: boolean;
+  /**
+   * Who brings a purchase order's goods (erp.order_freight_terms): the
+   * supplier, by default, or us. Null on any other document (J-63).
+   */
+  freight_terms?: string | null;
 };
 
 type Line = {
@@ -120,6 +127,8 @@ type Line = {
   unit_price_minor: number;
   net_minor: number;
   item: string | null;
+  /** The product's name beside its code (J-157, 20261007051000). */
+  item_name?: string | null;
   /** What the supplier calls the product, stamped on the line when it was raised. */
   supplier_item_code: string | null;
 };
@@ -130,6 +139,13 @@ type Lineage = {
   document_id: string;
   document_number: string;
   base_type: string;
+  /**
+   * The organisation's own type of the related document (R-07,
+   * 20261007050000). Several types share one base — a supplier bill, a
+   * carrier's bill and a sales invoice are all invoices — so the base alone
+   * named every one of them by whichever came first.
+   */
+  document_type?: string | null;
   relation: string;
 };
 
@@ -280,6 +296,22 @@ function Document() {
         (doc.state === "sent" || doc.state === "partially_received") ? (
           <ReceiveThisOrder
             documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
+
+        {/* Who brings the goods, said on the order, and the two verbs that act
+            on it, here where the order is rather than only in Purchasing's
+            Actions (J-63). Set freight terms is offered on an order not
+            finished; Book a collection only where the order is one
+            erp_orders_to_collect offers. The database refuses the rest by
+            name. */}
+        {doc.document_type === "purchase_order" && doc.freight_terms ? (
+          <OrderFreight
+            documentId={documentId}
+            terms={doc.freight_terms}
+            state={doc.state}
+            finished={doc.is_terminal}
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
         ) : null}
@@ -470,7 +502,13 @@ function Document() {
       <ApprovalDecisions documentId={documentId} />
 
       {data.lineage.length > 0 ? (
-        <LineagePanel lineage={data.lineage} documentId={documentId} typeName={typeNames.ofBase} />
+        <LineagePanel
+          lineage={data.lineage}
+          documentId={documentId}
+          typeName={(r) =>
+            r.document_type ? typeNames.ofType(r.document_type) : typeNames.ofBase(r.base_type)
+          }
+        />
       ) : null}
     </div>
   );
@@ -567,6 +605,80 @@ function ReceiveThisOrder({ documentId, context }: { documentId: string; context
             void navigate({ to: "/documents/$documentId", params: { documentId: made } });
         }}
       />
+    </div>
+  );
+}
+
+/** The words for an order's freight terms, as Set freight terms offers them. */
+const FREIGHT_TERMS_WORDS: Record<string, string> = {
+  supplier_delivers: "The supplier delivers",
+  we_collect: "We collect",
+};
+
+/**
+ * Who brings this order's goods, and the verbs that change it or act on it
+ * (J-63): Set freight terms, and Book a collection where the order is waiting
+ * to be collected. Both are the forms Purchasing's Actions carry, with the
+ * order already chosen, so the outcome names it.
+ */
+function OrderFreight({
+  documentId,
+  terms,
+  state,
+  finished,
+  context,
+}: {
+  documentId: string;
+  terms: string;
+  state: string | null;
+  finished: boolean;
+  context: string;
+}) {
+  const { ui } = useT();
+  // Only an order sent and collected by us can be waiting; asking the door
+  // settles whether a collection is already planned or booked for it.
+  const mayCollect = terms === "we_collect" && (state === "sent" || state === "partially_received");
+  const waiting = useQuery({
+    queryKey: ["erp_orders_to_collect", { p_order: documentId }],
+    queryFn: () => callErp<unknown[]>("erp_orders_to_collect", { p_order: documentId }),
+    enabled: mayCollect,
+  });
+  const collectable = mayCollect && (waiting.data?.length ?? 0) > 0;
+  const words = FREIGHT_TERMS_WORDS[terms];
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">
+        {ui("Freight terms")}: {words ? ui(words) : terms}
+      </span>
+      {!finished ? (
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui(SET_FREIGHT_TERMS.label)}</ActionButton>}
+          title={SET_FREIGHT_TERMS.label}
+          {...(SET_FREIGHT_TERMS.description ? { description: SET_FREIGHT_TERMS.description } : {})}
+          permission={SET_FREIGHT_TERMS.permission ?? null}
+          fn={SET_FREIGHT_TERMS.fn}
+          fields={SET_FREIGHT_TERMS.fields ?? []}
+          prefill={{ p_order: documentId }}
+          context={context}
+          invalidates={SET_FREIGHT_TERMS.invalidates ?? []}
+          submitLabel={SET_FREIGHT_TERMS.label}
+        />
+      ) : null}
+      {collectable ? (
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui(BOOK_A_COLLECTION.label)}</ActionButton>}
+          title={BOOK_A_COLLECTION.label}
+          {...(BOOK_A_COLLECTION.description ? { description: BOOK_A_COLLECTION.description } : {})}
+          permission={BOOK_A_COLLECTION.permission ?? null}
+          fn={BOOK_A_COLLECTION.fn}
+          fields={BOOK_A_COLLECTION.fields ?? []}
+          prefill={{ p_order: documentId }}
+          context={context}
+          invalidates={BOOK_A_COLLECTION.invalidates ?? []}
+          submitLabel={BOOK_A_COLLECTION.label}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1014,7 +1126,18 @@ function Lines({
             {lines.map((l) => (
               <tr key={l.line_id} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{l.line_no}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{l.item ?? "—"}</td>
+                {/* The product by its code and name, as Supplier
+                    confirmation and Shipping notices name it (J-157). */}
+                <td className="py-2 pr-4">
+                  {l.item ? (
+                    <>
+                      <span className="font-mono text-xs">{l.item}</span>
+                      {l.item_name ? <span className="ml-2">{l.item_name}</span> : null}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 {/* What the supplier calls it. Blank on anything they do not
                     supply, which is every sales line. */}
                 <td className="py-2 pr-4 font-mono text-xs">{l.supplier_item_code ?? "—"}</td>
@@ -1170,7 +1293,7 @@ function LineagePanel({
 }: {
   lineage: Lineage[];
   documentId: string;
-  typeName: (base: string) => string;
+  typeName: (row: Lineage) => string;
 }) {
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -1243,7 +1366,9 @@ function LineagePanel({
         {lineage
           .filter((r) => r.direction !== "self")
           .map((r) => (
-            <li key={`${r.direction}-${r.document_id}`} className="min-w-0">
+            // A document can relate two ways — an order a bill both
+            // invoices and fulfils — so the relation is part of the key.
+            <li key={`${r.direction}-${r.document_id}-${r.relation}`} className="min-w-0">
               <span className="text-xs text-muted-foreground">
                 {r.direction === "upstream" ? "from" : "to"} · {r.relation} ·{" "}
               </span>
@@ -1254,7 +1379,7 @@ function LineagePanel({
               >
                 {r.document_number}
               </Link>{" "}
-              <span className="text-xs text-muted-foreground">{typeName(r.base_type)}</span>
+              <span className="text-xs text-muted-foreground">{typeName(r)}</span>
             </li>
           ))}
       </ul>

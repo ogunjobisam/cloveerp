@@ -462,13 +462,19 @@ export const codeField = (
  * p_transition_code — so "Approve" offers what is waiting for approval and
  * nothing else. The database still refuses a move it does not allow; this only
  * stops offering one.
+ *
+ * `filter.states` narrows to documents standing in one of those states, for an
+ * action that is a door of its own rather than a transition: "Despatch a
+ * transfer" is offered the approved ones, not the ones already on the road or
+ * received (J-84). Each document is labelled with its state's name, as its
+ * lifecycle calls it, not the code.
  */
 export const pickDocument = (
   typeCode: string,
   name = "p_document_id",
   label = "Document",
   required = true,
-  filter?: { transition?: string },
+  filter?: { transition?: string; states?: readonly string[] },
 ): Field => ({
   kind: "select",
   name,
@@ -481,9 +487,10 @@ export const pickDocument = (
       p_limit: 200,
       p_actionable: true,
       ...(filter?.transition ? { p_transition_code: filter.transition } : {}),
+      ...(filter?.states && filter.states.length > 0 ? { p_states: [...filter.states] } : {}),
     },
     value: "document_id",
-    label: ["document_number", "state"],
+    label: ["document_number", "state_name"],
   },
 });
 

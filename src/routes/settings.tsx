@@ -18,11 +18,17 @@ import { useT } from "../lib/i18n";
  * reads this page top to bottom, and nobody doing the day's work has these
  * screens in their way.
  *
- * The setup order and its progress are for the people who configure the
- * organisation. erp_setup_progress refuses anybody without
- * administration.configure, so for them the list is not rendered at all rather
- * than rendered as a refusal, and the rest of the page stays as it is. Hiding
- * it is the convenience; the refusal is the database's.
+ * The page is one list. Whoever configures the organisation gets the setup
+ * order: every screen in the order it is set up, how far along, what is next,
+ * and any Settings screen the order does not name. Everybody else gets the
+ * launchpad's sections. erp_setup_progress refuses anybody without
+ * administration.configure, so for them it is not asked at all rather than
+ * drawn as a refusal. Hiding it is the convenience; the refusal is the
+ * database's.
+ *
+ * While the order is being read, when the read fails, or when it answers
+ * nothing, the launchpad stands in for it: the page is never blank, and an
+ * administrator never waits on that read to reach a screen.
  */
 
 export const Route = createFileRoute("/settings")({
@@ -51,8 +57,7 @@ function Settings() {
         {session.tenant?.name ?? ""}
       </PageHeader>
 
-      {mayConfigure ? <SetupOverview /> : null}
-      <SettingsLaunchpad />
+      {mayConfigure ? <SetupOverview fallback={<SettingsLaunchpad />} /> : <SettingsLaunchpad />}
     </div>
   );
 }

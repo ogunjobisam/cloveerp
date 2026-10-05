@@ -242,7 +242,9 @@ function InstalledModulePage({ def, actions }: { def: ModuleDef; actions?: React
               {ui("This module has no reports of its own yet.")}
             </p>
           ) : (
-            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+            // Two reports side by side only on the widest screens: at 1512
+            // pixels two halved a stock table past its card (J-88).
+            <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-2">
               {def.reports.map((r) => (
                 <div key={`${r.fn}-${r.title}`} className="min-w-0">
                   {panelOf(withSite(r, siteId), true)}

@@ -67,6 +67,33 @@ describe("pickDocument", () => {
       expect(args["p_actionable"]).toBe(true);
     }
   });
+
+  test("names the states when the action is offered only those, and never an empty list", () => {
+    expect(
+      argsOf(
+        pickDocument("transfer_order", "p_document_id", "Transfer order", true, {
+          states: ["approved", "issued"],
+        }),
+      ),
+    ).toEqual({
+      p_type_code: "transfer_order",
+      p_limit: 200,
+      p_actionable: true,
+      p_states: ["approved", "issued"],
+    });
+    expect(
+      "p_states" in
+        argsOf(
+          pickDocument("transfer_order", "p_document_id", "Transfer order", true, { states: [] }),
+        ),
+    ).toBe(false);
+  });
+
+  test("labels each document with its state's name, not its code", () => {
+    const field = pickDocument("transfer_order");
+    if (field.kind !== "select") throw new Error(`the picker returned a ${field.kind} field`);
+    expect(field.options.label).toEqual(["document_number", "state_name"]);
+  });
 });
 
 describe("pickLine", () => {

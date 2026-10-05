@@ -11,6 +11,7 @@
  */
 
 import type { RowSeed } from "./dependent-options";
+import { lineName } from "./line-name";
 
 export type NoticeStatus = "notified" | "part_received" | "received" | "cancelled";
 
@@ -18,6 +19,9 @@ export type NoticeLine = {
   orderLineId: string;
   lineNo: number;
   description: string;
+  /** The product's code and name, whatever was typed over its description (J-157). */
+  itemCode: string | null;
+  itemName: string | null;
   quantity: number;
   receivedQuantity: number | null;
 };
@@ -128,6 +132,8 @@ export function shippingNotice(v: unknown): ShippingNotice | null {
         orderLineId: text(l["order_line_id"]) ?? "",
         lineNo: num(l["line_no"]) ?? 0,
         description: text(l["description"]) ?? "",
+        itemCode: text(l["item_code"]),
+        itemName: text(l["item_name"]),
         quantity: num(l["quantity"]) ?? 0,
         receivedQuantity: num(l["received_quantity"]),
       }))
@@ -177,9 +183,11 @@ export function noticeLineSummary(lines: readonly NoticeLine[], shown = 2): stri
   const amount = (q: number) => (Number.isInteger(q) ? String(q) : String(Number(q.toFixed(4))));
   const said = lines
     .slice(0, shown)
-    .map((l) =>
-      l.description === "" ? amount(l.quantity) : `${amount(l.quantity)} × ${l.description}`,
-    )
+    .map((l) => {
+      // The product as every panel names it (J-157).
+      const product = lineName(l.itemCode, l.itemName, l.description).product;
+      return product === "" ? amount(l.quantity) : `${amount(l.quantity)} × ${product}`;
+    })
     .join(", ");
   const rest = lines.length - shown;
   return rest > 0 ? `${said} +${rest}` : said;
@@ -197,6 +205,19 @@ export const recordNoticeSeed = (orderId: string): RowSeed => ({
 });
 
 /**
+ * "Receive what arrived" arrives holding the notice's own lines at what it
+ * said (J-59), read from the order's notices: the notice is the one the
+ * dialog was opened on, prefilled as p_notice.
+ */
+export const arrivedSeed = (orderId: string): RowSeed => ({
+  fn: "erp_order_shipping_notices",
+  args: { p_order: orderId },
+  path: "notices",
+  within: { field: "p_notice", key: "notice_id", path: "lines" },
+  fill: { order_line_id: "order_line_id", quantity: "quantity" },
+});
+
+/**
  * The lines a recorded notice holds, from the rows as typed: a row with no
  * line, or nothing above nought on it, is not in this shipment. A line already
  * notified in full arrives in the editor at nought and is left out here.
@@ -211,6 +232,66 @@ export function noticeLinesTyped(
       ? [{ order_line_id: line, quantity }]
       : [];
   });
+}
+
+/**
+ * The cartons a recorded notice holds, from the rows as typed: one row per
+ * line a carton holds, grouped by the SSCC on its label (J-70). A row with no
+ * label, no line or nothing above nought is left out; the label is sent as the
+ * database reads a scan, eighteen digits, where it can be read that way. The
+ * database refuses cartons that do not hold exactly what the lines say.
+ */
+export function noticeCartonsTyped(
+  rows: readonly Record<string, string>[],
+): { sscc: string; contents: { order_line_id: string; quantity: number }[] }[] {
+  const cartons = new Map<string, { order_line_id: string; quantity: number }[]>();
+  for (const row of rows) {
+    const label = (row["sscc"] ?? "").trim();
+    const line = (row["order_line_id"] ?? "").trim();
+    const quantity = num(row["quantity"] ?? "");
+    if (label === "" || line === "" || quantity === null || quantity <= 0) continue;
+    const sscc = ssccOf(label) ?? label;
+    cartons.set(sscc, [...(cartons.get(sscc) ?? []), { order_line_id: line, quantity }]);
+  }
+  return [...cartons].map(([sscc, contents]) => ({ sscc, contents }));
+}
+
+/** A quantity as a person reads it: 6, 2.5, never 6.0000. */
+const quantityText = (v: unknown): string => {
+  const n = num(v);
+  return n === null ? "" : Number.isInteger(n) ? String(n) : String(Number(n.toFixed(4)));
+};
+
+/**
+ * What an order line offered in a picker says (J-61): its product, what was
+ * ordered and, where the screen knows it, what is still open for a notice.
+ * The line pickers read "RM-300 — 6", and the 6 was the ordered quantity,
+ * not the open one it was taken for. `open` is null where the screen does not
+ * know it; the words around these values are the screen's, through ui().
+ */
+export function orderLineWords(
+  row: Record<string, unknown>,
+  open?: ReadonlyMap<string, number>,
+): { words: { item: string; quantity: string }; open: string | null } {
+  const item = [text(row["item"]), text(row["description"])].filter((x) => x !== null).join(" ");
+  const known = open?.get(text(row["line_id"]) ?? "");
+  return {
+    words: { item, quantity: quantityText(row["quantity"]) },
+    open: known === undefined ? null : quantityText(known),
+  };
+}
+
+/** What a line of an order still to receive says in the receive picker (J-61). */
+export function receivableLineWords(row: Record<string, unknown>): {
+  line: string;
+  item: string;
+  open: string;
+} {
+  return {
+    line: quantityText(row["line_no"]),
+    item: [text(row["item"]), text(row["description"])].filter((x) => x !== null).join(" "),
+    open: quantityText(row["open_quantity"]),
+  };
 }
 
 export function noticeWords(s: NoticeStatus): {

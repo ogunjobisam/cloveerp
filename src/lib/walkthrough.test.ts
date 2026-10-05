@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { allTiles, areaOf, type TileDef } from "./modules";
 import {
   completeCount,
   nextScreen,
   nextStep,
+  settingsHomeRows,
   settingsScreenFor,
   stepState,
   tileFor,
@@ -132,5 +134,66 @@ describe("which screen a path belongs to", () => {
   test("the Settings home and an unknown path are nobody's tile", () => {
     expect(tileFor("/settings")).toBeNull();
     expect(tileFor("/no-such-screen")).toBeNull();
+  });
+});
+
+describe("the Settings home's one list", () => {
+  const p = (seq: number, path: string): SetupScreenProgress => ({
+    screen_path: path,
+    seq,
+    title: path,
+    blurb: "",
+    total: 1,
+    complete: 0,
+    next: null,
+  });
+  const tile = (path: string, group: TileDef["group"], over: Partial<TileDef> = {}): TileDef => ({
+    path,
+    titleKey: `nav.${path}`,
+    title: path,
+    blurb: "",
+    group,
+    ...over,
+  });
+  const key = (rows: ReturnType<typeof settingsHomeRows>) =>
+    rows.map((r) => (r.kind === "setup" ? `${r.screen.seq}:${r.screen.screen_path}` : r.tile.path));
+
+  test("keeps every screen in the order, in its order, whatever order it arrived in", () => {
+    const rows = settingsHomeRows(
+      [p(3, "/c"), p(1, "/a"), p(2, "/b")],
+      [tile("/a", "people"), tile("/b", "system"), tile("/c", "assure")],
+    );
+    expect(key(rows)).toEqual(["1:/a", "2:/b", "3:/c"]);
+  });
+
+  test("appends exactly the Settings screens offered that the order does not name, section by section", () => {
+    const rows = settingsHomeRows(
+      [p(1, "/a"), p(2, "/work-in-order")],
+      [
+        tile("/a", "people"),
+        tile("/late-assure", "assure"),
+        tile("/late-people", "people"),
+        tile("/work", "records"),
+        tile("/off", "assure", { offRail: true }),
+      ],
+    );
+    expect(key(rows)).toEqual(["1:/a", "2:/work-in-order", "/late-people", "/late-assure"]);
+  });
+
+  test("a screen in the order that this account is not offered is still in the order", () => {
+    expect(key(settingsHomeRows([p(1, "/a")], []))).toEqual(["1:/a"]);
+  });
+
+  test("nothing in the order and nothing offered is nothing", () => {
+    expect(settingsHomeRows([], [])).toEqual([]);
+  });
+
+  test("every Settings tile the registry offers is either in the order or appended", () => {
+    const tiles = allTiles();
+    const rows = settingsHomeRows([], tiles);
+    const settings = tiles.filter((t) => areaOf(t.group) === "settings" && !t.offRail);
+    expect(
+      rows.map((r) => (r.kind === "tile" ? r.tile.path : r.screen.screen_path)).sort(),
+    ).toEqual(settings.map((t) => t.path).sort());
   });
 });

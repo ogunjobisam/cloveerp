@@ -24,10 +24,12 @@ import { ProcessFlow, type FlowSpec } from "../../components/erp/process-flow";
 import { unstagedActions } from "../../lib/flow-actions";
 import {
   BILL_A_LANDED_COST,
+  BOOK_A_COLLECTION,
   GOODS_IN_LIST,
   PURCHASING_KPIS,
   RECEIVE_AN_ORDER,
   RECEIVE_THIS_ORDER,
+  SET_FREIGHT_TERMS,
 } from "../../lib/modules";
 import { useT } from "../../lib/i18n";
 import { approvalChoice } from "../../lib/plain-words";
@@ -588,91 +590,8 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     }),
     invalidates: ["erp_documents"],
   },
-  {
-    // Who brings an order's goods (20261004955000): the supplier, at their
-    // cost, or us, which lets a collection be booked for it.
-    label: "Set freight terms",
-    description:
-      "Who brings the goods: the supplier, delivered at their cost, or us, collected at ours.",
-    permission: "procurement.order",
-    fn: "erp_set_freight_terms",
-    fields: [
-      pickFrom(
-        "erp_documents",
-        "document_id",
-        ["document_number", "party", "state"],
-        "p_order",
-        "Purchase order",
-        { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
-      ),
-      {
-        kind: "choice",
-        name: "p_terms",
-        label: "Freight terms",
-        required: true,
-        choices: [
-          { value: "supplier_delivers", label: "The supplier delivers" },
-          { value: "we_collect", label: "We collect" },
-        ],
-      },
-    ],
-    invalidates: ["erp_documents", "erp_document"],
-  },
-  {
-    // The collection of an order we collect (20261004955000): an inbound
-    // shipment, booked with the carrier. Receiving the goods delivers it.
-    label: "Book a collection",
-    description:
-      "Books a carrier to collect an order we collect from the supplier. When the goods are received it arrives, and the carrier's bill lands on them.",
-    permission: "logistics.plan",
-    fn: "erp_ship_inbound",
-    fields: [
-      pickFrom(
-        "erp_documents",
-        "document_id",
-        ["document_number", "party", "state"],
-        "p_order",
-        "Purchase order",
-        { p_type_code: "purchase_order", p_limit: 100, p_actionable: true },
-      ),
-      {
-        kind: "select",
-        name: "p_carrier_code",
-        label: "Carrier",
-        required: true,
-        options: { fn: "erp_carriers", value: "code", label: ["code", "name"] },
-      },
-      {
-        kind: "text",
-        name: "p_service_code",
-        label: "Service",
-        required: true,
-        placeholder: "standard",
-      },
-      {
-        kind: "money",
-        name: "p_cost_minor",
-        label: "Cost",
-        currency: "GBP",
-        hint: "Leave empty to take the rate card's price.",
-      },
-      { kind: "date", name: "p_expected_arrival", label: "Expected arrival" },
-      {
-        kind: "text",
-        name: "p_tracking_reference",
-        label: "Tracking reference",
-        hint: "Leave empty when the carrier is booked through EasyPost: its label brings one.",
-      },
-      {
-        kind: "number",
-        name: "p_weight_g",
-        label: "Weight (g)",
-        placeholder: "12500",
-        hint: "The consignment as weighed. Leave empty to take the items' own weights; a carrier booked through EasyPost needs one or the other.",
-      },
-    ],
-    invalidates: ["erp_inbound_shipments", "erp_shipments", "erp_documents"],
-  },
+  SET_FREIGHT_TERMS,
+  BOOK_A_COLLECTION,
   {
     label: "Confirm a supplier-direct order",
     description:

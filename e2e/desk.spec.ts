@@ -626,6 +626,73 @@ test.describe("a document offers only what can be completed", () => {
     expect(backend.crashes).toEqual([]);
   });
 
+  test("a related document is captioned by its own type, and a line names its product by code and name (R-07, J-157)", async ({
+    page,
+    backend,
+  }) => {
+    const invoiceType = (code: string, name: string) => ({
+      document_type_id: `00000000-0000-4000-8000-0000000071${code.length}${name.length}`,
+      code,
+      name,
+      base_type_code: "invoice_reference",
+      requires_party: true,
+      requires_site: false,
+      currency: "GBP",
+      create_permission: "procurement.invoice",
+    });
+    // Three types on one base, carrier_bill first by code: the base alone
+    // captioned every invoice "Carrier bill".
+    backend.rpc("erp_document_types", [
+      invoiceType("carrier_bill", "Carrier bill"),
+      invoiceType("purchase_invoice", "Supplier bill"),
+      invoiceType("sales_invoice", "Sales invoice"),
+    ]);
+    const related = (n: number, number: string, documentType: string, relation: string) => ({
+      depth: 1,
+      direction: "downstream",
+      document_id: `00000000-0000-4000-8000-00000000e0${String(n).padStart(2, "0")}`,
+      document_number: number,
+      base_type: "invoice_reference",
+      document_type: documentType,
+      relation,
+    });
+    const bill = related(1, "PINV-000113", "purchase_invoice", "invoices");
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      lines: [
+        { ...ORDER_PAGE.lines[0]!, item_name: "Blue widget", description: "JT-A added line" },
+      ],
+      lineage: [
+        bill,
+        // The same bill relates a second way: listed once for each.
+        { ...bill, relation: "fulfils" },
+        related(2, "CB-000004", "carrier_bill", "consumes"),
+        related(3, "INV-000440", "sales_invoice", "mirrors"),
+      ],
+    });
+
+    await page.goto(`/documents/${DOC_ID}`);
+    await expect(page.getByRole("heading", { name: "PO-000042" })).toBeVisible({ timeout: 20_000 });
+
+    const lineage = page.locator("section", {
+      has: page.getByRole("heading", { name: "Related documents" }),
+    });
+    const row = (number: string) => lineage.locator("li", { hasText: number });
+    await expect(row("PINV-000113")).toHaveCount(2);
+    await expect(row("PINV-000113").first()).toContainText("Supplier bill");
+    await expect(row("PINV-000113").last()).toContainText("Supplier bill");
+    await expect(row("CB-000004")).toContainText("Carrier bill");
+    await expect(row("INV-000440")).toContainText("Sales invoice");
+    await expect(lineage.getByText("Carrier bill")).toHaveCount(1);
+
+    // The Lines card names the product by its code and its name, beside
+    // what was typed over its description.
+    const line = page.locator("tr", { hasText: "JT-A added line" });
+    await expect(line).toContainText("WID");
+    await expect(line).toContainText("Blue widget");
+    expect(backend.crashes).toEqual([]);
+  });
+
   test("a stamp that resolved a step draws the routing card, which carries the one stamp button", async ({
     page,
     backend,
@@ -862,32 +929,38 @@ test.describe("the counter works down a list", () => {
     expect(order).toEqual([A01, A02, LOOSE]);
 
     backend.rpc("erp_record_count", "posted");
-    const sent = page.waitForRequest(/rpc\/erp_record_count$/);
+    // What the database says once the figure is recorded: posted as it was.
+    // Swapped in as the record is answered, so no read before it sees it and
+    // every read after it does. Swapping it in once waitForRequest had
+    // resolved raced the screen's own read of the list, which follows the
+    // answer within milliseconds: waitForRequest settles a round trip later,
+    // and the read could be answered first, with the rows from before.
+    const posted = ROWS.map((r) =>
+      r.task_id === A01
+        ? {
+            ...r,
+            status: "posted",
+            counted: 12,
+            variance: 2,
+            within_tolerance: true,
+            posted_by_system: true,
+            adjustment_document_id: id(91),
+            adjustment_number: "ADJ-000003",
+            counted_by_me: true,
+          }
+        : r,
+    );
+    await page.route(/rpc\/erp_record_count$/, async (route) => {
+      if (route.request().method() === "POST") backend.rpc("erp_count_tasks", posted);
+      await route.fallback();
+    });
+    const sent = page.waitForRequest(
+      (r) => /rpc\/erp_record_count$/.test(r.url()) && r.method() === "POST",
+    );
     await list.getByLabel("Counted A-01 P1").fill("12");
     await list.getByLabel("Counted A-01 P1").press("Enter");
     const request = await sent;
     expect(request.postDataJSON()).toEqual({ p_task_id: A01, p_quantity: 12 });
-
-    // What the database says once the figure is recorded: posted as it was.
-    // Swapped in only now the record has gone, so no read before it sees it.
-    backend.rpc(
-      "erp_count_tasks",
-      ROWS.map((r) =>
-        r.task_id === A01
-          ? {
-              ...r,
-              status: "posted",
-              counted: 12,
-              variance: 2,
-              within_tolerance: true,
-              posted_by_system: true,
-              adjustment_document_id: id(91),
-              adjustment_number: "ADJ-000003",
-              counted_by_me: true,
-            }
-          : r,
-      ),
-    );
 
     // No dialog, no picker, and the next place is ready for its figure.
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -1132,6 +1205,35 @@ test.describe("stock's decisions are on the rows, and its page carries its day",
       timeout: 20_000,
     });
     await expect(row.getByRole("button")).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("each transfer says what it moves, by its state's name, and its number opens it", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_transfer_orders", [
+      {
+        ...transfer(4, "in_transit", 7),
+        state_name: "In transit",
+        their_reference: "ZZ-REF-4",
+        products: "ZZ-T, ZZ-U",
+      },
+      transfer(5, "closed", 2),
+    ]);
+    backend.rpc("erp_available_transitions", []);
+    await page.goto("/inventory/transfers");
+
+    const row = page.getByRole("row", { name: /TRF-000004/ });
+    await expect(row).toContainText("ZZ-REF-4", { timeout: 20_000 });
+    await expect(row).toContainText("ZZ-T, ZZ-U");
+    await expect(row).toContainText("In transit");
+    await expect(row.getByRole("link", { name: "TRF-000004" })).toHaveAttribute(
+      "href",
+      `/documents/${doc(4)}`,
+    );
+    // With no name to say, the state reads as its code, as before.
+    await expect(page.getByRole("row", { name: /TRF-000005/ })).toContainText("closed");
     expect(backend.crashes).toEqual([]);
   });
 
@@ -3011,6 +3113,91 @@ test.describe("a supplier's price is kept where its terms are", () => {
     await expect(page.getByText("In force", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Set the supplier's price" })).toBeVisible();
     await expect(page.getByRole("button", { name: "End a supplier's price" })).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+});
+
+test.describe("the Settings home", () => {
+  // The page is one list. For whoever configures the organisation that is the
+  // setup order, once erp_setup_progress has answered; until then, if it
+  // fails, or if it answers nothing, it is the launchpad, so the page is never
+  // blank. On live that read has taken nine to twenty-six seconds (J-38).
+  const launchpad = (page: Page) =>
+    page.getByRole("heading", { level: 2, name: "People and organisation", exact: true });
+  const setupList = (page: Page) =>
+    page.getByRole("heading", { level: 2, name: "Set up, step by step", exact: true });
+
+  const onboarding = {
+    screen_path: "/administration/onboarding",
+    seq: 1,
+    title: "Onboarding interview",
+    blurb: "Answer a few questions and the organisation is set up from them.",
+    total: 2,
+    complete: 1,
+    next: { code: "onboarding.answer", title: "Answer the interview", action_label: "Start" },
+  };
+
+  test("is the launchpad while the setup order is read, and the order once it answers", async ({
+    page,
+    backend,
+  }) => {
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    await page.route("**/rest/v1/rpc/erp_setup_progress", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fallback();
+      await answered;
+      return route.fallback();
+    });
+    backend.rpc("erp_setup_progress", [onboarding]);
+    await page.goto("/settings");
+
+    await expect(launchpad(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByRole("link", { name: /^Audit log/ })).toBeVisible();
+    await expect(setupList(page)).toHaveCount(0);
+
+    answer();
+    await expect(setupList(page)).toBeVisible();
+    await expect(launchpad(page)).toHaveCount(0);
+
+    // One list: the order's own screen, numbered, then every Settings screen
+    // the order does not name, so none is lost with the launchpad.
+    const list = page
+      .getByRole("list")
+      .filter({ has: page.getByRole("link", { name: "Onboarding interview" }) });
+    await expect(list.getByRole("listitem").first()).toContainText("1.");
+    await expect(list.getByRole("link", { name: "Audit log", exact: true })).toBeVisible();
+    await expect(
+      list.getByRole("link", { name: "People and permissions", exact: true }),
+    ).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("is the launchpad when the setup order cannot be read", async ({ page, backend }) => {
+    backend.fail("erp_setup_progress", {
+      status: 500,
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+    await page.goto("/settings");
+
+    await expect(launchpad(page)).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => backend.called.includes("erp_setup_progress")).toBe(true);
+    await expect(launchpad(page)).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: /^Audit log/ })).toBeVisible();
+    await expect(setupList(page)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("is the launchpad when the setup order answers nothing", async ({ page, backend }) => {
+    backend.rpc("erp_setup_progress", []);
+    await page.goto("/settings");
+
+    await expect.poll(() => backend.called.includes("erp_setup_progress")).toBe(true);
+    await expect(launchpad(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByRole("link", { name: /^Audit log/ })).toBeVisible();
+    await expect(setupList(page)).toHaveCount(0);
     expect(backend.crashes).toEqual([]);
   });
 });
