@@ -174,6 +174,30 @@
   opacity: 0.35;
 }
 
+/* A box that scrolls sideways shows a shadow at the edge there is more
+   beyond (J-88). The two card-coloured covers travel with the content and
+   hide each shadow while that edge is in view; the shadows stay with the box.
+   Nothing shows when nothing scrolls. */
+@utility scroll-shadow-x {
+  background:
+    linear-gradient(to right, var(--card-surface) 30%, transparent) left center / 2.5rem 100%
+      no-repeat local,
+    linear-gradient(to left, var(--card-surface) 30%, transparent) right center / 2.5rem 100%
+      no-repeat local,
+    radial-gradient(
+        farthest-side at 0 50%,
+        color-mix(in oklch, var(--ink) 22%, transparent),
+        transparent
+      )
+      left center / 0.875rem 100% no-repeat scroll,
+    radial-gradient(
+        farthest-side at 100% 50%,
+        color-mix(in oklch, var(--ink) 22%, transparent),
+        transparent
+      )
+      right center / 0.875rem 100% no-repeat scroll;
+}
+
 /* A printed page carries the one thing that asked to be printed (PR10 M3b).
    The count sheet renders itself into <body> as [data-print-root], beside the
    application rather than inside it. Only while it is there does printing
