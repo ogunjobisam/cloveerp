@@ -245,14 +245,14 @@ export const PURCHASE_TO_PAY: Flow = {
     },
     {
       path: "/finance",
-      stage: "Approve",
+      stage: "Payment run",
       does: "A second person approves the run. Whoever proposed it cannot.",
       doors: ["erp_approve_payment_run"],
       leaves: "The run, approved.",
     },
     {
       path: "/finance",
-      stage: "Pay",
+      stage: "Payment run",
       does: "Pay the approved run.",
       doors: ["erp_pay_payment_run"],
       leaves: "The run paid: the payable cleared and the bank credited.",

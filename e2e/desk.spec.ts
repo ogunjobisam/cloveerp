@@ -1628,7 +1628,7 @@ test.describe("the cash documents are on the desk", () => {
     supplier_item_code: null,
   });
   const step = (page: Page, label: string) =>
-    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 7`) });
+    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 5`) });
 
   test("Cash in lists its receipts, and Apply cash names the receipt it made and opens it", async ({
     page,
@@ -1849,9 +1849,40 @@ test.describe("the cash documents are on the desk", () => {
       ],
     });
 
+    // What the run pays, drawn under it (J-28).
+    backend.rpc("erp_payment_proposal_lines", [
+      {
+        line_id: "00000000-0000-4000-8000-0000000061e1",
+        supplier: "Anvil Supplies",
+        document_number: "PINV-000007",
+        amount_minor: 50000,
+        due_date: "2026-09-27",
+        held: false,
+        hold_reason: null,
+      },
+      {
+        line_id: "00000000-0000-4000-8000-0000000061e2",
+        supplier: "Bolt Brothers",
+        document_number: "PINV-000009",
+        amount_minor: 12000,
+        due_date: "2026-09-30",
+        held: true,
+        hold_reason: "disputed",
+      },
+    ]);
+
     await page.goto("/finance");
-    await step(page, "Pay").click({ timeout: 20_000 });
+    await step(page, "Payment run").click({ timeout: 20_000 });
+    const linesAsked = page.waitForRequest(/rpc\/erp_payment_proposal_lines$/);
     await page.getByRole("button", { name: /^PAY-000003/ }).click();
+    expect((await linesAsked).postDataJSON()).toEqual({ p_proposal_id: RUN });
+    await expect(page.getByText("Anvil Supplies — PINV-000007")).toBeVisible();
+    await expect(page.getByText("Bolt Brothers — PINV-000009")).toBeVisible();
+    await expect(page.getByText(/Held: Disputed/)).toBeVisible();
+    // An approved run is paid, not approved or withdrawn again.
+    for (const name of ["Approve a payment run", "Withdraw a payment run"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
     await page.getByRole("button", { name: "Pay an approved run", exact: true }).click();
     const sent = page.waitForRequest(/rpc\/erp_pay_payment_run$/);
     await page
