@@ -125,6 +125,11 @@ export type ErpSession = {
   entities: ErpEntity[];
   sites: ErpSite[];
   permissions: string[];
+  /**
+   * The modules installed and in force here, each once. Absent from a
+   * database older than the site: then nothing is hidden, as before.
+   */
+  modules?: string[];
 };
 
 /**
@@ -359,6 +364,18 @@ export function hasPermission(
   const held = session?.permissions;
   if (!held) return false;
   return typeof code === "string" ? held.includes(code) : code.some((c) => held.includes(c));
+}
+
+/**
+ * Whether the organisation has installed a module and the install is in force.
+ *
+ * A session that does not say (a database older than the site) hides nothing.
+ * This decides what the desk offers; the database refuses a module's verbs
+ * until it is installed whatever the desk shows.
+ */
+export function hasModule(session: ErpSession | null, code: string): boolean {
+  const held = session?.modules;
+  return held === undefined ? true : held.includes(code);
 }
 
 export async function currentSession(): Promise<Session | null> {

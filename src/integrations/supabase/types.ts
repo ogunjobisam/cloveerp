@@ -904,6 +904,11 @@ export type Database = {
         Args: { p_item_supplier_id: string; p_reason?: string }
         Returns: Json
       }
+      erp_end_party_contact: { Args: { p_contact_id: string }; Returns: Json }
+      erp_end_supplier_price: {
+        Args: { p_item_price_id: string; p_on?: string; p_reason?: string }
+        Returns: Json
+      }
       erp_entities: { Args: never; Returns: Json }
       erp_erasure_requests: { Args: never; Returns: Json }
       erp_erasure_subjects: { Args: never; Returns: Json }
@@ -1071,7 +1076,7 @@ export type Database = {
         Returns: Json
       }
       erp_items: {
-        Args: { p_limit?: number; p_search?: string }
+        Args: { p_limit?: number; p_sales_priced?: boolean; p_search?: string }
         Returns: Json
       }
       erp_job_handlers: { Args: never; Returns: Json }
@@ -1289,6 +1294,8 @@ export type Database = {
         Args: { p_limit?: number; p_role_kind?: string; p_search?: string }
         Returns: Json
       }
+      erp_party_contacts: { Args: { p_party_id: string }; Returns: Json }
+      erp_party_details: { Args: { p_party_id: string }; Returns: Json }
       erp_party_posting_classes: { Args: { p_limit?: number }; Returns: Json }
       erp_pay_payment_run: { Args: { p_proposal_id: string }; Returns: Json }
       erp_payables_ageing: { Args: { p_as_at?: string }; Returns: Json }
@@ -1297,6 +1304,7 @@ export type Database = {
         Returns: Json
       }
       erp_payment_proposals: { Args: { p_limit?: number }; Returns: Json }
+      erp_payment_terms: { Args: never; Returns: Json }
       erp_permission_catalogue: { Args: never; Returns: Json }
       erp_permissions_directory: { Args: never; Returns: Json }
       erp_personal_data_register: { Args: never; Returns: Json }
@@ -1895,7 +1903,11 @@ export type Database = {
         Returns: string
       }
       erp_raise_count_tasks: {
-        Args: { p_programme_code: string }
+        Args: {
+          p_item_id?: string
+          p_location_id?: string
+          p_programme_code: string
+        }
         Returns: number
       }
       erp_raise_customer_credit_note: {
@@ -2285,7 +2297,13 @@ export type Database = {
         Returns: Json
       }
       erp_resolve_price: {
-        Args: { p_item_id: string; p_party_id: string; p_quantity?: number }
+        Args: {
+          p_item_id: string
+          p_on?: string
+          p_party_id: string
+          p_quantity?: number
+          p_site_id?: string
+        }
         Returns: Json
       }
       erp_resolve_purchase_price: {
@@ -2430,6 +2448,18 @@ export type Database = {
       }
       erp_sales_invoice_issue_readiness: {
         Args: { p_document_id: string }
+        Returns: Json
+      }
+      erp_save_party_contact: {
+        Args: {
+          p_contact_id?: string
+          p_email?: string
+          p_is_default?: boolean
+          p_kind?: string
+          p_name?: string
+          p_party_id: string
+          p_phone?: string
+        }
         Returns: Json
       }
       erp_save_role: {
@@ -2640,6 +2670,14 @@ export type Database = {
         }
         Returns: Json
       }
+      erp_set_party_payment_terms: {
+        Args: {
+          p_party_id: string
+          p_payment_terms_code: string
+          p_role: string
+        }
+        Returns: Json
+      }
       erp_set_party_posting_class: {
         Args: {
           p_party_id: string
@@ -2647,6 +2685,10 @@ export type Database = {
           p_reason?: string
           p_valid_from?: string
         }
+        Returns: Json
+      }
+      erp_set_party_tax_identifier: {
+        Args: { p_party_id: string; p_tax_identifier: string }
         Returns: Json
       }
       erp_set_quote_contact: {
@@ -2696,6 +2738,19 @@ export type Database = {
           p_unit_cost_minor: number
         }
         Returns: string
+      }
+      erp_set_supplier_price: {
+        Args: {
+          p_currency: string
+          p_item_id: string
+          p_min_quantity?: number
+          p_party_id: string
+          p_reason?: string
+          p_unit_price: number
+          p_valid_from?: string
+          p_valid_to?: string
+        }
+        Returns: Json
       }
       erp_set_up_selling: { Args: never; Returns: Json }
       erp_set_user_roles: {
@@ -2834,6 +2889,10 @@ export type Database = {
         Returns: string
       }
       erp_supplier_balances: { Args: never; Returns: Json }
+      erp_supplier_prices: {
+        Args: { p_item_id?: string; p_party_id?: string }
+        Returns: Json
+      }
       erp_supplier_qualification: { Args: never; Returns: Json }
       erp_supply_demand: {
         Args: { p_horizon_days?: number; p_item_id: string; p_site_id: string }

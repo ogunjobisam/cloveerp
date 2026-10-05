@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { MODULES as MODULE_LIST } from "./modules";
+
 /**
  * An empty state says what to do, and the way it offers leads somewhere.
  *
@@ -148,5 +150,29 @@ describe("an empty state names a card its screen draws", () => {
       })
       .map(({ file, heading }) => `${heading} in ${file}`);
     expect(nowhere).toEqual([]);
+  });
+});
+
+describe("an inquiry that can answer nothing says what nothing means", () => {
+  /**
+   * J-95: Eliminations, for a group with nothing eliminated yet, and Budget
+   * position, for a code no budget in use carries this year, each answered a
+   * bare "None". Each door answers an empty list when there is nothing, so
+   * each inquiry says what that means instead.
+   */
+  const finance = MODULE_LIST.find((m) => m.path === "/finance");
+
+  test("Eliminations and Budget position each say why their answer is empty", () => {
+    const says = (fn: string) => (finance?.inquiries ?? []).find((i) => i.fn === fn)?.empty;
+    expect(says("erp_eliminations")).toBe("Nothing has been eliminated in this group yet.");
+    expect(says("erp_budget_position")).toBe("No budget in use has that code this year.");
+  });
+
+  test("every inquiry's empty answer is a finished sentence", () => {
+    const empties = MODULE_LIST.flatMap((m) => m.inquiries ?? []).flatMap((i) =>
+      i.empty === undefined ? [] : [i.empty],
+    );
+    expect(empties.length).toBeGreaterThan(1);
+    expect(empties.filter((e) => !/[.?!]$/.test(e))).toEqual([]);
   });
 });
