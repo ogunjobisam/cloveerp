@@ -5,6 +5,7 @@ import {
   checkSaid,
   closePresses,
   closesWith,
+  lastClosedSays,
   normaliseChecklist,
   taskPresses,
   type CloseTask,
@@ -204,5 +205,36 @@ describe("what is said", () => {
     });
     expect(checklistKeptOn(fromCommit)).toBe("GL 2026-09");
     expect(closesWith(fromCommit)).toEqual(["GL 2026-09"]);
+  });
+});
+
+describe("the month closed last (J-98)", () => {
+  test("is named with its ledger, the day it was closed and who closed it", () => {
+    const c = checklist({
+      last_closed: {
+        fiscal_period_id: "p-sep",
+        code: "2026-08",
+        ledger: "GL",
+        starts_on: "2026-08-01",
+        ends_on: "2026-08-31",
+        closed_at: "2026-09-02T08:15:00+00:00",
+        closed_by: "Dana Finch",
+      },
+    });
+    expect(c.last_closed?.fiscal_period_id).toBe("p-sep");
+    expect(lastClosedSays(c)).toBe("GL 2026-08 · 2026-09-02 · Dana Finch");
+  });
+
+  test("says what it knows where the door leaves a part out", () => {
+    const c = checklist({
+      last_closed: { fiscal_period_id: "p-sep", code: "2026-08", ledger: "GL", closed_at: null },
+    });
+    expect(lastClosedSays(c)).toBe("GL 2026-08");
+  });
+
+  test("says nothing while nothing has been closed, or from a door older than 20261006190000", () => {
+    expect(lastClosedSays(checklist({ last_closed: null }))).toBeNull();
+    expect(checklist().last_closed).toBeNull();
+    expect(lastClosedSays(checklist())).toBeNull();
   });
 });

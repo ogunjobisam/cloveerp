@@ -282,31 +282,40 @@ function SelectInput({
       }),
   });
 
+  // Only the rows worth offering, and why there are none, as the action forms
+  // say it: a group's parent, not every company (J-94).
+  const keep = spec.options.keep;
+  const kept = (rows ?? []).filter((row) => !keep || keep(row));
+  const empty = rows !== null && kept.length === 0 ? spec.options.empty : undefined;
+
   return (
-    <select
-      aria-label={ui(spec.label)}
-      required={spec.required ?? false}
-      value={value}
-      onFocus={() => {
-        if (rows === null && !load.isPending) load.mutate();
-      }}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
-    >
-      <option value="">{load.isPending ? ui("Loading…") : ui("Choose…")}</option>
-      {(rows ?? []).map((row) => {
-        const v = String(row[spec.options.value] ?? "");
-        const label = spec.options.label
-          .map((k) => row[k])
-          .filter((x) => x !== null && x !== undefined && x !== "")
-          .join(" — ");
-        return (
-          <option key={v} value={v}>
-            {label || v}
-          </option>
-        );
-      })}
-    </select>
+    <>
+      <select
+        aria-label={ui(spec.label)}
+        required={spec.required ?? false}
+        value={value}
+        onFocus={() => {
+          if (rows === null && !load.isPending) load.mutate();
+        }}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+      >
+        <option value="">{load.isPending ? ui("Loading…") : ui("Choose…")}</option>
+        {kept.map((row) => {
+          const v = String(row[spec.options.value] ?? "");
+          const label = spec.options.label
+            .map((k) => row[k])
+            .filter((x) => x !== null && x !== undefined && x !== "")
+            .join(" — ");
+          return (
+            <option key={v} value={v}>
+              {label || v}
+            </option>
+          );
+        })}
+      </select>
+      {empty ? <span className="text-xs text-muted-foreground">{ui(empty)}</span> : null}
+    </>
   );
 }
 
