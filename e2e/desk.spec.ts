@@ -2905,3 +2905,81 @@ test.describe("a supplier's price is kept where its terms are", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("a business partner's record keeps its details", () => {
+  // J-107: the role lists and the record's Roles printed database codes, and
+  // nothing on the desk could keep a partner's VAT number, payment terms or
+  // contacts. The record now reads them, in words, and offers to keep them.
+  test("a partner's roles read as words, and its VAT number, terms and contacts are shown with a way to keep each (J-107)", async ({
+    page,
+    backend,
+  }) => {
+    const PARTY = "00000000-0000-4000-8000-0000000107a1";
+    backend.rpc("erp_parties", [
+      {
+        party_id: PARTY,
+        code: "CONS-01",
+        name: "Harbour Consignee Ltd",
+        legal_name: null,
+        country_code: "GB",
+        status: "active",
+        roles: ["consignee", "customer"],
+      },
+    ]);
+    backend.rpc("erp_party_details", {
+      party_id: PARTY,
+      code: "CONS-01",
+      tax_identifier: "GB123456789",
+      is_company: false,
+      is_merged: false,
+      terms: [
+        {
+          role: "customer",
+          payment_terms_code: "NET30",
+          payment_terms_name: "Net 30 days",
+          payment_days: 30,
+          valid_from: "2026-10-01",
+          valid_to: null,
+        },
+      ],
+    });
+    backend.rpc("erp_party_contacts", [
+      {
+        contact_id: "00000000-0000-4000-8000-0000000107a2",
+        party_id: PARTY,
+        kind: "purchasing",
+        name: "Orders desk",
+        email: "orders@harbour.example",
+        phone: "01904 123456",
+        role_title: null,
+        is_default: true,
+        valid_from: "2026-10-01",
+        valid_to: null,
+        state: "current",
+        erased: false,
+      },
+    ]);
+
+    await page.goto("/master-data");
+    await expect(page.getByRole("heading", { name: "Business partners" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await page
+      .getByRole("button", { name: /CONS-01/ })
+      .first()
+      .click();
+
+    await expect(page.getByText("Consignee", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("consignee", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("GB123456789")).toBeVisible();
+    await expect(page.getByText("Net 30 days")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "orders@harbour.example" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Purchase orders" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set the VAT number" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set payment terms" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add a contact" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "End the contact" })).toBeVisible();
+    expect(backend.called).toContain("erp_party_contacts");
+    expect(backend.crashes).toEqual([]);
+  });
+});
