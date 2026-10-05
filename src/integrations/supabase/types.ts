@@ -1903,7 +1903,11 @@ export type Database = {
         Returns: string
       }
       erp_raise_count_tasks: {
-        Args: { p_programme_code: string }
+        Args: {
+          p_item_id?: string
+          p_location_id?: string
+          p_programme_code: string
+        }
         Returns: number
       }
       erp_raise_customer_credit_note: {
