@@ -1784,6 +1784,18 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
+        // What the chosen run pays, line by line, and what it holds and why
+        // (J-28, 20261007191000). A run used to show a total and nothing else.
+        lines: {
+          fn: "erp_payment_proposal_lines",
+          arg: "p_proposal_id",
+          id: "line_id",
+          title: ["supplier", "document_number"],
+          amount: "amount_minor",
+          due: "due_date",
+          held: "held",
+          heldReason: "hold_reason",
+        },
         // One step for the whole run (20261007190000): being put together or
         // proposed, then approved, then paid, each verb offered only in the
         // state its door takes. It was three steps listing the same runs.
@@ -2095,6 +2107,10 @@ export const FINANCE: ModuleDef = {
     },
     {
       label: "Propose a payment run",
+      // The run takes what falls due in the week after the payment date as
+      // well, which read as more than was due when nothing said so (J-28).
+      description:
+        "Gathers what suppliers are owed by the payment date, or up to a week after it, and any prepayment an order asks for. A bill in dispute is listed but held, and one already on another run is left to it. Somebody else approves the run.",
       permission: "finance.approve_payment",
       fn: "erp_propose_payment_run",
       fields: [

@@ -18,8 +18,10 @@ import {
   rememberRecord,
   rememberStep,
   rowsAtStage,
+  shownLines,
   shownValue,
   stageEmptyState,
+  stageLinesRead,
   stepsPerRow,
   settledAtStage,
   stageReadArgs,
@@ -27,6 +29,7 @@ import {
   summariseRecord,
   type DocumentLine,
   type Offer,
+  type StageLines,
 } from "../../lib/stage-records";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import type { ActionSpec } from "./actions-bar";
@@ -116,6 +119,11 @@ export type Stage = {
   partyRole?: string;
   /** Any other read whose rows are what is sitting at this stage. */
   list?: StageList;
+  /**
+   * The chosen record's lines, when the record is not a document: what a
+   * payment run pays, under the run (J-28). A document's lines come with it.
+   */
+  lines?: StageLines;
   /** Which argument the chosen record fills on this stage's verbs. */
   recordArg?: string;
   /**
@@ -653,9 +661,24 @@ function StageRecord({
           // the verb's own door: a move the lifecycle leaves to a door counts.
           moves.data.filter((t) => isOfferable(t)).map((t) => t.code);
 
+  // Any other record's lines, where the step names a read for them: a payment
+  // run's bills, held ones with their reason (J-28). Keyed by the state too, as
+  // the document's are, so a run approved or withdrawn here reads again.
+  const linesRead = !isDocument && row ? stageLinesRead(stage.lines, id) : null;
+  const recordLines = useQuery({
+    queryKey: [linesRead?.fn ?? "no-stage-lines", linesRead?.args ?? {}, state],
+    queryFn: () =>
+      linesRead ? callErp<Row[]>(linesRead.fn, linesRead.args) : Promise.resolve([] as Row[]),
+    enabled: linesRead !== null,
+  });
+
   const minorUnits = (code: string) => minorUnitsOf(currencies, code);
   const fields = row && source ? summariseRecord(row, source, minorUnits, stage.partyRole) : [];
   const lines = isDocument ? (detail.data?.lines ?? []) : [];
+  const otherLines =
+    linesRead && stage.lines && Array.isArray(recordLines.data)
+      ? shownLines(recordLines.data, stage.lines)
+      : [];
   const currency = typeof row?.["currency"] === "string" ? row["currency"] : "GBP";
 
   const offers: { action: ActionSpec; offer: Offer }[] = row
@@ -865,6 +888,39 @@ function StageRecord({
                   {ui("More lines are on the document.")}
                 </p>
               ) : null}
+            </div>
+          ) : null}
+          {/* Every line, not the first few: a run has no page of its own to
+              send the reader to, and the approver is agreeing to all of it. */}
+          {recordLines.error ? (
+            <div className="mt-3">
+              <ErrorNote error={recordLines.error} />
+            </div>
+          ) : otherLines.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-[11px] font-medium text-muted-foreground">{ui("Lines")}</p>
+              <ul className="mt-1 max-h-64 divide-y divide-border/60 overflow-y-auto rounded-md border border-border/60">
+                {otherLines.map((line) => (
+                  <li
+                    key={line.key}
+                    className="flex items-baseline justify-between gap-3 px-2 py-1 text-xs"
+                  >
+                    <span className="min-w-0 truncate">{line.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {line.amountMinor !== null
+                        ? formatMinor(line.amountMinor, currency, minorUnits(currency))
+                        : ""}
+                      {line.due ? ` · ${ui("Due")} ${line.due}` : ""}
+                      {line.held ? (
+                        <span className="font-medium text-foreground">
+                          {` · ${ui("Held")}`}
+                          {line.reason ? `: ${line.reason}` : ""}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
         </>

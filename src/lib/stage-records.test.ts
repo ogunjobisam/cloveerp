@@ -37,6 +37,8 @@ import {
   stageEmptyState,
   stepsPerRow,
   settledAtStage,
+  shownLines,
+  stageLinesRead,
   stageReadArgs,
   stateOf,
   summariseRecord,
@@ -1068,6 +1070,57 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     expect(offered("erp_approve_payment_run", "approved")).toBe("hide");
     expect(offered("erp_pay_payment_run", "approved")).toBe("offer");
     expect(offered("erp_pay_payment_run", "proposed")).toBe("hide");
+  });
+});
+
+describe("a step shows the lines of the record chosen on it (J-28)", () => {
+  const run = MODULES.find((m) => m.flow?.code === "money")?.flow?.stages.find(
+    (s) => s.label === "Payment run",
+  );
+
+  test("the Payment run step reads the chosen run's lines, asked with its id, and nothing before one is chosen", () => {
+    expect(run?.lines?.fn).toBe("erp_payment_proposal_lines");
+    expect(stageLinesRead(run?.lines, "run-1")).toEqual({
+      fn: "erp_payment_proposal_lines",
+      args: { p_proposal_id: "run-1" },
+    });
+    expect(stageLinesRead(run?.lines, "")).toBeNull();
+    expect(stageLinesRead(undefined, "run-1")).toBeNull();
+  });
+
+  test("each line names its supplier and bill, its amount and due date, and a held one says why", () => {
+    const spec = run?.lines;
+    expect(spec).toBeDefined();
+    if (!spec) return;
+    const shown = shownLines(
+      [
+        {
+          line_id: "l1",
+          supplier: "Anvil Supplies",
+          document_number: "PINV-000007",
+          amount_minor: 20000,
+          due_date: "2026-10-11",
+          held: false,
+          hold_reason: null,
+        },
+        {
+          line_id: "l2",
+          supplier: "Bolt Brothers",
+          document_number: "PINV-000008",
+          amount_minor: 30000,
+          due_date: null,
+          held: true,
+          hold_reason: "disputed",
+        },
+      ],
+      spec,
+    );
+    expect(shown.map((l) => [l.key, l.name, l.amountMinor, l.held, l.reason])).toEqual([
+      ["l1", "Anvil Supplies — PINV-000007", 20000, false, null],
+      ["l2", "Bolt Brothers — PINV-000008", 30000, true, "Disputed"],
+    ]);
+    expect(shown[0]?.due).toBe(shownValue("2026-10-11"));
+    expect(shown[1]?.due).toBeNull();
   });
 });
 
