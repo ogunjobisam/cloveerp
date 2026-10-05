@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
+import { formatMinor } from "../../lib/money";
 import {
   canSettle,
   quantityWords,
@@ -28,7 +29,14 @@ import { useErpSession } from "./session-context";
  * refuses regardless, and refuses buying at nothing.
  */
 
-const INVALIDATES = ["erp_samples", "erp_stock_health", "erp_stock_valuation", "erp_documents"];
+// Buying a sample prices its receipt's line, which the receipt's page reads.
+const INVALIDATES = [
+  "erp_samples",
+  "erp_stock_health",
+  "erp_stock_valuation",
+  "erp_documents",
+  "erp_document",
+];
 
 const TRIGGER = `${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-4 text-sm font-medium`;
 
@@ -225,6 +233,100 @@ export function Samples() {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * What became of a supplier's samples, on their receipt's own page (J-15,
+ * 20261008210000): what for, when they are due back, and for each line what
+ * was received, returned, kept free, bought and at what price each, and what
+ * is still held. The receipt's lines alone said none of it: a bought sample's
+ * line carries the price it was bought at and a net of nothing.
+ *
+ * Read from erp_samples with the settled lines included, which is where
+ * Samples on the Purchasing page reads them; Settle is drawn on a line where
+ * the database says the reader may.
+ */
+export function SampleReceipt({ receiptId }: { receiptId: string }) {
+  const { ui } = useT();
+  const { session } = useErpSession();
+  const mayRead = hasPermission(session, "procurement.read");
+  const { data, error } = useQuery({
+    queryKey: ["erp_samples", { p_include_settled: true }],
+    queryFn: () => callErp<unknown>("erp_samples", { p_include_settled: true }),
+    enabled: mayRead,
+  });
+  if (!mayRead) return null;
+  const lines = (Array.isArray(data) ? data : [])
+    .map(sample)
+    .filter((s): s is Sample => s !== null && s.receiptId === receiptId);
+  if (lines.length === 0) return <ErrorNote error={error} />;
+
+  const purposeWord: Record<SamplePurpose, string> = {
+    shoot: ui("Photo shoot"),
+    buying: ui("Buying appointment"),
+    press: ui("Press loan"),
+    fit: ui("Fit or quality check"),
+  };
+  // The purpose and the date due back are the receipt's, the same on every line.
+  const first = lines[0];
+  const overdue = lines.some((s) => s.overdue);
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <h2 className="text-sm font-semibold">{ui("Samples")}</h2>
+      <Prose className="mt-0.5 text-xs text-muted-foreground">
+        {ui("Samples suppliers lent: theirs until they go back, are kept or are bought.")}
+      </Prose>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        {first?.purpose ? (
+          <span className="text-xs text-muted-foreground">
+            {ui("Purpose")} <span className="text-foreground">{purposeWord[first.purpose]}</span>
+          </span>
+        ) : null}
+        {first?.dueBack ? (
+          <span className="text-xs text-muted-foreground">
+            {ui("Due back")} <span className="tabular-nums text-foreground">{first.dueBack}</span>
+          </span>
+        ) : null}
+        {overdue ? <Pill tone="bad">{ui("Overdue")}</Pill> : null}
+      </div>
+      <ul className="mt-3 flex flex-col divide-y divide-border text-sm">
+        {lines.map((s) => (
+          <li key={s.lineId} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 py-2">
+            <span className="min-w-0 font-medium">{s.description}</span>
+            <span className="tabular-nums">
+              {ui("Received")} {quantityWords(s.received)}
+            </span>
+            {s.returned > 0 ? (
+              <span className="tabular-nums">
+                {ui("Returned")} {quantityWords(s.returned)}
+              </span>
+            ) : null}
+            {s.kept > 0 ? (
+              <span className="tabular-nums">
+                {ui("Kept")} {quantityWords(s.kept)}
+              </span>
+            ) : null}
+            {s.bought > 0 ? (
+              <span className="tabular-nums">
+                {ui("Bought")} {quantityWords(s.bought)}
+              </span>
+            ) : null}
+            {s.bought > 0 && s.boughtPriceMinor !== null ? (
+              <span className="tabular-nums text-muted-foreground">
+                {ui("Price each")} {formatMinor(s.boughtPriceMinor, s.currency)}
+              </span>
+            ) : null}
+            <span className="tabular-nums">
+              {ui("Held")} {quantityWords(s.held)}
+            </span>
+            <span className="ml-auto">{canSettle(s) ? <SettleSample s={s} /> : null}</span>
+          </li>
+        ))}
+      </ul>
+      <ErrorNote error={error} />
     </section>
   );
 }
