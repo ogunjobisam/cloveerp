@@ -690,6 +690,9 @@ type ChainStep = {
   band_seq?: number | null;
   approver_user_id: string | null;
   approver_of_record_user_id: string | null;
+  /** The people by name, as the door answers them (20261007011000, J-50). */
+  approver?: string | null;
+  approver_of_record?: string | null;
   covered: boolean;
   cover_kind: string | null;
   cover_trail: { from_user_id: string; to_user_id: string; reason: string | null }[];
@@ -798,8 +801,8 @@ function ApprovalChainWhenStamped({ documentId }: { documentId: string }) {
                 {s.source === "named_assignment" ? "Named assignment" : `Band ${s.band_seq ?? ""}`}
               </td>
               <td className="py-2 pr-4 tabular-nums">{s.rule_version ?? "—"}</td>
-              <td className="py-2 pr-4 font-mono text-xs">{s.approver_user_id ?? "—"}</td>
-              <td className="py-2 pr-4 font-mono text-xs">{s.approver_of_record_user_id ?? "—"}</td>
+              <td className="py-2 pr-4">{s.approver ?? "—"}</td>
+              <td className="py-2 pr-4">{s.approver_of_record ?? "—"}</td>
               <td className="py-2 pr-4">
                 {s.covered ? (
                   <Pill tone="warn">{s.cover_kind ?? "cover"}</Pill>

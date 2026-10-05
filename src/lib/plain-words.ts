@@ -359,6 +359,8 @@ export function countOutcome(place: string, fn: string, result: unknown): string
  * count rule below read their answers as work done: a price found as "1 record
  * created", none as "nothing was raised", and a date as "done", so the answer
  * itself was never shown (found walking the live product, 4 October 2026).
+ * "Work out who approves" records the chain it works out and asks nobody, and
+ * said "— done." without naming anybody (J-50): it now names them, in order.
  * Null for any other routine, and for an answer in a shape this does not know.
  */
 export function lookupOutcome(
@@ -383,6 +385,23 @@ export function lookupOutcome(
     const list = text(row, "price_list_code");
     const currency = text(row, "currency") ?? "GBP";
     return `${label}: ${formatMinor(amount, currency)} each, from ${source ?? "the price list"}${list ? ` (${list})` : ""}.`;
+  }
+  if (fn === "erp_stamp_document_approval") {
+    const steps = asRecord(result)?.["steps"];
+    if (!Array.isArray(steps)) return null;
+    const who = steps
+      .map(asRecord)
+      .filter((s): s is Row => s !== null)
+      .map((s) => {
+        const approver = text(s, "approver") ?? "nobody named";
+        const ofRecord = text(s, "approver_of_record");
+        return s["covered"] === true && ofRecord && ofRecord !== approver
+          ? `${approver} (for ${ofRecord})`
+          : approver;
+      });
+    return who.length === 0
+      ? `${label}: no value band or named approver applies at this value.`
+      : `${label}: ${who.join(", then ")}.`;
   }
   return null;
 }
