@@ -802,6 +802,126 @@ test.describe("a document offers only what can be completed", () => {
     }
     expect(backend.crashes).toEqual([]);
   });
+
+  test("a posted receipt still to be billed says what it waits for, and a bill says when it falls due (B1, B4)", async ({
+    page,
+    backend,
+  }) => {
+    const GRN_ID = "00000000-0000-4000-8000-00000000d0c8";
+    const BILL_ID = "00000000-0000-4000-8000-00000000d0c9";
+    const finished = {
+      state: "posted",
+      state_name: "Posted",
+      is_committed: true,
+      is_terminal: true,
+      lines_open: false,
+    };
+    backend.rpc("erp_available_transitions", []);
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      document: {
+        ...ORDER_PAGE.document,
+        ...finished,
+        document_id: GRN_ID,
+        document_number: "GRN-000143",
+        document_type: "goods_receipt",
+        awaiting: "bill",
+      },
+      amendment: {
+        allowed: false,
+        cut_off: "stock_has_moved",
+        detail:
+          "stock has been received against this document; amend it by sending the goods back, not by editing the document",
+      },
+      available_transitions: [],
+    });
+
+    await page.goto(`/documents/${GRN_ID}`);
+    await expect(page.getByRole("heading", { name: "GRN-000143" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(
+      page.getByText("Waiting for the supplier's bill: raise it with Bill a receipt."),
+    ).toBeVisible();
+    await expect(page.getByText("Nothing more happens to this document.")).toHaveCount(0);
+    await expect(
+      page.getByText(/No line can be amended now: stock has been received/),
+    ).toBeVisible();
+
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      document: {
+        ...ORDER_PAGE.document,
+        ...finished,
+        state: "registered",
+        state_name: "Registered",
+        is_terminal: false,
+        document_id: BILL_ID,
+        document_number: "PINV-000116",
+        document_type: "purchase_invoice",
+        their_reference: "RT2-INV-149",
+        due_date: "2026-11-04",
+      },
+      amendment: null,
+      available_transitions: [],
+    });
+    await page.goto(`/documents/${BILL_ID}`);
+    await expect(page.getByRole("heading", { name: "PINV-000116" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("their ref RT2-INV-149")).toBeVisible();
+    await expect(page.getByText("due 2026-11-04")).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a supplier payment names its run and lists the bill it paid (B2)", async ({
+    page,
+    backend,
+  }) => {
+    const PMT_ID = "00000000-0000-4000-8000-00000000d0ca";
+    const BILL_ID = "00000000-0000-4000-8000-00000000d0cb";
+    backend.rpc("erp_available_transitions", []);
+    backend.rpc("erp_document", {
+      ...ORDER_PAGE,
+      document: {
+        ...ORDER_PAGE.document,
+        document_id: PMT_ID,
+        document_number: "PMT-000001",
+        document_type: "cash_payment",
+        state: "posted",
+        state_name: "Posted",
+        is_committed: true,
+        is_terminal: true,
+        lines_open: false,
+        payment_run: "PAY-20261005142957795",
+      },
+      amendment: null,
+      lineage: [
+        {
+          depth: 1,
+          direction: "downstream",
+          document_id: BILL_ID,
+          document_number: "PINV-000116",
+          base_type: "invoice_reference",
+          document_type: "purchase_invoice",
+          relation: "settles",
+        },
+      ],
+      available_transitions: [],
+    });
+
+    await page.goto(`/documents/${PMT_ID}`);
+    await expect(page.getByRole("heading", { name: "PMT-000001" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("paid by run PAY-20261005142957795")).toBeVisible();
+    const related = page.locator("section", {
+      has: page.getByRole("heading", { name: "Related documents" }),
+    });
+    await expect(related.getByRole("link", { name: "PINV-000116" })).toBeVisible();
+    await expect(related.getByText("Settles ·")).toBeVisible();
+    expect(backend.crashes).toEqual([]);
+  });
 });
 
 test.describe("the counter works down a list", () => {

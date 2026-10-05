@@ -1177,8 +1177,11 @@ describe("related documents (5 October re-test)", () => {
     expect(relationWords("upstream", "fulfils")).toBe("Fulfilled by");
     expect(relationWords("downstream", "invoices")).toBe("Invoices");
     expect(relationWords("upstream", "invoices")).toBe("Invoiced by");
+    // A payment settles the bill it paid; on the bill, the payment (B2).
+    expect(relationWords("downstream", "settles")).toBe("Settles");
+    expect(relationWords("upstream", "settles")).toBe("Settled by");
     // One this does not know, as the database names it.
-    expect(relationWords("downstream", "settles")).toBe("to · settles");
+    expect(relationWords("downstream", "binds")).toBe("to · binds");
     expect(relationWords("upstream", null)).toBe("from · related");
   });
 
