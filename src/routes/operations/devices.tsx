@@ -255,9 +255,9 @@ function Devices() {
 
       <DataPanel<Finding>
         title="What is wrong"
-        description="Read from the same report the build fails on. A session without a device, an action conflicted for no reason, a keyed entry with no reason — each is one row here and one failure there."
+        description="Each row is one thing to put right: a session with no device, an action that conflicted without saying why, or a barcode typed in by hand with no reason given."
         fn="erp_device_operations"
-        empty="Nothing to report. Every device session, action and scan rule is as §14 expects."
+        empty="Nothing to report. Every device session, action and scan rule is in order."
       >
         {(rows) => (
           <Table columns={["Finding", "Reference", "Detail"]}>
@@ -355,7 +355,7 @@ function Devices() {
 
       <DataPanel<TaskHandler>
         title="What each step applies"
-        description="Product data, the same for every organisation. For each of §14.3's steps, the module function a queued action applies through and what its payload must carry — or, where nothing applies it yet, the reason an action for it conflicts rather than waits. The build fails if a step has neither."
+        description="The same for every organisation. For each step a device can send, the module that applies it and what the action must carry — or, where nothing applies it yet, why an action for it conflicts rather than waits."
         fn="erp_device_task_handlers"
         empty="No step is registered, which is itself unexpected."
       >
@@ -370,13 +370,9 @@ function Devices() {
                   </div>
                 </td>
                 <td className="py-2 pr-4">
+                  {/* The module, not its database function (J-115). */}
                   {r.sql_function ? (
-                    <>
-                      <Pill tone="ok">{r.module_code}</Pill>
-                      <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                        {r.sql_function}
-                      </div>
-                    </>
+                    <Pill tone="ok">{r.module_code}</Pill>
                   ) : r.writes_nothing ? (
                     <Pill tone="muted">Reads only</Pill>
                   ) : (
