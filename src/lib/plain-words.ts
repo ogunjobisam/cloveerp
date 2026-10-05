@@ -361,6 +361,9 @@ export function countOutcome(place: string, fn: string, result: unknown): string
  * itself was never shown (found walking the live product, 4 October 2026).
  * "Work out who approves" records the chain it works out and asks nobody, and
  * said "— done." without naming anybody (J-50): it now names them, in order.
+ * A purchase price nobody holds sent people to "the supplier's price list", a
+ * screen that did not exist (J-108); it names Product-suppliers, where a
+ * supplier's price is set.
  * Null for any other routine, and for an answer in a shape this does not know.
  */
 export function lookupOutcome(
@@ -380,7 +383,7 @@ export function lookupOutcome(
     if (!row || row["amount_minor"] === null || !Number.isFinite(amount)) {
       return fn === "erp_resolve_price"
         ? `${label}: nothing prices this product for this customer today. Type a price on the line, or add one to their price list.`
-        : `${label}: ${source ?? "no price is on record for this supplier and product"}. Type a price on the line, or add one to the supplier's price list.`;
+        : `${label}: ${source ?? "no price is on record for this supplier and product"}. Type a price on the line, or set the supplier's price on Product-suppliers.`;
     }
     const list = text(row, "price_list_code");
     const currency = text(row, "currency") ?? "GBP";
@@ -817,6 +820,46 @@ export function approvalChoice(row: Row): string {
       : null;
   return [approvalSubject(row), text(row, "partner"), amount, text(row, "requested_by")]
     .filter((x): x is string => x !== null && x !== "" && x !== "—")
+    .join(" — ");
+}
+
+/**
+ * A day as a person writes it, "4 Oct 2026", from a timestamp or a date. Null
+ * for anything that is not one.
+ */
+export function shortDate(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * A count waiting on my approval, as its picker offers it: what was counted
+ * where, what was found against what was expected, who counted and when —
+ * "PK-010 Packing box at RECV — counted 50, expected 100 — Sam — 4 Oct 2026",
+ * not "count_task — Sam — 2026-10-04T03:15:14.717477+00:00" (J-20).
+ */
+export function countApprovalChoice(row: Row): string {
+  const item = [text(row, "item"), text(row, "item_name")]
+    .filter((x): x is string => x !== null)
+    .join(" ");
+  const place = text(row, "location") ?? text(row, "site");
+  let what = item === "" ? "Count" : item;
+  if (place) what += ` at ${place}`;
+  const context = row["context"];
+  const figure = (key: string): string | null => {
+    if (context === null || typeof context !== "object") return null;
+    const raw = text(context as Row, key);
+    const n = Number(raw);
+    return raw !== null && Number.isFinite(n) ? quantityWords(n) : null;
+  };
+  const counted = figure("counted");
+  const expected = figure("expected");
+  const figures =
+    counted !== null && expected !== null ? `counted ${counted}, expected ${expected}` : null;
+  return [what, figures, text(row, "requested_by"), shortDate(row["requested_at"])]
+    .filter((x): x is string => x !== null && x !== "")
     .join(" — ");
 }
 

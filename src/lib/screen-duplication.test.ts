@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import { MODULES } from "./modules";
 import { DOCUMENT_READ } from "./stage-records";
@@ -126,5 +128,44 @@ describe("the screens cut after them", () => {
     const quality = moduleAt("/quality");
     expect(quality.worklists.map((w) => w.fn)).toEqual(["erp_recalls"]);
     expect(stageDoors(quality)).toContain("erp_quality_events");
+  });
+});
+
+/**
+ * A panel's description belongs to one screen.
+ *
+ * Notifications' "Delivery, last seven days" described print queues, word for
+ * word the Print queues panel's description on Output and printing, copied
+ * with the panel (J-162). Two screens saying the same sentence about two
+ * different things is a copy nobody finished; within one screen a description
+ * may repeat, as the counting worklist's two dialogs do.
+ */
+describe("a panel's description is its own", () => {
+  test("no description is said on two screens", () => {
+    const root = join(import.meta.dir, "..", "..");
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (entry.name.endsWith(".tsx") && !entry.name.includes(".test.")) files.push(path);
+      }
+    };
+    walk(join(root, "src", "routes"));
+    walk(join(root, "src", "components"));
+    const where = new Map<string, Set<string>>();
+    for (const file of files) {
+      const src = readFileSync(file, "utf8");
+      for (const m of src.matchAll(/description=(?:\{ui\(\s*)?"((?:[^"\\]|\\.)*)"/g)) {
+        const said = m[1]!;
+        where.set(said, (where.get(said) ?? new Set<string>()).add(file));
+      }
+    }
+    // Guards the guard: a pattern that matched nothing would pass.
+    expect(where.size).toBeGreaterThan(100);
+    const shared = [...where]
+      .filter(([, inFiles]) => inFiles.size > 1)
+      .map(([said, inFiles]) => `${said.slice(0, 60)}… in ${[...inFiles].join(", ")}`);
+    expect(shared).toEqual([]);
   });
 });

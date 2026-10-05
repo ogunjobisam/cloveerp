@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 
-import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
+import { ActionButton, ActionDialog, ErrorNote, GoTo } from "../../components/erp/action";
+import { openAction } from "../../components/erp/action-registry";
 import {
   ActionBar,
   codeField,
@@ -14,7 +15,7 @@ import {
 import { AutoPanel } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
-import { PageHeader, Prose } from "../../components/erp/page";
+import { PageHeader, TOUCH } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { Field, RecordBrowser, RecordSection } from "../../components/erp/record-browser";
 import { callErp, hasPermission } from "../../lib/erp";
@@ -115,17 +116,20 @@ type ItemSupplier = {
   min_order_quantity: number | null;
 };
 
-/** Every erp.party_role_kind, so the picker can create any partner the doors accept. */
-const ROLES = [
-  "customer",
-  "supplier",
-  "carrier",
-  "manufacturer",
-  "broker",
-  "consignee",
-  "agent",
-  "internal",
-  "regulator",
+/**
+ * Every erp.party_role_kind, so the picker can create any partner the doors
+ * accept, in the word a person reads rather than the database's code (J-107).
+ */
+const ROLE_CHOICES = [
+  { value: "customer", label: "Customer" },
+  { value: "supplier", label: "Supplier" },
+  { value: "carrier", label: "Carrier" },
+  { value: "manufacturer", label: "Manufacturer" },
+  { value: "broker", label: "Broker" },
+  { value: "consignee", label: "Consignee" },
+  { value: "agent", label: "Agent" },
+  { value: "internal", label: "Internal" },
+  { value: "regulator", label: "Regulator" },
 ];
 
 const LIMIT = 200;
@@ -139,6 +143,8 @@ function MasterData() {
   // answered. Rendering it for everybody would turn a permission boundary
   // into an error message on a screen that is otherwise working.
   const maySeeSuppliers = hasPermission(session, "procurement.read");
+  // A partner's VAT number, terms and contacts are read on master_data.read.
+  const mayReadParty = hasPermission(session, "master_data.read");
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -148,7 +154,7 @@ function MasterData() {
       </PageHeader>
 
       <Items mayWrite={mayWrite} maySeeSuppliers={maySeeSuppliers} />
-      <Parties mayWrite={mayWrite} />
+      <Parties mayWrite={mayWrite} mayRead={mayReadParty} />
 
       <ActionBar
         title="Partners, roles and duplicates"
@@ -221,7 +227,7 @@ function MasterData() {
                 label: "Roles",
                 required: true,
                 hint: "Tick every role this partner plays.",
-                choices: ROLES.map((r) => ({ value: r, label: r })),
+                choices: ROLE_CHOICES,
               },
               pickCountry("p_country_code", "Country", false),
               {
@@ -258,7 +264,7 @@ function MasterData() {
                 name: "p_role_kind",
                 label: "Role",
                 required: true,
-                choices: ROLES.map((r) => ({ value: r, label: r })),
+                choices: ROLE_CHOICES,
               },
             ],
             invalidates: ["erp_parties"],
@@ -494,7 +500,7 @@ function ItemRecord({ item, maySeeSuppliers }: { item: Item; maySeeSuppliers: bo
       <RecordSection title="Identification">
         <dl className="grid gap-4 sm:grid-cols-3">
           <Field label="Class">{classWord(item.item_class, ui)}</Field>
-          <Field label="Group">{item.item_group ?? "—"}</Field>
+          <Field label="Category">{item.item_group ?? "—"}</Field>
           <Field label="Stock unit">{item.stock_uom_code ?? "—"}</Field>
           <Field label="Status">{recordStatusWord(item.status, ui)}</Field>
         </dl>
@@ -693,7 +699,7 @@ function NewItem() {
   );
 }
 
-function Parties({ mayWrite }: { mayWrite: boolean }) {
+function Parties({ mayWrite, mayRead }: { mayWrite: boolean; mayRead: boolean }) {
   const [search, setSearch] = useState("");
   const onSearchChange = useCallback((s: string) => setSearch(s), []);
   const { data, isPending, error } = useQuery({
@@ -733,13 +739,93 @@ function Parties({ mayWrite }: { mayWrite: boolean }) {
       titleOf={(p) => p.code}
       subtitleOf={(p) => p.name}
       recentsKey="clove.recent.partners"
-      detail={(party) => <PartyRecord party={party} />}
+      detail={(party) => <PartyRecord party={party} mayRead={mayRead} mayWrite={mayWrite} />}
     />
   );
 }
 
-function PartyRecord({ party }: { party: Party }) {
+/** A business partner's VAT number and payment terms, from erp_party_details. */
+type PartyTerms = {
+  role: string;
+  payment_terms_code: string | null;
+  payment_terms_name: string | null;
+  payment_days: number | null;
+};
+
+type PartyDetails = {
+  party_id: string;
+  tax_identifier: string | null;
+  /** One of the organisation's own companies: its VAT number is kept with its invoice details. */
+  is_company: boolean;
+  is_merged: boolean;
+  terms: PartyTerms[];
+};
+
+/** One of a business partner's people, from erp_party_contacts. */
+type PartyContact = {
+  contact_id: string;
+  kind: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  is_default: boolean;
+  state: "current" | "ended" | "starts_later";
+  erased: boolean;
+};
+
+/**
+ * What a contact is reached for: the values erp_save_party_contact accepts.
+ * "purchasing" is the one a purchase order's email goes to first
+ * (erp.supplier_email_address); "commercial" is what the party file and Set
+ * the quote's contact write.
+ */
+const CONTACT_KINDS = [
+  { value: "commercial", label: "General" },
+  { value: "purchasing", label: "Purchase orders" },
+  { value: "accounts", label: "Invoices and payments" },
+  { value: "delivery", label: "Deliveries" },
+  { value: "other", label: "Other" },
+];
+
+const SECONDARY = `${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md border border-input px-3 text-sm font-medium`;
+
+/** What a partner's details change: the record's own reads. */
+const DETAILS_CHANGED = ["erp_party_details"];
+const CONTACTS_CHANGED = ["erp_party_contacts"];
+
+function roleWord(code: string, ui: Words): string {
+  const known = ROLE_CHOICES.find((r) => r.value === code);
+  return known ? ui(known.label) : prettifyField(code);
+}
+
+function contactKindWord(code: string, ui: Words): string {
+  const known = CONTACT_KINDS.find((k) => k.value === code);
+  return known ? ui(known.label) : prettifyField(code);
+}
+
+function PartyRecord({
+  party,
+  mayRead,
+  mayWrite,
+}: {
+  party: Party;
+  mayRead: boolean;
+  mayWrite: boolean;
+}) {
   const { ui } = useT();
+  // erp_party_details authorises master_data.read, so it is asked for only
+  // where it would be answered (as ItemSuppliers is on procurement.read).
+  const details = useQuery({
+    queryKey: ["erp_party_details", { partyId: party.party_id }],
+    queryFn: () => callErp<PartyDetails>("erp_party_details", { p_party_id: party.party_id }),
+    enabled: mayRead,
+  });
+  const vat = !mayRead ? "—" : details.isPending ? "…" : (details.data?.tax_identifier ?? "—");
+  const context = `${party.code} — ${party.name}`;
+  const mayKeep = mayWrite && details.data !== undefined && !details.data.is_merged;
+  // An answer without terms (an empty one, say) has none to show.
+  const terms = details.data?.terms ?? [];
+
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -755,7 +841,49 @@ function PartyRecord({ party }: { party: Party }) {
           <Field label="Legal name">{party.legal_name ?? party.name}</Field>
           <Field label="Country">{party.country_code ?? "—"}</Field>
           <Field label="Status">{recordStatusWord(party.status, ui)}</Field>
+          <Field label="VAT number">
+            <span className="font-mono">{vat}</span>
+          </Field>
         </dl>
+        {details.error ? <ErrorNote error={details.error} /> : null}
+        {details.data?.is_company ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {ui(
+              "One of this organisation's own companies. Its VAT number is kept with its invoice details.",
+            )}
+          </p>
+        ) : mayKeep ? (
+          <div className="mt-3">
+            <ActionDialog
+              trigger={
+                <button type="button" className={SECONDARY}>
+                  {ui("Set the VAT number")}
+                </button>
+              }
+              title="Set the VAT number"
+              description="As it is printed on the partner's invoices, such as GB123456789. Spaces, dots and dashes are taken out."
+              permission="master_data.write"
+              fn="erp_set_party_tax_identifier"
+              fields={[
+                {
+                  kind: "text",
+                  name: "p_tax_identifier",
+                  label: "VAT number",
+                  placeholder: "GB123456789",
+                  hint: "Leave it empty to clear the VAT number.",
+                },
+              ]}
+              preselect={{ p_tax_identifier: details.data?.tax_identifier ?? "" }}
+              mapArgs={(v) => ({
+                p_party_id: party.party_id,
+                p_tax_identifier: v["p_tax_identifier"]?.trim() || null,
+              })}
+              prefill={{ p_party_id: party.party_id }}
+              context={context}
+              invalidates={DETAILS_CHANGED}
+            />
+          </div>
+        ) : null}
       </RecordSection>
 
       <RecordSection title="Roles">
@@ -767,24 +895,300 @@ function PartyRecord({ party }: { party: Party }) {
           <div className="flex flex-wrap gap-2">
             {(party.roles ?? []).map((r) => (
               <Pill key={r} tone="muted">
-                {r}
+                {roleWord(r, ui)}
               </Pill>
             ))}
           </div>
         )}
       </RecordSection>
 
-      {/*
-        A partner record stops here on purpose. Addresses, contacts, payment
-        terms and credit are each governed by their own permission and their
-        own doors, and none of them is readable from what this screen has
-        already fetched. Showing empty sections for them would say the data is
-        absent when what is absent is the read.
-      */}
-      <Prose className="mt-5 text-xs text-muted-foreground">
-        Addresses, contacts and credit are governed separately and are not read here.
-      </Prose>
+      {mayRead ? (
+        <RecordSection title={ui("Payment terms")}>
+          {details.isPending ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              Loading…
+            </p>
+          ) : terms.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {ui(
+                "Payment terms are kept for a customer or a supplier. Give this partner one of those roles first.",
+              )}
+            </p>
+          ) : (
+            <>
+              <dl className="grid gap-4 sm:grid-cols-3">
+                {terms.map((t) => (
+                  <Field
+                    key={t.role}
+                    label={t.role === "customer" ? ui("As a customer") : ui("As a supplier")}
+                  >
+                    {t.payment_terms_name ?? ui("Not set")}
+                  </Field>
+                ))}
+              </dl>
+              {mayKeep ? (
+                <div className="mt-3">
+                  <ActionDialog
+                    trigger={
+                      <button type="button" className={SECONDARY}>
+                        {ui("Set payment terms")}
+                      </button>
+                    }
+                    title="Set payment terms"
+                    description="When this partner pays the organisation as a customer, or is paid as a supplier. A credit limit is kept separately, on Sales."
+                    permission="master_data.write"
+                    fn="erp_set_party_payment_terms"
+                    fields={[
+                      {
+                        kind: "choice",
+                        name: "p_role",
+                        label: "Role",
+                        required: true,
+                        choices: ROLE_CHOICES.filter((r) => terms.some((t) => t.role === r.value)),
+                        hint: "Customer or supplier: the role these terms are for.",
+                      },
+                      {
+                        kind: "select",
+                        name: "p_payment_terms_code",
+                        label: "Payment terms",
+                        options: { fn: "erp_payment_terms", value: "code", label: ["name"] },
+                        hint: "Leave empty to clear the terms.",
+                      },
+                    ]}
+                    preselect={{
+                      p_role: terms[0]?.role ?? "",
+                      p_payment_terms_code: terms[0]?.payment_terms_code ?? "",
+                    }}
+                    mapArgs={(v) => ({
+                      p_party_id: party.party_id,
+                      p_role: v["p_role"],
+                      p_payment_terms_code: v["p_payment_terms_code"] || null,
+                    })}
+                    prefill={{ p_party_id: party.party_id }}
+                    context={context}
+                    invalidates={DETAILS_CHANGED}
+                  />
+                </div>
+              ) : null}
+            </>
+          )}
+        </RecordSection>
+      ) : null}
+
+      {mayRead ? (
+        <PartyContacts partyId={party.party_id} context={context} mayKeep={mayKeep} />
+      ) : null}
+
+      <RecordSection title={ui("Addresses and credit")}>
+        <p className="text-sm text-muted-foreground">
+          {ui(
+            "A business partner's addresses are set on this screen. A customer's credit limit is set on Sales.",
+          )}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {mayWrite ? (
+            <button
+              type="button"
+              className={SECONDARY}
+              onClick={() => openAction("erp_set_party_address")}
+            >
+              {ui("Set a business partner's address")}
+            </button>
+          ) : null}
+          <GoTo to="/sales">{ui("Open Sales")}</GoTo>
+        </div>
+      </RecordSection>
     </div>
+  );
+}
+
+function PartyContacts({
+  partyId,
+  context,
+  mayKeep,
+}: {
+  partyId: string;
+  context: string;
+  mayKeep: boolean;
+}) {
+  const { ui } = useT();
+  const { data, isPending, error } = useQuery({
+    queryKey: ["erp_party_contacts", { partyId }],
+    queryFn: () => callErp<PartyContact[]>("erp_party_contacts", { p_party_id: partyId }),
+  });
+  const contacts = data ?? [];
+
+  return (
+    <RecordSection title={ui("Contacts")}>
+      <p className="mb-3 text-xs text-muted-foreground">
+        {ui(
+          "Somebody at this partner, and how they are reached. A purchase order's email goes to the purchase orders contact first, then the default one; a quote goes to the default one.",
+        )}
+      </p>
+      {isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading…
+        </p>
+      ) : error ? (
+        <ErrorNote error={error} />
+      ) : contacts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {ui(
+            "No contact yet. A purchase order or quote emailed to this partner has nobody to go to.",
+          )}
+        </p>
+      ) : (
+        <Table columns={[ui("Name"), ui("Kind"), ui("Email"), ui("Phone"), ""]}>
+          {contacts.map((c) => (
+            <tr key={c.contact_id} className="border-b border-border/50 align-top last:border-0">
+              <td className="py-2 pr-4">
+                {c.name ?? "—"}
+                {c.is_default ? (
+                  <span className="ml-1.5">
+                    <Pill tone="ok">{ui("Default")}</Pill>
+                  </span>
+                ) : null}
+                {c.state === "ended" ? (
+                  <span className="ml-1.5">
+                    <Pill tone="muted">{ui("Ended")}</Pill>
+                  </span>
+                ) : null}
+                {c.erased ? (
+                  <span className="ml-1.5">
+                    <Pill tone="muted">{ui("Details erased on request")}</Pill>
+                  </span>
+                ) : null}
+              </td>
+              <td className="py-2 pr-4 text-xs">{contactKindWord(c.kind, ui)}</td>
+              <td className="py-2 pr-4 text-xs">{c.email ?? "—"}</td>
+              <td className="py-2 pr-4 text-xs">{c.phone ?? "—"}</td>
+              <td className="py-2">
+                {mayKeep && c.state !== "ended" ? (
+                  <div className="flex flex-wrap gap-2">
+                    {c.erased ? null : (
+                      <ContactDialog partyId={partyId} context={context} contact={c} />
+                    )}
+                    <ActionDialog
+                      trigger={
+                        <button type="button" className={SECONDARY}>
+                          {ui("End the contact")}
+                        </button>
+                      }
+                      title="End the contact"
+                      description="The contact stops being sent anything from today. They stay on the record, ended."
+                      permission="master_data.write"
+                      fn="erp_end_party_contact"
+                      fields={[]}
+                      prefill={{ p_contact_id: c.contact_id }}
+                      context={`${context}: ${c.name ?? c.email ?? ""}`}
+                      invalidates={CONTACTS_CHANGED}
+                      submitLabel="End the contact"
+                    />
+                  </div>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+      {mayKeep ? (
+        <div className="mt-3">
+          <ContactDialog partyId={partyId} context={context} />
+        </div>
+      ) : null}
+    </RecordSection>
+  );
+}
+
+/** Add a contact, or, given one, change it. */
+function ContactDialog({
+  partyId,
+  context,
+  contact,
+}: {
+  partyId: string;
+  context: string;
+  contact?: PartyContact;
+}) {
+  const { ui } = useT();
+  const label = contact ? "Change the contact" : "Add a contact";
+  return (
+    <ActionDialog
+      trigger={
+        <button type="button" className={SECONDARY}>
+          {ui(label)}
+        </button>
+      }
+      title={label}
+      description="Somebody at this partner, and how they are reached. A purchase order's email goes to the purchase orders contact first, then the default one; a quote goes to the default one."
+      permission="master_data.write"
+      fn="erp_save_party_contact"
+      fields={[
+        {
+          kind: "choice",
+          name: "p_kind",
+          label: "Kind",
+          choices: CONTACT_KINDS,
+          hint: "What this contact is reached for.",
+        },
+        {
+          kind: "text",
+          name: "p_name",
+          label: "Name",
+          placeholder: "Kim Lee",
+          hint: "Give a name, an email address, or both.",
+        },
+        {
+          kind: "text",
+          name: "p_email",
+          label: "Email",
+          placeholder: "kim@example.com",
+          hint: "Where emails to this contact go.",
+        },
+        {
+          kind: "text",
+          name: "p_phone",
+          label: "Phone",
+          placeholder: "01904 123456",
+          hint: "With its digits, and the country code if it is abroad.",
+        },
+        {
+          kind: "choice",
+          name: "p_is_default",
+          label: "Default",
+          boolean: true,
+          choices: [
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ],
+          hint: "The one emails to this partner go to when nothing more particular is asked for.",
+        },
+      ]}
+      preselect={
+        contact
+          ? {
+              p_kind: CONTACT_KINDS.some((k) => k.value === contact.kind) ? contact.kind : "",
+              p_name: contact.name ?? "",
+              p_email: contact.email ?? "",
+              p_phone: contact.phone ?? "",
+              p_is_default: contact.is_default ? "true" : "false",
+            }
+          : { p_kind: "commercial" }
+      }
+      mapArgs={(v) => ({
+        p_party_id: partyId,
+        p_contact_id: contact?.contact_id ?? null,
+        p_kind: v["p_kind"] || null,
+        p_name: v["p_name"]?.trim() || null,
+        p_email: v["p_email"]?.trim() || null,
+        p_phone: v["p_phone"]?.trim() || null,
+        p_is_default: v["p_is_default"] ? v["p_is_default"] === "true" : null,
+      })}
+      prefill={{ p_party_id: partyId }}
+      context={context}
+      invalidates={CONTACTS_CHANGED}
+      submitLabel={label}
+    />
   );
 }
 
@@ -817,7 +1221,7 @@ function NewParty() {
           name: "p_role_kind",
           label: "Role",
           required: true,
-          choices: ROLES.map((r) => ({ value: r, label: r })),
+          choices: ROLE_CHOICES,
           hint: "More roles can be added afterwards.",
         },
         pickCountry("p_country_code", "Country", false),

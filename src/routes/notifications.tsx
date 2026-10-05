@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { ActionButton, ErrorNote, useErpAction } from "../components/erp/action";
@@ -11,6 +11,7 @@ import { useErpSession } from "../components/erp/session-context";
 import { callErp, hasPermission } from "../lib/erp";
 import { prettifyField } from "../lib/friendly";
 import { useT } from "../lib/i18n";
+import { fill } from "../lib/interview";
 
 /**
  * Notifications. Specification v1.2 §15.6.
@@ -46,6 +47,13 @@ export const Route = createFileRoute("/notifications")({
   ),
 });
 
+/**
+ * Where a message leads: the document, task or screen it is about. A link
+ * with a reference opens a document by its number; otherwise the label is the
+ * product's own words for it, in the reader's language (20261007120000).
+ */
+type NoticeLink = { path: string; label?: string; reference?: string };
+
 type Notification = {
   id: string;
   severity: string;
@@ -58,6 +66,8 @@ type Notification = {
   digest_of: number;
   is_escalation: boolean;
   failure_reason: string | null;
+  /** Absent only from an answer older than the links (20261007120000). */
+  links?: NoticeLink[];
 };
 
 type Settings = {
@@ -480,7 +490,7 @@ function Notifications() {
             )}
             fn="erp_notification_channels"
             empty={ui(
-              "No channel is configured, so only in-app delivery works. Add one under Actions above.",
+              "No channel is configured. In-app always works and email is sent without one; a webhook needs a channel. Add one under Channels above.",
             )}
           >
             {(rows) => (
@@ -513,7 +523,7 @@ function Notifications() {
             )}
             fn="erp_notification_routes"
             empty={ui(
-              "No route is defined, so no event reaches anybody. Define one under Actions above.",
+              "No route of your own is defined. The product's own notices still arrive: approvals, configuration changes to approve, failed jobs and support access. Define a route under Notification routes above.",
             )}
           >
             {(rows) => (
@@ -559,7 +569,7 @@ function Notifications() {
           <DataPanel<Health>
             title={ui("Delivery, last seven days")}
             description={ui(
-              "Queue depth, the oldest waiting print and the last confirmed one per printer, with the signal §15.4 names when something is wrong.",
+              "Each channel's messages over the last seven days, counted by where they have got to, with how long the oldest waiting one has waited.",
             )}
             fn="erp_notification_health"
             empty={ui("Nothing has been delivered in the last seven days.")}
@@ -601,10 +611,42 @@ function Notifications() {
   );
 }
 
+/** The links a message names, each opened in the product. */
+function NoticeLinks({ links }: { links: NoticeLink[] }) {
+  const { ui } = useT();
+  if (links.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+      {links.map((l) => {
+        // The door names a screen with its query, as the email's link does;
+        // the router takes the two apart.
+        const [pathname = l.path, query = ""] = l.path.split("?");
+        return (
+          <Link
+            key={l.path}
+            to={pathname}
+            search={Object.fromEntries(new URLSearchParams(query))}
+            className="font-medium underline underline-offset-2"
+          >
+            {l.reference
+              ? fill(ui("Open {document}"), { document: l.reference })
+              : (l.label ?? ui("Open"))}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 function Inbox() {
   const { ui } = useT();
   const read = useErpAction({
     fn: "erp_mark_notification_read",
+    invalidates: ["erp_my_notifications", "erp_my_notification_settings"],
+  });
+  // Every unread message of the caller's own in one press (J-132).
+  const readAll = useErpAction({
+    fn: "erp_mark_all_notifications_read",
     invalidates: ["erp_my_notifications", "erp_my_notification_settings"],
   });
   return (
@@ -617,6 +659,18 @@ function Inbox() {
     >
       {(rows) => (
         <ul className="flex flex-col gap-3">
+          {rows.some((n) => n.status === "delivered" || n.status === "sent") ? (
+            <li>
+              <ActionButton
+                variant="secondary"
+                onClick={() => readAll.mutate({})}
+                disabled={readAll.isPending}
+              >
+                {ui("Mark all as read")}
+              </ActionButton>
+              {readAll.error ? <ErrorNote error={readAll.error} /> : null}
+            </li>
+          ) : null}
           {rows.map((n) => (
             <li key={n.id} className="border-b border-border/50 pb-3 last:border-0 last:pb-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -644,6 +698,7 @@ function Inbox() {
                 </Pill>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{n.body}</p>
+              <NoticeLinks links={n.links ?? []} />
               {n.failure_reason ? <p className="mt-1 text-xs">{n.failure_reason}</p> : null}
               <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                 {when(n.created_at)}
