@@ -862,32 +862,38 @@ test.describe("the counter works down a list", () => {
     expect(order).toEqual([A01, A02, LOOSE]);
 
     backend.rpc("erp_record_count", "posted");
-    const sent = page.waitForRequest(/rpc\/erp_record_count$/);
+    // What the database says once the figure is recorded: posted as it was.
+    // Swapped in as the record is answered, so no read before it sees it and
+    // every read after it does. Swapping it in once waitForRequest had
+    // resolved raced the screen's own read of the list, which follows the
+    // answer within milliseconds: waitForRequest settles a round trip later,
+    // and the read could be answered first, with the rows from before.
+    const posted = ROWS.map((r) =>
+      r.task_id === A01
+        ? {
+            ...r,
+            status: "posted",
+            counted: 12,
+            variance: 2,
+            within_tolerance: true,
+            posted_by_system: true,
+            adjustment_document_id: id(91),
+            adjustment_number: "ADJ-000003",
+            counted_by_me: true,
+          }
+        : r,
+    );
+    await page.route(/rpc\/erp_record_count$/, async (route) => {
+      if (route.request().method() === "POST") backend.rpc("erp_count_tasks", posted);
+      await route.fallback();
+    });
+    const sent = page.waitForRequest(
+      (r) => /rpc\/erp_record_count$/.test(r.url()) && r.method() === "POST",
+    );
     await list.getByLabel("Counted A-01 P1").fill("12");
     await list.getByLabel("Counted A-01 P1").press("Enter");
     const request = await sent;
     expect(request.postDataJSON()).toEqual({ p_task_id: A01, p_quantity: 12 });
-
-    // What the database says once the figure is recorded: posted as it was.
-    // Swapped in only now the record has gone, so no read before it sees it.
-    backend.rpc(
-      "erp_count_tasks",
-      ROWS.map((r) =>
-        r.task_id === A01
-          ? {
-              ...r,
-              status: "posted",
-              counted: 12,
-              variance: 2,
-              within_tolerance: true,
-              posted_by_system: true,
-              adjustment_document_id: id(91),
-              adjustment_number: "ADJ-000003",
-              counted_by_me: true,
-            }
-          : r,
-      ),
-    );
 
     // No dialog, no picker, and the next place is ready for its figure.
     await expect(page.getByRole("dialog")).toHaveCount(0);
