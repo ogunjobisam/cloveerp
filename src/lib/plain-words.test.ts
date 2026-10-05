@@ -330,7 +330,7 @@ describe("a lookup says its answer", () => {
         "erp_resolve_purchase_price",
       ),
     ).toBe(
-      "Find a purchase price: no price is on record for this supplier and item. Type a price on the line, or add one to the supplier's price list.",
+      "Find a purchase price: no price is on record for this supplier and item. Type a price on the line, or set the supplier's price on Product-suppliers.",
     );
   });
 
