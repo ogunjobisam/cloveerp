@@ -5,7 +5,7 @@
  * public.erp_setup_progress() return. The helpers are pure so the choice of
  * "the next thing to do" can be tested without a screen.
  */
-import { allTiles, areaOf } from "./modules";
+import { allTiles, areaOf, SETTINGS_GROUPS, type TileDef } from "./modules";
 
 /** The tile this path belongs to — the longest tile path that prefixes it. */
 export function tileFor(pathname: string): { path: string; settings: boolean } | null {
@@ -88,6 +88,39 @@ export function completeCount(steps: WalkthroughStep[]): number {
 export function nextScreen(progress: SetupScreenProgress[]): SetupScreenProgress | null {
   const ordered = [...progress].sort((a, b) => a.seq - b.seq);
   return ordered.find((p) => p.next !== null) ?? null;
+}
+
+/** One row of the Settings home's list: a screen in the setup order, or a Settings screen it lacks. */
+export type SettingsHomeRow =
+  { kind: "setup"; screen: SetupScreenProgress } | { kind: "tile"; tile: TileDef };
+
+/**
+ * The Settings home's one list.
+ *
+ * Every screen in the setup order, in its order, then every Settings screen
+ * this account is offered that the order does not name, section by section.
+ * The order is the database's and a screen added to Settings without a row in
+ * it would otherwise be offered nowhere on this page; appended, it is still
+ * one press away. Tiles kept off the rail are left out here as they are on the
+ * launchpad.
+ */
+export function settingsHomeRows(
+  progress: SetupScreenProgress[],
+  tiles: TileDef[],
+): SettingsHomeRow[] {
+  const ordered = [...progress].sort((a, b) => a.seq - b.seq);
+  const named = new Set(ordered.map((p) => p.screen_path));
+  const missing = tiles
+    .filter((t) => areaOf(t.group) === "settings" && !t.offRail && !named.has(t.path))
+    .map((tile, i) => ({ tile, i }))
+    .sort(
+      (a, b) =>
+        SETTINGS_GROUPS.indexOf(a.tile.group) - SETTINGS_GROUPS.indexOf(b.tile.group) || a.i - b.i,
+    );
+  return [
+    ...ordered.map((screen): SettingsHomeRow => ({ kind: "setup", screen })),
+    ...missing.map(({ tile }): SettingsHomeRow => ({ kind: "tile", tile })),
+  ];
 }
 
 /** What the step's state is called, in one word the panel can colour. */
