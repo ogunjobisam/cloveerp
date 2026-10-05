@@ -919,6 +919,7 @@ test.describe("a document offers only what can be completed", () => {
       has: page.getByRole("heading", { name: "Related documents" }),
     });
     await expect(related.getByRole("link", { name: "PINV-000116" })).toBeVisible();
+    await expect(related.getByText("Settles ·")).toBeVisible();
     expect(backend.crashes).toEqual([]);
   });
 });

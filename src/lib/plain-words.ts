@@ -974,6 +974,8 @@ const RELATION_WORDS: Readonly<Record<string, { towards: string; back: string }>
   corrects: { towards: "Corrects", back: "Corrected by" },
   consolidates: { towards: "Consolidates", back: "Consolidated into" },
   mirrors: { towards: "Mirrors", back: "Mirrored by" },
+  // A supplier payment settles the bills a run paid (20261010012000, B2).
+  settles: { towards: "Settles", back: "Settled by" },
 };
 
 /** One relation in words; one this does not know, as the database names it. */
