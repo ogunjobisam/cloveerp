@@ -46,9 +46,18 @@
 # through ui().
 #
 # Usage: supabase/ci/screen_strings.sh [src-dir]
-# Reads PSQL from the environment, defaulting to a plain psql.
+#        supabase/ci/screen_strings.sh --harvest [src-dir]
+# Reads PSQL from the environment, defaulting to a plain psql. --harvest prints
+# what it would check, one string a line in its source form, and touches no
+# database: src/lib/screen-strings.test.ts holds the harvest to what it must
+# read.
 set -euo pipefail
 
+HARVEST_ONLY=""
+if [ "${1:-}" = "--harvest" ]; then
+  HARVEST_ONLY=1
+  shift
+fi
 SRC="${1:-src}"
 PSQL_CMD="${PSQL:-psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc}"
 WORK="$(mktemp -d)"
@@ -60,8 +69,40 @@ trap 'rm -rf "$WORK"' EXIT
 # ui("…") only. The single-argument form is the whole convention: t(key,
 # fallback) names its key explicitly and is covered by
 # erp.assert_resource_coverage().
-grep -rhoE --exclude='*.test.ts' --exclude='*.test.tsx' 'ui\("(([^"\\]|\\.)*)"\)' "$SRC" \
-  | sed -E 's/^ui\("//; s/"\)$//' | sort -u > "$WORK/literals.txt"
+#
+# Read as a call, not as a line. This was a grep, and a grep reads one line:
+# a ui( call prettier wraps, with its string on the line below, was never
+# read, so its words went unchecked and could ship with no row (J-172, found
+# 4 October: 183 strings were wrapped that way, 41 of them with no row). The
+# call is its string, or strings joined with +, in double or single quotes
+# (which cannot hold a raw newline), across any whitespace and an optional
+# trailing comma. A template literal or an expression is not a string anybody
+# can rename, and is not read. Each string is written out in its double-quoted
+# source form, which is what the CSV step below undoes.
+python3 - "$SRC" > "$WORK/literals.txt" <<'PY'
+import re, pathlib, sys
+
+PIECE = r'"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\''
+CALL = re.compile(r'ui\(\s*((?:' + PIECE + r')(?:\s*\+\s*(?:' + PIECE + r'))*)\s*,?\s*\)', re.S)
+
+def double_quoted(piece):
+    """A piece's text as it would read between double quotes."""
+    body = re.sub(r'\\\n', '', piece[1:-1])
+    if piece[0] == "'":
+        body = re.sub(r"""\\(.)|(")""",
+                      lambda m: '\\"' if m.group(2) else ("'" if m.group(1) == "'" else m.group(0)),
+                      body)
+    return body
+
+found = set()
+for path in pathlib.Path(sys.argv[1]).rglob("*"):
+    if path.suffix not in (".ts", ".tsx") or path.name.endswith((".test.ts", ".test.tsx")):
+        continue
+    for m in CALL.finditer(path.read_text()):
+        found.add("".join(double_quoted(p.group(0)) for p in re.finditer(PIECE, m.group(1), re.S)))
+for value in sorted(found):
+    print(value)
+PY
 
 # The declared strings. Only the fields the components actually render through
 # ui(): a `fn` or a permission code is not a word anybody reads.
@@ -225,6 +266,11 @@ PY
 
 cat "$WORK/literals.txt" "$WORK/declared.txt" "$WORK/props.txt" "$WORK/form.txt" \
   | sort -u > "$WORK/strings.txt"
+
+if [ -n "$HARVEST_ONLY" ]; then
+  cat "$WORK/strings.txt"
+  exit 0
+fi
 
 python3 - "$WORK/strings.txt" > "$WORK/strings.csv" <<'PY'
 import csv, sys

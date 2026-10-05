@@ -428,9 +428,10 @@ describe("money on a tile", () => {
 });
 
 describe("every word the strip, the record and the help sheet say has a row", () => {
-  // The harvest in supabase/ci/screen_strings.sh reads ui("…") on one line,
-  // and prettier wraps a long one, so this reads the wrapped form too and
-  // checks the words against every migration that seeds erp_ref.resource.
+  // The harvest in supabase/ci/screen_strings.sh read ui("…") on one line
+  // until J-172, and prettier wraps a long one, so this reads the wrapped form
+  // too and checks the words against every migration that seeds
+  // erp_ref.resource.
   const MIGRATIONS = join(ROOT, "supabase", "migrations");
   const seeds = readdirSync(MIGRATIONS)
     .filter((f) => f.endsWith(".sql"))

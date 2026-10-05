@@ -179,6 +179,14 @@ const SHELL: Record<string, unknown> = {
   erp_is_platform_organisation: false,
   erp_platform_me: { is_staff: false, role: null, claimable: false },
   erp_my_tenants: [],
+  // Who is acting in a demonstration, answered for an organisation that is not
+  // one: the account menu offers nobody and the shell shows no banner.
+  erp_demonstration_personas: {
+    is_demonstration: false,
+    signed_in: null,
+    acting_as: null,
+    personas: [],
+  },
 
   // Self-service sign-up, answered open. A deployment starts with it closed,
   // and a principal with no tenant then gets only the "You need an invitation"

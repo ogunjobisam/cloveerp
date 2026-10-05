@@ -28,6 +28,7 @@ import { toMinor } from "./money";
 import { fill } from "./interview";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
 import { receivableLineWords } from "./shipping-notices";
+import type { InstallableModule } from "./installed-modules";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
@@ -308,6 +309,11 @@ export type ModuleDef = {
    */
   howItWorks?: string;
   permission?: string;
+  /**
+   * The module the organisation must have installed. Offered only once it is
+   * installed; the database refuses its verbs before then regardless.
+   */
+  module?: InstallableModule;
   group: TileGroup;
   kpis: Kpi[];
   chart?: Chart;
@@ -2789,6 +2795,7 @@ export const PLANNING: ModuleDef = {
     },
   ],
   key: "planning",
+  module: "planning",
   path: "/planning",
   titleKey: "module.planning",
   title: "Planning",
@@ -3205,6 +3212,7 @@ export const PRODUCTION: ModuleDef = {
     },
   ],
   key: "production",
+  module: "production",
   path: "/production",
   titleKey: "module.production",
   title: "Manufacturing",
@@ -3700,6 +3708,7 @@ export const QUALITY: ModuleDef = {
     },
   ],
   key: "quality",
+  module: "quality",
   path: "/quality",
   titleKey: "module.quality",
   title: "Quality control",
@@ -4971,6 +4980,9 @@ export const REPORTING: ModuleDef = {
         { header: "Score", cell: "score", numeric: true },
         { header: "Errors", cell: "errors", numeric: true },
         { header: "Warnings", cell: "warnings", numeric: true },
+        // The messages of the rules the record fails, errors first
+        // (20261007110000); a count alone gave nobody anything to fix.
+        { header: "Finding", cell: "failing" },
       ],
     },
 
@@ -5140,6 +5152,11 @@ export type TileDef = {
    * that will be refused off the launchpad.
    */
   platformOnly?: boolean;
+  /**
+   * The module the organisation must have installed. Offered only once it is
+   * installed; the database refuses its verbs before then regardless.
+   */
+  module?: InstallableModule;
   /**
    * Reached from the account menu and the palette rather than filed in an
    * area: kept out of the rail, the launchpads and the area counts. A screen
@@ -5626,6 +5643,7 @@ export function allTiles(): TileDef[] {
     title: m.title,
     blurb: m.blurb,
     ...(m.permission ? { permission: m.permission } : {}),
+    ...(m.module ? { module: m.module } : {}),
     group: m.group,
   }));
   return [...fromModules, ...EXTRA_TILES];
