@@ -1723,6 +1723,8 @@ test.describe("the cash documents are on the desk", () => {
   const PMT1 = "00000000-0000-4000-8000-00000000ba71";
   const PMT2 = "00000000-0000-4000-8000-00000000ba72";
   const CUST = "00000000-0000-4000-8000-00000000c057";
+  const INV41 = "00000000-0000-4000-8000-00000000a041";
+  const INV52 = "00000000-0000-4000-8000-00000000a052";
   const RUN = "00000000-0000-4000-8000-00000000f0a1";
   const receipt = (extra: Record<string, unknown> = {}) => ({
     document_id: RCPT,
@@ -1779,6 +1781,23 @@ test.describe("the cash documents are on the desk", () => {
       },
     ]);
     backend.rpc("erp_parties", [{ party_id: CUST, code: "VELA", name: "Vela Industrial" }]);
+    // What the customer owes, oldest first (20261010021000).
+    backend.rpc("erp_open_invoices", [
+      {
+        document_id: INV41,
+        document_number: "INV-000041",
+        owing_minor: 60000,
+        due_date: "2026-08-01",
+        currency: "GBP",
+      },
+      {
+        document_id: INV52,
+        document_number: "INV-000052",
+        owing_minor: 30000,
+        due_date: "2026-10-01",
+        currency: "GBP",
+      },
+    ]);
     backend.rpc("erp_apply_cash", [
       {
         subledger_item_id: "00000000-0000-4000-8000-0000000051e1",
@@ -1797,13 +1816,24 @@ test.describe("the cash documents are on the desk", () => {
         document_id: RCPT,
       },
     ]);
-    backend.rpc(
-      "erp_document",
-      cashDocument({ ...receipt(), their_reference: "BACS-0927" }, [
+    backend.rpc("erp_document", {
+      ...cashDocument({ ...receipt(), their_reference: "BACS-0927" }, [
         line(1, "INV-000041", 60000),
         line(2, "On account", 10000),
       ]),
-    );
+      // The invoice it paid, which the receipt names (20261010021000).
+      lineage: [
+        {
+          depth: 1,
+          direction: "downstream",
+          document_id: INV41,
+          document_number: "INV-000041",
+          base_type: "sales_invoice",
+          document_type: "sales_invoice",
+          relation: "settles",
+        },
+      ],
+    });
 
     await page.goto("/finance");
     await step(page, "Cash in").click({ timeout: 20_000 });
@@ -1819,6 +1849,15 @@ test.describe("the cash documents are on the desk", () => {
     await form.getByLabel("Business partner").selectOption(CUST);
     await form.getByLabel("Amount").fill("700.00");
     await form.getByLabel("Currency").selectOption("GBP");
+    // The customer's open invoices arrive ticked oldest first, as many as the
+    // amount pays: £700 reaches into the second. Untick it, and the rest of
+    // the cash stays on account (defect C).
+    const oldest = form.getByRole("checkbox", { name: /^INV-000041/ });
+    const newer = form.getByRole("checkbox", { name: /^INV-000052/ });
+    await expect(oldest).toBeChecked();
+    await expect(newer).toBeChecked();
+    await newer.uncheck();
+    await expect(oldest).toBeChecked();
     await form.getByLabel("Reference").fill("BACS-0927");
     const sent = page.waitForRequest(/rpc\/erp_apply_cash$/);
     await form.getByRole("button", { name: "Apply cash" }).click();
@@ -1827,12 +1866,15 @@ test.describe("the cash documents are on the desk", () => {
       p_amount_minor: 70000,
       p_currency: "GBP",
       p_reference: "BACS-0927",
+      p_invoice_ids: [INV41],
     });
 
-    // The outcome leads with the receipt, and links to it.
+    // The outcome leads with the receipt, names the invoice it paid, and
+    // links to both.
     await expect(
-      page.getByText("RCPT-000012: £600.00 applied to 1 open invoice and £100.00 on account."),
+      page.getByText("RCPT-000012: £600.00 applied to INV-000041 and £100.00 on account."),
     ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open INV-000041" })).toBeVisible();
     await page.getByRole("link", { name: "Open RCPT-000012" }).click();
     await expect(page).toHaveURL(new RegExp(`/documents/${RCPT}$`));
     await expect(page.getByRole("heading", { name: "RCPT-000012", level: 1 })).toBeVisible();
