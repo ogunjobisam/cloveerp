@@ -225,20 +225,22 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.credit_release",
     fn: "erp_release_credit_hold",
     fields: [
-      // A hold stops a confirmed order at picking and delivery, so those are
-      // the orders a release is for.
-      pickFrom(
-        "erp_documents",
-        "document_id",
-        ["document_number", "state"],
-        "p_document_id",
-        "Confirmed sales order",
-        {
-          p_type_code: "sales_order",
-          p_limit: 100,
-          p_states: ["confirmed", "picking", "partially_despatched"],
+      // The orders a hold stops at picking and delivery, by number and
+      // customer (J-79): held as erp.check_release_to_fulfilment holds them,
+      // read from the release sequence, one option per order.
+      {
+        kind: "select",
+        name: "p_document_id",
+        label: "Sales order",
+        required: true,
+        options: {
+          fn: "erp_release_sequence",
+          args: { p_limit: 500 },
+          value: "document_id",
+          label: ["document_number", "customer"],
+          keep: (row) => row["on_hold"] === true,
         },
-      ),
+      },
       reason("p_reason", "Reason", true),
     ],
     invalidates: ["erp_documents", "erp_release_sequence"],
@@ -352,20 +354,22 @@ const ORDER_TO_CASH: FlowSpec = {
       // one confirmed and one being picked.
       states: ["draft", "pending_approval", "confirmed", "picking", "partially_despatched"],
       // A delivery comes from an order that can still be despatched, and the
-      // same orders are picked.
+      // same orders are picked and released from a credit hold.
       // Part despatched is still owed the rest (20260923800000).
       actionStates: {
         deliver_this_order: ["confirmed", "picking", "partially_despatched"],
         erp_pick_document: ["confirmed", "picking", "partially_despatched"],
+        erp_release_credit_hold: ["confirmed", "picking", "partially_despatched"],
       },
       partyRole: "customer",
       // The chosen order is the one the delivery is created from.
       recordArg: "p_order_id",
-      // Picking arrives holding the chosen order and still asks, so the order
-      // chosen here is the one picked (20261009010000).
-      carriedArgs: { erp_pick_document: "p_document_id" },
+      // Picking and releasing arrive holding the chosen order and still ask,
+      // so the order chosen here is the one picked (20261009010000) and, when
+      // it is held, the one released (20261009012000).
+      carriedArgs: { erp_pick_document: "p_document_id", erp_release_credit_hold: "p_document_id" },
       actionFn: "deliver_this_order",
-      actionFns: ["erp_pick_document"],
+      actionFns: ["erp_pick_document", "erp_release_credit_hold"],
       createFn: "erp_promise_date",
     },
     {
