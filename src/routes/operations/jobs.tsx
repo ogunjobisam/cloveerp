@@ -27,12 +27,12 @@ const KILL_TARGETS = [
 export const Route = createFileRoute("/operations/jobs")({
   head: () => ({
     meta: [
-      { title: "Scheduled jobs — Clove ERP" },
-      { name: "description", content: "Scheduled jobs, run history and failure diagnostics." },
-      { property: "og:title", content: "Scheduled jobs — Clove ERP" },
+      { title: "Recurring tasks — Clove ERP" },
+      { name: "description", content: "Recurring tasks, run history and failure diagnostics." },
+      { property: "og:title", content: "Recurring tasks — Clove ERP" },
       {
         property: "og:description",
-        content: "Scheduled jobs, run history and failure diagnostics.",
+        content: "Recurring tasks, run history and failure diagnostics.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -56,6 +56,7 @@ type Silent = {
 
 type Health = {
   job_code: string;
+  name: string;
   is_enabled: boolean;
   is_failing: boolean;
   is_killed: boolean;
@@ -64,6 +65,7 @@ type Health = {
   running: number;
   queued: number;
   last_outcome: string | null;
+  last_finished_at: string | null;
   runs_24h: number;
   failures_24h: number;
   skips_24h: number;
@@ -78,18 +80,34 @@ type Evidence = {
 };
 
 const QUEUE_LABEL: Record<string, string> = {
-  jobs: "Scheduled jobs",
+  jobs: "Recurring tasks",
   commands: "Outbound commands",
   messages: "Integration messages",
   email: "Email",
   platform: "The platform's last pass",
 };
 
+/** A finished run's outcome, from `erp.job_run_outcome`, in words. */
+const OUTCOME_LABEL: Record<string, string> = {
+  succeeded: "Succeeded",
+  failed: "Failed",
+  timed_out: "Timed out",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
+
+/** How a finished run went, coloured by whether it is a good outcome. */
+function outcomeTone(outcome: string): "ok" | "bad" | "muted" {
+  if (outcome === "succeeded") return "ok";
+  if (outcome === "failed" || outcome === "timed_out") return "bad";
+  return "muted";
+}
+
 function Jobs() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
-        title="Scheduled jobs"
+        title="Recurring tasks"
         actions={
           <HeaderActions>
             <ActionBar
@@ -288,6 +306,7 @@ function Jobs() {
               "Job",
               "State",
               "Next run",
+              "Last run",
               "Running",
               "Queued",
               "24h runs",
@@ -296,8 +315,11 @@ function Jobs() {
             ]}
           >
             {rows.map((r) => (
-              <tr key={r.job_code} className="border-b border-border/50 last:border-0">
-                <td className="py-2 pr-4 font-mono text-xs">{r.job_code}</td>
+              <tr key={r.job_code} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-4">
+                  <div className="text-sm">{r.name}</div>
+                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">{r.job_code}</div>
+                </td>
                 <td className="py-2 pr-4">
                   {!r.is_enabled ? (
                     <Pill tone="muted">Disabled</Pill>
@@ -313,6 +335,24 @@ function Jobs() {
                 </td>
                 <td className="py-2 pr-4 text-xs text-muted-foreground">
                   {r.next_run_at ? new Date(r.next_run_at).toLocaleString() : "—"}
+                </td>
+                {/* When it last finished and how (20261007112000, J-114). A job
+                    with no run yet says so, rather than showing nothing. */}
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.last_finished_at ? (
+                    <>
+                      {new Date(r.last_finished_at).toLocaleString()}
+                      {r.last_outcome ? (
+                        <div className="mt-0.5">
+                          <Pill tone={outcomeTone(r.last_outcome)}>
+                            {OUTCOME_LABEL[r.last_outcome] ?? r.last_outcome}
+                          </Pill>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    "Never"
+                  )}
                 </td>
                 <td className="py-2 pr-4">{r.running}</td>
                 {/* A run somebody asked for, waiting for an engine to take it. */}

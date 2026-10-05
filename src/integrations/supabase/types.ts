@@ -904,6 +904,10 @@ export type Database = {
         Args: { p_item_supplier_id: string; p_reason?: string }
         Returns: Json
       }
+      erp_end_supplier_price: {
+        Args: { p_item_price_id: string; p_on?: string; p_reason?: string }
+        Returns: Json
+      }
       erp_entities: { Args: never; Returns: Json }
       erp_erasure_requests: { Args: never; Returns: Json }
       erp_erasure_subjects: { Args: never; Returns: Json }
@@ -2697,6 +2701,19 @@ export type Database = {
         }
         Returns: string
       }
+      erp_set_supplier_price: {
+        Args: {
+          p_currency: string
+          p_item_id: string
+          p_min_quantity?: number
+          p_party_id: string
+          p_reason?: string
+          p_unit_price: number
+          p_valid_from?: string
+          p_valid_to?: string
+        }
+        Returns: Json
+      }
       erp_set_up_selling: { Args: never; Returns: Json }
       erp_set_user_roles: {
         Args: {
@@ -2834,6 +2851,10 @@ export type Database = {
         Returns: string
       }
       erp_supplier_balances: { Args: never; Returns: Json }
+      erp_supplier_prices: {
+        Args: { p_item_id?: string; p_party_id?: string }
+        Returns: Json
+      }
       erp_supplier_qualification: { Args: never; Returns: Json }
       erp_supply_demand: {
         Args: { p_horizon_days?: number; p_item_id: string; p_site_id: string }

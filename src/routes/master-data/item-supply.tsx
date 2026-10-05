@@ -1,12 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ActionBar, pickFrom, pickItem, pickParty, reason } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  pickCurrency,
+  pickFrom,
+  pickItem,
+  pickParty,
+  reason,
+} from "../../components/erp/actions-bar";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
 import { ConfigTransfer } from "../../components/erp/transfer";
 import { useT } from "../../lib/i18n";
+import { formatMinor } from "../../lib/money";
 
 export const Route = createFileRoute("/master-data/item-supply")({
   head: () => ({
@@ -52,9 +60,25 @@ type SupplierRow = {
   status: string;
 };
 
+/** One price a supplier charges for a product, from erp_supplier_prices. */
+type SupplierPriceRow = {
+  item_price_id: string;
+  item_code: string;
+  item_name: string;
+  supplier: string;
+  amount_minor: number;
+  currency: string;
+  minor_units: number;
+  min_quantity: number;
+  valid_from: string;
+  valid_to: string | null;
+  state: "in_force" | "starts_later" | "ended";
+};
+
 function ItemSupply() {
   const { ui } = useT();
   const invalidates = ["erp_item_suppliers"];
+  const pricesChanged = ["erp_supplier_prices", "erp_resolve_purchase_price"];
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -163,6 +187,7 @@ function ItemSupply() {
               ui("Product"),
               ui("Name"),
               ui("Supplier"),
+              ui("Supplier's own code"),
               ui("Site"),
               ui("Rank"),
               ui("Default"),
@@ -178,6 +203,7 @@ function ItemSupply() {
                 <td className="py-2 pr-4 font-mono text-xs">{r.item_code}</td>
                 <td className="py-2 pr-4">{r.item_name}</td>
                 <td className="py-2 pr-4">{r.supplier}</td>
+                <td className="py-2 pr-4 font-mono text-xs">{r.supplier_item_code ?? "—"}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{r.site_code ?? ui("Everywhere")}</td>
                 <td className="py-2 pr-4 tabular-nums">{r.preference_rank}</td>
                 <td className="py-2 pr-4">
@@ -197,6 +223,135 @@ function ItemSupply() {
                 <td className="py-2 pr-4 tabular-nums">{r.min_order_quantity ?? "—"}</td>
                 <td className="py-2 pr-4">
                   <Pill tone={r.status === "active" ? "ok" : "muted"}>{r.status}</Pill>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </DataPanel>
+
+      <ActionBar
+        title="Supplier prices"
+        note="What a supplier charges for a product, from a day. A purchase order line left without a price takes it; a line already on an order keeps the price it has."
+        actions={[
+          {
+            label: "Set the supplier's price",
+            permission: "master_data.write",
+            fn: "erp_set_supplier_price",
+            fields: [
+              pickItem(),
+              { ...pickParty("supplier", "p_party_id", "Supplier"), required: true },
+              {
+                kind: "number",
+                name: "p_unit_price",
+                label: "Price each",
+                required: true,
+                placeholder: "12.50",
+                hint: "In the currency below, for one stock unit of the product.",
+              },
+              pickCurrency(),
+              {
+                kind: "number",
+                name: "p_min_quantity",
+                label: "Minimum quantity",
+                hint: "The price applies to an order line of at least this many. Leave empty for any quantity.",
+              },
+              {
+                kind: "date",
+                name: "p_valid_from",
+                label: "Valid from",
+                hint: "Today if left empty. A price cannot start in the past.",
+              },
+              {
+                kind: "date",
+                name: "p_valid_to",
+                label: "Valid to",
+                hint: "Leave empty for no end. The price stops applying on this day.",
+              },
+              reason(),
+            ],
+            invalidates: pricesChanged,
+          },
+          {
+            label: "End a supplier's price",
+            permission: "master_data.write",
+            fn: "erp_end_supplier_price",
+            fields: [
+              {
+                kind: "select",
+                name: "p_item_price_id",
+                label: "Price to end",
+                required: true,
+                options: {
+                  fn: "erp_supplier_prices",
+                  value: "item_price_id",
+                  label: ["item_code", "supplier", "currency"],
+                  keep: (row) => row["state"] !== "ended",
+                  describe: (row) =>
+                    `${String(row["item_code"])} — ${String(row["supplier"])}, ${formatMinor(
+                      Number(row["amount_minor"]),
+                      String(row["currency"]),
+                      Number(row["minor_units"]),
+                    )} from ${String(row["valid_from"])}`,
+                },
+              },
+              {
+                kind: "date",
+                name: "p_on",
+                label: "Stops applying on",
+                hint: "Today if left empty. One that has not started yet is withdrawn.",
+              },
+              reason(),
+            ],
+            invalidates: pricesChanged,
+          },
+        ]}
+      />
+
+      <DataPanel<SupplierPriceRow>
+        title={ui("Supplier prices")}
+        description={ui(
+          "The price a purchase order line takes when nobody types one, by supplier and from the day it applies. Find a purchase price answers the same.",
+        )}
+        fn="erp_supplier_prices"
+        empty={ui(
+          "No supplier has a price yet, so a purchase order line takes none unless one is typed. Set one under Supplier prices above.",
+        )}
+      >
+        {(rows) => (
+          <Table
+            columns={[
+              ui("Product"),
+              ui("Name"),
+              ui("Supplier"),
+              ui("Price each"),
+              ui("Minimum"),
+              ui("Valid from"),
+              ui("Valid to"),
+              ui("Status"),
+            ]}
+          >
+            {rows.map((r) => (
+              <tr key={r.item_price_id} className="border-b border-border/60 last:border-0">
+                <td className="py-2 pr-4 font-mono text-xs">{r.item_code}</td>
+                <td className="py-2 pr-4">{r.item_name}</td>
+                <td className="py-2 pr-4">{r.supplier}</td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {formatMinor(r.amount_minor, r.currency, r.minor_units)}
+                </td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {Number(r.min_quantity) > 0 ? r.min_quantity : "—"}
+                </td>
+                <td className="py-2 pr-4 tabular-nums">{r.valid_from}</td>
+                <td className="py-2 pr-4 tabular-nums">{r.valid_to ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  {r.state === "in_force" ? (
+                    <Pill tone="ok">{ui("In force")}</Pill>
+                  ) : r.state === "starts_later" ? (
+                    <Pill tone="warn">{ui("Starts later")}</Pill>
+                  ) : (
+                    <Pill tone="muted">{ui("Ended")}</Pill>
+                  )}
                 </td>
               </tr>
             ))}

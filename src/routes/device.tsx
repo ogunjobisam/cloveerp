@@ -22,6 +22,7 @@ import {
   type ScanCapture,
 } from "../lib/device-queue";
 import { callErp, hasPermission } from "../lib/erp";
+import { moduleOffered } from "../lib/installed-modules";
 import {
   evaluateScan,
   type ApplicationIdentifier,
@@ -503,6 +504,11 @@ function DeviceClient() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   const handlers = ref?.handlers ?? [];
+  // The tasks offered leave out those of a module the organisation has not
+  // installed (J-05): every one of them would be refused, and a receiving
+  // discrepancy raises an event in Quality that nobody here could open. A task
+  // already under way keeps its handler, so it can still be finished or left.
+  const offered = handlers.filter((h) => moduleOffered(session, h.module_code));
   const operator = session.principal?.given_name ?? session.principal?.display_name ?? "";
 
   return (
@@ -557,7 +563,7 @@ function DeviceClient() {
 
         {stage.kind === "tasks" ? (
           <TaskPick
-            handlers={handlers}
+            handlers={offered}
             tasks={ref?.tasks ?? []}
             online={online}
             onPick={startTask}

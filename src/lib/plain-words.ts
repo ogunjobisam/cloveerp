@@ -361,6 +361,9 @@ export function countOutcome(place: string, fn: string, result: unknown): string
  * itself was never shown (found walking the live product, 4 October 2026).
  * "Work out who approves" records the chain it works out and asks nobody, and
  * said "— done." without naming anybody (J-50): it now names them, in order.
+ * A purchase price nobody holds sent people to "the supplier's price list", a
+ * screen that did not exist (J-108); it names Product-suppliers, where a
+ * supplier's price is set.
  * Null for any other routine, and for an answer in a shape this does not know.
  */
 export function lookupOutcome(
@@ -380,7 +383,7 @@ export function lookupOutcome(
     if (!row || row["amount_minor"] === null || !Number.isFinite(amount)) {
       return fn === "erp_resolve_price"
         ? `${label}: nothing prices this product for this customer today. Type a price on the line, or add one to their price list.`
-        : `${label}: ${source ?? "no price is on record for this supplier and product"}. Type a price on the line, or add one to the supplier's price list.`;
+        : `${label}: ${source ?? "no price is on record for this supplier and product"}. Type a price on the line, or set the supplier's price on Product-suppliers.`;
     }
     const list = text(row, "price_list_code");
     const currency = text(row, "currency") ?? "GBP";
