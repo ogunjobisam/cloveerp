@@ -5,7 +5,7 @@
  * send so far with how far it got. In a demonstration, which never sends
  * email, it says so, so a send that stays queued is not taken for a stuck one.
  *
- * The order's page draws Send to supplier only where the database says the
+ * The order's page draws Email to supplier only where the database says the
  * reader may send it, and asks why only where a send has gone already. The door
  * refuses regardless.
  */
