@@ -5,6 +5,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
 import { inboundShipments } from "../../lib/inbound-shipments";
+import { lineName } from "../../lib/line-name";
 import {
   differenceWords,
   arrivedSeed,
@@ -23,6 +24,7 @@ import { awaitingOrders } from "../../lib/supplier-confirmation";
 import { ActionButton, ActionDialog, ErrorNote, type Field } from "./action";
 import { AwaitingConfirmations } from "./awaiting-confirmations";
 import { InboundShipments } from "./inbound-shipments";
+import { LineProduct } from "./line-product";
 import { LoadingRows, Prose } from "./page";
 import { Pill, Table } from "./panel";
 import { useErpSession } from "./session-context";
@@ -168,7 +170,9 @@ function NoticeCard({ n, context }: { n: ShippingNotice; context: string }) {
           {n.lines.map((l) => (
             <tr key={l.orderLineId} className="border-b border-border/60 last:border-0">
               <td className="py-2 pr-4 tabular-nums">{l.lineNo}</td>
-              <td className="py-2 pr-4">{l.description}</td>
+              <td className="py-2 pr-4">
+                <LineProduct name={lineName(l.itemCode, l.itemName, l.description)} />
+              </td>
               <td className="py-2 pr-4 tabular-nums">{l.quantity}</td>
               <td className="py-2 tabular-nums">{l.receivedQuantity ?? "—"}</td>
             </tr>

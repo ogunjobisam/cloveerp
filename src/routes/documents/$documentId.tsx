@@ -127,6 +127,8 @@ type Line = {
   unit_price_minor: number;
   net_minor: number;
   item: string | null;
+  /** The product's name beside its code (J-157, 20261007051000). */
+  item_name?: string | null;
   /** What the supplier calls the product, stamped on the line when it was raised. */
   supplier_item_code: string | null;
 };
@@ -1124,7 +1126,18 @@ function Lines({
             {lines.map((l) => (
               <tr key={l.line_id} className="border-b border-border/50 last:border-0">
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{l.line_no}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{l.item ?? "—"}</td>
+                {/* The product by its code and name, as Supplier
+                    confirmation and Shipping notices name it (J-157). */}
+                <td className="py-2 pr-4">
+                  {l.item ? (
+                    <>
+                      <span className="font-mono text-xs">{l.item}</span>
+                      {l.item_name ? <span className="ml-2">{l.item_name}</span> : null}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 {/* What the supplier calls it. Blank on anything they do not
                     supply, which is every sales line. */}
                 <td className="py-2 pr-4 font-mono text-xs">{l.supplier_item_code ?? "—"}</td>

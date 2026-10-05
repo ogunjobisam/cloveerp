@@ -184,6 +184,28 @@ describe("goods-in's row says which notice and what it holds (J-57)", () => {
     expect(noticeLineSummary([{ ...lines[0]!, description: "" }])).toBe("6");
   });
 
+  test("a line typed over is summed up by its product's code and name (J-157)", () => {
+    const named = shippingNotice({
+      ...NOTICE,
+      lines: [
+        { ...NOTICE.lines[0]!, item_code: "COAT", item_name: "Wool coat", description: "JT-A" },
+      ],
+    })?.lines;
+    expect(named?.[0]).toMatchObject({
+      itemCode: "COAT",
+      itemName: "Wool coat",
+      description: "JT-A",
+    });
+    expect(noticeLineSummary(named ?? [])).toBe("6 × COAT Wool coat");
+    const panel = readFileSync(
+      join(import.meta.dir, "..", "components", "erp", "shipping-notices.tsx"),
+      "utf8",
+    );
+    expect(panel).toContain(
+      "<LineProduct name={lineName(l.itemCode, l.itemName, l.description)} />",
+    );
+  });
+
   test("the row draws the notice's number and the summary", () => {
     const src = readFileSync(
       join(import.meta.dir, "..", "components", "erp", "shipping-notices.tsx"),
