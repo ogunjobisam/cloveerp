@@ -4827,6 +4827,9 @@ export const REPORTING: ModuleDef = {
         { header: "Score", cell: "score", numeric: true },
         { header: "Errors", cell: "errors", numeric: true },
         { header: "Warnings", cell: "warnings", numeric: true },
+        // The messages of the rules the record fails, errors first
+        // (20261007110000); a count alone gave nobody anything to fix.
+        { header: "Finding", cell: "failing" },
       ],
     },
 
