@@ -27,8 +27,8 @@ import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
 import { fill } from "./interview";
 import { localIsoDate, orderPeriods, quarterToDate } from "./plain-words";
-import { receivableLineWords } from "./shipping-notices";
 import type { InstallableModule } from "./installed-modules";
+import { receivableLineWords } from "./shipping-notices";
 
 /** Works orders, listed the same way at every step of making. */
 const WORKS_ORDER_LIST: StageList = {
