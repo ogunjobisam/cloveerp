@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { type Field } from "../../components/erp/action";
-import { ActionBar, HeaderActions, pickFrom } from "../../components/erp/actions-bar";
+import {
+  ActionBar,
+  HeaderActions,
+  pickDocumentType,
+  pickFrom,
+} from "../../components/erp/actions-bar";
 import { AutoPanel, StatusPill } from "../../components/erp/auto";
 import { Gate } from "../../components/erp/gate";
 import { InquiryBoard } from "../../components/erp/inquiry";
@@ -11,17 +16,17 @@ import { useT } from "../../lib/i18n";
 export const Route = createFileRoute("/finance/dimensions")({
   head: () => ({
     meta: [
-      { title: "Analysis dimensions — Clove ERP" },
+      { title: "Extra reporting tags — Clove ERP" },
       {
         name: "description",
         content:
-          "Cost centres, projects and the like: their values, how a posting derives them from the document, and which combinations an account allows.",
+          "Cost centres, projects and the like: the reporting tags a posting is analysed by, their values, how a posting takes them from the document, and which combinations an account allows.",
       },
-      { property: "og:title", content: "Analysis dimensions — Clove ERP" },
+      { property: "og:title", content: "Extra reporting tags — Clove ERP" },
       {
         property: "og:description",
         content:
-          "Dimensions and values, derivation rules over the posting's facts, permitted-combination rules, and a preview of what a document would be stamped with.",
+          "Cost centres, other reporting tags and their values, the rules that work them out from the posting's facts, permitted-combination rules, and a preview of what a document would be stamped with.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -66,16 +71,26 @@ const yesNo = (name: string, label: string, hint?: string): Field => ({
 const parseJson = (raw: string | undefined) => (raw && raw.trim() !== "" ? JSON.parse(raw) : null);
 
 /**
- * Analysis dimensions, specification v1.6 §5.7.
+ * Extra reporting tags (analysis dimensions, specification v1.6 §5.7), with
+ * cost centres first.
  *
  * Four doors existed for this and no screen called them, so a dimension could
  * be declared from a SQL client and nowhere else, and the two halves this
  * phase built — derivation from the document and the permitted-combination
  * rules — had nowhere to be written down. Everything here is declaration:
  * the posting bridge and the journal-line trigger are what read it.
+ *
+ * Cost centres are the COST_CENTRE tag, and were a screen of their own
+ * (/finance/cost-centres, which now sends whoever opens it here). They are
+ * kept here, first, because they are the tag everything posts against
+ * (20261007170000). A cost centre nobody fills in is a cost centre nobody
+ * reports on, so the value is derived: the document's own cost centre if it
+ * names one, then its department, then the site it happened at. Retiring one
+ * is a status rather than a deletion so the history that carries it still
+ * reads.
  */
 function Dimensions() {
-  const { t } = useT();
+  const { t, ui } = useT();
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -84,8 +99,69 @@ function Dimensions() {
         actions={
           <HeaderActions>
             <ActionBar
+              title="Maintain cost centres"
+              note="A code is short and permanent — LEE-WH, ADMIN, SALES. Retiring a cost centre sets it inactive; the postings that already carry it keep it."
+              actions={[
+                {
+                  label: "Add or amend a cost centre",
+                  permission: "finance.configure",
+                  fn: "erp_upsert_cost_centre",
+                  fields: [
+                    {
+                      kind: "text",
+                      name: "p_code",
+                      label: "Code",
+                      required: true,
+                      placeholder: "LEE-WH",
+                      hint: "Short, and the same one the site or department uses where it maps to one.",
+                    },
+                    {
+                      kind: "text",
+                      name: "p_name",
+                      label: "Name",
+                      required: true,
+                      placeholder: "Leeds warehouse",
+                    },
+                    {
+                      kind: "select",
+                      name: "p_parent_code",
+                      label: "Groups under",
+                      options: { fn: "erp_cost_centres", value: "code", label: ["code", "name"] },
+                      hint: "Optional. Use it to roll several cost centres into one heading.",
+                    },
+                    { kind: "date", name: "p_valid_from", label: "In use from" },
+                    { kind: "date", name: "p_valid_to", label: "In use until" },
+                    {
+                      kind: "choice",
+                      name: "p_status",
+                      label: "Status",
+                      required: true,
+                      // A new cost centre is in use; the form arrived on
+                      // "Choose…" and refused itself until somebody said so
+                      // (J-104).
+                      default: "active",
+                      choices: [
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Retired" },
+                      ],
+                    },
+                  ],
+                  mapArgs: (v) => ({
+                    p_code: v["p_code"],
+                    p_name: v["p_name"],
+                    p_parent_code: v["p_parent_code"] || null,
+                    p_valid_from: v["p_valid_from"] || null,
+                    p_valid_to: v["p_valid_to"] || null,
+                    p_status: v["p_status"] || "active",
+                  }),
+                  invalidates: ["erp_cost_centres", "erp_dimension_values"],
+                },
+              ]}
+            />
+
+            <ActionBar
               title="Dimensions and values"
-              note="A derivation is a JsonLogic expression over the posting's facts — document, account, line, entity — that returns one of the dimension's value codes. It is checked against those facts when it is saved, not discovered at month end."
+              note="A reporting tag can be worked out from the posting's facts — document, account, line, company — by a derivation that gives one of the tag's value codes. It is checked against those facts when it is saved, not discovered at month end."
               actions={[
                 {
                   label: "Add or amend a dimension",
@@ -218,7 +294,7 @@ function Dimensions() {
 
             <ActionBar
               title="Combination rules"
-              note="A rule has a scope (when it applies; empty is always) and a condition, both JsonLogic over account, dimensions and entity. Forbid refuses the line when the condition holds; permit refuses it when the condition does not. Evaluated for every journal, however it was raised."
+              note="A rule has a scope (when it applies; empty is always) and a condition, both written over the account, the reporting tags and the company. Forbid refuses the line when the condition holds; permit refuses it when the condition does not. Evaluated for every journal, however it was raised."
               actions={[
                 {
                   label: "Add or amend a rule",
@@ -306,10 +382,9 @@ function Dimensions() {
           </HeaderActions>
         }
       >
-        A dimension is a way of analysing a posting: cost centre, project, region. A value is
-        stamped on every journal line from the posting rule, from the document, or derived from the
-        document&rsquo;s facts by a rule you write here; a combination rule says which values an
-        account may carry together.
+        {ui(
+          "Cost centres come first: every journal line is stamped with one, taken from the document's own cost centre, then its department, then its site, so the profit and loss and the balance sheet can be read for one of them alone. Any other reporting tag, a project or a region, is stamped from the accounting rule, from the document, or worked out from the document's facts by a rule you write here; a combination rule says which values an account may carry together.",
+        )}
       </PageHeader>
 
       <InquiryBoard
@@ -327,16 +402,43 @@ function Dimensions() {
               "What each journal line would be stamped with when this document posts, and whether the rules let it through.",
             permission: "finance.read",
             fn: "erp_preview_dimensions",
+            // The kind of document first, then that kind's documents by number,
+            // party and state: a hundred documents of every type at once,
+            // labelled by type code, was not a list anybody could choose from
+            // (J-97). The type narrows the picker and is not sent.
             fields: [
-              pickFrom(
-                "erp_documents",
-                "document_id",
-                ["document_number", "document_type", "state"],
-                "p_document_id",
-                "Document",
-              ),
+              pickDocumentType(),
+              {
+                kind: "select",
+                name: "p_document_id",
+                label: "Document",
+                required: true,
+                options: {
+                  fn: "erp_documents",
+                  args: { p_limit: 100, p_exclude_cancelled: true },
+                  argsFrom: { p_type_code: "p_type_code" },
+                  value: "document_id",
+                  label: ["document_number", "party", "state_name"],
+                },
+              },
             ],
+            mapArgs: (v) => ({ p_document_id: v["p_document_id"] }),
           },
+        ]}
+      />
+
+      <AutoPanel
+        title="Cost centres"
+        description="What this organisation analyses its results by, and how much has already been posted to each."
+        fn="erp_cost_centres"
+        empty="No cost centre yet. Every site and department already here becomes one as soon as you add it above."
+        rowKey={(r, i) => String(r["cost_centre_id"] ?? i)}
+        columns={[
+          { header: "Code", cell: "code" },
+          { header: "Name", cell: "name" },
+          { header: "Groups under", cell: "parent" },
+          { header: "Posted lines", cell: "posted_lines", numeric: true },
+          { header: "Status", cell: (r) => <StatusPill value={r["status"]} /> },
         ]}
       />
 

@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
+import { dependentFields, optionArgs, optionList } from "../../lib/dependent-options";
 import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
@@ -30,6 +31,12 @@ export type InquirySpec = {
   permission?: string;
   fn: string;
   fields: Field[];
+  /**
+   * The door's arguments from the answers, when they are not the answers as
+   * they are: a field asked only to narrow another field's picker (the kind of
+   * document, before the document) is not an argument of the door.
+   */
+  mapArgs?: (values: Record<string, unknown>) => Record<string, unknown>;
 };
 
 function Value({ value }: { value: unknown }) {
@@ -113,9 +120,20 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
         if (raw === "") continue;
         args[f.name] = f.kind === "number" ? Number(raw) : raw;
       }
-      return callErp<unknown>(spec.fn, args);
+      return callErp<unknown>(spec.fn, spec.mapArgs ? spec.mapArgs(args) : args);
     },
   });
+
+  // A choice another picker follows takes that picker's answer with it: the
+  // documents of the type chosen before are not documents of this one.
+  function choose(name: string, value: string) {
+    const followers = dependentFields(spec.fields, name);
+    setValues((p) => {
+      const next: Record<string, string> = { ...p, [name]: value };
+      for (const f of followers) next[f] = "";
+      return next;
+    });
+  }
 
   if (spec.permission && !hasPermission(session, spec.permission)) return null;
 
@@ -180,7 +198,7 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
                     aria-label={ui(f.label)}
                     required={f.required ?? false}
                     value={values[f.name] ?? ""}
-                    onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                    onChange={(e) => choose(f.name, e.target.value)}
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
                   >
                     <option value="">{ui("Choose…")}</option>
@@ -195,7 +213,7 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
                     aria-label={ui(f.label)}
                     required={f.required ?? false}
                     value={values[f.name] ?? ""}
-                    onChange={(e) => setValues((p) => ({ ...p, [f.name]: e.target.value }))}
+                    onChange={(e) => choose(f.name, e.target.value)}
                     className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
                   >
                     <option value="">{ui("Choose…")}</option>
@@ -209,7 +227,8 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
                   <SelectInput
                     spec={f}
                     value={values[f.name] ?? ""}
-                    onChange={(v) => setValues((p) => ({ ...p, [f.name]: v }))}
+                    onChange={(v) => choose(f.name, v)}
+                    values={values}
                   />
                 ) : f.kind === "combo" ? (
                   <ComboField
@@ -262,31 +281,54 @@ function Inquiry({ spec, startsOpen }: { spec: InquirySpec; startsOpen: boolean 
   );
 }
 
-/** The same reference read the action forms use, without the dialog around it. */
+/**
+ * The same reference read the action forms use, without the dialog around it.
+ *
+ * It reads when it is first opened rather than when the page draws, because a
+ * board folds a dozen questions nobody may ask. A picker that follows another
+ * choice on the form (`argsFrom`) waits for it, asks with it, and reads again
+ * when it changes, as the action forms' pickers do (J-97).
+ */
 function SelectInput({
   spec,
   value,
   onChange,
+  values,
 }: {
   spec: Extract<Field, { kind: "select" }>;
   value: string;
   onChange: (v: string) => void;
+  /** The form's answers, for a picker whose list follows one of them. */
+  values: Record<string, string>;
 }) {
   const { ui } = useT();
-  const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
+  // Null while a choice this picker follows has not been made.
+  const args = optionArgs(spec.options, values);
+  const asked = args === null ? null : JSON.stringify(args);
+  const [loaded, setLoaded] = useState<{ asked: string; data: unknown } | null>(null);
   const load = useMutation({
-    mutationFn: () =>
-      callErp<Record<string, unknown>[]>(spec.options.fn, spec.options.args ?? {}).then((r) => {
-        setRows(r);
-        return r;
+    mutationFn: (ask: { args: Record<string, unknown>; asked: string }) =>
+      callErp<unknown>(spec.options.fn, ask.args).then((data) => {
+        setLoaded({ asked: ask.asked, data });
+        return data;
       }),
   });
+
+  // What was read for an earlier choice is not this choice's list.
+  const current = loaded !== null && loaded.asked === asked ? loaded.data : null;
+  const rows =
+    current === null
+      ? null
+      : (optionList(spec.options, current, values).filter(
+          (row): row is Record<string, unknown> => typeof row === "object" && row !== null,
+        ) as Record<string, unknown>[]);
 
   // Only the rows worth offering, and why there are none, as the action forms
   // say it: a group's parent, not every company (J-94).
   const keep = spec.options.keep;
   const kept = (rows ?? []).filter((row) => !keep || keep(row));
   const empty = rows !== null && kept.length === 0 ? spec.options.empty : undefined;
+  const waiting = args === null;
 
   return (
     <>
@@ -294,11 +336,13 @@ function SelectInput({
         aria-label={ui(spec.label)}
         required={spec.required ?? false}
         value={value}
+        disabled={waiting}
         onFocus={() => {
-          if (rows === null && !load.isPending) load.mutate();
+          if (args !== null && asked !== null && current === null && !load.isPending)
+            load.mutate({ args, asked });
         }}
         onChange={(e) => onChange(e.target.value)}
-        className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm`}
+        className={`${TOUCH} w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-60`}
       >
         <option value="">{load.isPending ? ui("Loading…") : ui("Choose…")}</option>
         {kept.map((row) => {
@@ -314,7 +358,11 @@ function SelectInput({
           );
         })}
       </select>
-      {empty ? <span className="text-xs text-muted-foreground">{ui(empty)}</span> : null}
+      {waiting ? (
+        <span className="text-xs text-muted-foreground">{ui("Make the choice above first.")}</span>
+      ) : empty ? (
+        <span className="text-xs text-muted-foreground">{ui(empty)}</span>
+      ) : null}
     </>
   );
 }

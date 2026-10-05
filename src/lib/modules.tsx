@@ -5390,15 +5390,6 @@ export const EXTRA_TILES: TileDef[] = [
     group: "settle",
   },
   {
-    path: "/finance/cost-centres",
-    titleKey: "nav.finance_cost_centres",
-    title: "Cost centres",
-    blurb:
-      "The cost centres postings are analysed by, derived from the document's cost centre, department or site.",
-    permission: "finance.read",
-    group: "money",
-  },
-  {
     path: "/administration/permissions",
     titleKey: "nav.administration_permissions",
     title: "People and permissions",

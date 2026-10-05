@@ -1553,6 +1553,15 @@ export function ActionDialog({
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {ui(f.label)}
                 {f.kind === "money" ? ` (${f.currency})` : ""}
+                {/* A required field is marked before anything is pressed, not
+                    only after a refusal (J-104). The mark is for the eye; the
+                    control itself carries required, which a screen reader
+                    announces. */}
+                {f.required ? (
+                  <span aria-hidden="true" className="text-destructive">
+                    {" *"}
+                  </span>
+                ) : null}
               </span>
 
               {f.kind === "select" ? (
