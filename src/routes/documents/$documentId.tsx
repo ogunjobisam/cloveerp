@@ -104,6 +104,12 @@ type Doc = {
    * lines a routine writes. The database refuses the rest by name.
    */
   lines_open: boolean;
+  /**
+   * A goods receipt of samples a supplier lent (erp.is_sample_receipt). They
+   * are settled from Samples, never sent back on a credit note; the database
+   * refuses that by name (J-69).
+   */
+  is_sample?: boolean;
 };
 
 type Line = {
@@ -331,7 +337,9 @@ function Document() {
             />
           ) : null}
 
-          {doc.document_type === "goods_receipt" && doc.is_committed ? (
+          {/* Not on samples: they go back, are kept or are bought from
+              Samples on the Purchasing page (J-69). */}
+          {doc.document_type === "goods_receipt" && doc.is_committed && !doc.is_sample ? (
             <CreditSupplier
               documentId={documentId}
               context={`${doc.document_number} · ${doc.party ?? "no party"}`}
