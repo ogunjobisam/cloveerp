@@ -24,7 +24,7 @@ refuses if it disagrees; the words are a person's, the numbers are not.
 | **Foundation, B1–B10** | Complete, and every later Part built on it.                                                                                                                                                                                                                                  |
 | **Modules**            | <!-- count:modules -->13<!-- /count --> installable modules, each a change set of rules, lifecycles and approval chains promoted through B6 exactly as a customer's own change would be.                                                                                     |
 | **Runtime**            | A dispatch worker driving the outbox, the command queue and the scheduler, with a lease, a timeout, and an honest `ambiguous` outcome when the other side never answers.                                                                                                     |
-| **Interface**          | An application over a curated API of <!-- count:doors -->784<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
+| **Interface**          | An application over a curated API of <!-- count:doors -->785<!-- /count --> doors; a scan-first device client; a platform console; a status page.                                                                                                                             |
 | **Build**              | Every migration applied on every push — to a base a previous build proved, and nightly to an empty database — then <!-- count:catalogue_checks -->485<!-- /count --> catalogue checks, three rehearsals against a stub endpoint, and the checks that every door and every screen string has a home.                              |
 
 Concretely: <!-- count:erp_tables -->261<!-- /count --> tenant tables,
@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->261<!-- /count --> tenant tables,
 <!-- count:policies -->379<!-- /count --> row-security policies and
 <!-- count:triggers -->867<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->751<!-- /count --> migrations and
-<!-- count:sql_lines -->457009<!-- /count --> lines of SQL.
+<!-- count:migrations -->753<!-- /count --> migrations and
+<!-- count:sql_lines -->458342<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -110,7 +110,7 @@ nobody wrote down:
 | `erp_ai`      | <!-- count:ai_tables -->2<!-- /count --> tables                                                   | B10. Separate so "never in the transaction path" is checkable                            |
 | `erp_ingress` | <!-- count:ingress_functions -->4<!-- /count --> functions                                        | What the website's enquiry function may call, as a role that reaches nothing else        |
 | `erp_test`    | <!-- count:suites -->382<!-- /count --> suites                                                    | The harness. Suites build their own organisations, attack them, and roll them back       |
-| `public`      | <!-- count:doors -->784<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
+| `public`      | <!-- count:doors -->785<!-- /count --> functions                                                  | The only surface PostgREST exposes                                                       |
 
 Extensions: `pgcrypto`, `pg_jsonschema`, `btree_gist`; `pg_cron` and `pg_net`
 where the host has them.
@@ -150,7 +150,7 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->6342<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->6363<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->769<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 
