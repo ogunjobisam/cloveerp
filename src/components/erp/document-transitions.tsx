@@ -97,6 +97,7 @@ export function DocumentTransitions({
   terminal = false,
   exclude = [],
   quiet = false,
+  awaiting = null,
 }: {
   documentId: string;
   /** The document's number, which the sentence after a move names. */
@@ -113,6 +114,14 @@ export function DocumentTransitions({
   terminal?: boolean;
   exclude?: readonly string[];
   quiet?: boolean;
+  /**
+   * What the document still waits for from another document once its own
+   * moves are over (erp.document_awaiting). A posted receipt still to be
+   * billed, or a posted delivery still to be invoiced, has finished its own
+   * lifecycle and is not finished with: it says so, and how, instead of
+   * "Nothing more happens" (B4).
+   */
+  awaiting?: "bill" | "invoice" | null;
 }) {
   const { ui } = useT();
   const act = useErpAction({
@@ -195,7 +204,11 @@ export function DocumentTransitions({
       <p className="mt-4 text-xs text-muted-foreground">
         {transitions.length === 0
           ? committed || terminal
-            ? ui("Nothing more happens to this document.")
+            ? awaiting === "bill"
+              ? ui("Waiting for the supplier's bill: raise it with Bill a receipt.")
+              : awaiting === "invoice"
+                ? ui("Waiting to be invoiced: raise the invoice with Invoice a delivery.")
+                : ui("Nothing more happens to this document.")
             : "This document's type has no lifecycle configured, so there is nothing to move it through."
           : "Nothing here is offered to this account. The transitions this document has all require a permission it does not hold."}
       </p>
