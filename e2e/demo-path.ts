@@ -442,8 +442,9 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
     "The vendor's own quotes, on the platform's organisation. Not a tenant selling to its customers.",
   "/finance/account-determination":
     "Which nominal account each posting lands on. Seeded, and what the four ties then test.",
-  "/finance/dimensions": "Analysis dimensions and the rules over their combinations. Seeded.",
-  "/finance/cost-centres": "Cost centres, and what a posting is stamped with. Seeded.",
+  "/finance/dimensions":
+    "Cost centres and the other reporting tags, and the rules over their combinations. Seeded.",
+  "/finance/cost-centres": "Redirects to Extra reporting tags, where cost centres are kept.",
   "/finance/journals":
     "Accruals and corrections typed by hand. Financials draws it as a step, and neither flow needs one: every posting on the demo path comes from a document.",
   "/finance/vat":

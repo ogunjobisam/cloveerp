@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { fieldsFor } from "./form-fields";
 
@@ -23,5 +25,24 @@ describe("the fields a form asks", () => {
     expect(fieldsFor(invoice, (code) => code === "sales.invoice").map((f) => f.name)).toEqual([
       "p_delivery_id",
     ]);
+  });
+});
+
+describe("a required field says so before anything is pressed (J-104)", () => {
+  const read = (p: string) => readFileSync(join(import.meta.dir, p), "utf8");
+
+  test("the cost centre's Status arrives on Active, the one value a new cost centre takes", () => {
+    const screen = read("../routes/finance/dimensions.tsx");
+    const action = screen.slice(
+      screen.indexOf('fn: "erp_upsert_cost_centre"'),
+      screen.indexOf('invalidates: ["erp_cost_centres"'),
+    );
+    const status = action.slice(action.indexOf('name: "p_status"'));
+    expect(status).toMatch(/^name: "p_status",[\s\S]*?required: true,[\s\S]*?default: "active",/);
+  });
+
+  test("the form marks a required field beside its label, for the eye only", () => {
+    const form = read("../components/erp/action.tsx");
+    expect(form).toMatch(/\{f\.required \? \(\s*<span aria-hidden="true"/);
   });
 });

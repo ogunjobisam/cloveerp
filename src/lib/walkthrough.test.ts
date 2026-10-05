@@ -123,7 +123,7 @@ describe("which screen a path belongs to", () => {
   });
 
   test("the longest tile wins when one tile path prefixes another", () => {
-    expect(tileFor("/finance/cost-centres")?.path).toBe("/finance/cost-centres");
+    expect(tileFor("/finance/dimensions")?.path).toBe("/finance/dimensions");
   });
 
   test("a Work tile is a tile but not a Settings screen", () => {
