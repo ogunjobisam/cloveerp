@@ -539,7 +539,9 @@ test.describe("a document offers only what can be completed", () => {
 
   // An order waiting for approval, written by hand, converted from a
   // requisition: erp.document_lineage() returns the order itself as a 'self'
-  // row beside the 'upstream' requisition.
+  // row beside the requisition. The order converts the requisition, and a
+  // relation points from the later document to the earlier, so the
+  // requisition is 'downstream' of the order (as PO-000149 showed it live).
   const PENDING_ID = "00000000-0000-4000-8000-00000000d0c6";
   const REQ_ID = "00000000-0000-4000-8000-00000000d0c7";
   const PENDING_PAGE = {
@@ -564,7 +566,7 @@ test.describe("a document offers only what can be completed", () => {
       },
       {
         depth: 1,
-        direction: "upstream",
+        direction: "downstream",
         document_id: REQ_ID,
         document_number: "REQ-000007",
         base_type: "requisition",
@@ -614,13 +616,15 @@ test.describe("a document offers only what can be completed", () => {
     ).toBeVisible();
     await expect(page.getByText("Approved as administrator, for the person asked")).toHaveCount(0);
 
-    // The requisition it came from reads "from", and the order is not listed
-    // as related to itself.
+    // The requisition it came from says so in words — "to · converts" read
+    // as code (5 October re-test) — and the order is not listed as related
+    // to itself.
     const related = page.locator("section", {
       has: page.getByRole("heading", { name: "Related documents" }),
     });
     await expect(related.getByRole("link", { name: "REQ-000007" })).toBeVisible();
-    await expect(related.getByText(/from · converts ·/)).toBeVisible();
+    await expect(related.getByText(/^Converted from ·/)).toBeVisible();
+    await expect(related.getByText(/converts ·/)).toHaveCount(0);
     await expect(related.getByRole("link", { name: "PO-000043" })).toHaveCount(0);
     await expect(related.getByRole("button", { name: "Link a document" })).toBeVisible();
     expect(backend.crashes).toEqual([]);
@@ -664,7 +668,8 @@ test.describe("a document offers only what can be completed", () => {
       ],
       lineage: [
         bill,
-        // The same bill relates a second way: listed once for each.
+        // The same bill relates a second way: listed once, saying both
+        // (5 October re-test: PINV-000116 listed PO-000149 twice).
         { ...bill, relation: "fulfils" },
         related(2, "CB-000004", "carrier_bill", "consumes"),
         related(3, "INV-000440", "sales_invoice", "mirrors"),
@@ -678,9 +683,9 @@ test.describe("a document offers only what can be completed", () => {
       has: page.getByRole("heading", { name: "Related documents" }),
     });
     const row = (number: string) => lineage.locator("li", { hasText: number });
-    await expect(row("PINV-000113")).toHaveCount(2);
-    await expect(row("PINV-000113").first()).toContainText("Supplier bill");
-    await expect(row("PINV-000113").last()).toContainText("Supplier bill");
+    await expect(row("PINV-000113")).toHaveCount(1);
+    await expect(row("PINV-000113")).toContainText("Supplier bill");
+    await expect(row("PINV-000113")).toContainText("Invoices, fulfils ·");
     await expect(row("CB-000004")).toContainText("Carrier bill");
     await expect(row("INV-000440")).toContainText("Sales invoice");
     await expect(lineage.getByText("Carrier bill")).toHaveCount(1);
@@ -778,9 +783,14 @@ test.describe("a document offers only what can be completed", () => {
     await expect(
       form.getByText("It comes off the draft, and anything it was raised from is open again."),
     ).toBeVisible();
+    // Which line it is, before the press (5 October re-test).
+    await expect(form.getByText("PO-000044 · line 1 · WID", { exact: true })).toBeVisible();
     const sent = page.waitForRequest(/rpc\/erp_remove_document_line$/);
     await form.getByRole("button", { name: "Remove" }).click();
     expect((await sent).postDataJSON()).toMatchObject({ p_line_id: LINE_ID });
+    // And after it: not the dialog's question, "Remove this line? — done."
+    await expect(page.getByText("Line 1 removed from PO-000044.", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Remove this line\? — done/)).toHaveCount(0);
 
     // Waiting for approval, the same order offers nothing that changes a line.
     backend.rpc("erp_document", PENDING_PAGE);
@@ -3369,5 +3379,266 @@ test.describe("features and content are kept on Configuration", () => {
       expect(backend.called).not.toContain("erp_change_sets");
       expect(backend.crashes).toEqual([]);
     });
+  });
+});
+
+test.describe("the 5 October re-test: what a press did, and where its toast sits", () => {
+  const stepOf = (page: Page, label: string) =>
+    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of \\d+`) });
+  const toastSaying = (page: Page, text: string) =>
+    page.locator("[data-sonner-toast]", { hasText: text });
+
+  test("a payment run is proposed in the company's currency, and proposing and approving it name it", async ({
+    page,
+    backend,
+  }) => {
+    const RUN = "00000000-0000-4000-8000-00000000f0b1";
+    backend.rpc("erp_entities", [
+      {
+        entity_id: "00000000-0000-4000-8000-0000000000c1",
+        code: "E1",
+        name: "E2E Entity",
+        base_currency: "GBP",
+      },
+      {
+        entity_id: "00000000-0000-4000-8000-0000000000c2",
+        code: "E2",
+        name: "E2E Europe",
+        base_currency: "EUR",
+      },
+    ]);
+    backend.rpc("erp_currencies", [
+      { code: "EUR", name: "Euro", minor_units: 2 },
+      { code: "GBP", name: "Pound sterling", minor_units: 2 },
+    ]);
+    backend.rpc("erp_payment_proposals", [
+      {
+        proposal_id: RUN,
+        reference: "PAY-20261005142957795",
+        payment_date: "2026-10-05",
+        currency: "GBP",
+        total_minor: 21300,
+        status: "proposed",
+      },
+    ]);
+    backend.rpc("erp_propose_payment_run", RUN);
+    // Approving answers with the run's total in pence.
+    backend.rpc("erp_approve_payment_run", 21300);
+
+    await page.goto("/finance");
+    await stepOf(page, "Payment run").click({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Propose a payment run", exact: true }).click();
+    const propose = page.getByRole("dialog", { name: "Propose a payment run" });
+    // The base currency of the company the run is for, not "Choose…".
+    await expect(propose.getByRole("combobox", { name: "Currency" })).toHaveValue("GBP");
+    const sent = page.waitForRequest(/rpc\/erp_propose_payment_run$/);
+    await propose.getByRole("button", { name: "Propose a payment run" }).click();
+    expect((await sent).postDataJSON()).toMatchObject({ p_currency: "GBP" });
+    await expect(
+      toastSaying(page, "PAY-20261005142957795 proposed: £213.00 to pay."),
+    ).toBeVisible();
+    await expect(page.getByText("Propose a payment run — done.")).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^PAY-20261005142957795/ }).click();
+    await page.getByRole("button", { name: "Approve a payment run", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Approve a payment run" })
+      .getByRole("button", { name: "Approve a payment run" })
+      .click();
+    await expect(
+      toastSaying(page, "PAY-20261005142957795 approved: £213.00 to pay."),
+    ).toBeVisible();
+    await expect(page.getByText(/records created/)).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("receiving against a notice names the goods receipt; its toast lets clicks through and goes with the page", async ({
+    page,
+    backend,
+  }) => {
+    const ORDER = "00000000-0000-4000-8000-00000000a0a1";
+    const GRN = "00000000-0000-4000-8000-00000000a0c1";
+    const notice = {
+      notice_id: "00000000-0000-4000-8000-00000000a0b1",
+      notice: "ASN-PO-000149-1",
+      order_id: ORDER,
+      order: "PO-000149",
+      supplier: "Anchor Fasteners",
+      status: "notified",
+      expected_arrival: "2026-10-05",
+      late: false,
+      lines: [],
+      cartons: [],
+      differences: [],
+    };
+    backend.rpc("erp_shipping_notices", [notice]);
+    backend.rpc("erp_receive_as_notified", {
+      ...notice,
+      status: "received",
+      receipt: "GRN-000143",
+      receipt_id: GRN,
+    });
+
+    await page.goto("/procurement");
+    const card = page.locator("section", {
+      has: page.getByRole("heading", { name: "On its way", level: 2 }),
+    });
+    await card.getByRole("button", { name: "Receive as notified" }).click({ timeout: 20_000 });
+    const form = page.getByRole("dialog", { name: "Receive as notified" });
+    await form.getByRole("button", { name: "Receive" }).click();
+
+    // The receipt it posted, and a way to it: not "Receive as notified — done."
+    const said = toastSaying(page, "GRN-000143 received against PO-000149.");
+    await expect(said).toBeVisible();
+    await expect(said.getByRole("link", { name: "Open GRN-000143" })).toBeVisible();
+
+    // A toast is read, not pressed: the pointer goes through it to what is
+    // under it, except to its own link.
+    const through = await said.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + 6, box.top + box.height / 2);
+      return hit !== null && !el.contains(hit);
+    });
+    expect(through, "the toast took the click meant for what is under it").toBe(true);
+
+    // A change of page takes it, well inside the eight seconds it stays.
+    await page.waitForTimeout(1_200);
+    await page
+      .getByRole("navigation", { name: "Sections" })
+      .first()
+      .getByRole("button", { name: "Financials", exact: true })
+      .click();
+    await page
+      .getByRole("navigation", { name: "Sections" })
+      .first()
+      .getByRole("link", { name: "Journals", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/finance\/journals\/?$/);
+    await expect(said).toHaveCount(0, { timeout: 2_500 });
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("Bill a receipt offers each receipt by its supplier, value and date", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_documents", [
+      {
+        document_id: "00000000-0000-4000-8000-00000000a0c1",
+        document_number: "GRN-000143",
+        document_type: "goods_receipt",
+        document_date: "2026-10-05",
+        required_date: null,
+        currency: "GBP",
+        party: "Anchor Fasteners",
+        total_minor: 21300,
+        state: "posted",
+        state_name: "Posted",
+        is_committed: true,
+        is_cancelled: false,
+      },
+    ]);
+    await page.goto("/procurement");
+    await stepOf(page, "Supplier bill").click({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Bill a receipt", exact: true }).click();
+    const form = page.getByRole("dialog", { name: "Bill a receipt" });
+    await expect(
+      form.getByRole("combobox", { name: "Goods receipt" }).locator("option", {
+        hasText: "GRN-000143 — Anchor Fasteners — £213.00 — 5 Oct 2026",
+      }),
+    ).toHaveCount(1);
+    await expect(form.getByText("GRN-000143 — posted")).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a new journal starts on the organisation's primary company, and its accounts are offered", async ({
+    page,
+    backend,
+  }) => {
+    const ACME = "00000000-0000-4000-8000-0000000000c1";
+    const EU = "00000000-0000-4000-8000-0000000000c2";
+    // ACME-EU first, so the test sees that the first by code is chosen.
+    backend.rpc("erp_entities", [
+      { entity_id: EU, code: "ACME-EU", name: "Acme Europe", base_currency: "EUR" },
+      { entity_id: ACME, code: "ACME", name: "Acme United Kingdom", base_currency: "GBP" },
+    ]);
+    backend.rpc("erp_accounts", [
+      {
+        account_id: "00000000-0000-4000-8000-0000000a0001",
+        code: "4000",
+        name: "Revenue",
+        entity_id: ACME,
+        status: "active",
+        control_kind: null,
+      },
+      {
+        account_id: "00000000-0000-4000-8000-0000000a0002",
+        code: "4001",
+        name: "Umsatz",
+        entity_id: EU,
+        status: "active",
+        control_kind: null,
+      },
+    ]);
+    await page.goto("/finance/journals");
+    await page.getByRole("button", { name: "New journal" }).click({ timeout: 20_000 });
+    const form = page.getByRole("region", { name: "New journal" });
+    await expect(form.getByRole("combobox", { name: "Company" })).toHaveValue(ACME);
+    await expect(
+      form.getByText("Choose the company first: each company keeps its own accounts."),
+    ).toHaveCount(0);
+    const account = form.getByRole("combobox", { name: "Account" }).first();
+    await expect(account.locator("option", { hasText: "4000 — Revenue" })).toHaveCount(1);
+    await expect(account.locator("option", { hasText: "Umsatz" })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("a product's description pre-filled on a line is replaced by what is typed, not spliced", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_document_types", [
+      {
+        document_type_id: "00000000-0000-4000-8000-0000000071f1",
+        code: "requisition",
+        name: "Requisition",
+        base_type_code: "requisition",
+        requires_party: false,
+        requires_site: false,
+        currency: "GBP",
+        create_permission: "procurement.order",
+      },
+    ]);
+    backend.rpc("erp_items", [
+      {
+        item_id: "00000000-0000-4000-8000-00000000e501",
+        code: "FG-5000",
+        name: "Acme widget 250",
+        description: "Acme widget, 250mm, zinc plated, box of 10",
+      },
+    ]);
+    // The strip opens on its first step, Requisition.
+    await page.goto("/procurement");
+    await page
+      .getByRole("button", { name: "New requisition", exact: true })
+      .click({ timeout: 20_000 });
+    const form = page.getByRole("dialog", { name: "New requisition" });
+    await form.getByRole("button", { name: "Add a line" }).click();
+    await form
+      .getByRole("combobox", { name: "Product" })
+      .selectOption("00000000-0000-4000-8000-00000000e501");
+    const description = form.getByRole("textbox", { name: "Description" });
+    // The product's own words arrive, to be seen and changed.
+    await expect(description).toHaveValue("Acme widget, 250mm, zinc plated, box of 10");
+    // A click lands the caret wherever it falls; what is typed replaces the
+    // product's words rather than going in the middle of them.
+    await description.click();
+    await page.keyboard.type("RT2- widget 250mm");
+    await expect(description).toHaveValue("RT2- widget 250mm");
+    // Once the words are the person's own, a click edits them where it lands.
+    await description.click({ position: { x: 4, y: 10 } });
+    await page.keyboard.type("Box: ");
+    await expect(description).toHaveValue("Box: RT2- widget 250mm");
+    expect(backend.crashes).toEqual([]);
   });
 });

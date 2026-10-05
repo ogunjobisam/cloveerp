@@ -9,7 +9,9 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { toast } from "sonner";
 import { Toaster } from "../components/ui/sonner";
+import { goesWithThePage } from "../lib/toast-age";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NotFoundComponent } from "../components/erp/not-found";
 
@@ -144,9 +146,30 @@ function useTitleFollowsTheRoute() {
   );
 }
 
+/**
+ * A toast showing when the page changes goes with the page (5 October
+ * re-test): it sat over the next screen's process strip and its first form.
+ * One raised a moment before stays, because it is the outcome of the press that
+ * opened the page. A change of record on the same screen is not a change of
+ * page. See src/lib/toast-age.ts.
+ */
+function useToastsGoWithThePage() {
+  const router = useRouter();
+  useEffect(
+    () =>
+      router.subscribe("onBeforeNavigate", ({ fromLocation, toLocation }) => {
+        if (!fromLocation || fromLocation.pathname === toLocation.pathname) return;
+        const now = Date.now();
+        for (const t of toast.getToasts()) if (goesWithThePage(t.id, now)) toast.dismiss(t.id);
+      }),
+    [router],
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useTitleFollowsTheRoute();
+  useToastsGoWithThePage();
 
   return (
     <QueryClientProvider client={queryClient}>
