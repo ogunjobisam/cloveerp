@@ -94,6 +94,7 @@ export function DocumentTransitions({
   documentType,
   transitions,
   committed,
+  terminal = false,
   exclude = [],
   quiet = false,
 }: {
@@ -104,6 +105,12 @@ export function DocumentTransitions({
   documentType: string | null;
   transitions: Transition[];
   committed: boolean;
+  /**
+   * Whether the document's state is one its lifecycle ends in. A cancelled
+   * document is not committed and has no move left, and it has finished, not
+   * gone without a lifecycle (J-119).
+   */
+  terminal?: boolean;
   exclude?: readonly string[];
   quiet?: boolean;
 }) {
@@ -187,7 +194,7 @@ export function DocumentTransitions({
     return (
       <p className="mt-4 text-xs text-muted-foreground">
         {transitions.length === 0
-          ? committed
+          ? committed || terminal
             ? "This document has reached a state its lifecycle does not continue from."
             : "This document's type has no lifecycle configured, so there is nothing to move it through."
           : "Nothing here is offered to this account. The transitions this document has all require a permission it does not hold."}

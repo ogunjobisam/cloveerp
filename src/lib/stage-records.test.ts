@@ -478,7 +478,7 @@ describe("a move another document makes is never a button", () => {
 
   test("the list is the moves a receipt, a conversion, a pick, a despatch, an invoice, a payment, a credit note, the cash, a payment run or a VAT period makes", () => {
     expect(DOOR_ONLY_TRANSITIONS).toEqual({
-      requisition: ["order"],
+      requisition: ["order", "reopen"],
       purchase_order: ["inherit_approval", "receive_partial", "receive_all", "cancel_sent"],
       quotation: ["accept"],
       sales_order: [
@@ -965,6 +965,14 @@ describe("a move is drawn only where it can be completed", () => {
       "Some moves wait on a condition this document does not meet yet.",
     ]);
     expect(heldReasons([move({ refused: "CLOVEERP_SOMETHING_ELSE" })])).toEqual([]);
+  });
+
+  test("an order changed since it was approved with its requisition says so instead of Issue", () => {
+    const send = move({ code: "send", refused: "CLOVEERP_CARRIED_ORDER_CHANGED" });
+    expect(isCompletable(send)).toBe(false);
+    expect(heldReasons([send])).toEqual([
+      "Changed since it was approved with its requisition. Take it back to draft and submit it for its own approval.",
+    ]);
   });
 
   test("a discount or credit step its holder may not give says so instead of Approve", () => {
