@@ -2424,7 +2424,8 @@ export const FINANCE: ModuleDef = {
     },
     {
       title: "Received, not yet billed",
-      description: "Received against a purchase order, still awaiting an invoice.",
+      // Only a posted goods receipt receives (20261006131000).
+      description: "Posted goods receipts against a purchase order, still awaiting an invoice.",
       fn: "erp_grni",
       empty:
         "Nothing received awaiting an invoice. A goods receipt accrues here until the supplier invoice matches it.",
@@ -4934,7 +4935,8 @@ export const SALES_KPIS: Kpi[] = [
 
 export const PURCHASING_KPIS: Kpi[] = [
   {
-    label: "Received, not yet billed",
+    // How many lines; the tile after it says what they are worth (J-48).
+    label: "Lines received, not yet billed",
     fn: "erp_grni",
     compute: (rows) => {
       if (rows.length === 0) return { value: "0", hint: "nothing awaiting an invoice", tone: "ok" };
@@ -4947,7 +4949,7 @@ export const PURCHASING_KPIS: Kpi[] = [
     },
   },
   {
-    label: "Received, not yet billed",
+    label: "Value received, not yet billed",
     fn: "erp_grni",
     compute: (rows, { money }) =>
       rows.length === 0

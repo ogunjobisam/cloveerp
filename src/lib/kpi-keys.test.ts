@@ -4,10 +4,11 @@ import { kpiKeys } from "./kpi-keys";
 import { MODULES, PURCHASING_KPIS, SALES_KPIS } from "./modules";
 
 /**
- * Purchasing's page carries "Received, not yet billed" twice — how many lines,
+ * Purchasing's page carried "Received, not yet billed" twice — how many lines,
  * and what they are worth — both read from erp_grni. The tiles were keyed by
  * door and label, so React was handed the same key twice. Every row of tiles
- * keys each tile differently, and both of those tiles stay.
+ * keys each tile differently, and both of those tiles stay, each now under
+ * its own label (J-48).
  */
 describe("every tile in a row has its own key", () => {
   const rows: [string, readonly { fn: string; label: string }[]][] = [
