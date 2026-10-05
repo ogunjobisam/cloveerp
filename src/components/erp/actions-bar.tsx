@@ -335,21 +335,41 @@ export const reason = (name = "p_reason", label = "Reason", required = false): F
   hint: "Recorded against the action in the audit trail.",
 });
 
-/** A place in a warehouse, chosen rather than typed. */
+/**
+ * A place in a warehouse, chosen rather than typed, named with its site: two
+ * sites each with a "Bulk store" read the same without it (J-81).
+ *
+ * `filter.pickable` offers only places stock can be picked from: marked
+ * pickable, and not blocked.
+ */
 export const pickLocation = (
   name = "p_location_id",
   label = "Location",
   required = false,
+  filter?: { pickable?: boolean },
 ): Field => ({
   kind: "select",
   name,
   label,
   required,
-  options: { fn: "erp_locations", value: "location_id", label: ["code", "name"] },
+  options: {
+    fn: "erp_locations",
+    value: "location_id",
+    label: ["site", "code", "name"],
+    ...(filter?.pickable
+      ? {
+          keep: (row: Record<string, unknown>) =>
+            row["is_pickable"] === true && row["is_blocked"] !== true,
+        }
+      : {}),
+  },
 });
 
 /**
  * A line of a document, shown as its number, item and quantity.
+ *
+ * `filter.withParty` names whose document it is as well, after its number:
+ * two orders for the same product read the same without it (J-81).
  *
  * `filter.openOnly` asks erp_document_lines for p_open_only: no line of a
  * cancelled or finished document, and no line already received and invoiced
@@ -364,7 +384,7 @@ export const pickLine = (
   typeCode: string,
   name = "p_order_line_id",
   label = "Order line",
-  filter?: { openOnly?: boolean; states?: string[] },
+  filter?: { openOnly?: boolean; states?: string[]; withParty?: boolean },
 ): Field => ({
   kind: "select",
   name,
@@ -379,7 +399,9 @@ export const pickLine = (
       ...(filter?.states && filter.states.length > 0 ? { p_document_states: filter.states } : {}),
     },
     value: "line_id",
-    label: ["document_number", "item", "quantity"],
+    label: filter?.withParty
+      ? ["document_number", "party", "item", "quantity"]
+      : ["document_number", "item", "quantity"],
   },
 });
 

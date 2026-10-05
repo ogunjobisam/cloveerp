@@ -40,6 +40,18 @@ const CONVERSION_DEFAULTS = (key: string) => ({
   key,
 });
 
+/** Every order not yet despatched: the orders the Sales order step lists. */
+const ORDERS_STILL_TO_GO = [
+  "draft",
+  "pending_approval",
+  "confirmed",
+  "picking",
+  "partially_despatched",
+];
+
+/** Orders that can be picked, delivered and released: confirmed and not yet gone. */
+const ORDERS_TO_PICK = ["confirmed", "picking", "partially_despatched"];
+
 /**
  * Quotation to order to delivery.
  *
@@ -129,9 +141,15 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.order",
     fn: "erp_reserve_for_line",
     fields: [
-      // Open lines only: not on a closed or cancelled order. The line row keeps
+      // Open lines of the orders the Sales order step lists, each with its
+      // customer (J-81): not a line of an order despatched, invoiced or
+      // closed, which has nothing left to hold stock for. The line row keeps
       // no reservation; erp.reserve_for_line refuses a line that holds stock.
-      pickLine("sales_order", "p_document_line_id", "Order line", { openOnly: true }),
+      pickLine("sales_order", "p_document_line_id", "Order line", {
+        openOnly: true,
+        states: ORDERS_STILL_TO_GO,
+        withParty: true,
+      }),
       {
         kind: "text",
         name: "p_policy_code",
@@ -148,15 +166,19 @@ const SALES_ACTIONS: ActionSpec[] = [
     permission: "sales.despatch",
     fn: "erp_pick_document",
     fields: [
+      // Orders that can be picked, by number, state and customer (J-81).
+      // p_actionable offered every order not yet finished, an invoiced one
+      // among them, by its state's code.
       pickFrom(
         "erp_documents",
         "document_id",
-        ["document_number", "state"],
+        ["document_number", "state_name", "party"],
         "p_document_id",
         "Sales order",
-        { p_type_code: "sales_order", p_limit: 100, p_actionable: true },
+        { p_type_code: "sales_order", p_limit: 100, p_states: ORDERS_TO_PICK },
       ),
-      pickLocation("p_location_id", "Pick from location", false),
+      // A place stock can be picked from, named with its site.
+      pickLocation("p_location_id", "Pick from location", false, { pickable: true }),
       pickBatch("p_batch_id", "Batch", false),
     ],
     invalidates: ["erp_documents", "erp_document"],
