@@ -302,7 +302,7 @@ export const ORDER_TO_CASH: Flow = {
     },
     {
       path: "/sales",
-      stage: "Pick",
+      stage: "Sales order",
       does: "Pick the order: it reserves whatever is not reserved yet, picks it off the shelf, and says what it could not cover.",
       doors: ["erp_pick_document"],
       leaves: "The order picking, with the stock allocated to its lines.",
@@ -316,14 +316,6 @@ export const ORDER_TO_CASH: Flow = {
     },
     {
       path: "/sales",
-      stage: "Delivery",
-      signpost: "/logistics",
-      does: "Sales' delivery step says where a delivery leaves from, and goes to Despatch.",
-      doors: [],
-      leaves: "Nothing. A signpost.",
-    },
-    {
-      path: "/logistics",
       stage: "Delivery",
       does: "Post the delivery when the goods leave. Posting is what takes the stock off the shelf.",
       doors: ["erp_transition_document"],
@@ -357,14 +349,6 @@ export const ORDER_TO_CASH: Flow = {
       does: "Raise the invoice from the posted delivery, so it bills what actually went, and issue it.",
       doors: ["erp_invoice_from_delivery", "erp_transition_document"],
       leaves: "A sales invoice issued: the receivable and the revenue posted.",
-    },
-    {
-      path: "/sales",
-      stage: "Cash",
-      signpost: "/finance",
-      does: "Sales' last step says the money is applied in Financials, and goes there.",
-      doors: [],
-      leaves: "Nothing. A signpost.",
     },
     {
       path: "/finance",

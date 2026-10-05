@@ -6,6 +6,7 @@ import * as ts from "typescript";
 import { FLOWS, OFF_THE_PATH, pathsOnTheDemoPath } from "../../e2e/demo-path";
 import { ROUTES } from "../../e2e/routes";
 import { MODULES } from "./modules";
+import { DOCUMENT_READ } from "./stage-records";
 
 /**
  * The demo path, held against the product.
@@ -72,7 +73,14 @@ const INLINE_FLOWS: Readonly<Record<string, string>> = {
   "/sales": join("routes", "sales", "index.tsx"),
 };
 
+/** A step a screen draws: its label, and whether it lists documents. */
+type DrawnStage = { label: string; listsDocuments: boolean };
+
 function inlineStages(file: string): string[] {
+  return inlineStageSpecs(file).map((s) => s.label);
+}
+
+function inlineStageSpecs(file: string): DrawnStage[] {
   const path = join(ROOT, "src", file);
   const tree = ts.createSourceFile(
     path,
@@ -138,7 +146,17 @@ function inlineStages(file: string): string[] {
           `${file} draws a step whose label is not written down: ${said(stage).slice(0, 80)}`,
         );
       }
-      return label.text;
+      const list = ts.isObjectLiteralExpression(stage) ? property(stage, "list") : undefined;
+      const listFn = list && ts.isObjectLiteralExpression(list) ? property(list, "fn") : undefined;
+      return {
+        label: label.text,
+        listsDocuments:
+          ts.isObjectLiteralExpression(stage) &&
+          (property(stage, "typeCode") !== undefined ||
+            (listFn !== undefined &&
+              ts.isStringLiteralLike(listFn) &&
+              listFn.text === DOCUMENT_READ)),
+      };
     });
     expect(labels.length, `${file} draws a <ProcessFlow> with no steps`).toBeGreaterThan(0);
     return labels;
@@ -146,11 +164,20 @@ function inlineStages(file: string): string[] {
 }
 
 function stagesDrawnOn(path: string): string[] | null {
+  return stageSpecsDrawnOn(path)?.map((s) => s.label) ?? null;
+}
+
+function stageSpecsDrawnOn(path: string): DrawnStage[] | null {
   const inline = INLINE_FLOWS[path];
-  if (inline !== undefined) return inlineStages(inline);
+  if (inline !== undefined) return inlineStageSpecs(inline);
   const module = MODULES.find((m) => m.path === path);
   const stages = module?.flow?.stages;
-  return stages ? stages.map((s) => s.label) : null;
+  return stages
+    ? stages.map((s) => ({
+        label: s.label,
+        listsDocuments: s.typeCode !== undefined || s.list?.fn === DOCUMENT_READ,
+      }))
+    : null;
 }
 
 const everyPath = new Set(ROUTES.map((r) => r.path));
@@ -202,6 +229,23 @@ describe("the demo path", () => {
           drawn ?? [],
           `${flow.key} names a "${step.stage}" step on ${step.path}, which draws no such step`,
         ).toContain(step.stage);
+      }
+    }
+  });
+
+  // A document is moved on from a step that lists documents: its moves are
+  // drawn under the chosen one. The path once posted a draft delivery on
+  // Despatch's Delivery step, which lists posted deliveries only, so the post
+  // it named could not be made there (J-17).
+  test("moves a document on only at a step that lists documents", () => {
+    for (const flow of FLOWS) {
+      for (const step of flow.steps) {
+        if (step.stage === undefined || !step.doors.includes("erp_transition_document")) continue;
+        const drawn = stageSpecsDrawnOn(step.path)?.find((s) => s.label === step.stage);
+        expect(
+          drawn?.listsDocuments,
+          `${flow.key} moves a document on at the ${step.stage} step of ${step.path}, which lists no documents to choose`,
+        ).toBe(true);
       }
     }
   });

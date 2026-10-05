@@ -5072,7 +5072,10 @@ export const SALES_KPIS: Kpi[] = [
     fn: "erp_release_sequence",
     compute: (rows) =>
       zeroIsGood(
-        count(rows, (r) => !isOneOf(r["credit_status"], ["ok"])),
+        // Held as picking holds them: the customer's credit position on hold
+        // and the order not released (20261009012000). A customer on watch
+        // is not held (J-79).
+        count(rows, (r) => r["on_hold"] === true),
         "lines held on credit",
       ),
   },
