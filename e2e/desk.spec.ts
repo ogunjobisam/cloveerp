@@ -1526,7 +1526,7 @@ test.describe("the cash documents are on the desk", () => {
     supplier_item_code: null,
   });
   const step = (page: Page, label: string) =>
-    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 7`) });
+    page.getByRole("button", { name: new RegExp(`^${label}, step \\d+ of 5`) });
 
   test("Cash in lists its receipts, and Apply cash names the receipt it made and opens it", async ({
     page,
@@ -1748,8 +1748,12 @@ test.describe("the cash documents are on the desk", () => {
     });
 
     await page.goto("/finance");
-    await step(page, "Pay").click({ timeout: 20_000 });
+    await step(page, "Payment run").click({ timeout: 20_000 });
     await page.getByRole("button", { name: /^PAY-000003/ }).click();
+    // An approved run is paid, not approved again.
+    await expect(
+      page.getByRole("button", { name: "Approve a payment run", exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Pay an approved run", exact: true }).click();
     const sent = page.waitForRequest(/rpc\/erp_pay_payment_run$/);
     await page

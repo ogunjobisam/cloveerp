@@ -1029,10 +1029,45 @@ describe("what only a routine opens is never raised or edited by hand (PR13 M4)"
     expect(cashIn?.states).toEqual(["posted"]);
     expect(cashIn?.actionFn).toBeUndefined();
     expect(cashIn?.actionFns).toBeUndefined();
-    // One step of seven keeps no list of its own: Journals, which is a screen.
+    // One step of five keeps no list of its own: Journals, which is a screen.
     expect(money?.stages.filter((s) => !s.typeCode && !s.list).map((s) => s.label)).toEqual([
       "Journals",
     ]);
+  });
+
+  test("a payment run is proposed, approved and paid on one step, each verb in the state its door takes", () => {
+    const money = MODULES.find((m) => m.flow?.code === "money")?.flow;
+    expect(money?.stages.map((s) => s.label)).toEqual([
+      "Invoice",
+      "Cash in",
+      "Payment run",
+      "Journals",
+      "Close",
+    ]);
+    const run = money?.stages.find((s) => s.label === "Payment run");
+    expect(run?.list?.fn).toBe("erp_payment_proposals");
+    expect(run?.states).toEqual(["draft", "proposed", "approved"]);
+    expect(run?.createFn).toBe("erp_propose_payment_run");
+    expect(run?.recordArg).toBe("p_proposal_id");
+    expect(run?.actionFns).toEqual(["erp_approve_payment_run", "erp_pay_payment_run"]);
+    expect(run?.actionStates).toEqual({
+      erp_approve_payment_run: ["proposed"],
+      erp_pay_payment_run: ["approved"],
+    });
+    // Each verb is offered only where its door would take the run.
+    const offered = (fn: string, state: string) =>
+      offerFor({
+        offeredIn: run?.actionStates?.[fn],
+        state,
+        stageStates: run?.states,
+        available: null,
+        settled: false,
+        staysOpen: false,
+      });
+    expect(offered("erp_approve_payment_run", "proposed")).toBe("offer");
+    expect(offered("erp_approve_payment_run", "approved")).toBe("hide");
+    expect(offered("erp_pay_payment_run", "approved")).toBe("offer");
+    expect(offered("erp_pay_payment_run", "proposed")).toBe("hide");
   });
 });
 

@@ -1784,50 +1784,18 @@ export const FINANCE: ModuleDef = {
           noun: "payment run",
           nounPlural: "payment runs",
         },
-        // Being put together, or proposed and waiting for a second pair of eyes.
-        states: ["draft", "proposed"],
+        // One step for the whole run (20261007190000): being put together or
+        // proposed, then approved, then paid, each verb offered only in the
+        // state its door takes. It was three steps listing the same runs.
+        // Whoever proposed a run still may not approve it; the door refuses.
+        states: ["draft", "proposed", "approved"],
         recordArg: "p_proposal_id",
         createFn: "erp_propose_payment_run",
-      },
-      {
-        label: "Approve",
-        hint: "A second pair of eyes. The proposer cannot approve their own run.",
-        fedBy: "Runs appear here once one has been proposed at the payment run step.",
-
-        list: {
-          fn: "erp_payment_proposals",
-          args: { p_limit: 200 },
-          id: "proposal_id",
-          title: ["reference"],
-          subtitle: ["payment_date", "currency"],
-          status: "status",
-          noun: "payment run",
-          nounPlural: "payment runs",
+        actionFns: ["erp_approve_payment_run", "erp_pay_payment_run"],
+        actionStates: {
+          erp_approve_payment_run: ["proposed"],
+          erp_pay_payment_run: ["approved"],
         },
-        // erp.approve_payment_run takes a proposed run and nothing else.
-        states: ["proposed"],
-        recordArg: "p_proposal_id",
-        actionFn: "erp_approve_payment_run",
-      },
-      {
-        label: "Pay",
-        hint: "Paying an approved run clears the payable and credits the bank.",
-        fedBy: "Runs appear here once a second approver has approved them.",
-
-        list: {
-          fn: "erp_payment_proposals",
-          args: { p_limit: 200 },
-          id: "proposal_id",
-          title: ["reference"],
-          subtitle: ["payment_date", "currency"],
-          status: "status",
-          noun: "payment run",
-          nounPlural: "payment runs",
-        },
-        // erp.pay_payment_run takes an approved run and nothing else.
-        states: ["approved"],
-        recordArg: "p_proposal_id",
-        actionFn: "erp_pay_payment_run",
       },
       {
         label: "Journals",
