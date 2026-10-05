@@ -1873,6 +1873,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_eliminations",
       fields: [pickGroupParent("p_parent_entity_id", "Parent company")],
+      empty: "Nothing has been eliminated in this group yet.",
     },
     {
       label: "Settlement statement",
@@ -1906,6 +1907,7 @@ export const FINANCE: ModuleDef = {
       permission: "finance.read",
       fn: "erp_budget_position",
       fields: [codeField("p_code", "Budget code", "OPEX-2026")],
+      empty: "No budget in use has that code this year.",
     },
   ],
   key: "finance",
