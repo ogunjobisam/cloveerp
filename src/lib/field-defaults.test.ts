@@ -110,3 +110,38 @@ describe("converting a quotation from the strip (J-77)", () => {
     expect(convert).toContain("madeDocumentId(result)");
   });
 });
+
+describe("a payment run's currency (5 October re-test)", () => {
+  // Proposing a run arrived with the currency empty over twenty-five of them;
+  // erp.propose_payment_run proposes for the first company by code, in its
+  // base currency.
+  const first: FieldDefault = { fn: "erp_entities", key: "base_currency", first: true };
+  const companies = [
+    { entity_id: "uk", code: "ACME", base_currency: "GBP" },
+    { entity_id: "eu", code: "ACME-EU", base_currency: "EUR" },
+  ];
+
+  test("takes the first company's base currency from the list", () => {
+    expect(
+      defaultedValues([{ name: "p_currency", defaultFrom: first }], {}, { p_currency: companies }),
+    ).toEqual({ p_currency: "GBP" });
+  });
+
+  test("a list is no answer to a default that does not ask for its first", () => {
+    const plain: FieldDefault = { fn: "erp_entities", key: "base_currency" };
+    expect(
+      defaultedValues([{ name: "p_currency", defaultFrom: plain }], {}, { p_currency: companies }),
+    ).toEqual({});
+  });
+
+  test("the Propose a payment run form declares it", () => {
+    const modules = readFileSync(join(import.meta.dir, "modules.tsx"), "utf8");
+    const propose = modules.slice(
+      modules.indexOf('label: "Propose a payment run"'),
+      modules.indexOf('label: "Approve a payment run"'),
+    );
+    expect(propose).toContain(
+      'defaultFrom: { fn: "erp_entities", key: "base_currency", first: true }',
+    );
+  });
+});
