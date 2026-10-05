@@ -975,6 +975,14 @@ describe("a move is drawn only where it can be completed", () => {
     ]);
   });
 
+  test("a quotation with a line at no price says so instead of Send", () => {
+    const send = move({ code: "send", refused: "CLOVEERP_QUOTATION_NOT_PRICED" });
+    expect(isCompletable(send)).toBe(false);
+    expect(heldReasons([send])).toEqual([
+      "A line has no price yet. Give it one with Change, then send it.",
+    ]);
+  });
+
   test("a discount or credit step its holder may not give says so instead of Approve", () => {
     const refused = move({ code: "approve", refused: "CLOVEERP_PERMISSION_DENIED" });
     expect(isCompletable(refused)).toBe(false);
