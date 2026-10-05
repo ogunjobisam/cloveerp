@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-import { callErp } from "../../lib/erp";
+import { callErp, setTabPersona, tabPersona } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { actingAs, personaChoices, type DemonstrationPersonas } from "../../lib/persona";
 import { TOUCH } from "./page";
@@ -17,14 +17,24 @@ import { TOUCH } from "./page";
  *
  * The database decides everything here: who may be acted as, who may choose,
  * and that it happens only in a demonstration. This reads its answer and
- * offers the choice. Once the person acting changes, every query is reset
- * rather than refreshed, so no screen goes on showing the other person's
- * approvals or permissions while it reloads.
+ * offers the choice. The choice is this browser tab's: the tab keeps it and
+ * names her on each request (src/lib/erp.ts), so another tab or device stays
+ * as the person who signed in. Once the person acting changes, every query is
+ * reset rather than refreshed, so no screen goes on showing the other
+ * person's approvals or permissions while it reloads.
  */
 function usePersonas() {
   return useQuery({
     queryKey: ["erp_demonstration_personas"],
-    queryFn: () => callErp<DemonstrationPersonas>("erp_demonstration_personas"),
+    queryFn: async () => {
+      const named = tabPersona();
+      const answer = await callErp<DemonstrationPersonas>("erp_demonstration_personas");
+      // The tab named somebody the database no longer lets it act as (roles
+      // removed, the demonstration retired, another organisation): forget
+      // her, so she does not come back unasked.
+      if (named && !answer.acting_as && tabPersona() === named) setTabPersona(null);
+      return answer;
+    },
     retry: false,
   });
 }
@@ -34,7 +44,10 @@ function useActAs() {
   return useMutation({
     mutationFn: (personaId: string | null) =>
       callErp<DemonstrationPersonas>("erp_act_as_persona", { p_persona_id: personaId }),
-    onSuccess: () => queryClient.resetQueries(),
+    onSuccess: (_answer, personaId) => {
+      setTabPersona(personaId);
+      return queryClient.resetQueries();
+    },
   });
 }
 

@@ -3371,3 +3371,84 @@ test.describe("features and content are kept on Configuration", () => {
     });
   });
 });
+
+test.describe("Act as is kept by the browser tab that chose it", () => {
+  const priya = {
+    principal_id: "0b6c8c6e-6a3b-4a83-9d55-1f4c9a2b7e10",
+    code: "finance",
+    display_name: "Priya Shah",
+    roles: ["Finance"],
+  };
+  const answer = (named: string | undefined) => ({
+    is_demonstration: true,
+    signed_in: { principal_id: "me", display_name: "Sam Visitor" },
+    acting_as:
+      named === priya.principal_id
+        ? { principal_id: priya.principal_id, display_name: priya.display_name }
+        : null,
+    personas: [priya],
+  });
+  const headers = {
+    "access-control-allow-origin": "*",
+    "access-control-allow-headers": "*",
+    "content-type": "application/json",
+  };
+
+  test("choosing her names her on every request from this tab, a new tab keeps nothing, and going back stops", async ({
+    page,
+    backend,
+  }) => {
+    // The database answers whom the request's header names, as
+    // erp.principal_context() does for a persona it allows.
+    await page.route("**/rest/v1/rpc/erp_demonstration_personas", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        return route.fulfill({ status: 204, headers, body: "" });
+      }
+      return route.fulfill({
+        status: 200,
+        headers,
+        body: JSON.stringify(answer(route.request().headers()["x-clove-act-as"])),
+      });
+    });
+    const sent: { fn: string; named: string | undefined }[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/rest/v1/rpc/")) {
+        sent.push({ fn: r.url().split("/").pop() ?? "", named: r.headers()["x-clove-act-as"] });
+      }
+    });
+    backend.rpc("erp_act_as_persona", answer(priya.principal_id));
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menuitem", { name: /Priya Shah/ }).click();
+    const banner = page.getByRole("status").filter({ hasText: "Acting as Priya Shah" });
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    expect(await page.evaluate(() => window.sessionStorage.getItem("clove.act-as"))).toBe(
+      priya.principal_id,
+    );
+
+    // Kept across a reload of this tab, and named on everything it asks.
+    const reloaded = sent.length;
+    await page.reload();
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    const afterReload = sent.slice(reloaded);
+    expect(afterReload.length).toBeGreaterThan(0);
+    expect(afterReload.filter((s) => s.named !== priya.principal_id)).toEqual([]);
+
+    // Another tab of the same sign-in keeps nothing: it is the person.
+    const other = await page.context().newPage();
+    await other.route("https://e2e.supabase.co/**", (route) => route.abort());
+    await other.goto("/");
+    expect(await other.evaluate(() => window.sessionStorage.getItem("clove.act-as"))).toBeNull();
+    await other.close();
+
+    // Back to yourself: forgotten, and named on nothing after.
+    await banner.getByRole("button", { name: "Back to yourself" }).click();
+    await expect(banner).toBeHidden();
+    expect(await page.evaluate(() => window.sessionStorage.getItem("clove.act-as"))).toBeNull();
+    const back = sent.map((s) => s.fn).lastIndexOf("erp_act_as_persona");
+    await expect.poll(() => sent.length).toBeGreaterThan(back + 1);
+    expect(sent.slice(back + 1).filter((s) => s.named !== undefined)).toEqual([]);
+    expect(backend.crashes).toEqual([]);
+  });
+});

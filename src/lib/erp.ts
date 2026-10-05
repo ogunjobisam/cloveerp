@@ -13,6 +13,7 @@ import type {
   ResendRequest,
   ResendResponse,
 } from "./invitation-email";
+import { isDatabaseRequest, readTabPersona, withActAs, writeTabPersona } from "./persona";
 
 /**
  * The single point at which the front end touches the database.
@@ -69,11 +70,59 @@ export const supabasePublishableKey = key;
 
 export const isConfigured = Boolean(url && key);
 
+/**
+ * This browser tab's own storage, where it keeps whom it acts as in a
+ * demonstration. sessionStorage is per tab and ends with it, so another tab or
+ * device of the same sign-in is never affected. Null on the server and where
+ * storage is blocked: then the tab acts as the person who signed in.
+ */
+function tabStore(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Whom this tab acts as in a demonstration, or null for the person who signed in. */
+export function tabPersona(): string | null {
+  return readTabPersona(tabStore());
+}
+
+/** Keep whom this tab acts as, or go back to yourself with null. */
+export function setTabPersona(personaId: string | null): void {
+  writeTabPersona(tabStore(), personaId);
+}
+
+/**
+ * Every request this tab makes to the database names whom it acts as, read at
+ * the moment it is sent. The database decides whether that stands
+ * (erp.principal_context); a header naming anybody it may not is answered as
+ * the person who signed in. Only the REST interface is sent it.
+ */
+const actAsFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const persona = tabPersona();
+  if (!persona) return fetch(input, init);
+  const target = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (!isDatabaseRequest(target, url)) return fetch(input, init);
+  const headers = init?.headers ?? (input instanceof Request ? input.headers : undefined);
+  return fetch(input, { ...init, headers: withActAs(headers, persona) });
+};
+
 export const supabase = isConfigured
   ? createClient(url, key, {
       auth: { persistSession: true, autoRefreshToken: true },
+      global: { fetch: actAsFetch as typeof fetch },
     })
   : null;
+
+// Signing out ends the tab's choice too, so whoever signs in next is themselves.
+if (supabase && typeof window !== "undefined") {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") setTabPersona(null);
+  });
+}
 
 /**
  * Whether this browser is holding a session, without waiting to ask.
