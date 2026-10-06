@@ -7,6 +7,7 @@ import {
   type Session,
 } from "@supabase/supabase-js";
 
+import { chooseBackend, pageHost } from "./backend";
 import type {
   InviteRequest,
   InviteResponse,
@@ -41,13 +42,13 @@ import {
 /**
  * The project this build talks to when the host names no other.
  *
- * These are here rather than only in the environment because a build that
- * reads only the environment is a build that can arrive unconfigured, and one
- * did: the values lived in a tracked `.env` until it left version control, and
- * from then on every publish shipped an application whose first screen told the
- * visitor to set two variables. The application is published by hand from
- * Lovable and the values are inlined at build time, so nothing downstream could
- * repair it either.
+ * The values are in the source rather than only in the environment because a
+ * build that reads only the environment is a build that can arrive
+ * unconfigured, and one did: the values lived in a tracked `.env` until it left
+ * version control, and from then on every publish shipped an application whose
+ * first screen told the visitor to set two variables. The application is
+ * published by hand from Lovable and the values are inlined at build time, so
+ * nothing downstream could repair it either.
  *
  * The publishable key is public by design. Supabase ships it in the client
  * bundle of every application built on it — this one included, before and after
@@ -58,17 +59,18 @@ import {
  * security. What it buys is that every build starts connected — Lovable's
  * publish, the build CI runs with no environment at all, a fresh clone, a fork.
  *
- * The environment still wins where it is set, which is how a preview or a
- * second project is pointed elsewhere without touching the source.
+ * Since 6 October there are two projects, and the page's own address chooses
+ * (./backend.ts): opened at demo.cloveerp.com it talks to the demonstration
+ * project, whatever the build was given; anywhere else the environment still
+ * wins where it is set, which is how a preview or a local stack is pointed
+ * elsewhere without touching the source, and production otherwise.
  */
-const DEFAULT_SUPABASE_URL = "https://xpzffnnhnhcqyjqcueja.supabase.co";
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwemZmbm5obmhjcXlqcWN1ZWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMDIyNDIsImV4cCI6MjEwMzU3ODI0Mn0.PKnEUURM8CTNVkBjgA_pCoQJheGmL_6I7UD1-5Uywjk";
-
-const url = (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) || DEFAULT_SUPABASE_URL;
-const key =
-  (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ||
-  DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+const backend = chooseBackend(pageHost(), {
+  url: import.meta.env["VITE_SUPABASE_URL"] as string | undefined,
+  key: import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined,
+});
+const url = backend.url;
+const key = backend.key;
 
 /** The project this build talks to. Read these rather than the variables. */
 export const supabaseUrl = url;

@@ -14,7 +14,7 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * The build points this at a Supabase stack it started itself. Two guards
  * below, because the application's default when the environment says nothing
- * is the LIVE project (see src/lib/erp.ts, which inlines it on purpose so that
+ * is the LIVE project (see src/lib/backend.ts, which inlines it on purpose so that
  * every build starts connected). A test run that signs in and clicks is not
  * something to point at production by accident, and "by accident" is exactly
  * how it would happen: one unset variable.
@@ -23,7 +23,7 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 4173;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
-/** The live project's ref, from src/lib/erp.ts. Named here to be refused. */
+/** The live project's ref, from src/lib/backend.ts. Named here to be refused. */
 const LIVE_PROJECT_REF = "xpzffnnhnhcqyjqcueja";
 
 const target = process.env["VITE_SUPABASE_URL"];
@@ -45,6 +45,19 @@ if (!target) {
     "CLOVEERP_E2E_NO_TARGET: VITE_SUPABASE_URL is not set, so the application would fall back to " +
       "the live project. Start a local stack (supabase start) and export its API URL and " +
       "publishable key, or point these tests at a disposable project.",
+  );
+}
+
+/**
+ * The demonstration's ref, from src/lib/backend.ts. Refused for the same
+ * reason: it is public, prospects are shown it, and these tests seed in it.
+ */
+const DEMO_PROJECT_REF = "lhizhynckagmjbbpghxq";
+
+if (target.includes(DEMO_PROJECT_REF)) {
+  throw new Error(
+    `CLOVEERP_E2E_TARGETS_DEMO: VITE_SUPABASE_URL names the demonstration project (${DEMO_PROJECT_REF}). ` +
+      "These tests sign in and seed an organisation; prospects are shown that project.",
   );
 }
 

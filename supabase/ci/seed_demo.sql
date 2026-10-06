@@ -15,6 +15,13 @@
 \set ON_ERROR_STOP on
 \set QUIET on
 
+-- This database is a demonstration deployment, said the way deploy.yml says it
+-- of the Clove ERP Demo project (20261010060000). Unmarked, it would be
+-- production, and production makes no demonstrations (20261010061000), so the
+-- seed below and every suite that makes one would be refused. First, and in
+-- its own statement: a database holding a live organisation refuses the mark.
+select erp_meta.mark_deployment('demonstration');
+
 begin;
 
 select * from erp.provision_tenant('ci-demo', 'CI demonstration', 'admin@ci-demo.test', 'CI Admin') \gset

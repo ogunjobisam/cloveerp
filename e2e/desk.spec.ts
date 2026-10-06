@@ -3885,3 +3885,61 @@ test.describe("the 5 October re-test: what a press did, and where its toast sits
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("on production, demonstrations are at demo.cloveerp.com", () => {
+  // A platform owner, as production answers since 20261010060000: production
+  // makes no demonstration (20261010061000), so every place that offered to
+  // make one offers the demonstration's address instead.
+  const owner = {
+    is_staff: true,
+    role: "owner",
+    email: "owner@clove.invalid",
+    display_name: "Platform Owner",
+    claimable: false,
+    deployment: "production",
+  };
+
+  test("Home offers the demonstration's address instead of seeding one", async ({
+    page,
+    backend,
+  }) => {
+    backend.rpc("erp_platform_me", owner);
+    await page.goto("/");
+    const link = page.getByRole("link", { name: "Seed a demo organisation" });
+    await expect(link).toHaveAttribute("href", "https://demo.cloveerp.com", { timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Seed a demo organisation" })).toHaveCount(0);
+    expect(backend.called).not.toContain("erp_seed_demo");
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test("on the demonstration, Home seeds as it always has", async ({ page, backend }) => {
+    backend.rpc("erp_platform_me", { ...owner, deployment: "demonstration" });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Seed a demo organisation" })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("link", { name: "Seed a demo organisation" })).toHaveCount(0);
+    expect(backend.crashes).toEqual([]);
+  });
+
+  test.describe("signed in, with no organisation", () => {
+    test.use({
+      session: { principal_id: null, tenant_id: null, entities: [], sites: [], permissions: [] },
+    });
+
+    test("onboarding offers the demonstration's address", async ({ page, backend }) => {
+      backend.rpc("erp_platform_me", owner);
+      await page.goto("/inventory");
+      await expect(page.getByRole("heading", { name: "Create your organisation" })).toBeVisible({
+        timeout: 20_000,
+      });
+      const link = page.getByRole("link", { name: "Explore a seeded demo organisation instead" });
+      await expect(link).toHaveAttribute("href", "https://demo.cloveerp.com");
+      await expect(
+        page.getByRole("button", { name: "Explore a seeded demo organisation instead" }),
+      ).toHaveCount(0);
+      expect(backend.called).not.toContain("erp_seed_demo");
+      expect(backend.crashes).toEqual([]);
+    });
+  });
+});
