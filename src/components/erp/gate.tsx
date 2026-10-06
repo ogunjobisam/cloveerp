@@ -11,7 +11,8 @@ import {
   readStoredInvitation,
   storeInvitation,
 } from "../../lib/invitation-token";
-import { atLeast, usePlatformMe } from "../../lib/platform";
+import { DEMO_ADDRESS } from "../../lib/backend";
+import { atLeast, demonstrationsLiveElsewhere, usePlatformMe } from "../../lib/platform";
 import { onboardingView, pastedToken, selfServiceIsOpen } from "../../lib/self-service";
 import { tenantStorageKey } from "../../lib/tenant-storage";
 import {
@@ -647,14 +648,27 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
           <span className="h-px flex-1 bg-border" />
         </div>
 
-        <button
-          type="button"
-          onClick={() => void run("demo")}
-          disabled={busy !== null}
-          className="mt-4 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
-        >
-          {busy === "demo" ? "Seeding…" : "Explore a seeded demo organisation instead"}
-        </button>
+        {/* Production makes no demonstrations (20261010061000): the same
+            words go to demo.cloveerp.com, another site with its own sign-in. */}
+        {demonstrationsLiveElsewhere(platform.data) ? (
+          <a
+            href={DEMO_ADDRESS}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 block w-full rounded-md border border-input px-4 py-2 text-center text-sm font-medium"
+          >
+            Explore a seeded demo organisation instead
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void run("demo")}
+            disabled={busy !== null}
+            className="mt-4 w-full rounded-md border border-input px-4 py-2 text-sm font-medium disabled:opacity-60"
+          >
+            {busy === "demo" ? "Seeding…" : "Explore a seeded demo organisation instead"}
+          </button>
+        )}
 
         {consoleNote}
         {signOut}

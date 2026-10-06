@@ -28,6 +28,12 @@ export type PlatformMe = {
   display_name?: string | null;
   /** True only when the staff list is empty: the platform has no owner yet. */
   claimable: boolean;
+  /**
+   * Which deployment answered (20261010060000). Absent from a database older
+   * than the marker, which is read as it always was: demonstrations are made
+   * here.
+   */
+  deployment?: "production" | "demonstration";
 };
 
 export type PlatformTenant = {
@@ -173,6 +179,20 @@ export function atLeast(role: PlatformRole | null | undefined, min: PlatformRole
  */
 export function isPlatformOperator(me: Pick<PlatformMe, "is_staff" | "role"> | undefined): boolean {
   return me?.is_staff === true && atLeast(me.role, "operator");
+}
+
+/**
+ * Whether demonstrations are made somewhere else (src/lib/backend.ts's
+ * DEMO_ADDRESS) rather than here. Production says so, and its doors refuse to
+ * make one (20261010061000), so a screen offers the address instead of a
+ * button that can only be refused. Only a database that says it is production
+ * is answered yes: the demonstration, the schema build's database and one
+ * older than the marker make demonstrations as before.
+ */
+export function demonstrationsLiveElsewhere(
+  me: Pick<PlatformMe, "deployment"> | undefined,
+): boolean {
+  return me?.deployment === "production";
 }
 
 export const ROLE_BLURB: Record<PlatformRole, string> = {

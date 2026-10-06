@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
+import { DEMO_ADDRESS } from "../../lib/backend";
 import { callErp } from "../../lib/erp";
-import { isPlatformOperator, usePlatformMe } from "../../lib/platform";
+import { demonstrationsLiveElsewhere, isPlatformOperator, usePlatformMe } from "../../lib/platform";
 import { maySeedDemo } from "../../lib/self-service";
 import { ActionButton, ErrorNote } from "./action";
+import { TOUCH } from "./page";
 import { useErpSession } from "./session-context";
 
 /**
@@ -41,6 +44,7 @@ export function useMaySeedDemo(): boolean {
 export function SeedDemoAction({ label = "Explore with demo data" }: { label?: string }) {
   const { session } = useErpSession();
   const queryClient = useQueryClient();
+  const platform = usePlatformMe();
 
   const mutation = useMutation({
     mutationFn: () => callErp<{ tenant_id: string; already_existed: boolean }>("erp_seed_demo"),
@@ -52,6 +56,12 @@ export function SeedDemoAction({ label = "Explore with demo data" }: { label?: s
   if (session.tenant?.code.startsWith("demo-")) return null;
   if (!maySeed) return null;
 
+  // Production makes no demonstrations (20261010061000): they are at
+  // demo.cloveerp.com, so the same words take you there instead.
+  if (demonstrationsLiveElsewhere(platform.data)) {
+    return <DemonstrationLink>{label}</DemonstrationLink>;
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <ActionButton onClick={() => mutation.mutate()} busy={mutation.isPending}>
@@ -59,5 +69,24 @@ export function SeedDemoAction({ label = "Explore with demo data" }: { label?: s
       </ActionButton>
       <ErrorNote error={mutation.error} />
     </div>
+  );
+}
+
+/**
+ * The demonstration's address, drawn as the button it stands in for. A link
+ * rather than a button with a navigation inside, so it can be opened beside
+ * the screen it was found on; in a new tab, because the demonstration is
+ * another site with its own sign-in.
+ */
+export function DemonstrationLink({ children }: { children: ReactNode }) {
+  return (
+    <a
+      href={DEMO_ADDRESS}
+      target="_blank"
+      rel="noreferrer"
+      className={`${TOUCH} inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground`}
+    >
+      {children}
+    </a>
   );
 }

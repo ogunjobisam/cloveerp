@@ -10,6 +10,7 @@ import { useErpSession, useScope } from "../components/erp/session-context";
 import { PageHeader, Prose } from "../components/erp/page";
 import { SeedDemoAction, useMaySeedDemo } from "../components/erp/seed";
 import { useT } from "../lib/i18n";
+import { demonstrationsLiveElsewhere, usePlatformMe } from "../lib/platform";
 
 /**
  * The Work area's home — and, for anybody else, the front door.
@@ -100,6 +101,9 @@ function Fork() {
 function DemoSeed() {
   const { ui } = useT();
   const maySeed = useMaySeedDemo();
+  // On production the button is the demonstration's address (20261010061000),
+  // and what seeding does here is not what the link does.
+  const elsewhere = demonstrationsLiveElsewhere(usePlatformMe().data);
   if (!maySeed) return null;
   return (
     <section className="rounded-2xl border border-dashed border-accent/40 bg-accent/5 p-4 sm:p-5">
@@ -110,11 +114,13 @@ function DemoSeed() {
           </span>
           <div className="min-w-0">
             <h2 className="font-display text-sm font-semibold">{ui("Explore with demo data")}</h2>
-            <Prose className="mt-1 text-xs text-muted-foreground">
-              {ui(
-                "Creates a demo organisation with companies, sites and a viewer, and switches your working context to it. Your current organisation is untouched.",
-              )}
-            </Prose>
+            {elsewhere ? null : (
+              <Prose className="mt-1 text-xs text-muted-foreground">
+                {ui(
+                  "Creates a demo organisation with companies, sites and a viewer, and switches your working context to it. Your current organisation is untouched.",
+                )}
+              </Prose>
+            )}
           </div>
         </div>
         <div className="shrink-0">
