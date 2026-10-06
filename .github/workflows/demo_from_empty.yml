@@ -222,16 +222,17 @@ jobs:
           fi
           exit "$status"
 
-      - name: Name the owner, and say this is the demonstration
+      - name: Name the owner
         # The owner's row is already there (the replay wrote it); this records
-        # it through the routine that refuses anybody else, and says which
-        # deployment this is (20261010060000), so production's refusals and
-        # screens tell the two apart from the first request.
+        # it through the routine that refuses anybody else. The database is
+        # not yet told it is the demonstration: that marker is the last thing
+        # this build writes, after its proof, so a build that stops before
+        # proving itself is never read as built by a release (release.yml,
+        # "The demonstration has been built").
         run: |
           set -euo pipefail
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="$OWNER_EMAIL" <<'SQL'
           select erp_meta.register_platform_owner(:'owner');
-          select erp_meta.mark_deployment('demonstration');
           SQL
 
       - name: The CLI finds every migration applied
@@ -284,6 +285,10 @@ jobs:
           fi
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.prove_release('${release}');"
+          # Proved: now, and only now, the database is told it is the
+          # demonstration (20261010060000). This is the marker a release reads
+          # as "built"; nothing before this point writes it.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('demonstration');"
           {
             echo "## The demonstration"
             echo '```'
