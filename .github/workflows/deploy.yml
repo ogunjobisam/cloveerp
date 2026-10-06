@@ -17,17 +17,34 @@ name: deploy
 # supabase_migrations.schema_migrations, which is what the deployment screen
 # in the platform console compares against the repository.
 #
-# Two jobs:
+# Two deployments, since 6 October. The owner moved the demonstration out of
+# production into a Supabase project of its own, Clove ERP Demo, served at
+# demo.cloveerp.com by the same application; its connection string is the
+# secret CLOVEERP_DEMO_DATABASE_URL, in the same form as the live one, and its
+# ref the variable CLOVEERP_DEMO_PROJECT_REF. Every release goes to the
+# demonstration FIRST, and production is not touched unless every step of
+# that release succeeded: the demonstration is the rehearsal of every release.
 #
-#   dry-run  — on every pull request: what WOULD apply, and the remote history.
-#              Both jobs refuse without the secret rather than pass having
-#              looked at nothing; the secret is what makes either of them real.
-#   apply    — on push to main: apply, then prove the result with the same
-#              checks the build runs. A deploy that applied and did not check
-#              is the silent-job problem moved to production. Then it schedules
-#              the dispatch function from inside the database and waits for a
-#              drain pass, because a schedule nobody proved fires is the same
-#              problem again, one layer out.
+# Three jobs:
+#
+#   dry-run       — on every pull request, once per deployment: what WOULD
+#                   apply, and the remote history. Each refuses without its
+#                   secret rather than pass having looked at nothing; the
+#                   secret is what makes it real.
+#   demonstration — on push to main: release to the demonstration
+#                   (release.yml).
+#   apply         — then, only if the demonstration's release succeeded,
+#                   release to production (release.yml). A release applies,
+#                   then proves the result with the same checks the build
+#                   runs: a deploy that applied and did not check is the
+#                   silent-job problem moved to production. Then it schedules
+#                   the dispatch function from inside the database and waits
+#                   for a drain pass, because a schedule nobody proved fires
+#                   is the same problem again, one layer out.
+#
+# The demonstration project started empty, and is built from empty once, by
+# demo_from_empty.yml, not by a release: until it has been, its release stops
+# at "The demonstration has been built" and production waits.
 #
 # One-off: the live project's history table holds the names the connector
 # recorded, not the repository's filenames. Run this workflow by hand with
@@ -71,8 +88,22 @@ on:
 jobs:
   dry-run:
     if: github.event_name == 'pull_request'
+    name: dry run (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Once per deployment, each against its own secret. By name, through
+    # secrets[...]: an expression like `a && secrets.X || secrets.Y` falls
+    # through to the second secret when the first is empty, and the
+    # demonstration's dry run would then have read production and said so
+    # under the demonstration's name.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: demonstration
+            secret: CLOVEERP_DEMO_DATABASE_URL
+          - target: production
+            secret: CLOVEERP_LIVE_DATABASE_URL
     # Its own group, per branch, and not the deploy's.
     #
     # deploy-live was declared on the workflow, so both jobs were in it, and
@@ -88,7 +119,7 @@ jobs:
     # only its own earlier self on the same branch, which is what you want
     # when a pull request is pushed to twice in a minute.
     concurrency:
-      group: deploy-dry-run-${{ github.ref }}
+      group: deploy-dry-run-${{ github.ref }}-${{ matrix.target }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -111,29 +142,75 @@ jobs:
         # repository has had no fork pull request, and one arriving is a
         # decision to take then, in the open, rather than a hole to leave now.
         env:
-          DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+          DB_URL: ${{ secrets[matrix.secret] }}
+          TARGET: ${{ matrix.target }}
+          SECRET_NAME: ${{ matrix.secret }}
+          PROJECT_REF: ${{ matrix.target == 'demonstration' && vars.CLOVEERP_DEMO_PROJECT_REF || (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja') }}
+          OTHER_REF: ${{ matrix.target == 'demonstration' && (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja') || vars.CLOVEERP_DEMO_PROJECT_REF }}
         run: |
           set -euo pipefail
           if [[ -z "${DB_URL}" ]]; then
-            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so this dry run compared nothing with live. Add the session-pooler connection string as a repository secret; until it is set, no merge to main can deploy."
+            if [[ "${TARGET}" == demonstration ]]; then
+              echo "::error::${SECRET_NAME} is not set, so this dry run compared nothing with the demonstration. Add the demonstration project's session-pooler connection string as a repository secret, in the same form as CLOVEERP_LIVE_DATABASE_URL. Until it is set, a merge to main releases to nothing: the demonstration's release fails at its first step, and production is released only after the demonstration has been."
+            else
+              echo "::error::${SECRET_NAME} is not set, so this dry run compared nothing with live. Add the session-pooler connection string as a repository secret; until it is set, no merge to main can deploy."
+            fi
             exit 1
           fi
-          echo "## Migrations that would apply" >> "$GITHUB_STEP_SUMMARY"
+          # The same check the release makes, so a connection string in the
+          # wrong secret is said here, on the pull request, and not first by a
+          # release.
+          if [[ -z "${PROJECT_REF}" || "${DB_URL}" != *"${PROJECT_REF}"* || ( -n "${OTHER_REF}" && "${DB_URL}" == *"${OTHER_REF}"* ) ]]; then
+            echo "::error::${SECRET_NAME} does not name the ${TARGET} project (${PROJECT_REF:-no ref set}), or names the other one. Check the secret and the variables CLOVEERP_DEMO_PROJECT_REF and CLOVEERP_PROJECT_REF."
+            exit 1
+          fi
+          echo "## Migrations that would apply to the ${TARGET}" >> "$GITHUB_STEP_SUMMARY"
+          # An empty demonstration lists every migration, which reads like a
+          # finding and is not one: say why, when psql can tell.
+          if [[ "${TARGET}" == demonstration ]] && command -v psql > /dev/null; then
+            built=$(psql "$DB_URL" -tAc "select to_regnamespace('erp') is not null" 2>/dev/null || echo unknown)
+            if [[ "$built" == "f" ]]; then
+              echo "::notice::the demonstration project has not been built yet, so every migration is listed. It is built once, from empty, by the demo-from-empty workflow, not by a release; until then its release stops before applying anything, and production waits."
+              echo "The demonstration has not been built yet: run demo-from-empty once after merging." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           supabase db push --dry-run --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+  demonstration:
+    # Every release goes here first (the owner's decision of 6 October). Not on
+    # a one-off repair of live's history, which is production's alone.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.mark_applied && !inputs.repair_gateway_bodies)
+    name: release to the demonstration
+    # One release against the demonstration at a time, for the reasons the
+    # production job gives below; its own group, so a release to one
+    # deployment never queues behind or displaces a release to the other.
+    concurrency:
+      group: deploy-demonstration
+      cancel-in-progress: false
+    uses: ./.github/workflows/release.yml
+    with:
+      target: demonstration
+      project_ref: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      other_project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      secret_name: CLOVEERP_DEMO_DATABASE_URL
+      dispatch_url: ${{ vars.CLOVEERP_DEMO_DISPATCH_URL || format('https://{0}.supabase.co/functions/v1/dispatch', vars.CLOVEERP_DEMO_PROJECT_REF) }}
+    secrets:
+      database_url: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
+      supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
   apply:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    # A replay that blocks on a lock rather than deadlocking gets no 40P01 and
-    # no retry — it just waits. On the default six-hour job timeout it would
-    # wait holding the deploy-live concurrency group and, worse, holding the
-    # scheduler paused: every deploy behind it queued and the platform's clock
-    # stopped, for six hours, with nothing red to say so. An hour is longer
-    # than any replay this repository has run and short enough to notice.
-    # Cancelling still runs the resume step, which is always().
-    timeout-minutes: 60
+    # Production, and only after the demonstration's release succeeded: a
+    # failed, cancelled or skipped release there leaves production exactly as
+    # it was. The exception is a one-off repair of live's history, which never
+    # concerned the demonstration and runs here alone.
+    needs: demonstration
+    if: >-
+      ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+          && (needs.demonstration.result == 'success'
+              || (github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies))) }}
+    name: release to production
     # One deploy against live at a time, and never two replays at once. A
     # newer deploy may cancel an older one still queued: --include-all means
     # the newer applies everything the older would have, so the migrations
@@ -141,834 +218,18 @@ jobs:
     concurrency:
       group: deploy-live
       cancel-in-progress: false
-    env:
-      DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
-      # Where pg_cron posts to drain the queues: the project's own dispatch
-      # function unless a repository variable says otherwise. A URL, not a
-      # secret — the secret the post carries never leaves the database.
-      DISPATCH_URL: ${{ vars.CLOVEERP_DISPATCH_URL || 'https://xpzffnnhnhcqyjqcueja.supabase.co/functions/v1/dispatch' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-        with:
-          version: 2.116.0
-
-      - name: The secret exists
-        # A deploy that deployed nothing must not be green.
-        run: |
-          if [[ -z "${DB_URL}" ]]; then
-            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set. Add the session-pooler connection string as a repository secret; nothing was applied."
-            exit 1
-          fi
-
-      - name: Install the psql client
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client
-
-      - name: The erp schema is not exposed
-        # Before anything is applied. Every table the doors read holds INSERT,
-        # UPDATE and DELETE for `authenticated`, because the doors run as the
-        # caller and need them (erp.apply_row_security() grants them at the
-        # end of every migration). What keeps a signed-in person from writing
-        # an approved state straight into erp.object_state, or a relation into
-        # erp.document_relation, is that PostgREST does not serve the erp
-        # schema at all (docs/ARCHITECTURE.md). The born-approved order
-        # (20260922380000) rests on that as much as every door does, and until
-        # now nothing checked it: supabase/config.toml has no [api] block, and
-        # the setting lives in the project, not in this repository.
-        #
-        # So the project's own PostgREST settings are read through the
-        # Management API and the deploy stops if erp, erp_ref, erp_meta or
-        # erp_test is listed. Only when SUPABASE_ACCESS_TOKEN is set, like the
-        # Edge Functions step; without it, a notice says nothing was checked.
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${SUPABASE_ACCESS_TOKEN}" ]]; then
-            echo "::notice::SUPABASE_ACCESS_TOKEN is not set, so this deploy did not check which schemas PostgREST exposes. Confirm in the dashboard (API settings, Exposed schemas) that only public and graphql_public are listed."
-            echo "- Exposed schemas: not checked (no SUPABASE_ACCESS_TOKEN)" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if ! [[ "${PROJECT_REF}" =~ ^[a-z0-9]{20}$ ]]; then
-            echo "::error::CLOVEERP_PROJECT_REF must be a 20-character project ref; got '${PROJECT_REF}'."
-            exit 1
-          fi
-          body=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-                   "https://api.supabase.com/v1/projects/${PROJECT_REF}/postgrest") || {
-            echo "::error::could not read the project's PostgREST settings from the Management API, so nothing says the erp schema is private. Nothing was applied."
-            exit 1
-          }
-          schemas=$(printf '%s' "$body" | jq -r '.db_schema // empty')
-          if [[ -z "$schemas" ]]; then
-            echo "::error::the Management API returned no db_schema for ${PROJECT_REF}: ${body}"
-            exit 1
-          fi
-          exposed=$(printf '%s' "$schemas" | tr ',' '\n' | tr -d ' ' | grep -Ex 'erp|erp_ref|erp_meta|erp_test' || true)
-          if [[ -n "$exposed" ]]; then
-            echo "::error::PostgREST exposes $(echo $exposed | tr '\n' ' ')on ${PROJECT_REF} (db_schema: ${schemas}). Every table there is writable by any signed-in person, past every door. Remove it under API settings, Exposed schemas, then re-run. Nothing was applied."
-            exit 1
-          fi
-          echo "Exposed schemas: ${schemas}"
-          echo "- Exposed schemas: ${schemas}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Re-emit the twelve gateway function bodies (one-off)
-        if: github.event_name == 'workflow_dispatch' && inputs.repair_gateway_bodies
-        # Seventeen of the migrations still to apply rewrite an existing
-        # function by text, and refuse when the body is not the one they were
-        # written against. Live's is not, because everything up to
-        # 20260905040000 arrived through the connector rather than by replaying
-        # the files: functionally equivalent, textually different.
-        #
-        # supabase/ops/20260908_gateway_function_bodies.sh does the work. It
-        # runs here rather than on somebody's laptop because it needs a
-        # PostgreSQL to build the reference in, and that has to be the image
-        # the product is verified against — pg_jsonschema is a Rust extension
-        # apt does not carry, and a reference built on a different host is not
-        # the reference.
-        #
-        # Pinned to the same image and major version as schema.yml, for the
-        # same reason: what live is compared against must be what CI builds.
-        run: |
-          set -euo pipefail
-          docker run -d --name clove-erp-reference \
-            -e POSTGRES_PASSWORD=postgres -p 5432:5432 \
-            supabase/postgres:17.6.1.167
-          for i in $(seq 1 60); do
-            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then break; fi
-            if [[ "$i" -eq 60 ]]; then
-              echo "::error::the reference PostgreSQL did not become ready within 60s"
-              docker logs clove-erp-reference 2>&1 | tail -40 >&2
-              exit 1
-            fi
-            sleep 1
-          done
-
-          log="$RUNNER_TEMP/gateway.log"
-          set +e
-          CLOVEERP_LIVE_DATABASE_URL="$DB_URL" \
-            ./supabase/ops/20260908_gateway_function_bodies.sh --apply 2>&1 \
-            | tee "$log"
-          status=${PIPESTATUS[0]}
-          set -e
-          .github/summarise.sh "$log" "## Gateway function bodies"
-          exit "$status"
-
-      - name: Record every repository migration as applied (one-off)
-        if: github.event_name == 'workflow_dispatch' && inputs.mark_applied
-        # Both directions, because the history table and the repository
-        # disagree in both and `supabase db push` refuses on either half.
-        #
-        # The first version of this step marked the repository's versions
-        # applied and stopped, which was half the job. The first dry run that
-        # ever reached live proved it: the history table held 160 stamps the
-        # connector recorded, the repository holds 278 files, and the two sets
-        # do not intersect at all — not one stamp names a file, not one file is
-        # recorded. Marking the 278 applied would have left the push refusing
-        # on the 160, with the error the CLI actually returns:
-        # "Remote migration versions not found in local migrations directory".
-        #
-        # Reverting a stamp deletes its row. It undoes nothing the connector
-        # did — the schema those statements built is still there — it declares
-        # the repository the record from here on, which is the whole point.
-        env:
-          THROUGH: ${{ inputs.mark_applied_through }}
-        run: |
-          set -euo pipefail
-
-          # No boundary, no repair. Recording a migration as applied without
-          # applying it is not recoverable by a later deploy: replay skips what
-          # the history table already claims, so the change is stranded and
-          # live diverges from the repository for good. A refusal here costs a
-          # re-dispatch; the default it replaces costs the schema.
-          if [[ -z "${THROUGH// /}" ]]; then
-            echo "::error::mark_applied needs mark_applied_through: the highest migration version already on live (supabase/ops/README.md records 20260905040000 as the last the connector applied). Without it this would record every later migration as applied without applying it."
-            exit 1
-          fi
-          if ! [[ "$THROUGH" =~ ^[0-9]+$ ]]; then
-            echo "::error::mark_applied_through must be a bare version, e.g. 20260905040000; got '$THROUGH'."
-            exit 1
-          fi
-
-          # Numerically, not as strings: the repository carries both 0001 and
-          # 20260905040000 and a lexicographic compare across those lengths is
-          # only accidentally right. Every version is well inside a double.
-          all=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed -E 's/^([0-9]+)_.*$/\1/' | sort -u)
-          versions=$(printf '%s\n' "$all" | awk -v t="$THROUGH" '$1 + 0 <= t + 0')
-          pending=$(printf '%s\n' "$all" | awk -v t="$THROUGH" '$1 + 0 > t + 0')
-
-          n_at=$(printf '%s' "$versions" | grep -c . || true)
-          n_after=$(printf '%s' "$pending" | grep -c . || true)
-          if [[ "$n_at" -eq 0 ]]; then
-            echo "::error::no migration in this repository is at or below $THROUGH; the boundary is wrong."
-            exit 1
-          fi
-          echo "boundary $THROUGH: $n_at at or below it, $n_after after it left for replay to apply"
-
-          # An absent history table is a project nothing has pushed to, which
-          # is not an error: there is simply nothing stale to clear.
-          if [[ "$(psql "$DB_URL" -tAc "select to_regclass('supabase_migrations.schema_migrations') is not null")" == "t" ]]; then
-            remote=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc \
-              "select version from supabase_migrations.schema_migrations order by version")
-          else
-            remote=""
-          fi
-
-          # Against the whole repository, not the bounded set: a stamp naming a
-          # migration above the boundary is recorded and real, not stale.
-          stale=$(comm -23 <(printf '%s\n' "$remote" | grep -v '^$' | sort -u) <(printf '%s\n' "$all") | tr '\n' ' ')
-          if [[ -n "${stale// /}" ]]; then
-            echo "reverting $(echo $stale | wc -w) stamp(s) naming no migration in this repository"
-            # shellcheck disable=SC2086
-            supabase migration repair --status reverted $stale --db-url "$DB_URL"
-          else
-            echo "no stale stamps: every recorded version names a migration in this repository"
-          fi
-
-          versions=$(printf '%s\n' "$versions" | tr '\n' ' ')
-          echo "marking $(echo $versions | wc -w) versions applied"
-          # shellcheck disable=SC2086
-          supabase migration repair --status applied $versions --db-url "$DB_URL"
-          supabase migration list --db-url "$DB_URL" | tail -20
-          echo "Recorded. Re-run this workflow without mark_applied to deploy." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Pause the scheduler for the length of the replay
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        # The retry below survives a deadlock; not having one is better.
-        #
-        # cron.job fires erp.run_due_jobs_all_tenants() every minute, and a
-        # replay runs for tens of minutes doing DDL that takes locks across
-        # hundreds of objects. On the first real deploy the two crossed and cost
-        # twelve migrations of progress. A queue that waits half an hour is a
-        # queue that waits; the worker picks up where it left off, and the
-        # ordering gate is what keeps that safe.
-        #
-        # Best effort, deliberately. If the deploy's role may not write
-        # cron.job, that is a warning and not a reason to refuse to deploy —
-        # the retry is the guarantee, this is the optimisation.
-        run: |
-          set -euo pipefail
-          if [[ "$(psql "$DB_URL" -tAc "select to_regclass('cron.job') is not null")" != "t" ]]; then
-            echo "no cron.job on this host; nothing to pause"
-            exit 0
-          fi
-          paused=$(psql "$DB_URL" -tAc \
-            "select coalesce(string_agg(jobid::text, ','), '') from cron.job where active" || true)
-          if [[ -z "$paused" ]]; then
-            echo "no active scheduled job; nothing to pause"
-            exit 0
-          fi
-          # pg_cron's own API first. On 8 September the direct UPDATE came back
-          # "permission denied for table job": the deploy's role can read
-          # cron.job but does not own it. cron.alter_job() checks that the role
-          # owns the job rather than the catalogue, which is the grant a
-          # deploying role is actually likely to have.
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qtc \
-               "select cron.alter_job(jobid, active := false) from cron.job where jobid in ($paused)"; then
-            echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
-            echo "paused scheduled job(s) via cron.alter_job: $paused"
-          elif psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
-               "update cron.job set active = false where jobid in ($paused)"; then
-            echo "PAUSED_JOBS=$paused" >> "$GITHUB_ENV"
-            echo "paused scheduled job(s) by update: $paused"
-          else
-            echo "::warning::could not pause cron.job by either route; THE SCHEDULER IS STILL RUNNING and the replay relies on the deadlock retry. Nothing needs undoing afterwards."
-          fi
-
-      - name: Apply pending migrations by replay
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        # A deadlock is a coincidence, not a verdict on the deploy.
-        #
-        # Every migration ends by re-running the generators, and
-        # erp.apply_row_security() and erp.apply_execute_grants() take heavy
-        # locks across hundreds of objects. Anything else touching the database
-        # at that moment can cross with them — on the first real deploy it was a
-        # session running erp.apply_execute_grants() itself, twenty-eight
-        # minutes and twelve migrations in:
-        #
-        #   ERROR: deadlock detected (SQLSTATE 40P01)
-        #   Process 1095739 waits for AccessShareLock on relation 38200;
-        #     blocked by process 1098150.
-        #
-        # PostgreSQL picks a victim and aborts it. The right answer is to go
-        # again: the migrations that already applied are recorded, so a re-run
-        # resumes at the one that lost rather than starting over, and the one
-        # that lost rolled back whole. Twelve migrations of progress should not
-        # be thrown away because a minutely job wanted the same table.
-        #
-        # Only on 40P01. Every other failure is this deploy's to answer for,
-        # and retrying it would turn one honest error into three.
-        run: |
-          set -euo pipefail
-          # The moment before anything changed: the point-in-time-recovery
-          # target a rollback of this deploy would restore to. Recorded on the
-          # release row below, and taken once rather than per attempt — a
-          # retry is the same deploy, so it is the same target.
-          echo "DEPLOY_STARTED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
-
-          attempts=3
-          log="$RUNNER_TEMP/push.log"
-          all="$RUNNER_TEMP/push-all.log"
-          : > "$all"
-          applied=false
-          for attempt in $(seq 1 "$attempts"); do
-            if supabase db push --include-all --db-url "$DB_URL" 2>&1 \
-                 | tee "$log"; then
-              cat "$log" >> "$all"
-              applied=true
-              break
-            fi
-            cat "$log" >> "$all"
-
-            if ! grep -q '40P01' "$log"; then
-              .github/summarise.sh "$all" "## Applied"
-              echo "::error::the replay failed for a reason that is not a deadlock; not retrying. The migrations applied before it are recorded, so a later run resumes from there."
-              exit 1
-            fi
-
-            if [[ "$attempt" -lt "$attempts" ]]; then
-              # Back off enough to clear a minutely job's window.
-              wait=$((attempt * 30))
-              echo "::warning::deadlock (40P01) on attempt ${attempt} of ${attempts}; retrying in ${wait}s from the migration that lost."
-              printf '\n-- deadlock on attempt %s; resuming --\n' "$attempt" >> "$all"
-              sleep "$wait"
-            fi
-          done
-
-          .github/summarise.sh "$all" "## Applied"
-          if [[ "$applied" != true ]]; then
-            echo "::error::deadlocked on all ${attempts} attempts. Something is contending for the same objects throughout — check cron.job and pg_stat_activity before running again."
-            exit 1
-          fi
-
-      - name: Record the release
-        # One row per deploy, written before the database is proved so that
-        # the proof's own release clause — the ledger has moved past the last
-        # recorded release — reads this deploy, not the one before it.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        run: |
-          set -euo pipefail
-          release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'lovable', 'run ${GITHUB_RUN_ID}');")
-          echo "RELEASE_ID=$release" >> "$GITHUB_ENV"
-          echo "release $release recorded for ${GITHUB_SHA}"
-
-      - name: Start the scheduler again
-        # Before the proof, not after it.
-        #
-        # The first deploy whose pause actually worked failed its own proof
-        # for that reason: erp.platform_assurance() raises
-        # CLOVEERP_PLATFORM_NOT_SCHEDULED when the register says a job is
-        # scheduled and the host's cron does not agree, and a paused scheduler
-        # is exactly that disagreement. The deploy was asserting a world it
-        # had itself taken apart. So the world goes back together first and
-        # the proof reads the database an operator would find.
-        #
-        # always(), and unconditional: whatever happened above — a failed
-        # replay, a cancelled run — the scheduler goes back on. A deploy that
-        # leaves the platform's own clock stopped has done more damage than
-        # the one it was avoiding.
-        #
-        # No-op when nothing was paused, so this is safe on every path that
-        # never reached the pause: PAUSED_JOBS is simply unset.
-        #
-        # A failure here fails the job even when the deploy itself succeeded.
-        # The scheduler being off is not a footnote to a green deploy.
-        if: always()
-        run: |
-          set -uo pipefail
-          if [[ -z "${PAUSED_JOBS:-}" ]]; then
-            echo "nothing was paused"
-            exit 0
-          fi
-          # Both routes, whichever paused it: a resume that fails because it
-          # picked the wrong one is the failure this step exists to prevent.
-          if psql "$DB_URL" -v ON_ERROR_STOP=1 -qtc \
-               "select cron.alter_job(jobid, active := true) from cron.job where jobid in (${PAUSED_JOBS})" \
-             || psql "$DB_URL" -v ON_ERROR_STOP=1 -qc \
-               "update cron.job set active = true where jobid in (${PAUSED_JOBS})"; then
-            echo "scheduled job(s) running again: ${PAUSED_JOBS}"
-          else
-            echo "::error::could not re-enable cron.job (${PAUSED_JOBS}). The platform scheduler is STOPPED on live: run 'update cron.job set active = true where jobid in (${PAUSED_JOBS});' by hand now."
-            exit 1
-          fi
-
-      - name: Deploy the Edge Functions
-        # Only when SUPABASE_ACCESS_TOKEN is set; otherwise a notice and nothing.
-        #
-        # On 13 September the deploy of 2b181c8 failed at its replay with
-        # "duplicate key value violates unique constraint
-        # pg_proc_proname_args_nsp_index": live's log shows a second client
-        # applying the same migration two seconds apart. That is Supabase's
-        # GitHub integration with "Deploy to production" on, which applies
-        # migrations from main as well as deploying the functions declared in
-        # supabase/config.toml, and it is the second route into production the
-        # 8 September deploy lost to. Turning it off would also stop the
-        # functions reaching live, because nothing else deployed them.
-        #
-        # So this deploys them from the same commit, after the database they
-        # read has been replayed and before the dispatch schedule starts
-        # calling them. With the token set, the integration's production
-        # deploy can be switched off and this workflow is the one route again.
-        # The CLI reads [functions.*] (verify_jwt, import_map) from config.toml.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${SUPABASE_ACCESS_TOKEN}" ]]; then
-            echo "::notice::SUPABASE_ACCESS_TOKEN is not set, so this workflow deployed no Edge Functions; Supabase's GitHub integration still deploys them, and applies migrations beside this workflow while it does."
-            echo "- Edge Functions: not deployed here (no SUPABASE_ACCESS_TOKEN)" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if ! [[ "${PROJECT_REF}" =~ ^[a-z0-9]{20}$ ]]; then
-            echo "::error::CLOVEERP_PROJECT_REF must be a 20-character project ref; got '${PROJECT_REF}'."
-            exit 1
-          fi
-          deployed=""
-          for dir in supabase/functions/*/; do
-            name=$(basename "$dir")
-            [[ -f "$dir/index.ts" ]] || continue
-            # --use-api bundles on Supabase's side, as the integration did: it follows
-            # the relative imports into worker/src/core and src/lib, and needs no Docker.
-            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api
-            deployed="$deployed $name"
-          done
-          echo "Edge Functions deployed:${deployed}"
-          echo "- Edge Functions deployed:${deployed}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Schedule the dispatch function
-        id: schedule_dispatch
-        # Email leaves only when something posts to the dispatch function, and
-        # nothing did. erp.ensure_platform_schedule() makes that post a pg_cron
-        # job, clove-dispatch, but only when it is given the function's URL, and
-        # the migration that defines it gives none: live's register has said
-        # "no dispatch URL has been given" since the day it was written, and
-        # every email queued since was queued for nobody.
-        #
-        # Three things, all inside the database, none printed:
-        #
-        #   the secret  the job signs its request with, created in the vault
-        #               when absent, from random bytes the database generates
-        #               itself. It never exists outside the database: not in the
-        #               repository, not in a GitHub secret, not in this log. The
-        #               function reads the same vault entry over its own
-        #               connection, so there is nothing to copy between them.
-        #   the backlog email and webhooks the minute pass queued while nothing
-        #               drained, retired right before the job can first send
-        #               them: erp.retire_undrained_notifications_everywhere()
-        #               turns what is over an hour old into in-app notices, and
-        #               does nothing once any drain pass has been recorded. The
-        #               migration that retired them ran when it was applied, and
-        #               a run that stopped before this step (a failed replay, a
-        #               function that would not deploy) leaves days of mail for
-        #               the first pass to send. A failure here stops the step
-        #               before anything is scheduled. The summary gets each
-        #               organisation that had any.
-        #   the job     rescheduled only when the register, cron.job and this
-        #               URL disagree, or the stored command predates the request
-        #               timeout 20260913120000 gives it. Rescheduling renumbers
-        #               both jobs, which on every deploy would be churn.
-        #
-        # After the scheduler is started again, so the new jobs are not left
-        # paused under ids the resume step never saw; before the proof, so the
-        # proof reads the schedule an operator would find.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        run: |
-          set -euo pipefail
-          # Interpolated into SQL below, so its shape is checked first.
-          if ! [[ "$DISPATCH_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~-]+)+$ ]]; then
-            echo "::error::the dispatch URL '${DISPATCH_URL}' is not a plain https URL such as https://<ref>.supabase.co/functions/v1/dispatch; nothing was scheduled."
-            exit 1
-          fi
-
-          missing=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select concat_ws(', ',
-                     case when to_regclass('cron.job') is null then 'pg_cron' end,
-                     case when not exists (select 1 from pg_catalog.pg_extension where extname = 'pg_net') then 'pg_net' end,
-                     case when to_regclass('vault.secrets') is null then 'supabase_vault' end);")
-          if [[ -n "$missing" ]]; then
-            echo "::error::live has no ${missing}, so the dispatch function cannot be scheduled from inside the database and no email can leave. Enable it under Database, Extensions and run this workflow again."
-            exit 1
-          fi
-
-          # What the proof below waits for a drain pass after.
-          echo "DISPATCH_SCHEDULED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
-
-          had=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select exists (select 1 from vault.secrets where name = 'cloveerp_dispatch_secret');")
-          if [[ "$had" == "t" ]]; then
-            secret="already in the vault"
-          else
-            # create_secret answers with the entry's id, not its value, and
-            # even that goes nowhere.
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-              select vault.create_secret(
-                       encode(extensions.gen_random_bytes(32), 'hex'),
-                       'cloveerp_dispatch_secret',
-                       'x-dispatch-secret for the pg_cron job clove-dispatch and the dispatch function. Created inside the database by deploy.yml and never printed.')
-               where not exists (select 1 from vault.secrets where name = 'cloveerp_dispatch_secret');" > /dev/null
-            secret="created in the vault"
-          fi
-
-          # Right before the schedule, so nothing queued before this moment can
-          # reach the first pass. One statement, one transaction: the function
-          # sets each organisation's context for that transaction only.
-          if ! retired=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tA -F '|' -c "
-                select r.tenant_code, r.retired
-                  from erp.retire_undrained_notifications_everywhere() r
-                 order by r.tenant_code;"); then
-            echo "::error::erp.retire_undrained_notifications_everywhere() failed, so mail queued while nothing drained could not be retired; nothing was scheduled, so none of it can be sent. The error is above."
-            exit 1
-          fi
-          checked=0
-          retired_total=0
-          retired_lines=""
-          while IFS='|' read -r tenant_code count; do
-            [[ -n "$tenant_code" ]] || continue
-            checked=$((checked + 1))
-            if [[ "$count" =~ ^[0-9]+$ ]] && (( count > 0 )); then
-              retired_total=$((retired_total + count))
-              retired_lines+="  - ${tenant_code}: ${count}"$'\n'
-            fi
-          done <<< "$retired"
-          if [[ "$checked" -eq 0 ]]; then
-            backlog="nothing retired: a drain pass has already been recorded"
-          else
-            backlog="${retired_total} undrained notification(s) retired across ${checked} organisation(s)"
-          fi
-
-          agrees=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select exists (
-              select 1
-                from erp_meta.platform_schedule s
-                join cron.job j on j.jobid = s.cron_jobid
-               where s.code = 'clove-dispatch'
-                 and s.is_scheduled
-                 and j.jobname = 'clove-dispatch'
-                 and j.active
-                 and j.command = s.command
-                 and position(quote_literal('${DISPATCH_URL}') in s.command) > 0
-                 and position('timeout_milliseconds' in s.command) > 0);")
-          if [[ "$agrees" == "t" ]]; then
-            result="unchanged: clove-dispatch posts to ${DISPATCH_URL}, and the register, cron.job and the command agree"
-          else
-            result=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.ensure_platform_schedule('${DISPATCH_URL}')::text;")
-          fi
-          echo "secret: ${secret}"
-          echo "backlog: ${backlog}"
-          [[ -z "$retired_lines" ]] || printf '%s' "$retired_lines"
-          echo "schedule: ${result}"
-          {
-            echo "## Dispatch"
-            echo "- secret: ${secret}"
-            echo "- backlog: ${backlog}"
-            [[ -z "$retired_lines" ]] || printf '%s' "$retired_lines"
-            echo "- schedule: ${result}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Bring the demonstration up to today
-        # A demonstration organisation that stopped trading in the spring reads,
-        # to a prospect, as a company that went under: every penny it is owed
-        # aged past ninety days, nothing in its current bucket, no month ever
-        # closed. erp.catch_up_demonstrations() trades it forward to the day of
-        # this deploy through erp.seed_demo_history(), bills the goods it
-        # received and never billed, and closes the months whose trading is
-        # finished, with nothing waived.
-        #
-        # It also reopens months an earlier catch-up closed before its trading
-        # had ever reached them, trades them and closes them again on their own
-        # figures (20260921110000). That is a real accounting act and it is
-        # permitted here only because erp.demonstration_catch_up() refuses any
-        # organisation whose code does not begin 'demo-' or whose environment
-        # is live: what this step may reopen is invented books in a non-live
-        # demonstration, and nothing else. The narrowness of that guard is the
-        # reason this is allowed, so it is not a guard to relax.
-        #
-        # Here rather than in a migration, for two reasons. A migration is one
-        # transaction, and five months of trading leaves thousands of journal
-        # rows with deferred trigger events pending, which the generators at the
-        # foot of every migration cannot then ALTER past — that is what took the
-        # deploy down on 18 September (20260920300000 has the whole account).
-        # And a migration runs once, so a demonstration it brings up to today is
-        # a month stale a month later; a step runs every deploy, and after the
-        # first one there are only the days since the last deploy to build.
-        #
-        # Before the proof below, so that what is proved is the database as this
-        # deploy leaves it.
-        #
-        # FIVE MINUTES, SET WHERE IT TAKES (20260921130000). This step used to
-        # carry `PGOPTIONS: -c statement_timeout=0` and a comment saying "no
-        # statement timeout". It never took: PGOPTIONS rides in libpq's startup
-        # packet and this deploy connects through the session pooler, which does
-        # not forward it, and a per-role setting would override it even on a
-        # direct connection. On 21 September the catch-up was killed at 121.9 s
-        # by the two-minute limit it believed it had removed, and everything
-        # those two minutes built was rolled back with it.
-        #
-        # So the limit is set by an explicit SET, which no pooler drops and no
-        # role setting overrides, and it is set to something rather than to
-        # nothing: five minutes is a bound this deploy has chosen, where "no
-        # timeout" would have been an unbounded write transaction on a database
-        # with a year of trading in it. erp.demonstration_catch_up() reads the
-        # session's own limit and stops at a fraction of it — trading at three
-        # minutes, billing and closing at four — so it returns and COMMITS
-        # instead of being cancelled, and the next deploy carries on from where
-        # it stopped.
-        #
-        # This never fails the deploy. It is hygiene on demonstration data, not
-        # an invariant of the product, and a red deploy blocks every branch
-        # behind it. The routine raises nothing — an organisation that refuses is
-        # reported and the next one is tried — and continue-on-error covers the
-        # rest. What it will not do is go quiet: every note comes back out here.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        continue-on-error: true
-        run: |
-          # GitHub runs a `run:` step as `bash -e {0}` unless the step says
-          # otherwise, so -e has always been in force here whatever this script
-          # set; the comment that used to say "Not -e" was wrong, and on
-          # 21 September that mattered — the first jq failed on a report it
-          # could not parse and the step died there having printed six words.
-          # It is relied on deliberately now: the reporter below is the last
-          # command, and its exit status is this step's.
-          set -uo pipefail
-          report="$RUNNER_TEMP/demonstrations.json"
-          errors="$RUNNER_TEMP/demonstrations.err"
-          started=$(date +%s%N)
-          # Two -c options, one session: the SET is an ordinary statement the
-          # server executes, so it cannot be dropped on the way in the way
-          # PGOPTIONS was (20260921130000).
-          #
-          # And -q, because psql prints a command tag for every -c it runs and
-          # those go to stdout with the answer. Without it the report carried
-          # "SET" ahead of the JSON and every jq reading it failed. -tA does not
-          # suppress that; -q does. supabase/ci/demonstration_catch_up.sh runs
-          # this exact invocation against a real server on every build and
-          # refuses a report that is not JSON, so this is checked rather than
-          # believed.
-          if psql "$DB_URL" -q -v ON_ERROR_STOP=1 -tA \
-               -c "set statement_timeout = '5min'" \
-               -c "select erp.catch_up_demonstrations();" > "$report" 2> "$errors"; then
-            answered=true
-          else
-            answered=false
-          fi
-          seconds=$(awk -v ms="$(( ($(date +%s%N) - started) / 1000000 ))" \
-                        'BEGIN { printf "%.1f", ms / 1000 }')
-
-          # Everything this step says about the demonstration is said there, so
-          # that it can be rehearsed against captured output by the build
-          # (supabase/ci/demonstration_report_rehearsal.sh). It exits non-zero
-          # only when it cannot read the report at all, which fails this step
-          # and not the deploy.
-          supabase/ci/demonstration_report.sh "$report" "$errors" "$seconds" "$answered"
-
-      - name: Prove the live database
-        # The same checks the build runs, minus the suites: suites create and
-        # destroy organisations and do not belong on live. erp.platform_assurance()
-        # runs every registered assertion; the whole-database reconciliation
-        # visits every organisation. Either failing fails the deploy, loudly.
-        #
-        # And how long it took, check by check. erp.platform_assurance() runs
-        # under a 55-second statement_timeout and took 63.3 s here on 14
-        # September; the console asks for it through the data API. It is run
-        # once, kept, and read twice: for what failed, and for where the time
-        # went (erp.run_diagnostic() records elapsed_ms per check since
-        # 20260914090000). Over 35 s is a warning, not a failure: a slow proof
-        # is still a proof, and the slowest checks it prints are where to look.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies)) }}
-        run: |
-          set -euo pipefail
-          assurance="$RUNNER_TEMP/assurance.json"
-          started=$(date +%s%N)
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.platform_assurance();" > "$assurance"
-          wall_ms=$(( ($(date +%s%N) - started) / 1000000 ))
-          seconds=$(awk -v ms="$wall_ms" 'BEGIN { printf "%.1f", ms / 1000 }')
-          slowest=$(jq -r '
-            map(select(.elapsed_ms != null)) | sort_by(-.elapsed_ms) | .[:10][]
-            | "\(.elapsed_ms | tostring | " " * ([0, 9 - length] | max) + .) ms  \(.code)"
-          ' "$assurance")
-          echo "platform_assurance took ${seconds} s; the slowest checks:"
-          echo "$slowest"
-          {
-            echo "## Assurance"
-            echo "erp.platform_assurance() took ${seconds} s. The slowest checks:"
-            echo '```'
-            echo "$slowest"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          bad=$(jq -r '.[] | select(.ok == false) | "\(.code): \((.detail // "")[0:120])"' "$assurance")
-          if [[ -n "$bad" ]]; then
-            echo "::error::platform_assurance() is not green on live:"
-            echo "$bad"
-            exit 1
-          fi
-          if (( wall_ms > 35000 )); then
-            echo "::warning::platform_assurance() took ${seconds} s on live, more than the 35 s it should stay under; its statement_timeout is 55 s. The slowest checks are listed above."
-          fi
-          echo "platform_assurance: every registered check green in ${seconds} s"
-          # When the reconciliation refuses, say what the refused documents'
-          # journals did, from every organisation that is not live
-          # (erp.describe_vat_disagreements(), 20261002200000). A migration's
-          # warnings do not survive supabase db push; psql prints a notice.
-          if ! psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"; then
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -qc "
-              do \$d\$
-              declare r record; v jsonb;
-              begin
-                for r in select tn.id, tn.code from erp.tenant tn where tn.deleted_at is null order by tn.code loop
-                  perform erp_meta.act_in_tenant(r.id);
-                  continue when erp.environment_is_live();
-                  v := erp.describe_vat_disagreements();
-                  if jsonb_array_length(v) > 0 then
-                    raise notice 'vat disagreements in %: %', r.code, jsonb_pretty(v);
-                    -- Every version of the rules those documents post by, and
-                    -- the organisation's module versions: which one posted it.
-                    raise notice 'posting rules in %: %', r.code, (
-                      select jsonb_pretty(coalesce(jsonb_agg(jsonb_build_object(
-                               'code', pr.code, 'version', pr.version, 'status', pr.status,
-                               'entity_specific', pr.entity_id is not null,
-                               'from', pr.effective_from, 'to', pr.effective_to,
-                               'lines', pr.posting_lines) order by pr.code, pr.version), '[]'::jsonb))
-                        from erp.posting_rule pr
-                       where pr.tenant_id = r.id
-                         and pr.code in (select dt.posting_rule_code
-                                           from erp.document d
-                                           join erp.document_type dt on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
-                                          where d.tenant_id = r.id
-                                            and d.document_number in (select x ->> 'document' from jsonb_array_elements(v) x)));
-                    raise notice 'modules in %: %', r.code, (
-                      select string_agg(mi.install_code || ' v' || coalesce(mi.installer_version::text, '?'), ', ' order by mi.install_code)
-                        from erp.module_installation mi where mi.tenant_id = r.id);
-                  end if;
-                end loop;
-                perform erp_meta.stop_acting_in_tenant();
-              end
-              \$d\$;" || true
-            exit 1
-          fi
-          # The release is proved: the database it produced passed. A release
-          # row without proved_at is a deploy that applied and did not check.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.prove_release('${RELEASE_ID}');"
-          {
-            echo "## Live"
-            echo '```'
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'organisations: ' || count(*) from erp.tenant;"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'migrations recorded: ' || count(*) from supabase_migrations.schema_migrations;"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'release ' || left(git_sha, 12) || ' recorded ' || recorded_at || ', ledger at ' || coalesce(migrations_high, '(none)') || ', proved ' || proved from erp.release_report() limit 1;"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Prove email can leave
-        # A schedule is a promise; a drain pass is the evidence.
-        #
-        # erp.platform_assurance() is green with dispatch unscheduled, and has
-        # to be: a database the build stands up has no URL to give it. So the
-        # proof that live sends email is here, where only live is touched. The
-        # register, cron and the vault must agree, and then a pass must be
-        # recorded in erp_meta.drain_pass after the step above began. A pass is
-        # recorded only if cron fired, pg_net posted, the gateway let the
-        # request through, the function accepted the secret, loaded its
-        # configuration and reached the database: the whole path, in one row.
-        #
-        # always(), so a proof that failed above cannot hide whether email
-        # leaves; and only when the schedule step succeeded, because otherwise
-        # there is nothing scheduled to prove.
-        if: ${{ always() && steps.schedule_dispatch.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-          state=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select coalesce((
-              select case
-                       when not s.is_scheduled
-                         then 'the register says it is not scheduled: ' || s.reason
-                       when not exists (select 1 from cron.job j where j.jobid = s.cron_jobid and j.jobname = 'clove-dispatch' and j.active)
-                         then 'the register names job ' || coalesce(s.cron_jobid::text, 'none') || ' and cron.job has no active clove-dispatch under it'
-                       when not exists (select 1 from vault.secrets v where v.name = 'cloveerp_dispatch_secret')
-                         then 'the vault has no cloveerp_dispatch_secret for the job to sign with'
-                       else 'ok'
-                     end
-                from erp_meta.platform_schedule s
-               where s.code = 'clove-dispatch'),
-              'erp_meta.platform_schedule has no clove-dispatch row');")
-          if [[ "$state" != "ok" ]]; then
-            echo "::error::clove-dispatch: ${state}"
-            exit 1
-          fi
-
-          # A tick a minute; four minutes is three chances and a slow one.
-          passes=0
-          for _ in $(seq 1 24); do
-            passes=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select count(*) from erp_meta.drain_pass where finished_at > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
-            if [[ "$passes" -gt 0 ]]; then break; fi
-            sleep 10
-          done
-
-          if [[ "$passes" -eq 0 ]]; then
-            # Diagnosis only from here: nothing below may hide the failure.
-            set +e
-            echo "What pg_net got back since ${DISPATCH_SCHEDULED_AT}, newest first:"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-              select r.created || '  status ' || coalesce(r.status_code::text, 'none')
-                     || '  timed out ' || coalesce(r.timed_out::text, '-')
-                     || '  ' || left(regexp_replace(coalesce(r.error_msg, r.content, ''), '\s+', ' ', 'g'), 200)
-                from net._http_response r
-               where r.created > '${DISPATCH_SCHEDULED_AT}'::timestamptz
-               order by r.created desc
-               limit 5;"
-            echo "What cron recorded for clove-dispatch since then, newest first:"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-              select d.start_time || '  ' || d.status || '  ' || left(coalesce(d.return_message, ''), 200)
-                from cron.job_run_details d
-                join cron.job j on j.jobid = d.jobid
-               where j.jobname = 'clove-dispatch'
-                 and d.start_time > '${DISPATCH_SCHEDULED_AT}'::timestamptz
-               order by d.start_time desc
-               limit 5;"
-            codes=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-              select coalesce(string_agg(distinct coalesce(r.status_code::text, case when r.timed_out then 'timeout' else 'error' end), ' '), '')
-                from net._http_response r
-               where r.created > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
-            set -e
-            diagnosis=""
-            for code in $codes; do
-              case "$code" in
-                401) diagnosis+=" 401: the gateway refused the request before the function ran, so the deployed dispatch function still has verify_jwt = true. supabase/config.toml says false, and the Supabase GitHub integration applies it when it deploys main: check that deploy ran." ;;
-                403) diagnosis+=" 403: the function refused the secret: the header matched neither the vault's cloveerp_dispatch_secret nor CLOVEERP_DISPATCH_SECRET. A warm function keeps what it read from the vault for up to five minutes, so if the entry was just created or changed, run this workflow again." ;;
-                404) diagnosis+=" 404: nothing is deployed at ${DISPATCH_URL}: the function has not been deployed, or vars.CLOVEERP_DISPATCH_URL names the wrong one." ;;
-                500) diagnosis+=" 500: the function ran and could not drain. The body above names the setting (a database URL, CLOVEERP_TENANTS without CLOVEERP_PRINCIPALS) or the error; the function's log has the rest." ;;
-                timeout) diagnosis+=" timed out: pg_net stopped waiting before the function answered, and no pass followed, so the function did not finish either: its log says where it stopped." ;;
-                *) diagnosis+=" ${code}: see the responses above." ;;
-              esac
-            done
-            if [[ -z "${codes// /}" ]]; then
-              diagnosis=" pg_net recorded no response at all: cron has not fired clove-dispatch (the cron rows above say whether it ran and what it returned), or every request is still in flight."
-            fi
-            echo "::error::clove-dispatch is scheduled and no drain pass was recorded in four minutes, so no email is leaving.${diagnosis}"
-            exit 1
-          fi
-
-          last=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select 'last pass ' || p.finished_at || ' by ' || p.worker
-                   || ': ' || coalesce(p.report ->> 'organisations', '?') || ' organisation(s), email sent '
-                   || coalesce(p.report ->> 'emailSent', '0') || ', email failed '
-                   || coalesce(p.report ->> 'emailFailed', '0') || ', failed stages '
-                   || coalesce(p.report ->> 'failures', '0')
-              from erp_meta.drain_pass p
-             order by p.finished_at desc
-             limit 1;")
-          echo "$last"
-          echo "- ${last}" >> "$GITHUB_STEP_SUMMARY"
-          # A stage that failed in one organisation does not stop the others'
-          # email, so it is not this proof's failure; it is still worth a line.
-          failed=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select coalesce(max((p.report ->> 'failures')::int), 0)
-              from erp_meta.drain_pass p
-             where p.finished_at > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
-          if [[ "$failed" -gt 0 ]]; then
-            echo "::warning::a drain pass since this deploy had ${failed} failed stage(s). Email is leaving; something in at least one organisation is not. The dispatch function's log names the organisation and the stage."
-          fi
+    uses: ./.github/workflows/release.yml
+    with:
+      target: production
+      project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      other_project_ref: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      secret_name: CLOVEERP_LIVE_DATABASE_URL
+      # The project's own dispatch function unless a repository variable says
+      # otherwise.
+      dispatch_url: ${{ vars.CLOVEERP_DISPATCH_URL || format('https://{0}.supabase.co/functions/v1/dispatch', vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja') }}
+      mark_applied: ${{ github.event_name == 'workflow_dispatch' && inputs.mark_applied == true }}
+      mark_applied_through: ${{ github.event_name == 'workflow_dispatch' && inputs.mark_applied_through || '' }}
+      repair_gateway_bodies: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_gateway_bodies == true }}
+    secrets:
+      database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
