@@ -8,10 +8,12 @@
 # which broke three times in one day because only production ever ran it
 # (supabase/ci/demonstration_report.sh). So every build runs it here first,
 # against a psql that answers from a script and writes down what it was asked:
-# what it refuses, the order it applies in, that each migration is one
-# transaction with the timeout off, the owner and the record inside it, that
-# a deadlock goes again and anything else stops it, and that it will not call
-# a build finished while the console is claimable.
+# what it refuses — open sign-up, unconfirmed addresses, any sign-in but the
+# owner's, a database that is not empty — the order it applies in, that each
+# migration is one transaction with the timeout off and the owner (bound to
+# their sign-in) and the record inside it, that a deadlock goes again and
+# anything else stops it, and that it will not call a build finished unless
+# the staff list is exactly the owner.
 #
 # What this does not prove is that the migrations apply to a real Supabase
 # project; the nightly stack replay and the build itself do that. It proves
@@ -58,17 +60,31 @@ if [[ -n "$file" ]]; then
   exit 0
 fi
 case "$cmd" in
+  *"from erp_meta.platform_staff s"*) echo "${FAKE_STAFF:-1 1}" ;;
+  *"from auth.users"*) echo "${FAKE_USERS:-1 1}" ;;
   *"to_regnamespace('erp')"*) echo "${FAKE_ERP:-f}" ;;
   *"to_regclass('supabase_migrations.schema_migrations')"*) echo "${FAKE_HISTORY:-f}" ;;
   *"count(*) from supabase_migrations"*) echo "${FAKE_RECORDED:-0}" ;;
   *"from erp.tenant"*) echo "${FAKE_TENANTS:-0}" ;;
   *"select version from"*) printf '%s' "${FAKE_APPLIED:-}" ;;
-  *"erp_meta.platform_staff where lower"*) echo "${FAKE_OWNER_ROWS:-1}" ;;
   *) : ;;
 esac
 exit 0
 FAKE
 chmod +x "$work/psql"
+
+# ── And a Management API that answers from the environment ───────────────────
+cat > "$work/curl" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$FAKE_DIR/curl"
+[[ -z "${FAKE_CURL_FAIL:-}" ]] || exit 22
+if [[ -n "${FAKE_AUTH:-}" ]]; then
+  printf '%s\n' "$FAKE_AUTH"
+else
+  echo '{"disable_signup":true,"mailer_autoconfirm":false}'
+fi
+FAKE
+chmod +x "$work/curl"
 
 # Three migrations, named the way the repository names them.
 mig="$work/migrations"
@@ -83,7 +99,8 @@ run() {
   # run <name> [VAR=value ...]: a fresh fake, the script, its exit and output.
   local name="$1"; shift
   rm -rf "$work/fake"; mkdir -p "$work/fake"
-  out=$(env FAKE_DIR="$work/fake" PSQL="$work/psql" REPLAY_DIR="$mig" VACUUM_EVERY=2 "$@" \
+  out=$(env FAKE_DIR="$work/fake" PSQL="$work/psql" CURL="$work/curl" REPLAY_DIR="$mig" VACUUM_EVERY=2 \
+          SUPABASE_ACCESS_TOKEN=rehearsal-token PROJECT_REF=abcdefghijklmnopqrst "$@" \
           bash "$SCRIPT" "postgresql://postgres.demoref@pooler.example:5432/postgres" "${OWNER:-owner@example.com}" 2>&1)
   status=$?
   CURRENT="$name"
@@ -131,12 +148,14 @@ check 'grep -q -- "--single-transaction" "$work/fake/log" && [[ $(grep -c -- "--
       "each migration is its own transaction"
 check '[[ "$(head -n 1 "$work/fake/apply.0001.sql")" == "set statement_timeout = 0;" && "$(sed -n 2p "$work/fake/apply.0001.sql")" == "\\i '"'"'$mig/0001_first.sql'"'"'" ]]' \
       "the timeout is off before the migration, in the same transaction"
-check 'grep -q "insert into erp_meta.platform_staff" "$work/fake/apply.20260830091046.sql" && grep -q "if to_regclass('"'"'erp_meta.platform_staff'"'"') is null then" "$work/fake/apply.20260830091046.sql"' \
-      "the owner is written inside the migration's transaction, once the staff list exists"
+check 'grep -q "insert into erp_meta.platform_staff (email, auth_user_id, display_name, staff_role)" "$work/fake/apply.20260830091046.sql" && grep -q "u.email_confirmed_at is not null" "$work/fake/apply.20260830091046.sql" && grep -q "if to_regclass('"'"'erp_meta.platform_staff'"'"') is null then" "$work/fake/apply.20260830091046.sql"' \
+      "the owner is written inside the migration's transaction, once the staff list exists, bound to their confirmed sign-in"
 check 'grep -q "insert into supabase_migrations.schema_migrations (version, name, statements)" "$work/fake/apply.0001.sql" && grep -qx "name=ad905a9f-fe00-4810-961e-441bae0f46a0" "$work/fake/vars.20260830091046" && grep -qx "owner=owner@example.com" "$work/fake/vars.0001"' \
       "each migration is recorded the way the CLI records it, under its version and name"
 check '[[ "$out" == *"built: 3 migration(s) applied"* && "$out" == *"owner@example.com is the platform'"'"'s owner"* ]]' \
       "it says what it built, and who owns it"
+check 'grep -q "from erp_meta.platform_staff s where s.revoked_at is null" "$work/fake/log"' \
+      "the staff list it counts at the end is the active rows, so a row revoked since does not refuse a build"
 
 # 7. Carrying on
 run "carrying on a build that stopped" RESUME=yes FAKE_ERP=t FAKE_HISTORY=t FAKE_RECORDED=1 FAKE_TENANTS=0 FAKE_APPLIED=$'0001\n'
@@ -153,10 +172,40 @@ run "a migration that refuses" FAKE_FAIL=20260830091046
 check '[[ $status -eq 1 && "$out" == *"20260830091046_ad905a9f-fe00-4810-961e-441bae0f46a0.sql failed"* && "$out" == *"CLOVEERP_REHEARSAL"* && "$(tr "\n" " " < "$work/fake/applied")" == "0001 20260830091046 " ]]' \
       "the build stops there, names it and its ERROR, and applies nothing after it"
 
-# 10. A claimable console
-run "no owner at the end" FAKE_OWNER_ROWS=0
-check '[[ $status -eq 1 && "$out" == *"the console is claimable"* ]]' \
-      "a build that leaves the console claimable is not finished"
+# 10. A console that is not exactly the owner's
+run "no owner bound at the end" FAKE_STAFF="1 0"
+check '[[ $status -eq 1 && "$out" == *"is not exactly owner@example.com"* ]]' \
+      "a build whose owner is not bound to their confirmed sign-in is not finished"
+run "a second staff row at the end" FAKE_STAFF="2 1"
+check '[[ $status -eq 1 && "$out" == *"rows: 2"* ]]' \
+      "a build that leaves anybody but the owner on the staff list is not finished"
+
+# 11. Nobody can be there first
+run "no access token" SUPABASE_ACCESS_TOKEN=
+check '[[ $status -eq 2 && "$out" == *"needed to read the project"* && ! -s "$work/fake/log" ]]' \
+      "refused before anything connects"
+run "sign-up open" FAKE_AUTH='{"disable_signup":false,"mailer_autoconfirm":false}'
+check '[[ $status -eq 2 && "$out" == *"sign-up is open"* && ! -s "$work/fake/log" ]]' \
+      "refused before anything connects"
+run "addresses confirmed without asking" FAKE_AUTH='{"disable_signup":true,"mailer_autoconfirm":true}'
+check '[[ $status -eq 2 && "$out" == *"mailer_autoconfirm"* && ! -s "$work/fake/log" ]]' \
+      "refused before anything connects"
+run "the settings cannot be read" FAKE_CURL_FAIL=1
+check '[[ $status -eq 2 && "$out" == *"could not read the project"* ]]' "refused"
+run "another sign-in already there" FAKE_USERS="2 1"
+check '[[ $status -eq 2 && "$out" == *"exactly one sign-in"* && ! -e "$work/fake/applied" ]]' \
+      "refused, and nothing applied"
+run "the owner's address not confirmed" FAKE_USERS="1 0"
+check '[[ $status -eq 2 && "$out" == *"exactly one sign-in"* && ! -e "$work/fake/applied" ]]' \
+      "refused, and nothing applied"
+run "no sign-in at all" FAKE_USERS="0 0"
+check '[[ $status -eq 2 && "$out" == *"Add user"* && ! -e "$work/fake/applied" ]]' \
+      "refused: the owner makes their confirmed sign-in first"
+
+# 12. Checking only
+run "checking only" CHECK_ONLY=yes
+check '[[ $status -eq 0 && "$out" == *"checked:"* && ! -e "$work/fake/applied" ]] && ! grep -q "create schema" "$work/fake/log"' \
+      "every check, and nothing created or applied"
 
 echo "$CASES checks over the build from empty, $FAILED failed"
 [[ "$FAILED" -eq 0 ]]

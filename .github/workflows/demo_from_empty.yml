@@ -24,7 +24,16 @@ name: demo from empty
 #     `resume` carries on a build this started that stopped part-way, over a
 #     database with no organisation in it;
 #   - the platform's owner (CLOVEERP_PLATFORM_OWNER_EMAIL) must be set, and is
-#     on the staff list from the migration that creates the list.
+#     on the staff list from the migration that creates the list, bound to
+#     their own confirmed sign-in;
+#   - the project's auth settings, read through the Management API, must say
+#     sign-up is closed and addresses must be confirmed, and the only sign-in
+#     it holds must be the owner's, confirmed (the owner adds it in the
+#     dashboard first). 20260830091046 makes owner whoever already signed up
+#     as admin@erpware.dev, and staff rows are matched by email, so nobody but
+#     the owner may be able to sign in while it builds.
+#
+# Every check runs before anything is created in the project.
 #
 # Production's connection string is not read by this workflow at all.
 #
@@ -117,6 +126,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
+      - name: Nobody else can be there first, and the database is empty
+        # Every check supabase/ci/build_from_empty.sh makes before it builds,
+        # and nothing else: no extension, no bucket, no table is created until
+        # these pass.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          CHECK_ONLY=yes RESUME="${RESUME}" supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL"
+
       - name: The erp schema is not exposed
         # As release.yml checks before every release, and for the same reason:
         # every table the doors read is writable by any signed-in person if
@@ -171,6 +191,9 @@ jobs:
               from pg_catalog.pg_extension where extname in ('pg_cron', 'pg_net', 'supabase_vault', 'pgcrypto');"
 
       - name: Replay every migration into it
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
         # supabase/ci/build_from_empty.sh: each migration one transaction with
         # the statement timeout off, the owner on the staff list from the
         # migration that creates it, each recorded in

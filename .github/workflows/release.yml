@@ -54,6 +54,14 @@ on:
       repair_gateway_bodies:
         type: boolean
         default: false
+      owner_email:
+        description: "The platform owner the demonstration's staff list must be, and only be."
+        type: string
+        default: ''
+      demonstration_skipped:
+        description: 'Production released without the demonstration, by the break-glass input of deploy.yml.'
+        type: boolean
+        default: false
     secrets:
       database_url:
         required: false
@@ -88,6 +96,20 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
+
+      - name: Released without the demonstration
+        # The break-glass in deploy.yml: production released with the
+        # demonstration skipped, which somebody asked for by typing
+        # production's ref. Said where nobody can miss it, on every release
+        # that does it.
+        if: inputs.demonstration_skipped
+        run: |
+          echo "::warning::this release to ${TARGET} SKIPPED THE DEMONSTRATION (deploy.yml, skip_demonstration, confirmed by typing ${PROJECT_REF}). Nothing in it was rehearsed first."
+          {
+            echo "## Released without the demonstration"
+            echo "**skip_demonstration** was set and production's ref typed to confirm it, so this release"
+            echo "reached production without being released to the demonstration first."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: The secret exists
         # A deploy that deployed nothing must not be green.
@@ -145,17 +167,69 @@ jobs:
         # released into: `supabase db push` would replay six hundred migrations
         # under the pooler's two-minute statement limit, with the suite calls
         # later migrations corrected still in them. It is built once, from
-        # empty, by demo_from_empty.yml, which does neither. Until then this
-        # stops here, and production waits for it.
+        # empty, by demo_from_empty.yml, which does neither.
+        #
+        # Built means the database says it is the demonstration
+        # (erp.deployment_kind(), 20261010060000), which only the last step of
+        # demo_from_empty.yml writes, after every migration has applied and
+        # the owner is bound. An erp schema is not enough: a build that
+        # stopped half-way has one. A release never writes the first marker on
+        # the demonstration, it only confirms it. Until then this stops here,
+        # and production waits for it.
         if: inputs.target == 'demonstration'
         run: |
           set -euo pipefail
-          built=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regnamespace('erp') is not null")
-          if [[ "$built" != "t" ]]; then
-            echo "::error::the demonstration project (${PROJECT_REF}) has no erp schema: it has not been built. Run the demo-from-empty workflow once (Actions, demo from empty, Run workflow), then run this workflow again. Production is not released until the demonstration has been."
+          has=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp.deployment_kind()') is not null")
+          said=""
+          if [[ "$has" == "t" ]]; then
+            said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.deployment_kind()")
+          fi
+          if [[ "$said" != "demonstration" ]]; then
+            echo "::error::the demonstration project (${PROJECT_REF}) does not say it is the demonstration (${said:-no marker}): it has not been built, or its build did not finish. Run the demo-from-empty workflow (Actions, demo from empty, Run workflow; with resume if it stopped part-way), then run this workflow again. Production is not released until the demonstration has been."
             exit 1
           fi
           echo "the demonstration has been built"
+
+      - name: The demonstration's staff list is its owner, and only its owner
+        # The demonstration is public: anybody with its address can try to
+        # sign in, and its build named the owner (CLOVEERP_PLATFORM_OWNER_EMAIL)
+        # bound to their own confirmed sign-in (build_from_empty.sh). A release
+        # into it proves that is still so before it applies anything: exactly
+        # one ACTIVE row on the platform staff list, the owner, bound to a
+        # confirmed sign-in with that address. Revoked rows do not count:
+        # revocation is soft (erp_platform_revoke_staff sets revoked_at), a
+        # revoked row is never matched by erp_meta.platform_actor(), and
+        # counting one here would have refused every release — and so every
+        # production release, which waits on this one — for good once anybody
+        # had been added and removed (review of #448, COV-3). Any second
+        # ACTIVE row is refused by design: staff reach the demonstration only
+        # by changing what CLOVEERP_PLATFORM_OWNER_EMAIL means, never from its
+        # console.
+        if: inputs.target == 'demonstration'
+        env:
+          OWNER_EMAIL: ${{ inputs.owner_email }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${OWNER_EMAIL}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+            echo "::error::CLOVEERP_PLATFORM_OWNER_EMAIL is not set to an email address, so nothing says who may run the demonstration's console. Nothing was applied."
+            exit 1
+          fi
+          staff=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="${OWNER_EMAIL}" <<'SQL'
+          select count(*) || ' ' || count(*) filter (
+                   where lower(s.email) = lower(:'owner')
+                     and s.staff_role = 'owner'
+                     and s.auth_user_id in (select u.id from auth.users u
+                                             where lower(u.email) = lower(:'owner')
+                                               and u.email_confirmed_at is not null))
+            from erp_meta.platform_staff s
+           where s.revoked_at is null;
+          SQL
+          )
+          if [[ "$staff" != "1 1" ]]; then
+            echo "::error::the demonstration's platform staff list is not exactly ${OWNER_EMAIL}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound and confirmed: ${staff##* }). Somebody else may reach its console. Nothing was applied, and production is not released."
+            exit 1
+          fi
+          echo "staff: ${OWNER_EMAIL}, bound to a confirmed sign-in, and nobody else"
 
       - name: This database is the ${{ inputs.target }}
         # The second check that this is the right database, and the one the
@@ -164,12 +238,20 @@ jobs:
         # other kind stops here, before anything is applied. Absent says
         # nothing either way — the first release after the marker arrived —
         # and the step after the replay writes it.
+        #
+        # Two calls, as "The demonstration has been built" makes them: a
+        # scalar subquery that names erp_meta.platform_setting fails at parse
+        # time on a database without the table, before any WHERE could
+        # short-circuit, so a to_regclass() guard in the same statement guards
+        # nothing (review of #448, REL-3). The table is asked for first, and
+        # read only when it is there.
         run: |
           set -euo pipefail
-          said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select coalesce((select s.value #>> '{}' from erp_meta.platform_setting s
-                              where s.key = 'deployment.kind'), '')
-             where to_regclass('erp_meta.platform_setting') is not null")
+          has=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regclass('erp_meta.platform_setting') is not null")
+          said=""
+          if [[ "$has" == "t" ]]; then
+            said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select coalesce((select s.value #>> '{}' from erp_meta.platform_setting s where s.key = 'deployment.kind'), '')")
+          fi
           if [[ -n "$said" && "$said" != "${TARGET}" ]]; then
             echo "::error::this database says it is the ${said} deployment, and this is a release to the ${TARGET}. ${SECRET_NAME} names the wrong database. Nothing was applied."
             exit 1
@@ -459,10 +541,23 @@ jobs:
         # changed by a deploy, so on every release after the first this only
         # confirms it — and refuses, failing the release, if the database is
         # the other kind.
+        #
+        # On the demonstration it is never written here: only the end of its
+        # build from empty says it is the demonstration, so a release can only
+        # confirm what that build said.
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
         run: |
           set -euo pipefail
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('${TARGET}');"
+          if [[ "${TARGET}" == demonstration ]]; then
+            said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.deployment_kind()")
+            if [[ "$said" != demonstration ]]; then
+              echo "::error::after the replay the demonstration's database says it is the ${said}. Production is not released."
+              exit 1
+            fi
+            echo "deployment: demonstration, as its build said"
+          else
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('${TARGET}');"
+          fi
 
       - name: Record the release
         # One row per deploy, written before the database is proved so that

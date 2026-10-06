@@ -84,6 +84,14 @@ on:
         description: 'One-off: run supabase/ops/20260908_gateway_function_bodies.sh against live, re-emitting the twelve function bodies the remaining migrations patch, then stop.'
         type: boolean
         default: false
+      skip_demonstration:
+        description: 'Break glass: release production WITHOUT releasing to the demonstration first. Only with confirm_production_ref.'
+        type: boolean
+        default: false
+      confirm_production_ref:
+        description: "With skip_demonstration: type production's project ref to confirm it."
+        type: string
+        default: ''
 
 jobs:
   dry-run:
@@ -180,8 +188,9 @@ jobs:
 
   demonstration:
     # Every release goes here first (the owner's decision of 6 October). Not on
-    # a one-off repair of live's history, which is production's alone.
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.mark_applied && !inputs.repair_gateway_bodies)
+    # a one-off repair of live's history, which is production's alone, and not
+    # when the break-glass below was asked for.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.mark_applied && !inputs.repair_gateway_bodies && !inputs.skip_demonstration)
     name: release to the demonstration
     # One release against the demonstration at a time, for the reasons the
     # production job gives below; its own group, so a release to one
@@ -196,6 +205,7 @@ jobs:
       other_project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
       secret_name: CLOVEERP_DEMO_DATABASE_URL
       dispatch_url: ${{ vars.CLOVEERP_DEMO_DISPATCH_URL || format('https://{0}.supabase.co/functions/v1/dispatch', vars.CLOVEERP_DEMO_PROJECT_REF) }}
+      owner_email: ${{ vars.CLOVEERP_PLATFORM_OWNER_EMAIL }}
     secrets:
       database_url: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -205,11 +215,19 @@ jobs:
     # failed, cancelled or skipped release there leaves production exactly as
     # it was. The exception is a one-off repair of live's history, which never
     # concerned the demonstration and runs here alone.
+    #
+    # And the break-glass: a dispatch with skip_demonstration releases
+    # production alone, but only when production's ref is typed in
+    # confirm_production_ref, and the release says so at the top of its
+    # summary. For the day the demonstration itself is what is broken and
+    # production cannot wait for it.
     needs: demonstration
     if: >-
       ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
           && (needs.demonstration.result == 'success'
-              || (github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies))) }}
+              || (github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies))
+              || (github.event_name == 'workflow_dispatch' && inputs.skip_demonstration
+                  && inputs.confirm_production_ref == (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja'))) }}
     name: release to production
     # One deploy against live at a time, and never two replays at once. A
     # newer deploy may cancel an older one still queued: --include-all means
@@ -230,6 +248,19 @@ jobs:
       mark_applied: ${{ github.event_name == 'workflow_dispatch' && inputs.mark_applied == true }}
       mark_applied_through: ${{ github.event_name == 'workflow_dispatch' && inputs.mark_applied_through || '' }}
       repair_gateway_bodies: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_gateway_bodies == true }}
+      demonstration_skipped: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_demonstration == true }}
     secrets:
       database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+  break-glass-refused:
+    # skip_demonstration without production's ref typed to confirm it: nothing
+    # is released anywhere, and this says why rather than leaving two skipped
+    # jobs that look like a quiet day.
+    if: github.event_name == 'workflow_dispatch' && inputs.skip_demonstration && inputs.confirm_production_ref != (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja')
+    name: break glass refused
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::skip_demonstration releases production without the demonstration, and needs production's project ref typed in confirm_production_ref. It was not, so nothing was released."
+          exit 1

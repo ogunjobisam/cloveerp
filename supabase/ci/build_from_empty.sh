@@ -22,6 +22,16 @@
 #                written into erp_meta.platform_staff inside the transaction
 #                of the migration that creates it: there is no committed state
 #                in which the list exists and is empty (20261010062000).
+#   the door     ...and that is only enough if nobody else can be there first.
+#                20260830091046 itself makes owner whoever already signed up
+#                as admin@erpware.dev, and the staff list is matched by email.
+#                So this refuses to start unless the project's own settings,
+#                read through the Management API, say sign-up is closed and an
+#                address must be confirmed, and unless the only sign-in the
+#                project holds is the owner's, confirmed: the owner makes it in
+#                the dashboard before the build, and the build binds the staff
+#                row to it. It refuses to call the build finished unless the
+#                staff list is exactly that one row.
 #
 # Each migration is one transaction, and the same transaction records it in
 # supabase_migrations.schema_migrations, the table the Supabase CLI keeps, so
@@ -45,6 +55,13 @@
 #                 budget that a sustained write drains (5 October); one
 #                 migration at a time, one connection, with a rest between,
 #                 keeps the build from being one long burst
+#   SUPABASE_ACCESS_TOKEN, PROJECT_REF
+#                 required: the project's auth settings are read through the
+#                 Management API (GET /v1/projects/<ref>/config/auth)
+#   CURL          the curl command (default: curl)
+#   CHECK_ONLY    yes to make every check that comes before the build and stop
+#                 there, changing nothing (demo_from_empty.yml runs it before it
+#                 provides anything)
 set -euo pipefail
 
 DB="${1:?usage: build_from_empty.sh <database url> <owner email>}"
@@ -53,6 +70,8 @@ PSQL_CMD="${PSQL:-psql}"
 RESUME="${RESUME:-no}"
 VACUUM_EVERY="${VACUUM_EVERY:-20}"
 PAUSE_SECONDS="${PAUSE_SECONDS:-0}"
+CURL_CMD="${CURL:-curl}"
+CHECK_ONLY="${CHECK_ONLY:-no}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 refuse() {
@@ -69,6 +88,26 @@ refuse() {
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || refuse "PAUSE_SECONDS must be a whole number."
 
 q() { $PSQL_CMD "$DB" -v ON_ERROR_STOP=1 -X -q -tA "$@"; }
+
+# The owner as a SQL literal, for the few checks below that are not run
+# through a psql variable.
+OWNER_SQL="'$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]' | sed "s/'/''/g")'"
+
+# ── Nobody can be there first ────────────────────────────────────────────────
+[[ -n "${SUPABASE_ACCESS_TOKEN:-}" && "${PROJECT_REF:-}" =~ ^[a-z0-9]{20}$ ]] ||
+  refuse "SUPABASE_ACCESS_TOKEN and PROJECT_REF are needed to read the project's auth settings; without them nothing says a stranger cannot sign up first."
+auth=$($CURL_CMD -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+         "https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth") ||
+  refuse "could not read the project's auth settings from the Management API."
+[[ "$(jq -r '.disable_signup' <<< "$auth")" == "true" ]] ||
+  refuse "sign-up is open on ${PROJECT_REF}. Turn it off (Authentication, Sign In / Providers, Allow new users to sign up) before the build: anybody who signs up while it runs could be matched to the platform's staff."
+[[ "$(jq -r '.mailer_autoconfirm' <<< "$auth")" == "false" ]] ||
+  refuse "${PROJECT_REF} confirms email addresses without asking (mailer_autoconfirm). Turn Confirm email on before the build: the platform's staff are recognised by a confirmed address."
+
+users=$(q -c "select count(*) || ' ' || count(*) filter (where lower(email) = ${OWNER_SQL} and email_confirmed_at is not null) from auth.users")
+if [[ "$users" != "1 1" ]]; then
+  refuse "auth.users must hold exactly one sign-in, the owner's (${OWNER}), with its address confirmed; it holds ${users%% *}, of which ${users##* } is the owner's confirmed. Create it in the dashboard (Authentication, Users, Add user, with Auto Confirm User) and delete any other before the build."
+fi
 
 # ── What is there already ────────────────────────────────────────────────────
 has_erp=$(q -c "select to_regnamespace('erp') is not null")
@@ -95,6 +134,11 @@ else
     refuse "this database already has an erp schema; a build from empty builds empty databases only. A build that stopped part-way is carried on with RESUME=yes."
   [[ "$recorded" -eq 0 ]] ||
     refuse "this database already records $recorded migration(s) in supabase_migrations.schema_migrations, so something has been pushed to it; a build from empty builds empty databases only."
+fi
+
+if [[ "$CHECK_ONLY" == yes ]]; then
+  echo "checked: sign-up closed, confirmation required, the owner's confirmed sign-in is the only one, and the database is ready to build (resume: ${RESUME})"
+  exit 0
 fi
 
 # ── The history the CLI keeps, in the CLI's own shape ────────────────────────
@@ -160,9 +204,13 @@ begin
   end if;
   execute 'select not exists (select 1 from erp_meta.platform_staff s where s.revoked_at is null)'
      into v_empty;
+  -- Bound to the owner's own confirmed sign-in, which the build refused to
+  -- start without, so the row is theirs by id and not only by address.
   if v_empty then
     execute format(
-      'insert into erp_meta.platform_staff (email, display_name, staff_role) values (%L, %L, %L)',
+      'insert into erp_meta.platform_staff (email, auth_user_id, display_name, staff_role) '
+      'select %L, (select u.id from auth.users u where lower(u.email) = %L and u.email_confirmed_at is not null limit 1), %L, %L',
+      lower(current_setting('cloveerp.platform_owner')),
       lower(current_setting('cloveerp.platform_owner')),
       lower(current_setting('cloveerp.platform_owner')),
       'owner');
@@ -212,9 +260,24 @@ done
 
 $PSQL_CMD "$DB" -X -q -v ON_ERROR_STOP=1 -c "analyze" > /dev/null
 
-owner_rows=$(q -c "select count(*) from erp_meta.platform_staff where lower(email) = lower('$(printf '%s' "$OWNER" | sed "s/'/''/g")') and staff_role = 'owner' and revoked_at is null")
-[[ "$owner_rows" -eq 1 ]] || {
-  echo "x every migration applied, and $OWNER is not the platform's owner; the console is claimable. Nothing else is wrong; register them before anybody signs in." >&2
+# Exactly one active row on the staff list: the owner, bound to their
+# confirmed sign-in. Anything else — nobody, an unbound row, a second active
+# row a migration made — is a console somebody other than the owner might
+# reach. A revoked row (revoked_at set) is not: erp_meta.platform_actor() never
+# matches one, and release.yml makes this same count before every release,
+# where counting revoked rows would have refused every release for good once
+# anybody had been added and removed (review of #448, COV-3).
+staff=$(q -c "
+  select count(*) || ' ' || count(*) filter (
+           where lower(s.email) = ${OWNER_SQL}
+             and s.staff_role = 'owner'
+             and s.auth_user_id = (select u.id from auth.users u
+                                    where lower(u.email) = ${OWNER_SQL}
+                                      and u.email_confirmed_at is not null
+                                    limit 1))
+    from erp_meta.platform_staff s where s.revoked_at is null")
+[[ "$staff" == "1 1" ]] || {
+  echo "x every migration applied, and the platform's staff list is not exactly ${OWNER}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound: ${staff##* }). The console is not safe to open; nothing else is wrong." >&2
   exit 1
 }
 
