@@ -27,7 +27,7 @@
 --   3. auth.uid(). The point at which Clove ERP learns WHO is calling.
 --      erp.principal_context() calls it and nothing else does.
 --
---   4. auth.users, in the three columns the product actually reads. This was
+--   4. auth.users, in the four columns the product actually reads. This was
 --      missing, and its absence was hiding something: the identity boundary is
 --      two things rather than one. erp.onboard_tenant() and erp.seed_demo()
 --      create a principal for a caller who has none, and erp.app_user requires
@@ -111,13 +111,20 @@ comment on function auth.uid() is
 
 -- The subject's verified identity, read back by the two self-service doors.
 -- On Supabase this table is the platform's and has forty columns; Clove ERP
--- reads three, and listing them here is the point of this file. Nothing in the
+-- reads four, and listing them here is the point of this file. Nothing in the
 -- product writes to it: an identity is created by signing up, not by Clove ERP.
+--
+-- email_confirmed_at since 20261010063000: a platform staff row not yet bound
+-- to a sign-in is matched by email only when the provider says the address
+-- was confirmed. Added as well as declared, for a cluster this file already
+-- built without it.
 create table if not exists auth.users (
   id                 uuid primary key,
   email              text,
-  raw_user_meta_data jsonb
+  raw_user_meta_data jsonb,
+  email_confirmed_at timestamptz
 );
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
 
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
