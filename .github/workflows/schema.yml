@@ -126,6 +126,16 @@ jobs:
         # So each rule is put in front of the mistake it exists for.
         run: supabase/ci/preflight_falsification.sh
 
+      - name: The demonstration's build from empty is rehearsed
+        # supabase/ci/build_from_empty.sh runs once, for about an hour, against
+        # the demonstration project (demo_from_empty.yml), and a mistake in it
+        # would be learned there. So it runs here first, against a psql that
+        # answers from a script: what it refuses, that each migration is one
+        # transaction with the timeout off and the owner and the record in it,
+        # that a deadlock goes again and anything else stops it. Seconds, no
+        # database.
+        run: supabase/ci/build_from_empty_rehearsal.sh
+
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the
         # whole schema, which catches an ungoverned door eventually. This closes
@@ -1217,16 +1227,21 @@ jobs:
         # screen telling the visitor to set two environment variables. A build
         # is only a build if the thing it produces can talk to something, so
         # the artefact is read rather than trusted.
+        #
+        # Both projects since 6 October (src/lib/backend.ts): production, and
+        # the demonstration a page opened at demo.cloveerp.com talks to.
         run: |
           set -euo pipefail
-          ref="$(grep -oE 'https://[a-z0-9]+\.supabase\.co' src/lib/erp.ts | head -n 1 | sed -E 's#https://([a-z0-9]+)\..*#\1#')"
-          test -n "$ref" || { echo "src/lib/erp.ts names no Supabase project"; exit 1; }
-          if grep -rql "$ref" .output/public/assets; then
-            echo "the built bundle names project $ref"
-          else
-            echo "the built bundle names no Supabase project: it would render 'Not connected to a project'"
-            exit 1
-          fi
+          refs="$(grep -oE 'https://[a-z0-9]+\.supabase\.co' src/lib/backend.ts | sed -E 's#https://([a-z0-9]+)\..*#\1#' | sort -u)"
+          test "$(printf '%s\n' "$refs" | grep -c .)" -eq 2 || { echo "src/lib/backend.ts should name two Supabase projects, production and the demonstration; it names: ${refs:-none}"; exit 1; }
+          for ref in $refs; do
+            if grep -rql "$ref" .output/public/assets; then
+              echo "the built bundle names project $ref"
+            else
+              echo "the built bundle does not name project $ref: a page that chooses it would render 'Not connected to a project'"
+              exit 1
+            fi
+          done
 
       - name: The Edge Functions build
         # deno check resolves the whole import graph and typechecks it, which
@@ -1404,6 +1419,18 @@ jobs:
           test -n "${API_URL:-}" || { echo "the stack reported no API URL"; exit 1; }
           test -n "${ANON_KEY:-}" || { echo "the stack reported no publishable key"; exit 1; }
           test -n "${SERVICE_ROLE_KEY:-}" || { echo "the stack reported no service-role key"; exit 1; }
+          test -n "${DB_URL:-}" || { echo "the stack reported no database URL"; exit 1; }
+
+          # A demonstration deployment, as the build's own database is
+          # (supabase/ci/seed_demo.sql) and the Clove ERP Demo project is
+          # (deploy.yml). The demo account below seeds a demonstration through
+          # the gate, and an unmarked database is production, which makes none
+          # (20261010061000).
+          command -v psql > /dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          }
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('demonstration');"
           {
             echo "E2E_API_URL=$API_URL"
             echo "E2E_ANON_KEY=$ANON_KEY"
