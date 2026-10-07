@@ -677,8 +677,14 @@ jobs:
         # tables that were empty a moment ago, and every suite after it plans
         # its queries over that organisation. The same reason the restore is
         # analysed above.
+        #
+        # Twice (Definition of Done DEM-01, "repeatable, idempotent"): the
+        # second run finds the organisation, builds nothing, and the script
+        # refuses if it built anything or if any row of the trail does not say
+        # a seed script wrote it (DAT-04).
         run: |
           set -euo pipefail
+          $PSQL -f supabase/ci/seed_demo.sql
           $PSQL -f supabase/ci/seed_demo.sql
           $PSQL -c 'analyze'
 

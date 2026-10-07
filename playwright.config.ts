@@ -89,8 +89,8 @@ export default defineConfig({
     // of them and none of them types a password.
     { name: "setup", testMatch: /auth\.setup\.ts/ },
 
-    // The suite that talks to a real stack. Six tests, one sign-in, and the
-    // only place in this directory where the answers come from a database.
+    // The suite that talks to a real stack. One sign-in, and the only place in
+    // this directory where the answers come from a database.
     {
       name: "integration",
       use: { ...devices["Desktop Chrome"] },

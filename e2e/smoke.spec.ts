@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 import { DEMO, NO_TENANT } from "./accounts";
+import { pathsOnTheDemoPath } from "./demo-path";
 
 /**
  * What a browser can see that a schema assertion cannot.
  *
- * Six tests, one per thing that is only true in a browser: the bundle
- * evaluates, the auth boundary renders the right one of its states, a module
- * page draws, and an unknown path lands somewhere deliberate. Everything about
+ * One test per thing that is only true in a browser: the bundle evaluates,
+ * the auth boundary renders the right one of its states, a module page
+ * draws, an unknown path lands somewhere deliberate, and every screen the two
+ * demonstrated flows pass through renders on a seeded organisation's own data. Everything about
  * who may do what is left to the database and the suites that already prove
  * it — `erp_test.assert_grant_suite`, `erp_test.assert_door_isolation_suite`,
  * `erp.assert_document_create_permissions`. A browser test that asserted a
@@ -86,5 +88,48 @@ test.describe("signed in, seeded demo organisation", () => {
     // from a panel that merely lists rows.
     await expect(page.getByRole("heading", { name: "Products" })).toBeVisible();
     await expect(page.getByLabel("Filter products by code")).toBeVisible();
+  });
+
+  // Definition of Done DEM-03: "Walk both flows front to back. Expect: no
+  // console errors, no unhandled exceptions, no dead ends, no empty grids
+  // where data should be." The route sweep in routes.spec.ts answers every
+  // call with an empty default, so a screen that breaks on real rows is
+  // invisible there. This visits every screen on the demo path, in the order
+  // the flows reach them, as the seeded organisation, and fails on an
+  // unhandled exception, the error screen, or a database read that answered
+  // 4xx or 5xx. The document screen is reached from a list in a real walk and
+  // has no fixed address, so it is left to the desk suite.
+  test("every screen on the demo path renders on the seeded organisation's data", async ({
+    page,
+  }) => {
+    test.setTimeout(10 * 60_000);
+    const crashes: string[] = [];
+    const refused: string[] = [];
+    page.on("pageerror", (e) => crashes.push(`${new URL(page.url()).pathname}: ${e.message}`));
+    page.on("response", (r) => {
+      if (r.url().includes("/rest/v1/") && r.status() >= 400) {
+        refused.push(`${new URL(page.url()).pathname}: ${r.status()} ${new URL(r.url()).pathname}`);
+      }
+    });
+
+    const paths = pathsOnTheDemoPath().filter(
+      (p) => p !== "/signin" && !p.startsWith("/documents/"),
+    );
+    expect(paths.length).toBeGreaterThan(5);
+    for (const path of paths) {
+      await page.goto(path);
+      const heading = page.getByRole("heading", { level: 1 }).first();
+      await expect(heading, `${path} drew no heading`).toBeVisible({ timeout: 30_000 });
+      await expect(heading, `${path} drew no heading`).not.toBeEmpty();
+      await expect(
+        page.getByRole("heading", { name: "This page didn't load" }),
+        `${path} fell to the error screen`,
+      ).toBeHidden();
+      // The reads a screen starts as it opens, answered before the next one.
+      await page.waitForTimeout(2_000);
+    }
+
+    expect(crashes, `uncaught client error(s):\n${crashes.join("\n")}`).toEqual([]);
+    expect(refused, `database reads that failed:\n${refused.join("\n")}`).toEqual([]);
   });
 });
