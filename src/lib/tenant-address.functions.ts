@@ -8,25 +8,24 @@
  * service_role may execute — answers the organisation's current code and name,
  * or nothing. Nothing else passes back to the browser.
  *
- * The service client is production's: the server holds no other project's
- * key. So on demo.cloveerp.com, where the page talks to the demonstration
- * project (./backend.ts), an address answers nothing rather than naming a
- * production organisation on the demonstration's sign-in screen.
+ * The service client is production's, the control plane's: the server holds
+ * no other project's key. So on demo.cloveerp.com, where the page talks to the
+ * demonstration project (./backend.ts), and on a client's own host, an address
+ * answers nothing rather than naming a production organisation on another
+ * deployment's sign-in screen.
+ *
+ * Since 20261011020000 the control plane also keeps the register of client
+ * deployments, and an address that names one answers with where that client
+ * lives — its own origin, <code>.cloveerp.com — so cloveerp.com/acme takes
+ * Acme's people to Acme's own door.
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { DEMO_HOST } from "./backend";
+import { APEX_HOST, DEMO_HOST, isClientHost } from "./backend";
+import { readDirectoryEntry } from "./deployment-directory";
+import { requestHost } from "./request-host";
 import { ADDRESS_MAX, readAddressLookup, type AddressLookup } from "./tenant-address";
-
-/** The host a request was made to, without its port, as the visitor typed it. */
-function requestHost(request: Request): string {
-  const named =
-    request.headers.get("x-forwarded-host") ??
-    request.headers.get("host") ??
-    new URL(request.url).host;
-  return (named.split(",")[0] ?? "").trim().split(":")[0]?.toLowerCase() ?? "";
-}
 
 const input = z.object({ code: z.string().min(1).max(ADDRESS_MAX) });
 
@@ -34,7 +33,8 @@ export const tenantByAddress = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => input.parse(data))
   .handler(async ({ data }): Promise<AddressLookup | null> => {
     const { getRequest } = await import("@tanstack/react-start/server");
-    if (requestHost(getRequest()) === DEMO_HOST) return null;
+    const host = requestHost(getRequest());
+    if (host === DEMO_HOST || isClientHost(host)) return null;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const rpc = (
       supabaseAdmin.rpc as unknown as (
@@ -42,6 +42,19 @@ export const tenantByAddress = createServerFn({ method: "GET" })
         a?: Record<string, unknown>,
       ) => Promise<{ data: unknown; error: { message: string } | null }>
     ).bind(supabaseAdmin);
+    const code = data.code.trim().toLowerCase();
+    // A client deployment's address first: the organisation is on its own
+    // project, and the visitor is sent there. A database older than the
+    // register answers an error here, which reads as "not a deployment".
+    const deployment = await rpc("erp_deployment_for_host", { p_host: `${code}.${APEX_HOST}` });
+    const entry = deployment.error ? null : readDirectoryEntry(deployment.data);
+    if (entry) {
+      return {
+        code: entry.code,
+        name: entry.client_name,
+        origin: `https://${entry.code}.${APEX_HOST}`,
+      };
+    }
     const { data: answer, error } = await rpc("erp_tenant_by_address", { p_code: data.code });
     // A visitor is told nothing about why: an address that could not be
     // looked up reads the same as one nobody holds.

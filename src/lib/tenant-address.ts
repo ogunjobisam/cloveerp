@@ -93,20 +93,29 @@ export function displayAddress(host: string, code: string): string {
   return `${host}${addressPath(code)}`;
 }
 
-/** What public.erp_tenant_by_address() answers, read strictly. */
-export type AddressLookup = { code: string; name: string };
+/**
+ * What public.erp_tenant_by_address() answers, read strictly — or, since
+ * 20261011020000, a client deployment's address: an organisation that lives on
+ * its own project, at its own origin, where the address sends the visitor.
+ */
+export type AddressLookup = { code: string; name: string; origin?: string };
 
 /**
  * Anything but an object carrying a code and a name is "no organisation here":
  * a null answer, an error payload, or an older schema that has no such door.
  * The code is the organisation's current address, which differs from the one
- * asked about when the organisation has since renamed it.
+ * asked about when the organisation has since renamed it. An origin, when
+ * there is one, is an https host and nothing more.
  */
 export function readAddressLookup(answer: unknown): AddressLookup | null {
   if (typeof answer !== "object" || answer === null) return null;
   const code: unknown = Reflect.get(answer, "code");
   const name: unknown = Reflect.get(answer, "name");
+  const origin: unknown = Reflect.get(answer, "origin");
   if (typeof code !== "string" || typeof name !== "string") return null;
   if (!addressShaped(code) || name.trim() === "") return null;
+  if (typeof origin === "string" && /^https:\/\/[a-z0-9.-]+$/.test(origin)) {
+    return { code, name, origin };
+  }
   return { code, name };
 }

@@ -39,6 +39,38 @@ export function directoryHost(raw: string | null | undefined): string | null {
 }
 
 /**
+ * The last answer the browser kept, so a client's people reach their own
+ * project while the control plane is briefly away. A day, which is how long
+ * the directory's own cache header lets an edge serve it stale.
+ */
+export const DIRECTORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Where a browser keeps the last answer for a host. */
+export function cacheKey(host: string): string {
+  return `cloveerp.backend:${host}`;
+}
+
+/** The answer as it is kept, with when it was kept. */
+export function cachedEntryJson(entry: DirectoryEntry, now: number): string {
+  return JSON.stringify({ ...entry, at: now });
+}
+
+/** A kept answer, read strictly and only while it is fresh. */
+export function readCachedEntry(raw: string | null, now: number): DirectoryEntry | null {
+  if (typeof raw !== "string" || raw === "") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  const at = (parsed as Record<string, unknown>)["at"];
+  if (typeof at !== "number" || !(now - at >= 0) || now - at > DIRECTORY_CACHE_TTL_MS) return null;
+  return readDirectoryEntry(parsed);
+}
+
+/**
  * What erp_deployment_for_host answered, read strictly: every field a string,
  * the URL https, or nothing at all. A half answer is no answer.
  */
