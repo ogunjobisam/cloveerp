@@ -40,6 +40,7 @@ export const CONSOLE_SECTIONS = [
     blurb: "The organisations on this deployment, with a page for each one.",
     views: [
       { key: "organisations", label: "All organisations" },
+      { key: "fleet", label: "Client deployments" },
       { key: "ownership", label: "Ownership transfers" },
     ],
   },
@@ -168,4 +169,37 @@ export function consoleSearch(section: SectionKey, view?: ViewKey, org?: string)
 /** A demonstration organisation: seeded by erp_seed_demo, and coded `demo-…`. */
 export function isDemoCode(code: string | null | undefined): boolean {
   return typeof code === "string" && code.startsWith("demo-");
+}
+
+/** A section as a deployment offers it: the same keys, possibly fewer views. */
+export type OfferedSection = {
+  key: SectionKey;
+  label: string;
+  blurb: string;
+  views: readonly (ConsoleView & { key: ViewKey })[];
+};
+
+/**
+ * The console a deployment offers (20261011010000).
+ *
+ * Production is the control plane: everything, and the register of client
+ * deployments under Customers. A client's own project holds one customer and
+ * knows nothing of the others: its console is Customers, Today and Platform —
+ * no Sales, Catalogue or Billing, which live on the control plane, and no
+ * register. The demonstration and a database older than the marker are as
+ * they were, less the register, whose doors they would refuse.
+ */
+export function sectionsFor(deployment: "production" | "demonstration" | "client" | undefined) {
+  return CONSOLE_SECTIONS.flatMap((s): OfferedSection[] => {
+    if (
+      deployment === "client" &&
+      (s.key === "sales" || s.key === "catalogue" || s.key === "billing")
+    ) {
+      return [];
+    }
+    const views = (s.views as readonly (ConsoleView & { key: ViewKey })[]).filter(
+      (v) => v.key !== "fleet" || deployment === "production",
+    );
+    return [{ key: s.key, label: s.label, blurb: s.blurb, views }];
+  });
 }

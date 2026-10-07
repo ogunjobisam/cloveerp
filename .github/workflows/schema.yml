@@ -136,6 +136,18 @@ jobs:
         # database.
         run: supabase/ci/build_from_empty_rehearsal.sh
 
+      - name: A client project's provisioning is rehearsed
+        # supabase/ci/provision_project.sh makes and sets up a client's
+        # Supabase project through the Management API, and runs for real only
+        # when a client is onboarded (deployment_from_empty.yml): a mistake in
+        # it is learned on that client's project. So it runs here first,
+        # against a curl that answers from a script: what each step refuses,
+        # what each sends (sign-up closed, addresses confirmed, the site URL,
+        # custom SMTP, the exposed schemas, a confirmed owner), that a setting
+        # read back wrong stops it, and that no password or key is printed.
+        # Seconds, no API.
+        run: supabase/ci/provision_project_rehearsal.sh
+
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the
         # whole schema, which catches an ungoverned door eventually. This closes

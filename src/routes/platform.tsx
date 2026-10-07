@@ -18,16 +18,17 @@ import { TOUCH } from "../components/erp/page";
 import { callErp, isConfigured, supabase } from "../lib/erp";
 import { ROLE_BLURB, ROLE_TONE, usePlatformMe, type PlatformRole } from "../lib/platform";
 import {
-  CONSOLE_SECTIONS,
   consoleSearch,
   locate,
   parseConsoleSearch,
+  sectionsFor,
   type ConsoleView,
   type SectionKey,
   type ViewKey,
 } from "../lib/platform-console";
 import { Card, Fail } from "../components/platform/kit";
 import { Companies, Ownership } from "../components/platform/organisations";
+import { Fleet } from "../components/platform/fleet";
 import { OrganisationPage } from "../components/platform/organisation";
 import { Staff } from "../components/platform/staff";
 import { Activity } from "../components/platform/activity";
@@ -112,6 +113,7 @@ const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
   today: () => <Today />,
   organisations: ({ role, org }) =>
     org ? <OrganisationPage code={org} role={role} /> : <Companies role={role} />,
+  fleet: ({ role }) => <Fleet role={role} />,
   ownership: () => <Ownership />,
   enquiries: ({ role }) => <Enquiries role={role} />,
   quotes: ({ role }) => <Quotes role={role} />,
@@ -283,7 +285,16 @@ function PlatformConsole() {
   }
 
   const role = me.data.role as PlatformRole;
-  const { section, view, org } = locate(search);
+  // What this deployment offers (src/lib/platform-console.ts): a client's own
+  // console has no Sales, Catalogue or Billing, and only the control plane
+  // keeps the register. An address naming a place not offered here opens
+  // Today, as an address naming nowhere does.
+  const offered = sectionsFor(me.data.deployment);
+  const located = locate(search);
+  const placed = offered.find((s) => s.key === located.section.key);
+  const { view, org } =
+    placed && placed.views.some((v) => v.key === located.view.key) ? located : locate({});
+  const section = (placed && placed.views.some((v) => v.key === view.key) ? placed : offered[0])!;
 
   return (
     <Frame
@@ -305,7 +316,7 @@ function PlatformConsole() {
             each section is an address that can be opened in a new tab. */}
         <nav aria-label="Console sections" className="lg:w-52 lg:shrink-0">
           <ul className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-            {CONSOLE_SECTIONS.map((s) => {
+            {offered.map((s) => {
               const current = s.key === section.key;
               return (
                 <li key={s.key} className="shrink-0 lg:shrink">

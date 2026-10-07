@@ -31,9 +31,81 @@ export type PlatformMe = {
   /**
    * Which deployment answered (20261010060000). Absent from a database older
    * than the marker, which is read as it always was: demonstrations are made
-   * here.
+   * here. A client's own project answers `client` (20261011010000).
    */
-  deployment?: "production" | "demonstration";
+  deployment?: DeploymentKind;
+  /** Where this deployment is served from, once a release has said (20261011010000). */
+  origin?: string | null;
+  /** The Supabase project this deployment runs in, once a release has said. */
+  project_ref?: string | null;
+};
+
+/**
+ * The three kinds of deployment (20261011010000): production is the control
+ * plane at cloveerp.com, with Clove Foods on it; the demonstration is its own
+ * project at demo.cloveerp.com; a client is one customer's own project at
+ * <code>.cloveerp.com.
+ */
+export type DeploymentKind = "production" | "demonstration" | "client";
+
+/** Where a client deployment is, from requested to retired (erp_meta.deployment). */
+export type ClientDeploymentStatus =
+  | "requested"
+  | "creating"
+  | "building"
+  | "built"
+  | "live"
+  | "suspended"
+  | "retiring"
+  | "retired"
+  | "failed";
+
+/** The steps a person still does by hand after a client's build, in the order they are done. */
+export const CHECKLIST_ITEMS = [
+  { key: "lovable_domain", label: "Lovable domain added" },
+  { key: "dns", label: "DNS records set" },
+  { key: "google_sign_in", label: "Google sign-in (if wanted)" },
+  { key: "resend_webhook", label: "Resend webhook" },
+] as const;
+
+export type ChecklistItem = (typeof CHECKLIST_ITEMS)[number]["key"];
+
+/** One client deployment as the register holds it, for the Fleet view (erp_platform_deployments). */
+export type ClientDeployment = {
+  code: string;
+  client_name: string;
+  status: ClientDeploymentStatus;
+  owner_email: string;
+  project_ref: string | null;
+  api_url: string | null;
+  region: string;
+  instance_size: string;
+  /** https://<code>.cloveerp.com, as the control plane's own origin spells the apex. */
+  origin: string;
+  build_run_id: string | null;
+  built_at: string | null;
+  last_release_sha: string | null;
+  last_release_at: string | null;
+  last_release_outcome: "success" | "failure" | "cancelled" | null;
+  last_release_run_id: string | null;
+  checklist: Partial<Record<ChecklistItem, { done: boolean; at: string; by: string }>>;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  /** The latest build request: queued until the sweep starts the run, claimed once it has. */
+  request_status: "requested" | "claimed" | "done" | "failed" | "cancelled" | null;
+  request_run_id: string | null;
+  last_event: { phase: string; status: string; detail: string | null; at: string } | null;
+};
+
+/** One step a workflow recorded on a client deployment (erp_platform_deployment_events). */
+export type DeploymentEvent = {
+  id: number;
+  phase: string;
+  status: "started" | "done" | "failed" | "note";
+  detail: string | null;
+  run_id: string | null;
+  at: string;
 };
 
 export type PlatformTenant = {
@@ -184,15 +256,15 @@ export function isPlatformOperator(me: Pick<PlatformMe, "is_staff" | "role"> | u
 /**
  * Whether demonstrations are made somewhere else (src/lib/backend.ts's
  * DEMO_ADDRESS) rather than here. Production says so, and its doors refuse to
- * make one (20261010061000), so a screen offers the address instead of a
- * button that can only be refused. Only a database that says it is production
- * is answered yes: the demonstration, the schema build's database and one
- * older than the marker make demonstrations as before.
+ * make one (20261010061000); so does a client's own project (20261011010000).
+ * A screen then offers the address instead of a button that can only be
+ * refused. The demonstration, the schema build's database and one older than
+ * the marker make demonstrations as before.
  */
 export function demonstrationsLiveElsewhere(
   me: Pick<PlatformMe, "deployment"> | undefined,
 ): boolean {
-  return me?.deployment === "production";
+  return me?.deployment === "production" || me?.deployment === "client";
 }
 
 export const ROLE_BLURB: Record<PlatformRole, string> = {

@@ -76,6 +76,7 @@ import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
 import { Route as ReportingDistributionRouteImport } from './routes/reporting/distribution'
 import { Route as ReportingReproducibilityRouteImport } from './routes/reporting/reproducibility'
 import { Route as SalesIndexRouteImport } from './routes/sales/index'
+import { Route as ApiDirectoryHostRouteImport } from './routes/api/directory/$host'
 import { Route as ApiPublicV1OpenapiDotjsonRouteImport } from './routes/api/public/v1/openapi[.]json'
 
 const IndexRoute = IndexRouteImport.update({
@@ -423,6 +424,11 @@ const SalesIndexRoute = SalesIndexRouteImport.update({
   path: '/sales/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDirectoryHostRoute = ApiDirectoryHostRouteImport.update({
+  id: '/api/directory/$host',
+  path: '/api/directory/$host',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicV1OpenapiDotjsonRoute =
   ApiPublicV1OpenapiDotjsonRouteImport.update({
     id: '/api/public/v1/openapi.json',
@@ -498,6 +504,7 @@ export interface FileRoutesByFullPath {
   '/quality/': typeof QualityIndexRoute
   '/reporting/': typeof ReportingIndexRoute
   '/sales/': typeof SalesIndexRoute
+  '/api/directory/$host': typeof ApiDirectoryHostRoute
   '/api/public/v1/openapi.json': typeof ApiPublicV1OpenapiDotjsonRoute
 }
 export interface FileRoutesByTo {
@@ -568,6 +575,7 @@ export interface FileRoutesByTo {
   '/quality': typeof QualityIndexRoute
   '/reporting': typeof ReportingIndexRoute
   '/sales': typeof SalesIndexRoute
+  '/api/directory/$host': typeof ApiDirectoryHostRoute
   '/api/public/v1/openapi.json': typeof ApiPublicV1OpenapiDotjsonRoute
 }
 export interface FileRoutesById {
@@ -639,6 +647,7 @@ export interface FileRoutesById {
   '/quality/': typeof QualityIndexRoute
   '/reporting/': typeof ReportingIndexRoute
   '/sales/': typeof SalesIndexRoute
+  '/api/directory/$host': typeof ApiDirectoryHostRoute
   '/api/public/v1/openapi.json': typeof ApiPublicV1OpenapiDotjsonRoute
 }
 export interface FileRouteTypes {
@@ -711,6 +720,7 @@ export interface FileRouteTypes {
     | '/quality/'
     | '/reporting/'
     | '/sales/'
+    | '/api/directory/$host'
     | '/api/public/v1/openapi.json'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -781,6 +791,7 @@ export interface FileRouteTypes {
     | '/quality'
     | '/reporting'
     | '/sales'
+    | '/api/directory/$host'
     | '/api/public/v1/openapi.json'
   id:
     | '__root__'
@@ -851,6 +862,7 @@ export interface FileRouteTypes {
     | '/quality/'
     | '/reporting/'
     | '/sales/'
+    | '/api/directory/$host'
     | '/api/public/v1/openapi.json'
   fileRoutesById: FileRoutesById
 }
@@ -922,6 +934,7 @@ export interface RootRouteChildren {
   QualityIndexRoute: typeof QualityIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
   SalesIndexRoute: typeof SalesIndexRoute
+  ApiDirectoryHostRoute: typeof ApiDirectoryHostRoute
   ApiPublicV1OpenapiDotjsonRoute: typeof ApiPublicV1OpenapiDotjsonRoute
 }
 
@@ -1396,6 +1409,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SalesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/directory/$host': {
+      id: '/api/directory/$host'
+      path: '/api/directory/$host'
+      fullPath: '/api/directory/$host'
+      preLoaderRoute: typeof ApiDirectoryHostRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/v1/openapi.json': {
       id: '/api/public/v1/openapi.json'
       path: '/api/public/v1/openapi.json'
@@ -1474,6 +1494,7 @@ const rootRouteChildren: RootRouteChildren = {
   QualityIndexRoute: QualityIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
   SalesIndexRoute: SalesIndexRoute,
+  ApiDirectoryHostRoute: ApiDirectoryHostRoute,
   ApiPublicV1OpenapiDotjsonRoute: ApiPublicV1OpenapiDotjsonRoute,
 }
 export const routeTree = rootRouteImport

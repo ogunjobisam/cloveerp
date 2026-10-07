@@ -20,15 +20,28 @@ name: release
 # 20261010060000) — and the one-off repairs for live's history, which only
 # ever ran against production and still do.
 #
+# Since 7 October a target may also be a client: one Supabase project per
+# client, served at <code>.cloveerp.com (the owner's decision; the plan is in
+# the pull request that made it). A client's connection string is not a
+# repository secret: the control plane's vault holds it, under a name the
+# register gives (erp_meta.deployment, named by the project's ref), and this
+# reads it over CLOVEERP_LIVE_DATABASE_URL when vault_secret_name is given.
+# What the kind changes is said at each step; the body is the same for all
+# three, which is the point.
+#
 # Called, never run on its own: it has no trigger but workflow_call.
 
 on:
   workflow_call:
     inputs:
       target:
-        description: 'demonstration or production'
+        description: "demonstration, production, or a client's code (its address, <code>.cloveerp.com)."
         type: string
         required: true
+      kind:
+        description: "demonstration, production or client. Empty: demonstration and production are themselves, anything else is a client."
+        type: string
+        default: ''
       project_ref:
         description: "The target project's ref."
         type: string
@@ -37,10 +50,22 @@ on:
         description: "The other deployment's ref, which the target's connection string must not name."
         type: string
         required: true
+      other_project_refs:
+        description: "Every other deployment's ref, comma-separated, none of which the target's connection string may name. In addition to other_project_ref."
+        type: string
+        default: ''
       secret_name:
-        description: 'The repository secret the connection string comes from, named in what this says.'
+        description: 'The repository secret the connection string comes from, named in what this says; or, for a client, the name of its vault entry.'
         type: string
         required: true
+      vault_secret_name:
+        description: "A client: the control plane's vault entry holding the connection string (cloveerp:deployment:<ref>:db_url), read over control_plane_database_url. Empty: the database_url secret is the connection."
+        type: string
+        default: ''
+      app_origin:
+        description: "Where this deployment is served from (https://cloveerp.com, https://demo.cloveerp.com, https://<code>.cloveerp.com), recorded in the database once it can hold it."
+        type: string
+        default: ''
       dispatch_url:
         description: "The target project's dispatch function."
         type: string
@@ -67,6 +92,9 @@ on:
         required: false
       supabase_access_token:
         required: false
+      control_plane_database_url:
+        description: "CLOVEERP_LIVE_DATABASE_URL: where a client's connection string is read from (vault_secret_name), and where its release is recorded."
+        required: false
 
 jobs:
   release:
@@ -81,11 +109,21 @@ jobs:
     # Cancelling still runs the resume step, which is always().
     timeout-minutes: 60
     env:
-      DB_URL: ${{ secrets.database_url }}
+      # DB_URL is not here: "Resolve the connection" below writes it to the
+      # job's environment, from the database_url secret or from the control
+      # plane's vault, so that every step after it reads one variable
+      # whichever way the connection came.
       TARGET: ${{ inputs.target }}
+      # demonstration and production are the kinds they always were; any
+      # other target is a client, unless the caller says otherwise.
+      KIND: ${{ inputs.kind || (inputs.target == 'demonstration' && 'demonstration') || (inputs.target == 'production' && 'production') || 'client' }}
       PROJECT_REF: ${{ inputs.project_ref }}
       OTHER_REF: ${{ inputs.other_project_ref }}
+      OTHER_REFS: ${{ inputs.other_project_refs }}
       SECRET_NAME: ${{ inputs.secret_name }}
+      VAULT_SECRET_NAME: ${{ inputs.vault_secret_name }}
+      APP_ORIGIN: ${{ inputs.app_origin }}
+      CP_URL: ${{ secrets.control_plane_database_url }}
       # Where pg_cron posts to drain the queues: the project's own dispatch
       # function unless a repository variable says otherwise (deploy.yml). A
       # URL, not a secret — the secret the post carries never leaves the
@@ -111,22 +149,59 @@ jobs:
             echo "reached production without being released to the demonstration first."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: The secret exists
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Resolve the connection
         # A deploy that deployed nothing must not be green.
         #
         # And for the demonstration, the first thing a release does, so that a
         # missing CLOVEERP_DEMO_DATABASE_URL stops it here: production is
         # released only after the demonstration has been (deploy.yml), so this
         # failing is production left exactly as it was.
+        #
+        # A client's connection string is no repository secret at all. The
+        # build that made its project generated the password and put the
+        # session-pooler URL in the control plane's vault, under the project's
+        # ref (deployment_from_empty.yml), the way cloveerp_dispatch_secret is
+        # made inside the database and never printed. This reads it from
+        # there, over the control plane's own connection, masks it, and hands
+        # it to every step after as DB_URL. One route for every client, and
+        # a new client adds no secret anywhere.
+        env:
+          GIVEN_URL: ${{ secrets.database_url }}
         run: |
-          if [[ -z "${DB_URL}" ]]; then
-            if [[ "${TARGET}" == demonstration ]]; then
+          set -euo pipefail
+          url="${GIVEN_URL}"
+          if [[ -z "$url" && -n "${VAULT_SECRET_NAME}" ]]; then
+            if [[ -z "${CP_URL}" ]]; then
+              echo "::error::${TARGET}'s connection string is read from the control plane's vault (${VAULT_SECRET_NAME}), and no control plane connection was given (CLOVEERP_LIVE_DATABASE_URL). Nothing was applied."
+              exit 1
+            fi
+            if ! [[ "${VAULT_SECRET_NAME}" =~ ^cloveerp:deployment:${PROJECT_REF}:db_url$ ]]; then
+              echo "::error::the vault entry named for ${TARGET} (${VAULT_SECRET_NAME}) is not the one for its project (${PROJECT_REF}): entries are named cloveerp:deployment:<ref>:db_url. Nothing was applied."
+              exit 1
+            fi
+            url=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v n="${VAULT_SECRET_NAME}" \
+                    -c "select decrypted_secret from vault.decrypted_secrets where name = :'n' limit 1")
+            if [[ -z "$url" ]]; then
+              echo "::error::the control plane's vault has no entry named ${VAULT_SECRET_NAME}, so ${TARGET} cannot be reached. Its build from empty writes that entry; if the build finished, run the password rotation for it. Nothing was applied."
+              exit 1
+            fi
+            echo "::add-mask::$url"
+            echo "connection for ${TARGET}: read from the control plane's vault (${VAULT_SECRET_NAME})"
+          fi
+          if [[ -z "$url" ]]; then
+            if [[ "${KIND}" == demonstration ]]; then
               echo "::error::${SECRET_NAME} is not set, so nothing was released to the demonstration, and production is not released until the demonstration has been. Add the demonstration project's session-pooler connection string as a repository secret, in the same form as CLOVEERP_LIVE_DATABASE_URL, then run this workflow again."
             else
               echo "::error::${SECRET_NAME} is not set. Add the session-pooler connection string as a repository secret; nothing was applied."
             fi
             exit 1
           fi
+          echo "DB_URL=$url" >> "$GITHUB_ENV"
 
       - name: The connection is the ${{ inputs.target }}'s
         # Two secrets, two projects, and nothing but the secret's name between
@@ -135,32 +210,42 @@ jobs:
         # Supabase connection string names its project — the pooler's user is
         # postgres.<ref>, the direct host db.<ref>.supabase.co — so this reads
         # the ref out of it before anything connects.
+        #
+        # With clients there are more than two: the connection must name the
+        # target and none of the others, every other deployment the caller
+        # knows (other_project_refs), so that a vault entry filed under the
+        # wrong ref is refused here, before anything connects.
         run: |
           set -euo pipefail
-          for ref in "${PROJECT_REF}" "${OTHER_REF}"; do
+          others=("${OTHER_REF}")
+          IFS=',' read -r -a more <<< "${OTHER_REFS}"
+          for r in ${more[@]+"${more[@]}"}; do
+            r="${r// /}"
+            [[ -n "$r" ]] && others+=("$r")
+          done
+          for ref in "${PROJECT_REF}" "${others[@]}"; do
             if ! [[ "$ref" =~ ^[a-z0-9]{20}$ ]]; then
-              echo "::error::a project ref must be 20 lower-case letters and digits; got '${ref}'. Check CLOVEERP_DEMO_PROJECT_REF and CLOVEERP_PROJECT_REF. Nothing was applied."
+              echo "::error::a project ref must be 20 lower-case letters and digits; got '${ref}'. Check CLOVEERP_DEMO_PROJECT_REF, CLOVEERP_PROJECT_REF and the register. Nothing was applied."
               exit 1
             fi
           done
-          if [[ "${PROJECT_REF}" == "${OTHER_REF}" ]]; then
-            echo "::error::the demonstration and production are the same project (${PROJECT_REF}). Nothing was applied."
-            exit 1
-          fi
+          for other in "${others[@]}"; do
+            if [[ "${PROJECT_REF}" == "${other}" ]]; then
+              echo "::error::the ${TARGET} and another deployment are the same project (${PROJECT_REF}). Nothing was applied."
+              exit 1
+            fi
+          done
           if [[ "${DB_URL}" != *"${PROJECT_REF}"* ]]; then
             echo "::error::${SECRET_NAME} does not name the ${TARGET} project (${PROJECT_REF}). Nothing was applied."
             exit 1
           fi
-          if [[ "${DB_URL}" == *"${OTHER_REF}"* ]]; then
-            echo "::error::${SECRET_NAME} names the other project (${OTHER_REF}), not the ${TARGET} (${PROJECT_REF}). Nothing was applied."
-            exit 1
-          fi
-          echo "${SECRET_NAME} names ${PROJECT_REF}, the ${TARGET} project"
-
-      - name: Install the psql client
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client
+          for other in "${others[@]}"; do
+            if [[ "${DB_URL}" == *"${other}"* ]]; then
+              echo "::error::${SECRET_NAME} names another project (${other}), not the ${TARGET} (${PROJECT_REF}). Nothing was applied."
+              exit 1
+            fi
+          done
+          echo "${SECRET_NAME} names ${PROJECT_REF}, the ${TARGET} project, and none of ${#others[@]} other(s)"
 
       - name: The demonstration has been built
         # The demonstration project starts empty, and an empty project is not
@@ -176,7 +261,10 @@ jobs:
         # stopped half-way has one. A release never writes the first marker on
         # the demonstration, it only confirms it. Until then this stops here,
         # and production waits for it.
-        if: inputs.target == 'demonstration'
+        #
+        # A client's project is built the same way (deployment_from_empty.yml)
+        # and says it is a client only at the end of that build.
+        if: env.KIND != 'production'
         run: |
           set -euo pipefail
           has=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp.deployment_kind()') is not null")
@@ -184,11 +272,11 @@ jobs:
           if [[ "$has" == "t" ]]; then
             said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.deployment_kind()")
           fi
-          if [[ "$said" != "demonstration" ]]; then
-            echo "::error::the demonstration project (${PROJECT_REF}) does not say it is the demonstration (${said:-no marker}): it has not been built, or its build did not finish. Run the demo-from-empty workflow (Actions, demo from empty, Run workflow; with resume if it stopped part-way), then run this workflow again. Production is not released until the demonstration has been."
+          if [[ "$said" != "${KIND}" ]]; then
+            echo "::error::the ${TARGET} project (${PROJECT_REF}) does not say it is a ${KIND} deployment (${said:-no marker}): it has not been built, or its build did not finish. Run the deployment-from-empty workflow for it (Actions, deployment from empty, Run workflow; with resume if it stopped part-way), then run this workflow again. The control plane is not released until every deployment before it has been."
             exit 1
           fi
-          echo "the demonstration has been built"
+          echo "the ${TARGET} has been built: it says it is a ${KIND} deployment"
 
       - name: The demonstration's staff list is its owner, and only its owner
         # The demonstration is public: anybody with its address can try to
@@ -205,16 +293,24 @@ jobs:
         # ACTIVE row is refused by design: staff reach the demonstration only
         # by changing what CLOVEERP_PLATFORM_OWNER_EMAIL means, never from its
         # console.
-        if: inputs.target == 'demonstration'
+        #
+        # A client's console is the owner's too, from its build, and the owner
+        # may add staff there (people who support that client), each bound to
+        # a confirmed sign-in of their own. What a client's release proves is
+        # narrower: the owner's row is there, bound and confirmed, and no
+        # active row is unbound — an unbound row is one anybody who confirms
+        # that address would be matched to (20261010063000).
+        if: env.KIND != 'production'
         env:
           OWNER_EMAIL: ${{ inputs.owner_email }}
         run: |
           set -euo pipefail
           if ! [[ "${OWNER_EMAIL}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
-            echo "::error::CLOVEERP_PLATFORM_OWNER_EMAIL is not set to an email address, so nothing says who may run the demonstration's console. Nothing was applied."
+            echo "::error::CLOVEERP_PLATFORM_OWNER_EMAIL is not set to an email address, so nothing says who may run the ${TARGET}'s console. Nothing was applied."
             exit 1
           fi
-          staff=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="${OWNER_EMAIL}" <<'SQL'
+          if [[ "${KIND}" == demonstration ]]; then
+            staff=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="${OWNER_EMAIL}" <<'SQL'
           select count(*) || ' ' || count(*) filter (
                    where lower(s.email) = lower(:'owner')
                      and s.staff_role = 'owner'
@@ -224,12 +320,34 @@ jobs:
             from erp_meta.platform_staff s
            where s.revoked_at is null;
           SQL
-          )
-          if [[ "$staff" != "1 1" ]]; then
-            echo "::error::the demonstration's platform staff list is not exactly ${OWNER_EMAIL}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound and confirmed: ${staff##* }). Somebody else may reach its console. Nothing was applied, and production is not released."
-            exit 1
+            )
+            if [[ "$staff" != "1 1" ]]; then
+              echo "::error::the demonstration's platform staff list is not exactly ${OWNER_EMAIL}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound and confirmed: ${staff##* }). Somebody else may reach its console. Nothing was applied, and production is not released."
+              exit 1
+            fi
+            echo "staff: ${OWNER_EMAIL}, bound to a confirmed sign-in, and nobody else"
+          else
+            staff=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="${OWNER_EMAIL}" <<'SQL'
+          select count(*) filter (
+                   where s.auth_user_id is null
+                      or not exists (select 1 from auth.users u
+                                      where u.id = s.auth_user_id and u.email_confirmed_at is not null))
+                 || ' ' || count(*) filter (
+                   where lower(s.email) = lower(:'owner')
+                     and s.staff_role = 'owner'
+                     and s.auth_user_id in (select u.id from auth.users u
+                                             where lower(u.email) = lower(:'owner')
+                                               and u.email_confirmed_at is not null))
+            from erp_meta.platform_staff s
+           where s.revoked_at is null;
+          SQL
+            )
+            if [[ "$staff" != "0 1" ]]; then
+              echo "::error::the ${TARGET}'s platform staff list is not safe to release into: active rows not bound to a confirmed sign-in: ${staff%% *}; the owner's row (${OWNER_EMAIL}), bound and confirmed: ${staff##* }. An unbound row is one anybody who confirms that address would be matched to. Nothing was applied, and the control plane is not released."
+              exit 1
+            fi
+            echo "staff: ${OWNER_EMAIL} bound to a confirmed sign-in, and every active row bound"
           fi
-          echo "staff: ${OWNER_EMAIL}, bound to a confirmed sign-in, and nobody else"
 
       - name: This database is the ${{ inputs.target }}
         # The second check that this is the right database, and the one the
@@ -245,18 +363,30 @@ jobs:
         # short-circuit, so a to_regclass() guard in the same statement guards
         # nothing (review of #448, REL-3). The table is asked for first, and
         # read only when it is there.
+        #
+        # And since 20261011010000 a database also holds its own project's
+        # ref (deployment.ref), written by the step after the replay the first
+        # time and only confirmed after: a connection string filed under the
+        # wrong name in the vault is refused by the database it reaches, not
+        # only by the name on the string.
         run: |
           set -euo pipefail
           has=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regclass('erp_meta.platform_setting') is not null")
           said=""
+          ref_said=""
           if [[ "$has" == "t" ]]; then
             said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select coalesce((select s.value #>> '{}' from erp_meta.platform_setting s where s.key = 'deployment.kind'), '')")
+            ref_said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select coalesce((select s.value #>> '{}' from erp_meta.platform_setting s where s.key = 'deployment.ref'), '')")
           fi
-          if [[ -n "$said" && "$said" != "${TARGET}" ]]; then
-            echo "::error::this database says it is the ${said} deployment, and this is a release to the ${TARGET}. ${SECRET_NAME} names the wrong database. Nothing was applied."
+          if [[ -n "$said" && "$said" != "${KIND}" ]]; then
+            echo "::error::this database says it is the ${said} deployment, and this is a release to the ${TARGET}, a ${KIND} deployment. ${SECRET_NAME} names the wrong database. Nothing was applied."
             exit 1
           fi
-          echo "deployment: ${said:-not yet said}; releasing to the ${TARGET}"
+          if [[ -n "$ref_said" && "$ref_said" != "${PROJECT_REF}" ]]; then
+            echo "::error::this database says its project is ${ref_said}, and this is a release to ${PROJECT_REF} (the ${TARGET}). ${SECRET_NAME} names the wrong database. Nothing was applied."
+            exit 1
+          fi
+          echo "deployment: ${said:-not yet said}, project ${ref_said:-not yet said}; releasing to the ${TARGET} (${KIND})"
 
       - name: The erp schema is not exposed
         # Before anything is applied. Every table the doors read holds INSERT,
@@ -542,21 +672,31 @@ jobs:
         # confirms it — and refuses, failing the release, if the database is
         # the other kind.
         #
-        # On the demonstration it is never written here: only the end of its
-        # build from empty says it is the demonstration, so a release can only
-        # confirm what that build said.
+        # On the demonstration and on a client it is never written here: only
+        # the end of a build from empty says what a database is, so a release
+        # can only confirm what that build said.
+        #
+        # Then the database's own ref and address (20261011010000): written
+        # the first time, confirmed after, and refused if they differ — the
+        # database's half of "the connection is the target's". Only once the
+        # routine exists; the first release after that migration writes it.
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
         run: |
           set -euo pipefail
-          if [[ "${TARGET}" == demonstration ]]; then
+          if [[ "${KIND}" == production ]]; then
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('production');"
+          else
             said=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.deployment_kind()")
-            if [[ "$said" != demonstration ]]; then
-              echo "::error::after the replay the demonstration's database says it is the ${said}. Production is not released."
+            if [[ "$said" != "${KIND}" ]]; then
+              echo "::error::after the replay the ${TARGET}'s database says it is the ${said}, not a ${KIND} deployment. The control plane is not released."
               exit 1
             fi
-            echo "deployment: demonstration, as its build said"
-          else
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('${TARGET}');"
+            echo "deployment: ${KIND}, as its build said"
+          fi
+          if [[ "$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp_meta.set_deployment_identity(text,text)') is not null")" == "t" ]]; then
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${APP_ORIGIN}" \
+              -c "select erp_meta.set_deployment_identity(:'ref', nullif(:'origin', ''));"
+            echo "identity: project ${PROJECT_REF}${APP_ORIGIN:+, served at ${APP_ORIGIN}}"
           fi
 
       - name: Record the release
@@ -844,7 +984,12 @@ jobs:
         # behind it. The routine raises nothing — an organisation that refuses is
         # reported and the next one is tried — and continue-on-error covers the
         # rest. What it will not do is go quiet: every note comes back out here.
-        if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
+        #
+        # Not on a client: a client's database refuses demonstrations as
+        # production does (erp.require_demonstration_deployment() tests for
+        # the demonstration kind), and a paying client's release has no
+        # hygiene to do on invented books.
+        if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) && env.KIND != 'client' }}
         continue-on-error: true
         # A SMALLER BOUND ON THE DEMONSTRATION. Its project is a Micro instance
         # (1 GB), the owner's choice of 6 October, and production went down on
@@ -1107,4 +1252,29 @@ jobs:
              where p.finished_at > '${DISPATCH_SCHEDULED_AT}'::timestamptz;")
           if [[ "$failed" -gt 0 ]]; then
             echo "::warning::a drain pass since this deploy had ${failed} failed stage(s). Email is leaving; something in at least one organisation is not. The dispatch function's log names the organisation and the stage."
+          fi
+
+      - name: Record the outcome in the control plane's register
+        # A client's release, whatever became of it, is written on its row in
+        # erp_meta.deployment on the control plane (20261011020000): the sha,
+        # the outcome, the run. The Fleet view reads it; "the morning with
+        # twenty clients and three red" starts there, not in twenty run logs.
+        # always(), so a failed or cancelled release is recorded as such.
+        # Never fails the release it records: the register being unreachable
+        # is a second problem, said as a warning.
+        if: ${{ always() && env.KIND == 'client' }}
+        env:
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -uo pipefail
+          if [[ -z "${CP_URL}" ]]; then
+            echo "::warning::no control plane connection, so this release of ${TARGET} (${OUTCOME}) was not recorded in the register."
+            exit 0
+          fi
+          if psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA \
+               -v code="${TARGET}" -v sha="${GITHUB_SHA}" -v outcome="${OUTCOME}" -v run="${GITHUB_RUN_ID}" \
+               -c "select erp_meta.record_deployment_release(:'code', :'sha', :'outcome', :'run', null);" > /dev/null; then
+            echo "register: ${TARGET} release of ${GITHUB_SHA} recorded as ${OUTCOME} (run ${GITHUB_RUN_ID})"
+          else
+            echo "::warning::the control plane's register did not take the record of this release of ${TARGET} (${OUTCOME}); the release itself stands."
           fi
