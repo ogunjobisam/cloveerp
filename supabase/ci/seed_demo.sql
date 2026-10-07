@@ -9,9 +9,15 @@
 -- screen runs — and the reconciliation then has a ledger, a stock ledger, a
 -- subledger and a batch genealogy to disagree with.
 --
--- Run by psql as the trusted build role, once, after every migration has
--- applied and before supabase/ci/run_checks.sh. Six five-day slices: a
--- month of trading, in a few seconds.
+-- Run by psql as the trusted build role, after every migration has applied
+-- and before supabase/ci/run_checks.sh. Six five-day slices: a month of
+-- trading, in a few seconds.
+--
+-- Run twice, it builds nothing the second time (Definition of Done DEM-01,
+-- "repeatable, idempotent"; 20261010130000): the organisation is found, not
+-- provisioned again, and every slice it has already built builds nothing.
+-- The build runs it twice to prove that. It is plain SQL apart from the two
+-- settings below, so it can be run by anything that speaks to Postgres.
 \set ON_ERROR_STOP on
 \set QUIET on
 
@@ -24,38 +30,58 @@ select erp_meta.mark_deployment('demonstration');
 
 begin;
 
-select * from erp.provision_tenant('ci-demo', 'CI demonstration', 'admin@ci-demo.test', 'CI Admin') \gset
+-- What wrote the seeded month (Definition of Done DAT-04, 20261010130000).
+-- Declared first, before anything is written, so every row of the trail says
+-- a seed script wrote it rather than that nothing declared anything. A trusted
+-- connection may declare it; erp.authorise() leaves a declaration alone.
+select erp.declare_source('seed');
 
--- Impersonate the invited administrator: the demo builders run as a
--- principal, not as the build role. Transaction-local, like every context.
-select set_config('request.jwt.claims',
-                  json_build_object('sub', '00000000-0000-4000-8000-00000000c1de')::text, true);
-select erp.claim_invitation(:'admin_token');
+-- Found on a second run rather than provisioned again, which refused.
+do $seed$
+declare
+  r        record;
+  v_tenant uuid;
+  v_admin  uuid;
+begin
+  select t.id into v_tenant from erp.tenant t where t.code = 'ci-demo';
 
--- provision_tenant leaves the organisation live; the demo builder refuses a
--- live environment, as it should. Reopen the bootstrap window.
-update erp.environment set is_live = false
- where tenant_id = :'tenant_id' and is_self;
+  -- Impersonate the invited administrator: the demo builders run as a
+  -- principal, not as the build role. Transaction-local, like every context.
+  perform set_config('request.jwt.claims',
+                     json_build_object('sub', '00000000-0000-4000-8000-00000000c1de')::text, true);
 
-select left(erp.ensure_demo_configuration(:'tenant_id', :'admin_user_id')::text, 200) as configured;
+  if v_tenant is null then
+    select * into r from erp.provision_tenant('ci-demo', 'CI demonstration', 'admin@ci-demo.test', 'CI Admin');
+    v_tenant := r.tenant_id;
+    v_admin  := r.admin_user_id;
+    perform erp.claim_invitation(r.admin_token);
+    perform set_config('ci_seed.first_run', 'true', true);
+  else
+    select u.id into v_admin from erp.app_user u
+     where u.tenant_id = v_tenant and u.email = 'admin@ci-demo.test';
+    perform set_config('ci_seed.first_run', 'false', true);
+  end if;
 
-select (date_trunc('month', current_date) - interval '12 months')::date as from_date \gset
+  -- provision_tenant leaves the organisation live; the demo builder refuses a
+  -- live environment, as it should. Reopen the bootstrap window.
+  update erp.environment set is_live = false
+   where tenant_id = v_tenant and is_self;
 
-select erp.seed_demo_history(:'from_date'::date, null, 1) ->> 'built' as slice_1;
-select erp.seed_demo_history(:'from_date'::date + 5, null, 1) ->> 'built' as slice_2;
-select erp.seed_demo_history(:'from_date'::date + 10, null, 1) ->> 'built' as slice_3;
-select erp.seed_demo_history(:'from_date'::date + 15, null, 1) ->> 'built' as slice_4;
-select erp.seed_demo_history(:'from_date'::date + 20, null, 1) ->> 'built' as slice_5;
-select erp.seed_demo_history(:'from_date'::date + 25, null, 1) ->> 'built' as slice_6;
+  perform set_config('ci_seed.tenant', v_tenant::text, true);
+  perform set_config('ci_seed.admin', v_admin::text, true);
+end
+$seed$;
 
--- The month moves stock between the company's two sites every Wednesday
--- (20260918100000), sends goods back to a supplier every Tuesday and credits a
--- customer every Friday (20260918220000), receives half of an order every
--- Monday, every Thursday registers a supplier's bill above the agreed price and
--- delivers half of a customer's order (20260918600000), and every Saturday
--- counts the shelf and writes one unit off (20260918800000);
--- erp_test.demo_site_transfer_suite() and erp_test.demo_history_suite() hold
--- the seeder to all seven.
+select left(erp.ensure_demo_configuration(current_setting('ci_seed.tenant')::uuid,
+                                          current_setting('ci_seed.admin')::uuid)::text, 200) as configured;
+
+create temp table ci_seed_slices (slice integer, built integer) on commit drop;
+insert into ci_seed_slices
+select n, coalesce((erp.seed_demo_history(
+         (date_trunc('month', current_date) - interval '12 months')::date + (n - 1) * 5, null, 1) ->> 'built')::integer, 0)
+  from generate_series(1, 6) n
+ order by n;
+
 select 'ci-demo: ' || count(*) || ' documents, '
        || count(*) filter (where dt.base_type_code = 'transfer_order')
        || ' of them transfers between sites, '
@@ -78,6 +104,32 @@ select 'ci-demo: ' || count(*) || ' documents, '
        || ' weekend counts' as seeded
   from erp.document d
   join erp.document_type dt on dt.tenant_id = d.tenant_id and dt.id = d.document_type_id
- where d.tenant_id = :'tenant_id';
+ where d.tenant_id = current_setting('ci_seed.tenant')::uuid;
+
+-- Who, when and from what source, on every document of the seeded month
+-- (DAT-04), and on a second run nothing built (DEM-01).
+do $proved$
+declare
+  v_tenant uuid := current_setting('ci_seed.tenant')::uuid;
+  v_docs bigint; v_unattributed bigint; v_undeclared bigint; v_built bigint;
+begin
+  select count(*), count(*) filter (where d.created_by is null or d.created_at is null)
+    into v_docs, v_unattributed
+    from erp.document d where d.tenant_id = v_tenant;
+  select count(*) into v_undeclared
+    from erp.audit_entry a where a.tenant_id = v_tenant and a.source = 'undeclared';
+  select coalesce(sum(s.built), 0) into v_built from ci_seed_slices s;
+
+  if v_docs = 0 or v_unattributed > 0 or v_undeclared > 0 then
+    raise exception 'CLOVEERP_SEED_UNATTRIBUTED: ci-demo holds % document(s), % without who or when, and % audit row(s) with no source',
+      v_docs, v_unattributed, v_undeclared;
+  end if;
+  if current_setting('ci_seed.first_run') = 'false' and v_built > 0 then
+    raise exception 'CLOVEERP_SEED_NOT_IDEMPOTENT: the second run built % record(s) the first had built', v_built;
+  end if;
+  raise notice 'ci-demo: % documents, every one attributed and every audit row declared; % built this run',
+    v_docs, v_built;
+end
+$proved$;
 
 commit;
