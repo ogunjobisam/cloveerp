@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261010170000  The demonstration's second person raises the invoice
+-- 20261010175000  The demonstration's second person raises the invoice
 -- -----------------------------------------------------------------------------
 -- Found by walking order to cash live on demo.cloveerp.com on 7 October, as
 -- the Definition of Done's exit criterion asks: "Both flows can be
@@ -28,7 +28,8 @@ set lock_timeout = '30s';
 --      demonstration from now on.
 --   C. Each demonstration that already has her is given it now.
 --   D. erp_test.persona_switch_suite expected her permissions to be the
---      Finance role's exactly; it now expects those and the two above.
+--      Finance role's exactly, and erp_test.demonstration_persona_suite her
+--      roles to be Finance alone; they now expect the role above as well.
 --   E. erp_test.demo_persona_invoices_suite proves the walk: the presenter
 --      despatches, is refused the invoice, and acting as her the invoice is
 --      raised and issued.
@@ -95,7 +96,7 @@ begin
 
   insert into erp.user_role (tenant_id, app_user_id, role_id, valid_from, granted_by, grant_reason)
   values (p_tenant_id, v_persona, v_role, current_date, v_admin,
-          'Demonstration persona raises invoices (20261010170000)');
+          'Demonstration persona raises invoices (20261010175000)');
   return 1;
 end;
 $$;
@@ -104,7 +105,7 @@ revoke all on function erp.ensure_demo_receivables_role(uuid) from public, anon,
 
 comment on function erp.ensure_demo_receivables_role(uuid) is
   'In a demonstration that is not live, gives its persona an Accounts receivable role (sales.invoice, sales.read), '
-  'so the presenter despatches and the persona invoices: two people for the two halves (20261010170000).';
+  'so the presenter despatches and the persona invoices: two people for the two halves (20261010175000).';
 
 -- ── B. As she is seeded ──────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ $o$;
   v_new  constant text := $n$  values (p_tenant_id, v_user, v_role, current_date, v_admin, 'Demonstration persona (20261006150000)');
 
   -- And she raises the invoices the presenter's deliveries wait for
-  -- (20261010170000).
+  -- (20261010175000).
   perform erp.ensure_demo_receivables_role(p_tenant_id);
 
   return 1;
@@ -165,14 +166,14 @@ declare
   v_sig  constant text := 'erp_test.persona_switch_suite()';
   v_def  text := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
   v_old1 constant text := $o$    select array_agg(x order by x) into v_want from unnest(erp.standard_role_permissions('finance')) x;$o$;
-  v_new1 constant text := $n$    -- Finance, and the invoices the presenter's deliveries wait for (20261010170000).
+  v_new1 constant text := $n$    -- Finance, and the invoices the presenter's deliveries wait for (20261010175000).
     select array_agg(distinct x order by x) into v_want
       from unnest(erp.standard_role_permissions('finance') || array['sales.invoice', 'sales.read']) x;$n$;
   v_old2 constant text := $o$holds only her Finance permissions$o$;
   v_new2 constant text := $n$holds only her own permissions, Finance and invoicing$n$;
   n integer;
 begin
-  if position('20261010170000' in v_def) > 0 then
+  if position('20261010175000' in v_def) > 0 then
     raise notice '% already expects her invoicing; left as it is', v_sig;
     return;
   end if;
@@ -187,6 +188,34 @@ begin
   execute replace(replace(v_def, v_old1, v_new1), v_old2, v_new2);
 end
 $persona_switch_suite$;
+
+-- The demonstration persona suite expected her roles to be Finance alone.
+do $demonstration_persona_suite$
+declare
+  v_sig  constant text := 'erp_test.demonstration_persona_suite()';
+  v_def  text := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
+  v_old1 constant text := $o$          and v_roles = 'finance'$o$;
+  v_new1 constant text := $n$          -- And Accounts receivable, to raise the invoices (20261010175000).
+          and v_roles = 'demo_receivables,finance'$n$;
+  v_old2 constant text := $o$who cannot sign in and holds Finance, and says$o$;
+  v_new2 constant text := $n$who cannot sign in and holds Finance and Accounts receivable, and says$n$;
+  n integer;
+begin
+  if position('demo_receivables,finance' in v_def) > 0 then
+    raise notice '% already expects her two roles; left as it is', v_sig;
+    return;
+  end if;
+  n := (length(v_def) - length(replace(v_def, v_old1, ''))) / length(v_old1);
+  if n <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % roles expected % time(s)', v_sig, n;
+  end if;
+  n := (length(v_def) - length(replace(v_def, v_old2, ''))) / length(v_old2);
+  if n <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % case name found % time(s)', v_sig, n;
+  end if;
+  execute replace(replace(v_def, v_old1, v_new1), v_old2, v_new2);
+end
+$demonstration_persona_suite$;
 
 -- ── E. The proof ─────────────────────────────────────────────────────────────
 
@@ -377,7 +406,7 @@ revoke all on function erp_test.demo_persona_invoices_suite() from public, anon;
 revoke all on function erp_test.assert_demo_persona_invoices_suite() from public, anon;
 
 comment on function erp_test.demo_persona_invoices_suite() is
-  'The demonstration''s second person raises the invoice (20261010170000): she may invoice and read sales only; the '
+  'The demonstration''s second person raises the invoice (20261010175000): she may invoice and read sales only; the '
   'presenter who despatched is refused the invoice; acting as her it is raised and issued, recorded as hers.';
 
 comment on function erp_test.assert_demo_persona_invoices_suite() is
