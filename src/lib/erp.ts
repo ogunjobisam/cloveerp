@@ -486,6 +486,66 @@ export async function inviteFailure(error: unknown): Promise<unknown> {
 }
 
 /**
+ * Calling an Edge Function that works on a person's behalf: document output,
+ * a commercial document's link, a supplier's answer. In the project this page
+ * talks to, which since 7 October may be a client's own (src/lib/backend.ts).
+ *
+ * functions.invoke rather than a hand-built fetch, for the reason callInvite
+ * gives. A refusal comes back as the function's JSON — the database's own
+ * message, code and hint — and is thrown as an ErpError, so friendlyError()
+ * reads it exactly as it reads a callErp refusal. A function that could not
+ * be reached, or that is not deployed yet, is an ErpError too, worded for
+ * the person rather than the log.
+ */
+export async function callFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  if (!supabase) {
+    throw new Error(
+      "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.",
+    );
+  }
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (!error) return data as T;
+  throw await functionFailure(error, name);
+}
+
+async function functionFailure(error: unknown, name: string): Promise<unknown> {
+  if (error instanceof FunctionsFetchError || error instanceof FunctionsRelayError) {
+    return new ErpError("Could not reach the server. Check the connection and try again.", {
+      details: error.message,
+    });
+  }
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response;
+    let said: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = await response.json();
+      if (typeof parsed === "object" && parsed !== null) said = parsed as Record<string, unknown>;
+    } catch {
+      /* not JSON: not the function speaking */
+    }
+    const message = said["error"];
+    if (typeof message !== "string" && (response.status === 404 || response.status === 503)) {
+      return new ErpError(
+        `This part of the service (${name}) is not available on this deployment yet.`,
+        { code: "CLOVEERP_FUNCTION_NOT_DEPLOYED" },
+      );
+    }
+    const code = said["code"];
+    const hint = said["hint"];
+    return new ErpError(
+      typeof message === "string" && message !== ""
+        ? message
+        : `The request could not be completed (the service answered ${response.status}).`,
+      {
+        code: typeof code === "string" ? code : undefined,
+        hint: typeof hint === "string" ? hint : undefined,
+      },
+    );
+  }
+  return error;
+}
+
+/**
  * Calling supabase/functions/invite.
  *
  * functions.invoke rather than a hand-built fetch, because it attaches what the
