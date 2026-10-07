@@ -1,8 +1,11 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
+import { fill } from "../../lib/interview";
 import { byTone, transitionOutcome, transitionTone } from "../../lib/plain-words";
+import { rememberStep } from "../../lib/stage-records";
 import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "./action";
 import {
   approvalStillWaiting,
@@ -200,18 +203,40 @@ export function DocumentTransitions({
     // Every move left is one a door makes, and the screen offers that door by
     // name: there is nothing to explain here.
     if (quiet || (transitions.length > 0 && manual.length === 0)) return null;
+    // Where the next step is, as a way there and not only its name: the
+    // page said "raise it with Bill a receipt" and offered nothing to press
+    // (7 October live walk). The step it opens is the one the flow remembers.
+    const next =
+      transitions.length === 0 && (committed || terminal)
+        ? awaiting === "bill"
+          ? { to: "/procurement", flow: "p2p", step: "Supplier bill" }
+          : awaiting === "invoice"
+            ? { to: "/finance", flow: "money", step: "Invoice" }
+            : null
+        : null;
     return (
-      <p className="mt-4 text-xs text-muted-foreground">
-        {transitions.length === 0
-          ? committed || terminal
-            ? awaiting === "bill"
-              ? ui("Waiting for the supplier's bill: raise it with Bill a receipt.")
-              : awaiting === "invoice"
-                ? ui("Waiting to be invoiced: raise the invoice with Invoice a delivery.")
-                : ui("Nothing more happens to this document.")
-            : "This document's type has no lifecycle configured, so there is nothing to move it through."
-          : "Nothing here is offered to this account. The transitions this document has all require a permission it does not hold."}
-      </p>
+      <div className="mt-4 flex flex-col items-start gap-2">
+        <p className="text-xs text-muted-foreground">
+          {transitions.length === 0
+            ? committed || terminal
+              ? awaiting === "bill"
+                ? ui("Waiting for the supplier's bill: raise it with Bill a receipt.")
+                : awaiting === "invoice"
+                  ? ui("Waiting to be invoiced: raise the invoice with Invoice a delivery.")
+                  : ui("Nothing more happens to this document.")
+              : "This document's type has no lifecycle configured, so there is nothing to move it through."
+            : "Nothing here is offered to this account. The transitions this document has all require a permission it does not hold."}
+        </p>
+        {next ? (
+          <Link
+            to={next.to}
+            onClick={() => rememberStep(next.flow, next.step)}
+            className={`${TOUCH} inline-flex items-center justify-center rounded-md border border-input px-3 text-sm font-medium`}
+          >
+            {fill(ui("Go to {step}"), { step: ui(next.step) })}
+          </Link>
+        ) : null}
+      </div>
     );
   }
 

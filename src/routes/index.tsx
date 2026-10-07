@@ -171,7 +171,11 @@ function Overview() {
       {/* Somebody else is waiting on this before any step of your own. */}
       <ApprovalsWaiting />
 
-      <FirstRun />
+      {/* A demonstration is for the trading, not for setting an organisation
+          up: "Invite a second administrator" was the first thing above the
+          fold (18 September findings). Its setup lives on the Organisation
+          screen for whoever looks after it. */}
+      {!session.tenant?.code.startsWith("demo-") ? <FirstRun /> : null}
 
       <Launchpad />
 

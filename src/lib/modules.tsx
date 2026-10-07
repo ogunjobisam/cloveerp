@@ -26,7 +26,13 @@ import {
 import type { FlowSpec, StageList } from "../components/erp/process-flow";
 import { toMinor } from "./money";
 import { fill } from "./interview";
-import { localIsoDate, openInvoiceWords, orderPeriods, quarterToDate } from "./plain-words";
+import {
+  documentChoice,
+  localIsoDate,
+  openInvoiceWords,
+  orderPeriods,
+  quarterToDate,
+} from "./plain-words";
 import type { InstallableModule } from "./installed-modules";
 import { receivableLineWords } from "./shipping-notices";
 
@@ -2241,18 +2247,26 @@ export const FINANCE: ModuleDef = {
       permission: "sales.invoice",
       fn: "erp_invoice_from_delivery",
       fields: [
-        pickFrom(
-          "erp_documents",
-          "document_id",
-          ["document_number", "state"],
-          "p_delivery_id",
-          "Delivery",
-          // Only deliveries can be invoiced; offering every document invites
-          // the failure rather than preventing it. Only posted ones:
-          // erp.invoice_from_delivery refuses a delivery that moved no stock,
-          // and posted is terminal, so p_actionable would offer none.
-          { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
-        ),
+        // Only deliveries can be invoiced; offering every document invites
+        // the failure rather than preventing it. Only posted ones:
+        // erp.invoice_from_delivery refuses a delivery that moved no stock,
+        // and posted is terminal, so p_actionable would offer none. Each by
+        // its customer, value and date, as Bill a receipt offers receipts:
+        // "DN-000472 — posted" a hundred times over named none of them
+        // (7 October live walk).
+        {
+          kind: "select",
+          name: "p_delivery_id",
+          label: "Delivery",
+          required: true,
+          options: {
+            fn: "erp_documents",
+            args: { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
+            value: "document_id",
+            label: ["document_number", "party", "total_minor", "document_date"],
+            describe: documentChoice,
+          },
+        },
         // Invoicing goods you despatched yourself is an exception to the
         // separation of duties. Once the organisation is live it needs a reason
         // and somebody who may promote configuration, so only they are asked.

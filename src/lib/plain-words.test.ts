@@ -1234,6 +1234,12 @@ describe("a goods receipt as Bill a receipt offers it (5 October re-test)", () =
     const bill = procurement.slice(procurement.indexOf('label: "Bill a receipt"'));
     expect(bill.slice(0, 1500)).toContain("describe: documentChoice");
   });
+
+  test("and Invoice a delivery offers deliveries the same way (7 October live walk)", () => {
+    const modules = readFileSync(join(ROOT, "src", "lib", "modules.tsx"), "utf8");
+    const invoice = modules.slice(modules.indexOf('label: "Invoice a delivery"'));
+    expect(invoice.slice(0, 1500)).toContain("describe: documentChoice");
+  });
 });
 
 describe("related documents (5 October re-test)", () => {
