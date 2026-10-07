@@ -1,0 +1,553 @@
+name: deployment from empty
+
+# A deployment's first build: once, into an empty project.
+#
+# On 6 October the owner moved the demonstration out of production into a
+# Supabase project of its own, Clove ERP Demo (CLOVEERP_DEMO_PROJECT_REF),
+# served at demo.cloveerp.com. On 7 October the owner decided that every
+# client gets a project of its own too, at <code>.cloveerp.com, requested
+# from the platform console's Fleet view and recorded in the control plane's
+# register (erp_meta.deployment, 20261011020000). This workflow builds
+# either: the demonstration with `code: demo`, or a client with its code.
+#
+# A project starts empty, and a release (deploy.yml → release.yml) does not
+# build an empty project: it applies what a database has not run with
+# `supabase db push`, which from empty would replay every migration under
+# the pooler's two-minute statement limit with the suite calls later
+# migrations corrected still in them, and would leave the platform claimable
+# by whoever signed up first while it ran. This does the build
+# supabase/ci/build_from_empty.sh describes instead, records every migration
+# where the CLI looks, and deploys the Edge Functions. After it, releases to
+# the deployment are ordinary releases.
+#
+# For a client it also MAKES the project, through the Management API
+# (supabase/ci/provision_project.sh, rehearsed on every build): creates it in
+# the organisation, waits for it, closes sign-up, requires confirmed
+# addresses, sets the site URL and custom SMTP through Resend, exposes public
+# and graphql_public only, makes the owner's confirmed sign-in, and keeps the
+# connection string and the secret key in the control plane's vault under
+# the project's ref — never in this log, never in a GitHub secret. Every step
+# is written on the client's row in the register, so the Fleet view follows
+# the build without a run log, and a build that stops is carried on with
+# `resume` from where it stopped.
+#
+# It refuses everything that is not an empty project of the kind asked for:
+#
+#   - the demonstration must be CLOVEERP_DEMO_PROJECT_REF, typed again by
+#     whoever runs it, and must not be production's, by variable or by name;
+#   - a client must be in the register, requested or stopped part-way, and
+#     its connection string must name its project and no other;
+#   - the database must have no erp schema and no recorded migration, unless
+#     `resume` carries on a build this started that stopped part-way, over a
+#     database with no organisation in it;
+#   - the platform's owner (CLOVEERP_PLATFORM_OWNER_EMAIL) must be set, and is
+#     on the staff list from the migration that creates the list, bound to
+#     their own confirmed sign-in;
+#   - the project's auth settings, read through the Management API, must say
+#     sign-up is closed and addresses must be confirmed, and the only sign-in
+#     it holds must be the owner's, confirmed.
+#
+# Every check runs before anything is created in the project. Production's
+# connection string is read by this workflow only to reach the register and
+# the vault, never to build into.
+#
+# About three and a half hours of replay, paced for a 1 GB instance. The job
+# allows five, because a replay that is cancelled by its timeout leaves the
+# migration it was on rolled back and is carried on with `resume`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "demo for the demonstration, or a client's code as the register holds it."
+        type: string
+        required: true
+      confirm_project_ref:
+        description: "The demonstration: type CLOVEERP_DEMO_PROJECT_REF to build it. A client whose project was made outside the register: its ref. Otherwise empty: the project is made here, or found on the client's row."
+        type: string
+        default: ''
+      resume:
+        description: 'Carry on a build that stopped part-way (no organisation may exist yet).'
+        type: boolean
+        default: false
+
+# The same group as a release to this deployment (deploy.yml), so a release
+# never runs into the project while it is being built, and the build never
+# starts under a release.
+concurrency:
+  group: deploy-${{ inputs.code == 'demo' && 'demonstration' || inputs.code }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build ${{ inputs.code }} from empty
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    outputs:
+      project_ref: ${{ steps.project.outputs.ref }}
+      origin: ${{ steps.project.outputs.origin }}
+      vault: ${{ steps.project.outputs.vault }}
+      dispatch_url: ${{ steps.project.outputs.dispatch_url }}
+      others: ${{ steps.project.outputs.others }}
+    env:
+      CODE: ${{ inputs.code }}
+      KIND: ${{ inputs.code == 'demo' && 'demonstration' || 'client' }}
+      CONFIRM: ${{ inputs.confirm_project_ref }}
+      RESUME: ${{ inputs.resume && 'yes' || 'no' }}
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      DEMO_URL: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      OWNER_EMAIL: ${{ vars.CLOVEERP_PLATFORM_OWNER_EMAIL }}
+      APEX: ${{ vars.CLOVEERP_APEX || 'cloveerp.com' }}
+      ORG_SLUG: ${{ vars.CLOVEERP_SUPABASE_ORG }}
+      REGION: ${{ vars.CLOVEERP_CLIENT_REGION || 'eu-central-1' }}
+      INSTANCE_SIZE: ${{ vars.CLOVEERP_CLIENT_INSTANCE || 'micro' }}
+      MAIL_FROM: ${{ vars.CLOVEERP_MAIL_FROM || 'noreply@cloveerp.com' }}
+      INVITE_FROM: ${{ vars.CLOVEERP_INVITE_FROM || format('Clove ERP <{0}>', vars.CLOVEERP_MAIL_FROM || 'noreply@cloveerp.com') }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Only from main, and only a deployment this can build
+        run: |
+          set -euo pipefail
+          echo "PHASE=request" >> "$GITHUB_ENV"
+          # The production ref by name as well as by variable: a variable
+          # can be changed, and this workflow must never be one change away
+          # from production.
+          never="xpzffnnhnhcqyjqcueja"
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::run this from main, where every migration it applies has been reviewed and merged; this run is on ${GITHUB_REF}."
+            exit 1
+          fi
+          if ! [[ "${CODE}" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
+            echo "::error::'${CODE}' is not a code: demo, or a client's code as the register holds it."
+            exit 1
+          fi
+          if ! [[ "${OWNER_EMAIL}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+            echo "::error::CLOVEERP_PLATFORM_OWNER_EMAIL is not set to an email address. It names the platform's owner on the deployment, who is on the staff list before anybody can sign in; without it the console would be claimable by whoever signed up first."
+            exit 1
+          fi
+          if [[ -z "${SUPABASE_ACCESS_TOKEN}" ]]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set, so neither a project can be made nor its settings read. Nothing was built."
+            exit 1
+          fi
+          if [[ "${KIND}" == demonstration ]]; then
+            if ! [[ "${DEMO_REF}" =~ ^[a-z0-9]{20}$ ]]; then
+              echo "::error::CLOVEERP_DEMO_PROJECT_REF must be the demonstration project's 20-character ref; got '${DEMO_REF}'."
+              exit 1
+            fi
+            if [[ "${DEMO_REF}" == "${PRODUCTION_REF}" || "${DEMO_REF}" == "${never}" ]]; then
+              echo "::error::CLOVEERP_DEMO_PROJECT_REF names production. This workflow never builds production."
+              exit 1
+            fi
+            if [[ "${CONFIRM}" != "${DEMO_REF}" ]]; then
+              echo "::error::the ref typed (${CONFIRM}) is not CLOVEERP_DEMO_PROJECT_REF (${DEMO_REF}). Nothing was built."
+              exit 1
+            fi
+            if [[ -z "${DEMO_URL}" ]]; then
+              echo "::error::CLOVEERP_DEMO_DATABASE_URL is not set. Add the demonstration project's session-pooler connection string as a repository secret, in the same form as CLOVEERP_LIVE_DATABASE_URL."
+              exit 1
+            fi
+            if [[ "${DEMO_URL}" != *"${DEMO_REF}"* ]]; then
+              echo "::error::CLOVEERP_DEMO_DATABASE_URL does not name the demonstration project (${DEMO_REF}). Nothing was built."
+              exit 1
+            fi
+            if [[ "${DEMO_URL}" == *"${PRODUCTION_REF}"* || "${DEMO_URL}" == *"${never}"* ]]; then
+              echo "::error::CLOVEERP_DEMO_DATABASE_URL names production. Nothing was built."
+              exit 1
+            fi
+          else
+            if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+              echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so the register and the vault on the control plane cannot be reached. Nothing was built."
+              exit 1
+            fi
+            if [[ -n "${CONFIRM}" && ( "${CONFIRM}" == "${PRODUCTION_REF}" || "${CONFIRM}" == "${never}" || "${CONFIRM}" == "${DEMO_REF}" ) ]]; then
+              echo "::error::${CONFIRM} is production's or the demonstration's project. A client is never built into either."
+              exit 1
+            fi
+            for v in ORG_SLUG; do
+              if [[ -z "${!v}" ]]; then
+                echo "::error::the repository variable CLOVEERP_SUPABASE_ORG (the Supabase organisation's slug, from the dashboard URL) is not set, so no project can be made."
+                exit 1
+              fi
+            done
+            if [[ -z "${RESEND_API_KEY}" ]]; then
+              echo "::error::RESEND_API_KEY is not set as a repository secret, so the project's sign-in links would go through Supabase's own sender, which delivers only to the project's team. Nothing was built."
+              exit 1
+            fi
+          fi
+          echo "building ${CODE} (${KIND}) from empty; platform owner ${OWNER_EMAIL}; resume: ${RESUME}"
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: The register knows it
+        # A client is built only when the control plane's register holds it,
+        # requested (from the Fleet view) or stopped part-way. Its row says
+        # whether its project exists yet.
+        id: register
+        if: env.KIND == 'client'
+        run: |
+          set -euo pipefail
+          row=$(supabase/ci/fleet_register.sh row "${CODE}")
+          if [[ -z "$row" ]]; then
+            echo "::error::${CODE} is not in the register. Request it from the Fleet view first (erp_platform_request_deployment); the build is started from there."
+            exit 1
+          fi
+          status=$(sed -n 's/^status=//p' <<< "$row")
+          ref=$(sed -n 's/^ref=//p' <<< "$row")
+          case "$status" in
+            requested|creating|building|failed) : ;;
+            *)
+              echo "::error::${CODE} is ${status}, and only a deployment requested or stopped part-way is built. A built or live deployment is released into (deploy.yml), not built again."
+              exit 1 ;;
+          esac
+          if [[ -n "${CONFIRM}" ]]; then
+            if ! [[ "${CONFIRM}" =~ ^[a-z0-9]{20}$ ]]; then
+              echo "::error::'${CONFIRM}' is not a project ref."
+              exit 1
+            fi
+            if [[ -n "$ref" && "$ref" != "${CONFIRM}" ]]; then
+              echo "::error::${CODE} runs in project ${ref} according to the register, not ${CONFIRM}. Nothing was built."
+              exit 1
+            fi
+            ref="${CONFIRM}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          supabase/ci/fleet_register.sh event "${CODE}" dispatch done "run ${GITHUB_RUN_ID} started (${status}${ref:+, project ${ref}}; resume ${RESUME})"
+          echo "${CODE}: ${status}${ref:+, project ${ref}}"
+
+      - name: The project exists, and its keys are in the vault
+        # Made through the Management API when the row has no project yet
+        # (supabase/ci/provision_project.sh), or found when it has. The
+        # password is generated here, kept in the control plane's vault
+        # before the project is asked for, and composed into the pooler URL
+        # that release.yml will read from the vault; nothing of it is
+        # printed. A build carried on after the password was lost sets a new
+        # one.
+        id: project
+        if: env.KIND == 'client'
+        env:
+          REF_KNOWN: ${{ steps.register.outputs.ref }}
+        run: |
+          set -euo pipefail
+          echo "PHASE=create" >> "$GITHUB_ENV"
+          reg=supabase/ci/fleet_register.sh
+          prov=supabase/ci/provision_project.sh
+          ref="${REF_KNOWN}"
+          client_name=$(psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${CODE}" \
+                          -c "select d.client_name from erp_meta.deployment d where d.code = :'code'")
+          pass_name="cloveerp:provision:${CODE}:db_pass"
+
+          if [[ -z "$ref" ]]; then
+            $reg event "${CODE}" create started "making the project in ${REGION} on ${INSTANCE_SIZE}"
+            DB_PASS=$(head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40)
+            echo "::add-mask::${DB_PASS}"
+            printf '%s' "$DB_PASS" | $reg vault-put "$pass_name"
+            out=$(DB_PASS="$DB_PASS" $prov create "${CODE}" "${client_name}")
+            ref=$(sed -n 's/^ref=//p' <<< "$out")
+            $reg project "${CODE}" "$ref" "https://${ref}.supabase.co" "" "${REGION}" "${INSTANCE_SIZE}"
+          else
+            $reg event "${CODE}" create started "carrying on with project ${ref}"
+            DB_PASS=$($reg vault-get "$pass_name")
+            [[ -z "${DB_PASS}" ]] || echo "::add-mask::${DB_PASS}"
+          fi
+
+          $prov wait "$ref"
+          echo "PHASE=configure" >> "$GITHUB_ENV"
+          $prov configure "$ref" "${CODE}"
+          publishable=$(SECRET_OUT="$RUNNER_TEMP/secret.key" $prov keys "$ref" | sed -n 's/^publishable=//p')
+          service_key=$(cat "$RUNNER_TEMP/secret.key")
+          echo "::add-mask::${service_key}"
+          rm -f "$RUNNER_TEMP/secret.key"
+          $reg project "${CODE}" "$ref" "https://${ref}.supabase.co" "$publishable" "${REGION}" "${INSTANCE_SIZE}"
+          printf '%s' "$service_key" | $reg vault-put "cloveerp:deployment:${ref}:service_key"
+
+          url_name="cloveerp:deployment:${ref}:db_url"
+          db_url=$($reg vault-get "$url_name")
+          [[ -z "$db_url" ]] || echo "::add-mask::${db_url}"
+          if [[ -z "$db_url" ]]; then
+            if [[ -z "${DB_PASS}" ]]; then
+              # The project exists and nothing remembers its password: set a
+              # new one. Nobody else is using it; the build is what uses it.
+              DB_PASS=$(head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40)
+              echo "::add-mask::${DB_PASS}"
+              DB_PASS="$DB_PASS" $prov password "$ref"
+            fi
+            pool=$($prov pooler "$ref")
+            host=$(sed -n 's/^host=//p' <<< "$pool"); port=$(sed -n 's/^port=//p' <<< "$pool")
+            user=$(sed -n 's/^user=//p' <<< "$pool"); dbname=$(sed -n 's/^dbname=//p' <<< "$pool")
+            # The password is letters and digits only, so it needs no
+            # percent-encoding in the URL.
+            db_url="postgresql://${user}:${DB_PASS}@${host}:${port}/${dbname}"
+            echo "::add-mask::${db_url}"
+            printf '%s' "$db_url" | $reg vault-put "$url_name"
+          fi
+          $reg vault-del "$pass_name" || true
+          $reg event "${CODE}" configure done "sign-up closed, confirmation required, site https://${CODE}.${APEX}, SMTP via Resend; keys in the vault"
+
+          # The owner's confirmed sign-in, so the build finds exactly one.
+          SERVICE_KEY="$service_key" PROJECT_API_URL="https://${ref}.supabase.co" $prov owner "$ref" "${OWNER_EMAIL}"
+
+          {
+            echo "DB_URL=${db_url}"
+            echo "PROJECT_REF=${ref}"
+            echo "ORIGIN=https://${CODE}.${APEX}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "ref=${ref}"
+            echo "origin=https://${CODE}.${APEX}"
+            echo "vault=${url_name}"
+            echo "dispatch_url=https://${ref}.supabase.co/functions/v1/dispatch"
+            echo "others=${PRODUCTION_REF},${DEMO_REF}"
+          } >> "$GITHUB_OUTPUT"
+          echo "${CODE} runs in project ${ref}; its connection string and secret key are in the control plane's vault"
+
+      - name: The demonstration's connection
+        if: env.KIND == 'demonstration'
+        run: |
+          {
+            echo "DB_URL=${DEMO_URL}"
+            echo "PROJECT_REF=${DEMO_REF}"
+            echo "ORIGIN=https://demo.${APEX}"
+          } >> "$GITHUB_ENV"
+
+      - name: Nobody else can be there first, and the database is empty
+        # Every check supabase/ci/build_from_empty.sh makes before it builds,
+        # and nothing else: no extension, no bucket, no table is created until
+        # these pass.
+        run: |
+          set -euo pipefail
+          CHECK_ONLY=yes RESUME="${RESUME}" supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL"
+
+      - name: The erp schema is not exposed
+        # As release.yml checks before every release, and for the same reason:
+        # every table the doors read is writable by any signed-in person if
+        # PostgREST serves the erp schema. Checked before the build, on a
+        # project that is public while it builds.
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                   "https://api.supabase.com/v1/projects/${PROJECT_REF}/postgrest") || {
+            echo "::error::could not read the project's PostgREST settings from the Management API. Nothing was built."
+            exit 1
+          }
+          schemas=$(printf '%s' "$body" | jq -r '.db_schema // empty')
+          exposed=$(printf '%s' "$schemas" | tr ',' '\n' | tr -d ' ' | grep -Ex 'erp|erp_ref|erp_meta|erp_test' || true)
+          if [[ -z "$schemas" || -n "$exposed" ]]; then
+            echo "::error::the project's PostgREST exposes '${schemas}'. Only public and graphql_public may be listed (API settings, Exposed schemas). Nothing was built."
+            exit 1
+          fi
+          echo "Exposed schemas: ${schemas}"
+
+      - name: What the host provides
+        # What production has and an empty project does not, provided before
+        # the first migration the way production came to have it:
+        #
+        #   the archive  the private document-output bucket (supabase/
+        #                config.toml), which 20260911123400 asserts exists.
+        #                On Supabase a bucket is a row in storage.buckets; the
+        #                schema build's host bootstrap writes the same row
+        #                with the same three properties.
+        #   pg_cron,     which the platform's own schedule and the dispatch
+        #   pg_net       job need (release.yml's "Schedule the dispatch
+        #                function" refuses without them). 20260906100000
+        #                schedules only where they exist.
+        run: |
+          set -euo pipefail
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q \
+            -c "create extension if not exists pg_cron with schema pg_catalog" \
+            -c "create extension if not exists pg_net with schema extensions" \
+            -c "insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+                values ('document-output', 'document-output', false, 20971520, array['application/pdf'])
+                on conflict (id) do update
+                   set public = false, file_size_limit = 20971520,
+                       allowed_mime_types = array['application/pdf']::text[]"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select 'extensions: ' || string_agg(extname, ', ' order by extname)
+              from pg_catalog.pg_extension where extname in ('pg_cron', 'pg_net', 'supabase_vault', 'pgcrypto');"
+
+      - name: Replay every migration into it
+        # supabase/ci/build_from_empty.sh: each migration one transaction with
+        # the statement timeout off, the owner on the staff list from the
+        # migration that creates it, each recorded in
+        # supabase_migrations.schema_migrations. supabase/ci/
+        # build_from_empty_rehearsal.sh runs it against a scripted psql on
+        # every build.
+        run: |
+          set -euo pipefail
+          echo "PHASE=build" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" build started "replaying every migration, paced for a ${INSTANCE_SIZE} instance"
+          # The point-in-time-recovery target, as a release records it.
+          echo "DEPLOY_STARTED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
+          log="$RUNNER_TEMP/build.log"
+          set +e
+          # Paced for a 1 GB instance: one migration at a time over one
+          # connection, a second's rest between them, vacuumed every twenty.
+          # Nothing else runs into the project meanwhile: a release to it
+          # shares this workflow's concurrency group, and the scheduler's
+          # minutely job finds no organisation to work for until the build
+          # is done.
+          RESUME="${RESUME}" PAUSE_SECONDS=1 VACUUM_EVERY=20 \
+            supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL" 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          set -e
+          .github/summarise.sh "$log" "## Built from empty"
+          if [[ "$status" -ne 0 ]]; then
+            echo "::error::the build stopped. The migrations before the one named above are applied and recorded; fix the cause and run this workflow again with resume (the Fleet view's Retry does that)."
+          fi
+          exit "$status"
+
+      - name: Name the owner
+        # The owner's row is already there (the replay wrote it); this records
+        # it through the routine that refuses anybody else. The database is
+        # not yet told what it is: that marker is the last thing this build
+        # writes, after its proof, so a build that stops before proving
+        # itself is never read as built by a release (release.yml, "has been
+        # built").
+        run: |
+          set -euo pipefail
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="$OWNER_EMAIL" <<'SQL'
+          select erp_meta.register_platform_owner(:'owner');
+          SQL
+
+      - name: Say where it is
+        # Its project and its address (20261011010000): the ref a release
+        # will refuse to differ from, and the origin every product email and
+        # in-app notice links to.
+        run: |
+          set -euo pipefail
+          echo "PHASE=identity" >> "$GITHUB_ENV"
+          if [[ "$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp_meta.set_deployment_identity(text,text)') is not null")" == "t" ]]; then
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${ORIGIN}" \
+              -c "select erp_meta.set_deployment_identity(:'ref', :'origin');"
+          else
+            echo "::notice::this build predates 20261011010000, so the database was not told its project or address; the first release will."
+          fi
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" identity done "project ${PROJECT_REF}, served at ${ORIGIN}"
+
+      - name: The CLI finds every migration applied
+        # So the next release applies only what is new.
+        run: |
+          set -euo pipefail
+          out=$(supabase db push --dry-run --include-all --db-url "$DB_URL" 2>&1) || {
+            echo "$out"
+            echo "::error::supabase db push --dry-run failed against ${CODE} after the build."
+            exit 1
+          }
+          echo "$out"
+          if ! grep -qi "up to date" <<< "$out"; then
+            echo "::error::after the build, supabase db push would still apply something to ${CODE}: the history the build kept does not match the repository."
+            exit 1
+          fi
+
+      - name: Deploy the Edge Functions
+        run: |
+          set -euo pipefail
+          echo "PHASE=functions" >> "$GITHUB_ENV"
+          deployed=""
+          for dir in supabase/functions/*/; do
+            name=$(basename "$dir")
+            [[ -f "$dir/index.ts" ]] || continue
+            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api
+            deployed="$deployed $name"
+          done
+          echo "Edge Functions deployed:${deployed}"
+          echo "- Edge Functions deployed:${deployed}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The functions' secrets
+        # What the Edge Functions read from their own project: the email
+        # provider's key, where the application is served from (every invite
+        # and notification links there), and the sender of invitations. The
+        # demonstration's were set by hand on 6 October and are left alone.
+        if: env.KIND == 'client'
+        run: |
+          set -euo pipefail
+          supabase/ci/provision_project.sh secrets "${PROJECT_REF}" \
+            "RESEND_API_KEY=${RESEND_API_KEY}" \
+            "CLOVEERP_APP_URL=${ORIGIN}" \
+            "CLOVEERP_INVITE_FROM=${INVITE_FROM}"
+          supabase/ci/fleet_register.sh event "${CODE}" functions done "functions deployed; RESEND_API_KEY, CLOVEERP_APP_URL and CLOVEERP_INVITE_FROM set"
+
+      - name: Prove it
+        # As every release proves (release.yml): recorded first, so the
+        # assurance's release clause reads this build, then
+        # erp.platform_assurance() and the whole-database reconciliation. The
+        # release that follows proves the rest — the dispatch schedule and a
+        # drain pass.
+        run: |
+          set -euo pipefail
+          echo "PHASE=prove" >> "$GITHUB_ENV"
+          release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
+            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'lovable', 'deployment from empty, run ${GITHUB_RUN_ID}');")
+          assurance="$RUNNER_TEMP/assurance.json"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.platform_assurance();" > "$assurance"
+          bad=$(jq -r '.[] | select(.ok == false) | "\(.code): \((.detail // "")[0:120])"' "$assurance")
+          if [[ -n "$bad" ]]; then
+            echo "::error::platform_assurance() is not green on ${CODE} after its build:"
+            echo "$bad"
+            exit 1
+          fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.prove_release('${release}');"
+          # Proved: now, and only now, the database is told what it is
+          # (20261010060000, 20261011010000). This is the marker a release
+          # reads as "built"; nothing before this point writes it.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp_meta.mark_deployment('${KIND}');"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh built "${CODE}"
+          {
+            echo "## ${CODE}"
+            echo '```'
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'deployment: ' || erp.deployment_kind();"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'platform owner: ' || string_agg(email, ', ') from erp_meta.platform_staff where staff_role = 'owner' and revoked_at is null;"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'migrations recorded: ' || count(*) from supabase_migrations.schema_migrations;"
+            echo '```'
+            echo
+            if [[ "${KIND}" == client ]]; then
+              echo "Next: the release below schedules its dispatch function and proves a drain pass. Then, by hand:"
+              echo "add ${CODE}.${APEX} in Lovable (Settings, Domains) and its DNS records, and tick them on the Fleet view."
+            else
+              echo "Next: run the deploy workflow on main (Actions, deploy, Run workflow). It releases to the"
+              echo "demonstration — the dispatch schedule, the proof, the release record — and then to production."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "platform_assurance: green on ${CODE}"
+
+      - name: Record a stopped build
+        # Whatever stopped it, the row says so, and the Fleet view offers to
+        # carry on.
+        if: failure() && env.KIND == 'client'
+        run: |
+          supabase/ci/fleet_register.sh event "${CODE}" "${PHASE:-request}" failed "run ${GITHUB_RUN_ID} stopped at ${PHASE:-the start}; carry on with Retry from the Fleet view" || true
+
+  release:
+    # The first release into a client, right after its build: the dispatch
+    # schedule, a drain pass, the release record — so the client is live
+    # without waiting for the next train.
+    needs: build
+    if: inputs.code != 'demo' && needs.build.result == 'success'
+    name: first release to ${{ inputs.code }}
+    uses: ./.github/workflows/release.yml
+    with:
+      target: ${{ inputs.code }}
+      kind: client
+      project_ref: ${{ needs.build.outputs.project_ref }}
+      other_project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      other_project_refs: ${{ needs.build.outputs.others }}
+      secret_name: ${{ needs.build.outputs.vault }}
+      vault_secret_name: ${{ needs.build.outputs.vault }}
+      dispatch_url: ${{ needs.build.outputs.dispatch_url }}
+      owner_email: ${{ vars.CLOVEERP_PLATFORM_OWNER_EMAIL }}
+      app_origin: ${{ needs.build.outputs.origin }}
+    secrets:
+      supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}

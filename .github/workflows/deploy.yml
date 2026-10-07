@@ -1,6 +1,6 @@
 name: deploy
 
-# The route to the live database that is not a person at a console.
+# The route to every live database that is not a person at a console.
 #
 # Until this workflow, every change reached production through the Supabase
 # MCP connector, one statement block at a time, because the repository holds
@@ -25,26 +25,42 @@ name: deploy
 # demonstration FIRST, and production is not touched unless every step of
 # that release succeeded: the demonstration is the rehearsal of every release.
 #
-# Three jobs:
+# A fleet, since 7 October. One Supabase project per client, one subdomain
+# each, the owner's decision; production is the control plane and keeps a
+# register of them (erp_meta.deployment, 20261011020000), and their
+# connection strings live in the control plane's vault, read by release.yml
+# and never by anybody. The order of a release is the owner's:
 #
-#   dry-run       — on every pull request, once per deployment: what WOULD
-#                   apply, and the remote history. Each refuses without its
-#                   secret rather than pass having looked at nothing; the
-#                   secret is what makes it real.
-#   demonstration — on push to main: release to the demonstration
-#                   (release.yml).
-#   apply         — then, only if the demonstration's release succeeded,
-#                   release to production (release.yml). A release applies,
-#                   then proves the result with the same checks the build
-#                   runs: a deploy that applied and did not check is the
-#                   silent-job problem moved to production. Then it schedules
-#                   the dispatch function from inside the database and waits
-#                   for a drain pass, because a schedule nobody proved fires
-#                   is the same problem again, one layer out.
+#   the demonstration first, then every built client at once, then the
+#   control plane last; a client that fails stops the control plane.
 #
-# The demonstration project started empty, and is built from empty once, by
-# demo_from_empty.yml, not by a release: until it has been, its release stops
-# at "The demonstration has been built" and production waits.
+# And the cadence is the owner's too — a sprint's, with ad-hoc releases where
+# needed — so what runs on each event differs:
+#
+#   pull request     the dry run, once per deployment the register knows:
+#                    what WOULD apply, and the remote history. Each refuses
+#                    without its connection rather than pass having looked
+#                    at nothing.
+#   push to main     the demonstration, every merge: the rehearsal. And,
+#                    only while the register holds no built client, the
+#                    control plane too, so that nothing changes for
+#                    production until the first client exists.
+#   workflow_dispatch the train, by hand or from the console's Fleet view
+#                    (fleet_sweep.yml): `targets` names all, control,
+#                    demonstration, or built clients by code.
+#
+# A release applies, then proves the result with the same checks the build
+# runs: a deploy that applied and did not check is the silent-job problem
+# moved to production. Then it schedules the dispatch function from inside
+# the database and waits for a drain pass, because a schedule nobody proved
+# fires is the same problem again, one layer out. After a green train the
+# application is published in Lovable, so that the application and every
+# database carry the same commit; between trains only the demonstration
+# moves ahead, which is the direction the compat job proves.
+#
+# A project starts empty, and is built from empty once, by
+# deployment_from_empty.yml, not by a release: until it has been, its release
+# stops at "has been built" and everything after it waits.
 #
 # One-off: the live project's history table holds the names the connector
 # recorded, not the repository's filenames. Run this workflow by hand with
@@ -72,6 +88,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      targets:
+        description: "The train: all; control; demonstration; or built clients by code, separated by commas. The demonstration goes first whatever is named, unless skip_demonstration."
+        type: string
+        default: 'all'
       mark_applied:
         description: 'One-off: reconcile the live migration history with this repository, then stop. Requires mark_applied_through.'
         type: boolean
@@ -85,33 +105,179 @@ on:
         type: boolean
         default: false
       skip_demonstration:
-        description: 'Break glass: release production WITHOUT releasing to the demonstration first. Only with confirm_production_ref.'
+        description: "Break glass: release ONE target without the demonstration first. Only with confirm_project_ref, typed: production's ref for the control plane, or a client's ref with that client alone in targets."
         type: boolean
         default: false
-      confirm_production_ref:
-        description: "With skip_demonstration: type production's project ref to confirm it."
+      confirm_project_ref:
+        description: "With skip_demonstration: type the project ref of the one target released, to confirm it."
         type: string
         default: ''
 
 jobs:
+  targets:
+    # Which deployments there are, and which of them this run is for.
+    #
+    # Production and the demonstration are known from variables; the clients
+    # from the control plane's register, over CLOVEERP_LIVE_DATABASE_URL.
+    # Everything the jobs below need to know about a client is public —
+    # its code, its ref, its address — so it travels as a job output; the
+    # connection strings stay in the vault for release.yml to read.
+    name: which deployments
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      clients: ${{ steps.read.outputs.clients }}
+      count: ${{ steps.read.outputs.count }}
+      want_demonstration: ${{ steps.read.outputs.want_demonstration }}
+      want_control: ${{ steps.read.outputs.want_control }}
+      client_refs: ${{ steps.read.outputs.client_refs }}
+      breakglass: ${{ steps.read.outputs.breakglass }}
+    env:
+      CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      APEX: ${{ vars.CLOVEERP_APEX || 'cloveerp.com' }}
+      EVENT: ${{ github.event_name }}
+      TARGETS: ${{ github.event_name == 'workflow_dispatch' && inputs.targets || 'all' }}
+      SKIP: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_demonstration && 'yes' || 'no' }}
+      CONFIRM: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_project_ref || '' }}
+      ONE_OFF: ${{ github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies) && 'yes' || 'no' }}
+    steps:
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Read the register
+        id: read
+        run: |
+          set -euo pipefail
+          rows='[]'
+          if [[ -n "${CP_URL}" ]]; then
+            if [[ "$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "select to_regclass('erp_meta.deployment') is not null")" == "t" ]]; then
+              rows=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "
+                select coalesce(jsonb_agg(jsonb_build_object(
+                         'code', d.code, 'project_ref', d.project_ref, 'status', d.status) order by d.code), '[]'::jsonb)
+                  from erp_meta.deployment d
+                 where d.status in ('built', 'live')
+                   and d.project_ref is not null;")
+            else
+              echo "the control plane has no register of deployments yet; production and the demonstration only"
+            fi
+          else
+            echo "::notice::CLOVEERP_LIVE_DATABASE_URL is not available to this run, so no client is known to it."
+          fi
+
+          # Which of them this run is for.
+          want_demo=true
+          want_control=false
+          selected='[]'
+          breakglass=""
+          if [[ "${ONE_OFF}" == yes ]]; then
+            # A one-off repair of live's history is production's alone.
+            want_demo=false; want_control=true
+          elif [[ "${EVENT}" == push || "${EVENT}" == pull_request ]]; then
+            # Every merge rehearses on the demonstration; the control plane
+            # follows only while no client exists, so nothing changes for
+            # production until the first one does. A pull request's dry run
+            # looks at everything.
+            if [[ "${EVENT}" == pull_request ]]; then
+              selected="$rows"; want_control=true
+            elif [[ "$(jq 'length' <<< "$rows")" -eq 0 ]]; then
+              want_control=true
+            fi
+          else
+            IFS=',' read -r -a named <<< "${TARGETS}"
+            for t in ${named[@]+"${named[@]}"}; do
+              t="${t// /}"
+              [[ -n "$t" ]] || continue
+              case "$t" in
+                all) selected="$rows"; want_control=true ;;
+                control) want_control=true ;;
+                demonstration) : ;;
+                *)
+                  if ! [[ "$t" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
+                    echo "::error::'${t}' is not a target: name all, control, demonstration, or a built client's code."
+                    exit 1
+                  fi
+                  row=$(jq -c --arg c "$t" '.[] | select(.code == $c)' <<< "$rows")
+                  if [[ -z "$row" ]]; then
+                    echo "::error::'${t}' is not a built client in the register. Nothing was released."
+                    exit 1
+                  fi
+                  selected=$(jq -c --argjson r "$row" '. + [$r] | unique_by(.code)' <<< "$selected")
+                  ;;
+              esac
+            done
+            if [[ "${SKIP}" == yes ]]; then
+              want_demo=false
+              if [[ "${CONFIRM}" == "${PRODUCTION_REF}" ]]; then
+                # Production alone, without the demonstration: the break-glass
+                # as it always was. No client rides along unrehearsed.
+                selected='[]'; want_control=true; breakglass="production"
+              else
+                one=$(jq -c --arg r "${CONFIRM}" '[.[] | select(.project_ref == $r)]' <<< "$selected")
+                if [[ "$(jq 'length' <<< "$one")" -eq 1 && "$(jq 'length' <<< "$selected")" -eq 1 ]]; then
+                  selected="$one"; want_control=false; breakglass=$(jq -r '.[0].code' <<< "$one")
+                else
+                  echo "::error::skip_demonstration releases ONE target without the demonstration, and needs its project ref typed in confirm_project_ref: production's, or a client's with that client alone in targets. Nothing was released."
+                  exit 1
+                fi
+              fi
+            fi
+          fi
+
+          # Every other ref, per client, so release.yml can refuse a
+          # connection that names any of them.
+          all_refs=$(jq -c --arg p "${PRODUCTION_REF}" --arg d "${DEMO_REF}" '[.[].project_ref] + [$p, $d] | map(select(. != null and . != ""))' <<< "$rows")
+          clients=$(jq -c --argjson all "$all_refs" --arg p "${PRODUCTION_REF}" --arg apex "${APEX}" '
+            map(. + {
+              others: ($all - [.project_ref] | join(",")),
+              vault: ("cloveerp:deployment:" + .project_ref + ":db_url"),
+              origin: ("https://" + .code + "." + $apex),
+              dispatch_url: ("https://" + .project_ref + ".supabase.co/functions/v1/dispatch")
+            })' <<< "$selected")
+          client_refs=$(jq -r '[.[].project_ref] | join(",")' <<< "$rows")
+          count=$(jq 'length' <<< "$clients")
+
+          {
+            echo "clients=${clients}"
+            echo "count=${count}"
+            echo "want_demonstration=${want_demo}"
+            echo "want_control=${want_control}"
+            echo "client_refs=${client_refs}"
+            echo "breakglass=${breakglass}"
+          } >> "$GITHUB_OUTPUT"
+          echo "event ${EVENT}: demonstration ${want_demo}; clients ${count} of $(jq 'length' <<< "$rows") built; control plane ${want_control}${breakglass:+; BREAK GLASS for ${breakglass}}"
+          {
+            echo "## Targets"
+            echo "- demonstration: ${want_demo}"
+            echo "- clients: $(jq -r 'map(.code) | join(", ")' <<< "$clients") (${count})"
+            echo "- control plane: ${want_control}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   dry-run:
     if: github.event_name == 'pull_request'
+    needs: targets
     name: dry run (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Once per deployment, each against its own secret. By name, through
+    # Once per deployment, each against its own connection. By name, through
     # secrets[...]: an expression like `a && secrets.X || secrets.Y` falls
     # through to the second secret when the first is empty, and the
     # demonstration's dry run would then have read production and said so
-    # under the demonstration's name.
+    # under the demonstration's name. A client's comes from the vault.
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: demonstration
             secret: CLOVEERP_DEMO_DATABASE_URL
+            project_ref: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+            others: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }},${{ needs.targets.outputs.client_refs }}
           - target: production
             secret: CLOVEERP_LIVE_DATABASE_URL
+            project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+            others: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }},${{ needs.targets.outputs.client_refs }}
     # Its own group, per branch, and not the deploy's.
     #
     # deploy-live was declared on the workflow, so both jobs were in it, and
@@ -134,6 +300,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
       - name: What would apply
         # A dry run that could not see live must not be green.
         #
@@ -153,13 +323,13 @@ jobs:
           DB_URL: ${{ secrets[matrix.secret] }}
           TARGET: ${{ matrix.target }}
           SECRET_NAME: ${{ matrix.secret }}
-          PROJECT_REF: ${{ matrix.target == 'demonstration' && vars.CLOVEERP_DEMO_PROJECT_REF || (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja') }}
-          OTHER_REF: ${{ matrix.target == 'demonstration' && (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja') || vars.CLOVEERP_DEMO_PROJECT_REF }}
+          PROJECT_REF: ${{ matrix.project_ref }}
+          OTHERS: ${{ matrix.others }}
         run: |
           set -euo pipefail
           if [[ -z "${DB_URL}" ]]; then
             if [[ "${TARGET}" == demonstration ]]; then
-              echo "::error::${SECRET_NAME} is not set, so this dry run compared nothing with the demonstration. Add the demonstration project's session-pooler connection string as a repository secret, in the same form as CLOVEERP_LIVE_DATABASE_URL. Until it is set, a merge to main releases to nothing: the demonstration's release fails at its first step, and production is released only after the demonstration has been."
+              echo "::error::${SECRET_NAME} is not set, so this dry run compared nothing with the demonstration. Add the demonstration project's session-pooler connection string as a repository secret, in the same form as CLOVEERP_LIVE_DATABASE_URL. Until it is set, a merge to main releases to nothing: the demonstration's release fails at its first step, and everything after it waits."
             else
               echo "::error::${SECRET_NAME} is not set, so this dry run compared nothing with live. Add the session-pooler connection string as a repository secret; until it is set, no merge to main can deploy."
             fi
@@ -168,20 +338,84 @@ jobs:
           # The same check the release makes, so a connection string in the
           # wrong secret is said here, on the pull request, and not first by a
           # release.
-          if [[ -z "${PROJECT_REF}" || "${DB_URL}" != *"${PROJECT_REF}"* || ( -n "${OTHER_REF}" && "${DB_URL}" == *"${OTHER_REF}"* ) ]]; then
-            echo "::error::${SECRET_NAME} does not name the ${TARGET} project (${PROJECT_REF:-no ref set}), or names the other one. Check the secret and the variables CLOVEERP_DEMO_PROJECT_REF and CLOVEERP_PROJECT_REF."
+          if [[ -z "${PROJECT_REF}" || "${DB_URL}" != *"${PROJECT_REF}"* ]]; then
+            echo "::error::${SECRET_NAME} does not name the ${TARGET} project (${PROJECT_REF:-no ref set}). Check the secret and the variables CLOVEERP_DEMO_PROJECT_REF and CLOVEERP_PROJECT_REF."
             exit 1
           fi
+          IFS=',' read -r -a others <<< "${OTHERS}"
+          for other in ${others[@]+"${others[@]}"}; do
+            other="${other// /}"
+            [[ -n "$other" ]] || continue
+            if [[ "${DB_URL}" == *"${other}"* ]]; then
+              echo "::error::${SECRET_NAME} names another deployment's project (${other}), not the ${TARGET} (${PROJECT_REF})."
+              exit 1
+            fi
+          done
           echo "## Migrations that would apply to the ${TARGET}" >> "$GITHUB_STEP_SUMMARY"
-          # An empty demonstration lists every migration, which reads like a
+          # An empty project lists every migration, which reads like a
           # finding and is not one: say why, when psql can tell.
-          if [[ "${TARGET}" == demonstration ]] && command -v psql > /dev/null; then
+          if [[ "${TARGET}" != production ]]; then
             built=$(psql "$DB_URL" -tAc "select to_regnamespace('erp') is not null" 2>/dev/null || echo unknown)
             if [[ "$built" == "f" ]]; then
-              echo "::notice::the demonstration project has not been built yet, so every migration is listed. It is built once, from empty, by the demo-from-empty workflow, not by a release; until then its release stops before applying anything, and production waits."
-              echo "The demonstration has not been built yet: run demo-from-empty once after merging." >> "$GITHUB_STEP_SUMMARY"
+              echo "::notice::the ${TARGET} project has not been built yet, so every migration is listed. It is built once, from empty, by the deployment-from-empty workflow, not by a release; until then its release stops before applying anything, and everything after it waits."
+              echo "The ${TARGET} has not been built yet: run deployment-from-empty once after merging." >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          supabase db push --dry-run --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  dry-run-clients:
+    if: github.event_name == 'pull_request' && needs.targets.outputs.count != '0'
+    needs: targets
+    name: dry run (${{ matrix.code }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.clients) }}
+    concurrency:
+      group: deploy-dry-run-${{ github.ref }}-${{ matrix.code }}
+      cancel-in-progress: true
+    env:
+      CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: What would apply
+        # A client's connection comes from the control plane's vault, as
+        # release.yml reads it; masked the moment it is read.
+        env:
+          CODE: ${{ matrix.code }}
+          PROJECT_REF: ${{ matrix.project_ref }}
+          VAULT: ${{ matrix.vault }}
+          OTHERS: ${{ matrix.others }}
+        run: |
+          set -euo pipefail
+          DB_URL=$(CLOVEERP_LIVE_DATABASE_URL="$CP_URL" supabase/ci/fleet_register.sh vault-get "${VAULT}")
+          [[ -z "${DB_URL}" ]] || echo "::add-mask::${DB_URL}"
+          if [[ -z "${DB_URL}" ]]; then
+            echo "::error::the control plane's vault has no ${VAULT}, so ${CODE} cannot be reached. Its build from empty writes that entry."
+            exit 1
+          fi
+          if [[ "${DB_URL}" != *"${PROJECT_REF}"* ]]; then
+            echo "::error::${VAULT} does not name ${CODE}'s project (${PROJECT_REF})."
+            exit 1
+          fi
+          IFS=',' read -r -a others <<< "${OTHERS}"
+          for other in ${others[@]+"${others[@]}"}; do
+            other="${other// /}"
+            [[ -n "$other" && "${DB_URL}" == *"${other}"* ]] && { echo "::error::${VAULT} names another deployment's project (${other})."; exit 1; }
+          done
+          echo "## Migrations that would apply to ${CODE}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           supabase db push --dry-run --include-all --db-url "$DB_URL" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -190,11 +424,15 @@ jobs:
     # Every release goes here first (the owner's decision of 6 October). Not on
     # a one-off repair of live's history, which is production's alone, and not
     # when the break-glass below was asked for.
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.mark_applied && !inputs.repair_gateway_bodies && !inputs.skip_demonstration)
+    needs: targets
+    if: >-
+      ${{ !cancelled() && needs.targets.result == 'success'
+          && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+          && needs.targets.outputs.want_demonstration == 'true' }}
     name: release to the demonstration
     # One release against the demonstration at a time, for the reasons the
-    # production job gives below; its own group, so a release to one
-    # deployment never queues behind or displaces a release to the other.
+    # control plane's job gives below; its own group, so a release to one
+    # deployment never queues behind or displaces a release to another.
     concurrency:
       group: deploy-demonstration
       cancel-in-progress: false
@@ -203,32 +441,77 @@ jobs:
       target: demonstration
       project_ref: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
       other_project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      other_project_refs: ${{ needs.targets.outputs.client_refs }}
       secret_name: CLOVEERP_DEMO_DATABASE_URL
       dispatch_url: ${{ vars.CLOVEERP_DEMO_DISPATCH_URL || format('https://{0}.supabase.co/functions/v1/dispatch', vars.CLOVEERP_DEMO_PROJECT_REF) }}
       owner_email: ${{ vars.CLOVEERP_PLATFORM_OWNER_EMAIL }}
+      app_origin: ${{ vars.CLOVEERP_DEMO_ORIGIN || format('https://demo.{0}', vars.CLOVEERP_APEX || 'cloveerp.com') }}
     secrets:
       database_url: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+
+  clients:
+    # Every built client at once, after the demonstration succeeded — or,
+    # for one client alone, after the break-glass confirmed its ref. Four at
+    # a time: each release pauses a scheduler, replays, deploys functions
+    # through the Management API (sixty calls a minute) and proves, on a
+    # small instance. One that fails leaves the others to finish and the
+    # control plane untouched (fail-fast is off; apply needs them all).
+    needs: [targets, demonstration]
+    if: >-
+      ${{ !cancelled() && needs.targets.result == 'success'
+          && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+          && needs.targets.outputs.count != '0'
+          && (needs.demonstration.result == 'success'
+              || (needs.demonstration.result == 'skipped' && needs.targets.outputs.breakglass != '' && needs.targets.outputs.breakglass != 'production')) }}
+    name: release to ${{ matrix.code }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.clients) }}
+    # The same group as the client's build from empty
+    # (deployment_from_empty.yml), so a release never runs into a build.
+    concurrency:
+      group: deploy-${{ matrix.code }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/release.yml
+    with:
+      target: ${{ matrix.code }}
+      kind: client
+      project_ref: ${{ matrix.project_ref }}
+      other_project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      other_project_refs: ${{ matrix.others }}
+      secret_name: ${{ matrix.vault }}
+      vault_secret_name: ${{ matrix.vault }}
+      dispatch_url: ${{ matrix.dispatch_url }}
+      owner_email: ${{ vars.CLOVEERP_PLATFORM_OWNER_EMAIL }}
+      app_origin: ${{ matrix.origin }}
+      demonstration_skipped: ${{ needs.demonstration.result == 'skipped' }}
+    secrets:
+      supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
 
   apply:
-    # Production, and only after the demonstration's release succeeded: a
-    # failed, cancelled or skipped release there leaves production exactly as
-    # it was. The exception is a one-off repair of live's history, which never
-    # concerned the demonstration and runs here alone.
-    #
-    # And the break-glass: a dispatch with skip_demonstration releases
-    # production alone, but only when production's ref is typed in
-    # confirm_production_ref, and the release says so at the top of its
-    # summary. For the day the demonstration itself is what is broken and
-    # production cannot wait for it.
-    needs: demonstration
+    # The control plane, last, and only after everything before it
+    # succeeded: a failed, cancelled or skipped release anywhere leaves it
+    # exactly as it was. The exceptions are a one-off repair of live's
+    # history, which never concerned anything else and runs here alone, and
+    # the break-glass: a dispatch with skip_demonstration and production's
+    # ref typed releases the control plane alone, and says so at the top of
+    # its summary. For the day the demonstration itself is what is broken
+    # and production cannot wait for it.
+    needs: [targets, demonstration, clients]
     if: >-
-      ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      ${{ !cancelled() && needs.targets.result == 'success'
+          && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+          && needs.targets.outputs.want_control == 'true'
+          && (needs.clients.result == 'success' || needs.clients.result == 'skipped')
           && (needs.demonstration.result == 'success'
               || (github.event_name == 'workflow_dispatch' && (inputs.mark_applied || inputs.repair_gateway_bodies))
-              || (github.event_name == 'workflow_dispatch' && inputs.skip_demonstration
-                  && inputs.confirm_production_ref == (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja'))) }}
-    name: release to production
+              || needs.targets.outputs.breakglass == 'production') }}
+    name: release to the control plane
     # One deploy against live at a time, and never two replays at once. A
     # newer deploy may cancel an older one still queued: --include-all means
     # the newer applies everything the older would have, so the migrations
@@ -241,26 +524,36 @@ jobs:
       target: production
       project_ref: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
       other_project_ref: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      other_project_refs: ${{ needs.targets.outputs.client_refs }}
       secret_name: CLOVEERP_LIVE_DATABASE_URL
       # The project's own dispatch function unless a repository variable says
       # otherwise.
       dispatch_url: ${{ vars.CLOVEERP_DISPATCH_URL || format('https://{0}.supabase.co/functions/v1/dispatch', vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja') }}
+      app_origin: ${{ vars.CLOVEERP_ORIGIN || format('https://{0}', vars.CLOVEERP_APEX || 'cloveerp.com') }}
       mark_applied: ${{ github.event_name == 'workflow_dispatch' && inputs.mark_applied == true }}
       mark_applied_through: ${{ github.event_name == 'workflow_dispatch' && inputs.mark_applied_through || '' }}
       repair_gateway_bodies: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_gateway_bodies == true }}
-      demonstration_skipped: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_demonstration == true }}
+      demonstration_skipped: ${{ needs.targets.outputs.breakglass == 'production' }}
     secrets:
       database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
 
-  break-glass-refused:
-    # skip_demonstration without production's ref typed to confirm it: nothing
-    # is released anywhere, and this says why rather than leaving two skipped
-    # jobs that look like a quiet day.
-    if: github.event_name == 'workflow_dispatch' && inputs.skip_demonstration && inputs.confirm_production_ref != (vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja')
-    name: break glass refused
+  held:
+    # A train that stopped: something before the control plane went red, so
+    # the control plane was not released and the application must not be
+    # published. Said in one place rather than left as skipped jobs that
+    # look like a quiet day.
+    needs: [targets, demonstration, clients, apply]
+    if: >-
+      ${{ !cancelled() && needs.targets.result == 'success'
+          && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+          && needs.targets.outputs.want_control == 'true'
+          && needs.apply.result == 'skipped'
+          && (needs.demonstration.result == 'failure' || needs.clients.result == 'failure') }}
+    name: the control plane was held back
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::error::skip_demonstration releases production without the demonstration, and needs production's project ref typed in confirm_production_ref. It was not, so nothing was released."
+          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released and the application must not be published. Fix forward (the Fleet view names the client and the step), then dispatch this workflow with targets=control once everything before it is green."
           exit 1

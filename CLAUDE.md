@@ -87,7 +87,8 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
 - A new public function must assert its own governance in the same migration —
   `supabase/ci/boundary_in_migration.sh`.
 - **`.github/workflows/deploy.yml` is the only way a migration reaches
-  production.** Not the connector, not a console, not by hand. On 8 September a
+  any deployment: production (the control plane), the demonstration, or a
+  client's own project.** Not the connector, not a console, not by hand. On 8 September a
   replay and something else applied the same migrations at the same time and
   met on a `CREATE OR REPLACE`; the deploy lost twenty-three minutes of work to
   a duplicate-key error, and the other writer had already carried on. Two
