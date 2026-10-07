@@ -28,12 +28,25 @@ name: schema
 # migration_cutover_suite, which compares current_date fixed at the start of
 # its transaction with movements stamped clock_timestamp().
 
+#
+# Weekly, since 8 October, not nightly. Fourteen days of runs (24 September to
+# 7 October) cost 18,555 billable minutes, and the scheduled run was 2,318 of
+# them: 57 minutes for the from-empty replay and catalogue, and 105 for the
+# typescript job, 91 of which were `supabase start` replaying every migration
+# into a stack for a browser suite that takes 81 seconds. Once a week keeps the
+# from-nothing claim, the nightly-cadence suites and the stack smoke test; a
+# dispatch with `full` makes the same claim on demand, and that is the run to
+# ask for before a release that touches the sequence itself. Where the comments
+# below still say "nightly", read "scheduled": the cadence name in
+# erp_meta.check_cadence is unchanged, because it is data, not a schedule.
+
 on:
   push:
     branches: [main]
   pull_request:
   schedule:
-    - cron: '30 2 * * *'
+    # Sundays, 02:30 UTC.
+    - cron: '30 2 * * 0'
   workflow_dispatch:
     inputs:
       full:
@@ -61,6 +74,11 @@ concurrency:
 jobs:
   build-and-assert:
     runs-on: ubuntu-latest
+    # actions: read so a push to main can ask which pull request runs left a
+    # catalogue pass behind ("Or a pull request proved this same tree today").
+    permissions:
+      contents: read
+      actions: read
     # The two cache keys below, for the compat job: it reads the databases
     # this job builds rather than building its own.
     outputs:
@@ -784,6 +802,56 @@ jobs:
             echo "Already proved today by $proved, for the same migrations, bootstrap, seed and runner; not walked again. The nightly run walks it from an empty cluster regardless."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Or a pull request proved this same tree today
+        id: pr_proved
+        # A push to main that walks the catalogue is, nearly always, walking
+        # it for the second time. A pull request is built on refs/pull/N/merge
+        # — its changes already merged onto main — so when main has not moved
+        # since its last run, the tree the merge lands is the tree the pull
+        # request proved, and the catalogue key (every input to the verdict,
+        # and the day) is the same key. In the fourteen days to 7 October that
+        # second walk was 155 runs and about eighteen minutes each.
+        #
+        # The marker the pull request left cannot answer here: GitHub scopes a
+        # cache to the ref that saved it, and main never reads a pull
+        # request's. An artifact is not scoped that way, so the pull request
+        # also leaves its pass as one, named by the key, and main asks for
+        # that name. Only from a run whose head repository is this one: a
+        # fork's pull request runs its own copy of this file and could name an
+        # artifact anything. When main has moved, the key differs, nothing is
+        # found, and the catalogue is walked as before.
+        if: >-
+          github.event_name == 'push' && steps.keys.outputs.full != 'yes' &&
+          steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged != 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: catalogue-proved-${{ steps.keys.outputs.catalogue }}-push
+        run: |
+          set -euo pipefail
+          # Any failure to ask is "not proved": the walk runs, which is the
+          # cheaper mistake.
+          proof="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT}&per_page=20" \
+                     --jq '[.artifacts[]
+                            | select(.expired == false
+                                     and .workflow_run.head_repository_id == ${{ github.repository_id }})]
+                           | first
+                           | if . == null then "" else "pull request run \(.workflow_run.id) of \(.workflow_run.head_branch)" end' \
+                   2>/dev/null || true)"
+          if [[ -z "$proof" ]]; then
+            echo "hit=no" >> "$GITHUB_OUTPUT"
+            echo "no pull request proved this tree's catalogue today: it is walked here"
+            exit 0
+          fi
+          echo "hit=yes" >> "$GITHUB_OUTPUT"
+          # The marker main's later runs, and the pull requests that read
+          # main's cache, will find — the save step below keeps it.
+          echo "$proof, reused by run ${{ github.run_id }} of ${{ github.sha }} on $(date -u +%F)" > "$RUNNER_TEMP/catalogue.proved"
+          echo "the catalogue for this exact tree passed today on $proof. Not walked again."
+          {
+            echo "## Catalogue"
+            echo "Already proved today by $proof, on the same migrations, bootstrap, seed and runner that this merge lands; not walked again. The scheduled run walks it from an empty cluster regardless."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Nothing this branch changes reaches the catalogue
         if: steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged == 'yes'
         run: |
@@ -795,7 +863,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Every check in the catalogue
-        if: steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged != 'yes'
+        if: steps.proved.outputs.cache-hit != 'true' && steps.keys.outputs.catalogue_unchanged != 'yes' && steps.pr_proved.outputs.hit != 'yes'
         # No list. erp.ci_check_catalogue() reads pg_proc and returns every
         # erp.assert_* and erp_test.assert_* the build can call, in order:
         # structural assertions, adversarial suites, the one procedure, and
@@ -831,6 +899,24 @@ jobs:
         with:
           path: ${{ runner.temp }}/catalogue.proved
           key: clove-erp-proved-v2-${{ steps.keys.outputs.catalogue }}-push
+
+      - name: Leave the pass where main can see it
+        # The other half of "Or a pull request proved this same tree today":
+        # the same marker, as an artifact named by the catalogue key, which a
+        # push to main can find and a cache entry scoped to this ref cannot be.
+        # Only after a walk this run made and passed, only from this
+        # repository, and kept for two days because the key carries the day.
+        if: >-
+          success() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          steps.keys.outputs.full != 'yes' && steps.proved.outputs.cache-hit != 'true' &&
+          steps.keys.outputs.catalogue_unchanged != 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalogue-proved-${{ steps.keys.outputs.catalogue }}-push
+          path: ${{ runner.temp }}/catalogue.proved
+          retention-days: 2
+          if-no-files-found: error
 
       - name: A check that is not run fails the build
         # The negative proof, in a transaction that is rolled back: create an
@@ -1524,6 +1610,22 @@ jobs:
   # these shapes — erp.assert_* and the erp_test suites do that, against the
   # database that answers.
   browser:
+    # After the typescript job, and only when something it renders changed.
+    #
+    # An application that does not typecheck or build will not render either,
+    # so a red typescript job already holds the answer this suite would spend
+    # four minutes and a browser install reaching. And a push that changes
+    # only supabase/ or docs/ cannot change what the ui project sees: it
+    # mocks every request inside the page. The scheduled run and a full
+    # dispatch run it regardless, so a week never passes without it.
+    #
+    # !cancelled() with an explicit check on typescript, because `changes` is
+    # skipped on the schedule and a skipped need fails the default success().
+    needs: [changes, typescript]
+    if: >-
+      ${{ !cancelled() && needs.typescript.result == 'success' &&
+          (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+           needs.changes.outputs.app != 'false') }}
     runs-on: ubuntu-latest
     # Longer than the suite needs and far shorter than the six-hour default: a
     # hung dev server should fail, not idle.
@@ -1573,14 +1675,20 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Does this pull request touch anything the schema comparison could see?
+  # Does this push touch anything the schema comparison, or the browser suite,
+  # could see?
   #
-  # Twenty seconds, to decide whether to spend thirty minutes.
+  # Twenty seconds, to decide whether to spend thirty minutes. Since 8 October
+  # it answers a push to main as well as a pull request, because the browser
+  # suite asks it too: in the fourteen days to 7 October that suite ran 455
+  # times for 1,513 minutes, on every push, including the ones that changed
+  # nothing it renders.
   changes:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       schema: ${{ steps.decide.outputs.schema }}
+      app: ${{ steps.decide.outputs.app }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1590,16 +1698,37 @@ jobs:
         # Anything unexpected answers yes. A check skipped when it should have
         # run is a hole in the build; a check run when it need not have is a
         # bill, and the bill is the cheaper mistake.
+        #
+        # The browser suite renders the application, so it needs to run when
+        # anything the bundle or the suite is built from changes: src/, e2e/,
+        # public/, the dependency and build configuration, and this workflow.
+        # A change under supabase/ alone does not reach it: the ui project
+        # answers every request inside the page and never talks to a database.
         run: |
           set -uo pipefail
-          say() { echo "schema=$1" >> "$GITHUB_OUTPUT"; echo "schema=$1"; exit 0; }
+          both() {
+            echo "schema=$1" >> "$GITHUB_OUTPUT"; echo "app=$1" >> "$GITHUB_OUTPUT"
+            echo "schema=$1 app=$1"; exit 0
+          }
 
-          base=$(git merge-base "origin/${{ github.base_ref }}" HEAD) || say true
-          changed=$(git diff --name-only "$base" HEAD) || say true
-          [[ -n "$changed" ]] || say true
+          # A pull request against the branch it left; a push to main against
+          # the main before it, as the build job's keys step does.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base=$(git merge-base "origin/${{ github.base_ref }}" HEAD) || both true
+          else
+            base=$(git rev-parse --verify -q HEAD^1) || both true
+          fi
+          changed=$(git diff --name-only "$base" HEAD) || both true
+          [[ -n "$changed" ]] || both true
 
-          if grep -qE '^supabase/' <<< "$changed"; then say true; fi
-          say false
+          schema=false; app=false
+          if grep -qE '^supabase/' <<< "$changed"; then schema=true; fi
+          if grep -qE '^(src/|e2e/|public/|package\.json$|bun\.lock$|bunfig\.toml$|vite\.config\.ts$|tsconfig\.json$|playwright\.config\.ts$|components\.json$|eslint\.config\.js$|\.github/workflows/schema\.yml$)' <<< "$changed"; then
+            app=true
+          fi
+          echo "schema=$schema" >> "$GITHUB_OUTPUT"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "schema=$schema app=$app"
 
   compat:
     needs: [changes, build-and-assert]
