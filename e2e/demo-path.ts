@@ -346,7 +346,7 @@ export const ORDER_TO_CASH: Flow = {
     {
       path: "/finance",
       stage: "Invoice",
-      does: "Raise the invoice from the posted delivery, so it bills what actually went, and issue it.",
+      does: "Act as Priya Shah, the demonstration's second person: whoever despatched may not also invoice. Raise the invoice from the posted delivery, so it bills what actually went, and issue it.",
       doors: ["erp_invoice_from_delivery", "erp_transition_document"],
       leaves: "A sales invoice issued: the receivable and the revenue posted.",
     },
