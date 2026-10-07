@@ -1,7 +1,7 @@
 set lock_timeout = '30s';
 
 -- =============================================================================
--- 20261010190000  A returned receipt bills what was kept
+-- 20261010195000  A returned receipt bills what was kept
 -- -----------------------------------------------------------------------------
 -- Found checking the demonstration after 20261010180000 was released on
 -- 7 October. Its customers were tidied, but its suppliers were not: still 58
@@ -36,6 +36,11 @@ set lock_timeout = '30s';
 --      CLOVEERP_RECEIPT_ALL_RETURNED rather than the misleading "not received
 --      against an order". A credit note still in draft takes nothing off: if
 --      it is issued after the bill, it falls on the bill, as it always has.
+--      erp.match_three_way() compared a bill with everything that arrived, so
+--      a bill for what was kept read as short and was disputed as it
+--      registered. A bill for anything between what was kept and what arrived
+--      now matches: for what was kept when the return came first, for what
+--      arrived when the bill came first and the credit note falls on it.
 --   C. erp.tidy_demonstration_books() and erp.demonstration_catch_up() bill a
 --      receipt with goods sent back, for what was kept, instead of skipping it
 --      for ever. A receipt that went back whole is still skipped.
@@ -47,6 +52,9 @@ set lock_timeout = '30s';
 -- Production: no data changes. The next bill raised from a part-returned
 -- receipt is for what was kept. On the demonstration project, the next
 -- catch-up's tidy bills the receipts it skipped.
+--
+-- First pushed as 20261010190000, without the change to the match; re-added
+-- here whole, because a branch migration is written in one commit.
 --
 -- Proof: erp_test.returned_receipt_bill_suite.
 -- =============================================================================
@@ -80,7 +88,7 @@ revoke all on function erp.receipt_line_returned(uuid, uuid) from public, anon;
 
 comment on function erp.receipt_line_returned(uuid, uuid) is
   'How much of a goods receipt line has gone back to the supplier on a credit note that is issued and not cancelled '
-  '(20261010190000). The same count erp.grni_report() makes.';
+  '(20261010195000). The same count erp.grni_report() makes.';
 
 -- ── B. Bill a receipt bills what was kept ────────────────────────────────────
 
@@ -106,7 +114,7 @@ declare
      group by rel.to_line_id
   loop$o$;
   v_new1 constant text := $n$  --
-  -- Less what went back on a credit note that is issued (20261010190000):
+  -- Less what went back on a credit note that is issued (20261010195000):
   -- that note has already taken those goods out of goods received not
   -- invoiced, so a bill for them would take them out twice. A line that all
   -- went back is left off.
@@ -154,6 +162,58 @@ begin
 end
 $bill_from_receipt$;
 
+-- ── B2. The match takes a bill for what was kept ─────────────────────────────
+
+do $match_three_way$
+declare
+  v_sig  constant text := 'erp.match_three_way(uuid)';
+  v_def  text := pg_catalog.pg_get_functiondef(v_sig::regprocedure);
+  v_old1 constant text := $o$  v_base    numeric;
+$o$;
+  v_new1 constant text := $n$  v_base    numeric;
+  v_returned numeric;
+$n$;
+  v_old2 constant text := $o$  v_qty_var := coalesce(ol.quantity_invoiced, 0) - v_base;
+$o$;
+  v_new2 constant text := $n$  -- Goods that went back on an issued credit note (20261010195000). A bill
+  -- raised after the return is for what was kept; one raised before it is
+  -- for what arrived, and the credit note falls on it. Either matches, and
+  -- anything outside the two is a variance. With nothing sent back the two
+  -- are one, and this is the rule it always was.
+  v_returned := case
+                  when erp.billed_by_consumption(ol.id) then 0
+                  else coalesce((select sum(erp.receipt_line_returned(v_tenant, fr.from_line_id))
+                                   from erp.document_relation fr
+                                  where fr.tenant_id = v_tenant
+                                    and fr.to_line_id = ol.id
+                                    and fr.relation_kind = 'fulfils'), 0)
+                end;
+  v_qty_var := case
+                 when coalesce(ol.quantity_invoiced, 0) > v_base
+                   then coalesce(ol.quantity_invoiced, 0) - v_base
+                 when coalesce(ol.quantity_invoiced, 0) < v_base - v_returned
+                   then coalesce(ol.quantity_invoiced, 0) - (v_base - v_returned)
+                 else 0
+               end;
+$n$;
+  n integer;
+begin
+  if position('erp.receipt_line_returned(' in v_def) > 0 then
+    raise notice '% already matches what was kept; left as it is', v_sig;
+    return;
+  end if;
+  n := (length(v_def) - length(replace(v_def, v_old1, ''))) / length(v_old1);
+  if n <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % v_base declaration found % time(s)', v_sig, n;
+  end if;
+  n := (length(v_def) - length(replace(v_def, v_old2, ''))) / length(v_old2);
+  if n <> 1 then
+    raise exception 'CLOVEERP_ANCHOR_MOVED: % quantity variance found % time(s)', v_sig, n;
+  end if;
+  execute replace(replace(v_def, v_old1, v_new1), v_old2, v_new2);
+end
+$match_three_way$;
+
 -- ── C. The demonstration bills a part-returned receipt ───────────────────────
 
 do $tidy_demonstration_books$
@@ -165,7 +225,7 @@ declare
                          join erp.document_relation rr
                            on rr.tenant_id = gl.tenant_id and rr.to_line_id = gl.id and rr.relation_kind = 'returns'
                         where gl.tenant_id = d.tenant_id and gl.document_id = d.id)$o$;
-  v_new  constant text := $n$       -- Something of it kept (20261010190000). Bill a receipt bills what was
+  v_new  constant text := $n$       -- Something of it kept (20261010195000). Bill a receipt bills what was
        -- kept, so goods sent back no longer keep a receipt from being billed;
        -- one sent back whole has nothing to bill.
        and exists (select 1 from erp.document_relation kr
@@ -201,7 +261,7 @@ declare
                           where gl.tenant_id = d.tenant_id
                             and gl.document_id = d.id)
 $o$;
-  v_new  constant text := $n$         -- Something of it kept (20261010190000). Bill a receipt bills what
+  v_new  constant text := $n$         -- Something of it kept (20261010195000). Bill a receipt bills what
          -- was kept, so goods sent back no longer keep a receipt from being
          -- billed; one sent back whole has nothing to bill.
          and exists (select 1 from erp.document_relation kr
@@ -235,7 +295,7 @@ declare
                          join erp.document_relation rr on rr.tenant_id = gl.tenant_id and rr.to_line_id = gl.id
                           and rr.relation_kind = 'returns'
                         where gl.tenant_id = d.tenant_id and gl.document_id = d.id);$o$;
-  v_new  constant text := $n$       -- Every receipt with something kept (20261010190000): skipping those
+  v_new  constant text := $n$       -- Every receipt with something kept (20261010195000): skipping those
        -- with goods sent back is how this case passed while the
        -- demonstration's were never billed.
        and exists (select 1 from erp.document_relation kr
@@ -335,9 +395,11 @@ begin
      where l.tenant_id = rb.tenant_id and l.document_id = v_bill;
 
     v_cases := v_cases + 1;
-    case_name := 'a receipt of a hundred with ten sent back on an issued credit note is billed for the ninety kept';
-    passed := v_state is null and v_qty = 90;
-    detail := format('the bill is for %s', coalesce(v_qty::text, 'nothing'));
+    case_name := 'a receipt of a hundred with ten sent back on an issued credit note is billed for the ninety kept, and the bill matches';
+    passed := v_state is null and v_qty = 90
+          and erp.object_current_state('document', v_bill) = 'registered';
+    detail := format('the bill is for %s and %s', coalesce(v_qty::text, 'nothing'),
+                     erp.object_current_state('document', v_bill));
     return next;
 
     -- ── 2. And the account agrees ───────────────────────────────────────────
@@ -383,9 +445,12 @@ begin
     end;
 
     v_cases := v_cases + 1;
-    case_name := 'a credit note still in draft takes nothing off the bill, and issued after it the accounts still agree';
-    passed := v_state is null and v_qty = 50 and v_recon not like 'refused:%';
-    detail := format('the bill is for %s; %s', coalesce(v_qty::text, 'nothing'), v_recon);
+    case_name := 'a credit note still in draft takes nothing off the bill, and issued after it the bill still matches and the accounts agree';
+    passed := v_state is null and v_qty = 50 and v_recon not like 'refused:%'
+          and erp.object_current_state('document', v_bill) in ('registered', 'part_paid', 'paid')
+          and erp.match_three_way(v_pol) = 'matched';
+    detail := format('the bill is for %s and %s; %s', coalesce(v_qty::text, 'nothing'),
+                     erp.object_current_state('document', v_bill), v_recon);
     return next;
 
     -- ── 4. All of it back ───────────────────────────────────────────────────
@@ -533,7 +598,7 @@ revoke all on function erp_test.returned_receipt_bill_suite() from public, anon;
 revoke all on function erp_test.assert_returned_receipt_bill_suite() from public, anon;
 
 comment on function erp_test.returned_receipt_bill_suite() is
-  'A returned receipt bills what was kept (20261010190000): Bill a receipt bills what a receipt brought in less what '
+  'A returned receipt bills what was kept (20261010195000): Bill a receipt bills what a receipt brought in less what '
   'went back on an issued credit note, refuses a receipt sent back whole, leaves a draft credit note to fall on the '
   'bill, keeps goods received not invoiced agreeing with the ledger, and a demonstration''s tidy and catch-up bill '
   'such a receipt instead of skipping it.';
