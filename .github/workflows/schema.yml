@@ -128,7 +128,7 @@ jobs:
 
       - name: The demonstration's build from empty is rehearsed
         # supabase/ci/build_from_empty.sh runs once, for about an hour, against
-        # the demonstration project (demo_from_empty.yml), and a mistake in it
+        # a deployment's project (deployment_from_empty.yml), and a mistake in it
         # would be learned there. So it runs here first, against a psql that
         # answers from a script: what it refuses, that each migration is one
         # transaction with the timeout off and the owner and the record in it,

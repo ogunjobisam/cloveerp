@@ -3,7 +3,7 @@
 # supabase/ci/build_from_empty.sh, rehearsed with no database.
 #
 # The build it does runs once, for an hour, against the demonstration project
-# (.github/workflows/demo_from_empty.yml), and a mistake in it is learned
+# (.github/workflows/deployment_from_empty.yml), and a mistake in it is learned
 # there or not at all — the lesson of the demonstration step's reporting,
 # which broke three times in one day because only production ever ran it
 # (supabase/ci/demonstration_report.sh). So every build runs it here first,

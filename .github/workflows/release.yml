@@ -252,11 +252,11 @@ jobs:
         # released into: `supabase db push` would replay six hundred migrations
         # under the pooler's two-minute statement limit, with the suite calls
         # later migrations corrected still in them. It is built once, from
-        # empty, by demo_from_empty.yml, which does neither.
+        # empty, by deployment_from_empty.yml, which does neither.
         #
         # Built means the database says it is the demonstration
         # (erp.deployment_kind(), 20261010060000), which only the last step of
-        # demo_from_empty.yml writes, after every migration has applied and
+        # deployment_from_empty.yml writes, after every migration has applied and
         # the owner is bound. An erp schema is not enough: a build that
         # stopped half-way has one. A release never writes the first marker on
         # the demonstration, it only confirms it. Until then this stops here,
