@@ -46,7 +46,7 @@ If a path here is wrong, say so and ask. Do not go looking.
 
 The build already proves most of what you would be tempted to check manually.
 `.github/workflows/schema.yml` builds the schema on every pull request (from
-a proved base plus what the branch adds; from an empty cluster nightly and on
+a proved base plus what the branch adds; from an empty cluster weekly and on
 demand) and runs every `erp.assert_*` and `erp_test.assert_*` in
 `erp.ci_check_catalogue()` — a check that exists and is not run fails the build.
 
