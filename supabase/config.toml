@@ -101,6 +101,29 @@ import_map = "./functions/import_map.json"
 verify_jwt = false
 import_map = "./functions/import_map.json"
 
+# The work the application's own server did on a person's behalf until
+# 7 October — rendering an invoice and filing it, signing a link to a stored
+# commercial document, answering a supplier's link — now runs here, in each
+# project with its own keys, since every client has a project of its own and
+# the application's server holds no client's key.
+#
+# verify_jwt is false on all three: document_output and commercial_document
+# check their caller against Supabase Auth themselves and call every door as
+# that person (the anon key is a valid JWT and would pass the gateway's
+# check); supplier_response has no caller with a session at all, and the
+# token the link carries is what the database checks.
+[functions.document_output]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
+[functions.commercial_document]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
+[functions.supplier_response]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
 # Passwords.
 #
 # The two settings the CLI carries. Leaked-password protection (checking a new
