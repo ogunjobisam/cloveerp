@@ -39,6 +39,10 @@
 #   MAPI_MAX_WAIT  the longest pause taken (default 300). A Retry-After longer
 #                  than this is not waited out: the request is given up at once
 #   MAPI_TIMEOUT   seconds one attempt may take (default 60)
+#   MAPI_RETRY_ONLY_429  yes: ask again only after a 429, which says the request
+#                  was not done. For a request that is not safe to repeat, such
+#                  as making a project, where a 5xx or no answer may come after
+#                  the work was done; the caller then finds out for itself.
 #   MAPI_SLEEP     the sleep command (default sleep); the rehearsals' stand-in
 #
 # bash 3.2 and later: supabase/ci/provision_project_rehearsal.sh runs it on a
@@ -53,6 +57,7 @@ patient_request() {
   local attempts="${MAPI_ATTEMPTS:-5}" backoff="${MAPI_BACKOFF:-5}"
   local max_wait="${MAPI_MAX_WAIT:-300}" timeout="${MAPI_TIMEOUT:-60}" sleeper="${MAPI_SLEEP:-sleep}"
   local work out status answer after wait attempt=1
+  local only429="${MAPI_RETRY_ONLY_429:-no}"
 
   if ! [[ "$attempts" =~ ^[1-9][0-9]*$ && "$backoff" =~ ^[0-9]+$ && "$max_wait" =~ ^[0-9]+$ && "$timeout" =~ ^[1-9][0-9]*$ ]]; then
     echo "x MAPI_ATTEMPTS, MAPI_BACKOFF, MAPI_MAX_WAIT and MAPI_TIMEOUT must be whole numbers; ${label} was not asked." >&2
@@ -86,7 +91,13 @@ patient_request() {
         printf '%s' "$answer"
         rm -rf "$work"
         return 0 ;;
-      429|5??|000) : ;;
+      429) : ;;
+      5??|000)
+        if [[ "$only429" == yes ]]; then
+          echo "x ${label} answered ${status}; not asked again, because the request may already have been done" >&2
+          rm -rf "$work"
+          return 1
+        fi ;;
       *)
         echo "x ${label} answered ${status}: $(printf '%s' "$answer" | head -c 300)" >&2
         rm -rf "$work"

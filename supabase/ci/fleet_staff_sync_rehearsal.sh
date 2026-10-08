@@ -271,7 +271,7 @@ check '[[ $status -eq 1 && "$out" == *"has no owner (0 active"* && "$(ncalls "$A
 fresh
 answer cp cp-staff '[{"email":"other@clove.example","name":"Other","role":"owner"},{"email":"owner@clove.example","name":"Olu Owner","role":"administrator"}]'
 run "a list that demotes the platform's owner" --
-check '[[ $status -eq 1 && "$out" == *"does not make the platform"*"s owner (CLOVEERP_PLATFORM_OWNER_EMAIL, owner@clove.example) an owner"* && "$(ncalls "$A")" -eq 0 && -z "$(events)" ]]' \
+check '[[ $status -eq 1 && "$out" == *"does not make the platform"*"s owner (CLOVEERP_PLATFORM_OWNER_EMAIL, o…@clove.example) an owner"* && "$(ncalls "$A")" -eq 0 && -z "$(events)" ]]' \
       "nothing done on any client: every client's next release would have stopped"
 fresh
 answer cp cp-staff '[{"email":"other@clove.example","name":"Other","role":"owner"}]'
@@ -356,17 +356,18 @@ fresh
 answer cp cp-clients "[{\"code\":\"acme\",\"ref\":\"${A}\",\"api_url\":\"https://${A}.supabase.co\"},{\"code\":\"beta\",\"ref\":\"${B}\",\"api_url\":\"https://${B}.supabase.co\"}]"
 answer "$A" client-revoke 'ERROR:  CLOVEERP_LAST_OWNER: gone@clove.example is the only owner here, and the platform would have no owner'
 run "the last owner" PAUSE_SECONDS=3 --
-check '[[ $status -eq 1 && "$out" == *"::error::acme: gone@clove.example $NOT_ON (ERROR: CLOVEERP_LAST_OWNER"* ]]' \
+check '[[ $status -eq 1 && "$out" == *"::error::acme: g…@clove.example $NOT_ON (ERROR: CLOVEERP_LAST_OWNER"* ]]' \
       "reported in plain words, naming the refusal"
 check '[[ "$(emails_of "$A" client-add)" == "owner@clove.example ops@clove.example new@clove.example " ]]' "everything else on that client kept"
 check '[[ "$(emails_of "$B" client-add)" == "owner@clove.example ops@clove.example new@clove.example " ]]' "and the next client kept all the same"
-check '[[ "$(events)" == *"acme|note|failed|staff kept as $LIST: 1 added, 1 changed, 0 removed; not done: gone@clove.example"* && "$(events)" == *"beta|note|note|staff kept as $LIST: 3 added, 0 changed, 0 removed"* ]]' \
+check '[[ "$(events)" == *"acme|note|failed|staff kept as $LIST: 1 added, 1 changed, 0 removed; not done: g…@clove.example"* && "$(events)" == *"beta|note|note|staff kept as $LIST: 3 added, 0 changed, 0 removed"* ]]' \
       "each written on its own row, the trouble as a failure"
 check '[[ "$(sleeps)" == "3 " ]]' "one client at a time, with a pause between them"
 check '[[ "$out" == *"1 of 2 client(s) could not be made to match"* ]]' "the run ends red, saying how many"
 
+check '[[ "$(shown)" != *"gone@clove.example"* && "$(events)" != *"gone@clove.example"* && "$out" == *"::add-mask::gone@clove.example"* ]]' "no person's full address in what the log shows or in the register's note, and the address masked"
 fresh
-answer cp cp-last-note "failed staff kept as $LIST: 1 added, 1 changed, 0 removed; not done: gone@clove.example $NOT_ON (ERROR: CLOVEERP_LAST_OWNER: gone@clove.example is the only owner here, and the platform would have no owner)"
+answer cp cp-last-note "failed staff kept as $LIST: 1 added, 1 changed, 0 removed; not done: g…@clove.example $NOT_ON (ERROR: CLOVEERP_LAST_OWNER: g…@clove.example is the only owner here, and the platform would have no owner)"
 answer "$A" client-revoke 'ERROR:  CLOVEERP_LAST_OWNER: gone@clove.example is the only owner here, and the platform would have no owner'
 run "the same trouble an hour later" --
 check '[[ $status -eq 1 && -z "$(events)" && "$out" == *"the register already says so"* ]]' "not written twice in a row"
@@ -422,13 +423,13 @@ check '[[ $status -eq 0 && "$out" == *"::notice::acme has not yet been released 
 fresh
 answer "$A" client-staff "{\"staff\":[],\"users\":[{\"email\":\"owner@clove.example\",\"id\":\"${U_OWNER}\",\"confirmed\":true},{\"email\":\"ops@clove.example\",\"id\":\"${U_OPS}\",\"confirmed\":true},{\"email\":\"new@clove.example\",\"id\":\"${U_GONE}\",\"confirmed\":false}]}"
 run "a sign-in that is not confirmed" --
-check '[[ $status -eq 1 && "$out" == *"new@clove.example has a sign-in there that is not confirmed"* && -z "$(requests)" ]]' \
+check '[[ $status -eq 1 && "$out" == *"n…@clove.example has a sign-in there that is not confirmed"* && -z "$(requests)" ]]' \
       "not bound, not made again, and said"
 check '[[ "$(emails_of "$A" client-add)" == "owner@clove.example ops@clove.example " ]]' "everyone else kept"
 fresh
 answer "$A" client-staff "{\"staff\":[],\"users\":[{\"email\":\"owner@clove.example\",\"id\":\"${U_OWNER}\",\"confirmed\":true},{\"email\":\"ops@clove.example\",\"id\":\"${U_OPS}\",\"confirmed\":true},{\"email\":\"ops@clove.example\",\"id\":\"${U_GONE}\",\"confirmed\":true}]}"
 run "two confirmed sign-ins for one address" --
-check '[[ $status -eq 1 && "$out" == *"ops@clove.example has more than one confirmed sign-in there"* && "$(emails_of "$A" client-add)" != *"ops@"* ]]' \
+check '[[ $status -eq 1 && "$out" == *"o…@clove.example has more than one confirmed sign-in there"* && "$(emails_of "$A" client-add)" != *"ops@"* ]]' \
       "neither is bound, and it is said"
 fresh
 answer "$A" client-staff "{\"staff\":[{\"email\":\"ops@clove.example\",\"role\":\"support\",\"name\":\"Ops\",\"uid\":\"${U_GONE}\"}],\"users\":[{\"email\":\"owner@clove.example\",\"id\":\"${U_OWNER}\",\"confirmed\":true},{\"email\":\"ops@clove.example\",\"id\":\"${U_OPS}\",\"confirmed\":true},{\"email\":\"ops@clove.example\",\"id\":\"${U_GONE}\",\"confirmed\":true},{\"email\":\"new@clove.example\",\"id\":\"${U_MADE}\",\"confirmed\":true}]}"
@@ -447,7 +448,7 @@ check '[[ $status -eq 0 && "$(sleeps)" == "5 " && "$(requests)" == "POST https:/
 check '[[ "$out" == *"answered 429 on attempt 1 of 5"* ]]' "and says it waited"
 fresh
 run "an admin API that refuses" FAKE_HTTP_STATUS=401 --
-check '[[ $status -eq 1 && "$out" == *"a sign-in for new@clove.example could not be made there"* && "$out" == *"answered 401"* && "$(requests)" == "POST https://${A}.supabase.co/auth/v1/admin/users;" ]]' \
+check '[[ $status -eq 1 && "$out" == *"a sign-in for n…@clove.example could not be made there"* && "$out" == *"answered 401"* && "$(requests)" == "POST https://${A}.supabase.co/auth/v1/admin/users;" ]]' \
       "said, and a 401 is never asked again"
 check '[[ "$(emails_of "$A" client-add)" == "owner@clove.example ops@clove.example " && "$(emails_of "$A" client-revoke)" == "gone@clove.example " ]]' "everyone else kept"
 fresh
@@ -457,7 +458,7 @@ check '[[ $status -eq 1 && "$out" == *"no cloveerp:deployment:${A}:service_key t
 fresh
 answer "$A" client-add.ops@clove.example 'ERROR:  CLOVEERP_PLATFORM_STAFF_SIGN_IN_UNKNOWN: that sign-in is already bound to another member of staff, x@clove.example'
 run "a refusal from the routine" --
-check '[[ $status -eq 1 && "$out" == *"ops@clove.example could not be kept as operator (ERROR: CLOVEERP_PLATFORM_STAFF_SIGN_IN_UNKNOWN"* && "$(emails_of "$A" client-add)" == *"new@clove.example"* ]]' \
+check '[[ $status -eq 1 && "$out" == *"o…@clove.example could not be kept as operator (ERROR: CLOVEERP_PLATFORM_STAFF_SIGN_IN_UNKNOWN"* && "$(emails_of "$A" client-add)" == *"new@clove.example"* ]]' \
       "said in its own words, and the rest kept"
 fresh
 answer "$A" client-staff 'ERROR:  canceling statement due to statement timeout'

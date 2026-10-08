@@ -340,6 +340,11 @@ fresh
 run "an API that stays down" MAPI_ATTEMPTS=2 FAKE_HTTP_STATUS=503 -- light
 check '[[ $status -eq 0 && "$(h acme .backups_count)" == null && "$(h acme ".errors[0]")" == *"the backups could not be read"*"503"* ]]' "said in errors"
 fresh
+two_clients
+run "an API that stays down, with two clients" FAKE_HTTP_STATUS=503 -- light
+check '[[ $status -eq 0 && "$(requests | grep -o "database/backups;" | wc -l | tr -d " ")" == 2 && "$(h beta ".errors[0]")" == *"did not answer for acme earlier in this poll"* && "$(h beta .release_sha)" == "$SHA" ]]' \
+      "asked twice for the first client, not at all for the next, whose database is still read"
+fresh
 run "a new project with no backup yet" 'FAKE_BACKUPS={"backups":[]}' -- light
 check '[[ "$(h acme .backups_count)" == 0 && "$(h acme .backups_latest_at)" == null && "$(h acme ".errors | length")" == 0 ]]' \
       "none counted, and nothing missed"

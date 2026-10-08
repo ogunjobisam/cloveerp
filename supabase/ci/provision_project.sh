@@ -138,9 +138,26 @@ case "$cmd" in
       refuse "a project named '${project_name}' already exists (${existing}). Carry that build on with confirm_project_ref=${existing} rather than making a second project for ${code}."
     body=$(jq -cn --arg name "$project_name" --arg org "$ORG_SLUG" --arg region "$REGION" --arg size "$INSTANCE_SIZE" --arg pass "$DB_PASS" \
              '{name: $name, organization_slug: $org, region: $region, desired_instance_size: $size, db_pass: $pass}')
-    made=$(api POST "/v1/projects" "$body")
-    ref=$(printf '%s' "$made" | jq -r '.ref // .id // empty')
-    is_ref "$ref" || refuse "the Management API made a project but answered no ref: $(printf '%s' "$made" | head -c 300)"
+    # Asked again only after a 429, which says nothing was made: making a
+    # project is not safe to repeat, and a 5xx or no answer may come after the
+    # project was made. Then the organisation is looked at again, by name,
+    # before anything else is asked: a project that appeared is this build's
+    # (none of that name existed a moment ago) and is carried on with.
+    if made=$(MAPI_RETRY_ONLY_429=yes MAPI_TIMEOUT="${CREATE_TIMEOUT:-180}" mapi POST "/v1/projects" "$body"); then
+      ref=$(printf '%s' "$made" | jq -r '.ref // .id // empty')
+      is_ref "$ref" || refuse "the Management API made a project but answered no ref: $(printf '%s' "$made" | head -c 300)"
+    else
+      ref=""
+      for pause in ${CREATE_RECHECK_PAUSES:-15 30 60}; do
+        ${MAPI_SLEEP:-sleep} "$pause"
+        ref=$(api GET "/v1/organizations/${ORG_SLUG}/projects?limit=100" | jq -r --arg n "$project_name" '[.projects[] | select(.name == $n)] | .[0].ref // empty')
+        [[ -z "$ref" ]] || break
+      done
+      [[ -n "$ref" ]] ||
+        refuse "POST /v1/projects gave no project, and none named '${project_name}' has appeared in ${ORG_SLUG}. Retry the build: it looks for the project by name again before making one."
+      is_ref "$ref" || refuse "a project named '${project_name}' appeared, but its ref '${ref}' is not a ref."
+      echo "POST /v1/projects had no clear answer, but '${project_name}' now exists (${ref}); carrying on with it" >&2
+    fi
     echo "made ${project_name} (${ref}) in ${REGION} on ${INSTANCE_SIZE}" >&2
     echo "ref=${ref}"
     ;;

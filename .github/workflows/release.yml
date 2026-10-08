@@ -901,10 +901,12 @@ jobs:
         # cannot be trusted. The commit last released is the target's own
         # record: for a client, the control plane's register
         # (last_release_sha, only when that release succeeded); for the
-        # demonstration and production, the newest proved release in their
-        # own database (erp_meta.release, proved_at set; this run's row,
-        # recorded above, is not proved yet). If the script itself cannot
-        # decide, every function is deployed.
+        # demonstration and production, the release just before this one in
+        # their own database (erp_meta.release), and only when it was proved:
+        # one that deployed functions and then failed was not, so every
+        # function is deployed after it, and a revert cannot leave its
+        # functions running. If the script itself cannot decide, every
+        # function is deployed.
         #
         # Each deploy is tried three times, twenty and then forty seconds
         # apart: a busy minute at the Management API is not a broken function.
@@ -935,9 +937,13 @@ jobs:
               ) || { echo "::warning::the control plane's register could not be read for ${TARGET}'s last release, so every function is deployed."; last=""; }
             fi
           else
-            last=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA <<'SQL'
-          select coalesce((select r.git_sha from erp_meta.release r
-                            where r.proved_at is not null
+            # The release just before this one, and only if it was proved: a
+            # release that deployed functions and then failed is not proved,
+            # and a revert after it must not be compared with the one before.
+            last=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v this="${RELEASE_ID:-}" <<'SQL'
+          select coalesce((select case when r.proved_at is not null then r.git_sha else '' end
+                             from erp_meta.release r
+                            where r.id::text <> :'this'
                             order by r.recorded_at desc limit 1), '');
           SQL
             ) || { echo "::warning::the ${TARGET}'s releases could not be read, so every function is deployed."; last=""; }

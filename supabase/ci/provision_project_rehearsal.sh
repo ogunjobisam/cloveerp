@@ -66,7 +66,13 @@ if [[ -n "${FAKE_HTTP_STATUSES:-}" ]]; then
 fi
 answer=""
 case "$method $path" in
-  "GET v1/organizations/"*"/projects"*) answer="${FAKE_LIST:-$DEFAULT_LIST}" ;;
+  "GET v1/organizations/"*"/projects"*)
+    # The first listing answers FAKE_LIST; later ones FAKE_LIST_LATER when it is
+    # set: a project that appeared after an unclear answer to making it.
+    l=$(( $(cat "$FAKE_DIR/list.calls" 2>/dev/null || echo 0) + 1 ))
+    echo "$l" > "$FAKE_DIR/list.calls"
+    if [[ "$l" -gt 1 && -n "${FAKE_LIST_LATER:-}" ]]; then answer="$FAKE_LIST_LATER"
+    else answer="${FAKE_LIST:-$DEFAULT_LIST}"; fi ;;
   "POST v1/projects") answer="${FAKE_CREATE:-$DEFAULT_CREATE}" ;;
   "GET v1/projects/"*"/config/auth")
     if [[ -n "${FAKE_AUTH:-}" ]]; then answer="$FAKE_AUTH"
@@ -311,6 +317,20 @@ check '[[ $status -eq 0 && -z "$(jq -r ".[].slug" <<< "$out")" ]]' "nothing ther
 run "a busy minute while making a project" "${CREATE[@]}" "FAKE_HTTP_STATUSES=429,200,200" -- create acme "Acme Ltd"
 check '[[ $status -eq 0 && "$out" == *"ref=abcdefghijklmnopqrst"* && "$(requests)" == "GET https://api.example/v1/organizations/orgslug/projects?limit=100;GET https://api.example/v1/organizations/orgslug/projects?limit=100;POST https://api.example/v1/projects;" ]]' \
       "the list asked again, then one project made"
+run "a busy minute while asking to make a project" "${CREATE[@]}" "FAKE_HTTP_STATUSES=200,429,200" -- create acme "Acme Ltd"
+check '[[ $status -eq 0 && "$out" == *"ref=abcdefghijklmnopqrst"* && "$(requests)" == "GET https://api.example/v1/organizations/orgslug/projects?limit=100;POST https://api.example/v1/projects;POST https://api.example/v1/projects;" ]]' \
+      "a 429 says nothing was made, so making it is asked again"
+LATER='FAKE_LIST_LATER={"projects":[{"ref":"zzzzzzzzzzzzzzzzzzzz","name":"Clove ERP - Acme Ltd"}],"pagination":{"count":1}}'
+run "a gateway error while making a project, and none appears" "${CREATE[@]}" "FAKE_HTTP_STATUSES=200,502,200" "CREATE_RECHECK_PAUSES=1 2" -- create acme "Acme Ltd"
+check '[[ $status -eq 2 && "$out" == *"none named '"'"'Clove ERP - Acme Ltd'"'"' has appeared"* && "$(requests | grep -o "POST https://api.example/v1/projects;" | wc -l | tr -d " ")" == 1 ]]' \
+      "refused after looking again, and making the project asked once only"
+check '[[ "$(sleeps)" == *"1 "*"2 "* ]]' "the organisation looked at again after each pause"
+run "a gateway error while making a project that was made" "${CREATE[@]}" "FAKE_HTTP_STATUSES=200,502,200" "CREATE_RECHECK_PAUSES=1 2" "$LATER" -- create acme "Acme Ltd"
+check '[[ $status -eq 0 && "$out" == *"ref=zzzzzzzzzzzzzzzzzzzz"* && "$out" == *"carrying on with it"* && "$(requests | grep -o "POST https://api.example/v1/projects;" | wc -l | tr -d " ")" == 1 ]]' \
+      "the project that appeared is this build's, carried on with, and never made twice"
+run "no answer while making a project that was made" "${CREATE[@]}" "FAKE_HTTP_STATUSES=200,000,200" "CREATE_RECHECK_PAUSES=1" "$LATER" -- create acme "Acme Ltd"
+check '[[ $status -eq 0 && "$out" == *"ref=zzzzzzzzzzzzzzzzzzzz"* && "$(requests | grep -o "POST https://api.example/v1/projects;" | wc -l | tr -d " ")" == 1 ]]' \
+      "no answer at all is treated the same way: looked up by name, never made twice"
 run "a busy minute that does not end" "${CREATE[@]}" MAPI_ATTEMPTS=2 FAKE_HTTP_STATUSES=429 -- create acme "Acme Ltd"
 check '[[ $status -eq 2 && "$out" == *"GET /v1/organizations/orgslug/projects?limit=100 failed"* && "$(requests)" != *"POST"* ]]' \
       "refused, naming the call, and no project made"

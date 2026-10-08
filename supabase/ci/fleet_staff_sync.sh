@@ -85,6 +85,19 @@ TIMEOUT="${CLIENT_STATEMENT_TIMEOUT:-30s}"
 ONLY="${1:-}"
 RUN="${GITHUB_RUN_ID:-}"
 SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
+
+# A person's address as this script shows it: the repository is public, and
+# so are its logs and summaries. The first letter and the domain say enough
+# to act on; the full address is in the console.
+shown() {
+  local e="$1"
+  if [[ "$e" == *@* ]]; then printf '%s…@%s' "${e:0:1}" "${e#*@}"; else printf '%s' "${e:0:1}…"; fi
+}
+# And every address read is masked in the log, whatever prints it.
+mask_addresses() {
+  [[ "${GITHUB_ACTIONS:-}" == true ]] || { cat > /dev/null; return 0; }
+  jq -r '.[]? | (.email? // .)' 2> /dev/null | while IFS= read -r a; do [[ -z "$a" ]] || echo "::add-mask::$a"; done
+}
 export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-15}"
 export PGAPPNAME="${PGAPPNAME:-fleet_staff_sync}"
 
@@ -156,6 +169,7 @@ select coalesce(jsonb_agg(jsonb_build_object('email', lower(btrim(s.email)), 'na
  where s.revoked_at is null;
 SQL
 ) || { echo "::error::the control plane's staff list could not be read ($(said)). No client's staff was changed."; exit 1; }
+mask_addresses <<< "$staff"
 members=$(jq 'length' <<< "$staff")
 owners=$(jq '[.[] | select(.role == "owner")] | length' <<< "$staff")
 if [[ "$members" -eq 0 || "$owners" -eq 0 ]]; then
@@ -171,7 +185,7 @@ fi
 # release: the two must agree before anything is followed.
 platform_owner=$(printf '%s' "${PLATFORM_OWNER_EMAIL:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
 if [[ -n "$platform_owner" ]] && ! jq -e --arg o "$platform_owner" 'any(.[]; .email == $o and .role == "owner")' <<< "$staff" > /dev/null; then
-  echo "::error::the control plane's staff list does not make the platform's owner (CLOVEERP_PLATFORM_OWNER_EMAIL, ${platform_owner}) an owner. Every release to a client checks that this owner is there, so following the list would stop every client's next release. Make the two agree, on the control plane's console or in the variable, and the next sync carries on. No client's staff was changed."
+  echo "::error::the control plane's staff list does not make the platform's owner (CLOVEERP_PLATFORM_OWNER_EMAIL, $(shown "$platform_owner")) an owner. Every release to a client checks that this owner is there, so following the list would stop every client's next release. Make the two agree, on the control plane's console or in the variable, and the next sync carries on. No client's staff was changed."
   exit 1
 fi
 wanted=$(jq -c '[.[].email]' <<< "$staff")
@@ -230,8 +244,12 @@ skipped=0
 # ── One client ───────────────────────────────────────────────────────────────
 # Its words of trouble gather in TROUBLE, said at once and written on its row.
 trouble() {
-  echo "::error::${CODE}: $*"
-  TROUBLE="${TROUBLE:+${TROUBLE}; }$*"
+  # Shortened wherever an address appears, a database's own words included:
+  # this goes to the public log, the summary and the register's note.
+  local said_here
+  said_here=$(printf '%s' "$*" | sed -E 's/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+)/\1…@\2/g')
+  echo "::error::${CODE}: ${said_here}"
+  TROUBLE="${TROUBLE:+${TROUBLE}; }${said_here}"
 }
 
 keep_client() {
@@ -326,6 +344,8 @@ SQL
     ); then
       trouble "its staff list could not be read ($(said)); nothing was changed there"
       url=""
+    else
+      jq -c '[.staff[]?.email]' <<< "$before" | mask_addresses
     fi
   fi
 
@@ -346,11 +366,11 @@ SQL
           elif ($ids | length) == 1 then $ids[0]
           else "ambiguous" end' <<< "$before")
       if [[ "$uid" == ambiguous ]]; then
-        trouble "${email} has more than one confirmed sign-in there, so which to bind is not clear; delete the one that is not theirs (Authentication, Users)"
+        trouble "$(shown "$email") has more than one confirmed sign-in there, so which to bind is not clear; delete the one that is not theirs (Authentication, Users)"
         continue
       fi
       if [[ -z "$uid" ]] && jq -e --arg e "$email" 'any(.users[]; .email == $e)' <<< "$before" > /dev/null; then
-        trouble "${email} has a sign-in there that is not confirmed, so it was not bound; confirm it or delete it (Authentication, Users) and the next sync binds it"
+        trouble "$(shown "$email") has a sign-in there that is not confirmed, so it was not bound; confirm it or delete it (Authentication, Users) and the next sync binds it"
         continue
       fi
 
@@ -364,7 +384,7 @@ SQL
           mask "$service_key"
         fi
         if [[ -z "$service_key" ]]; then
-          trouble "${email} has no sign-in there, and the control plane's vault has no cloveerp:deployment:${ref}:service_key to make one with"
+          trouble "$(shown "$email") has no sign-in there, and the control plane's vault has no cloveerp:deployment:${ref}:service_key to make one with"
           continue
         fi
         # A secret key in the new format (sb_secret_...) is not a JWT and
@@ -396,15 +416,15 @@ SQL
           )
         else
           sed -n '/^!/p' "$work/err"
-          trouble "a sign-in for ${email} could not be made there ($(said))"
+          trouble "a sign-in for $(shown "$email") could not be made there ($(said))"
           continue
         fi
         result=""
         if ! is_uuid "$uid"; then
-          trouble "a sign-in for ${email} was asked for there, and no single confirmed sign-in came of it ('${uid}')"
+          trouble "a sign-in for $(shown "$email") was asked for there, and no single confirmed sign-in came of it ('${uid}')"
           continue
         fi
-        echo "${CODE}: a confirmed sign-in made for ${email}"
+        echo "${CODE}: a confirmed sign-in made for $(shown "$email")"
       fi
 
       if ! result=$(client_q "$url" -v email="$email" -v name="$name" -v role="$role" -v uid="$uid" 2> "$work/err" <<'SQL'
@@ -413,16 +433,16 @@ set statement_timeout = :'timeout';
 select erp_meta.add_platform_staff_trusted(:'email', :'name', :'role', :'uid'::uuid);
 SQL
       ); then
-        trouble "${email} could not be kept as ${role} ($(said))"
+        trouble "$(shown "$email") could not be kept as ${role} ($(said))"
         continue
       fi
       if [[ "$(jq -r '.changed' <<< "$result" 2> /dev/null)" == true ]]; then
         if jq -e --arg e "$email" 'any(.staff[]; .email == $e)' <<< "$before" > /dev/null; then
           changed=$((changed + 1))
-          echo "${CODE}: ${email} kept as ${role} (changed)"
+          echo "${CODE}: $(shown "$email") kept as ${role} (changed)"
         else
           added=$((added + 1))
-          echo "${CODE}: ${email} added as ${role}"
+          echo "${CODE}: $(shown "$email") added as ${role}"
         fi
       else
         kept=$((kept + 1))
@@ -441,12 +461,12 @@ set statement_timeout = :'timeout';
 select erp_meta.revoke_platform_staff_trusted(:'email', :'reason');
 SQL
       ); then
-        trouble "${email} is not on the control plane's list and could not be removed there ($(said))"
+        trouble "$(shown "$email") is not on the control plane's list and could not be removed there ($(said))"
         continue
       fi
       if [[ "$(jq -r '.revoked' <<< "$result" 2> /dev/null)" == true ]]; then
         removed=$((removed + 1))
-        echo "${CODE}: ${email} removed"
+        echo "${CODE}: $(shown "$email") removed"
       fi
     done
   fi

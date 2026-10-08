@@ -333,7 +333,10 @@ SQL
   if is_ref "$ref"; then
     if [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
       missed "the backups were not asked for: SUPABASE_ACCESS_TOKEN is not available to the poll"
-    elif value=$(mapi GET "/v1/projects/${ref}/database/backups" 2> "$work/err"); then
+    elif [[ -n "$backups_down" ]]; then
+      missed "the backups were not asked for: the Management API did not answer for ${backups_down} earlier in this poll"
+    elif value=$(MAPI_ATTEMPTS="${POLL_MAPI_ATTEMPTS:-2}" MAPI_TIMEOUT="${POLL_MAPI_TIMEOUT:-20}" MAPI_MAX_WAIT="${POLL_MAPI_MAX_WAIT:-30}" \
+                 mapi GET "/v1/projects/${ref}/database/backups" 2> "$work/err"); then
       sed -n '/^!/p' "$work/err"
       if items=$(jq -c '[(.backups // [])[] | select(.status == "COMPLETED")]
                         | {backups_count: length,
@@ -345,6 +348,10 @@ SQL
       fi
     else
       sed -n '/^!/p' "$work/err"
+      # An API that is down (busy, failing or silent to the end) is not asked
+      # again for the rest of this poll: every client's database readings are
+      # written well inside the job's time, and the backups wait an hour.
+      if grep -qE 'had no answer|on each of|longer than MAPI_MAX_WAIT' "$work/err"; then backups_down="$code"; fi
       missed "the backups could not be read ($(said))"
     fi
   fi
@@ -371,6 +378,9 @@ SQL
   return 0
 }
 
+# Set once the Management API stops answering, so later clients are not kept
+# waiting on it (their database readings still are taken).
+backups_down=""
 for ((c = 0; c < count; c++)); do
   if [[ "$c" -gt 0 && "$PAUSE" -gt 0 ]]; then
     $SLEEP_CMD "$PAUSE"
