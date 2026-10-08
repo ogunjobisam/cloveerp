@@ -43,7 +43,10 @@ name: schema
 on:
   push:
     branches: [main]
+  # ready_for_review on top of the defaults: a draft runs only the cheap jobs
+  # (see build-and-assert), so marking it ready is what asks for the database.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     # Sundays, 02:30 UTC.
     - cron: '30 2 * * 0'
@@ -73,6 +76,14 @@ concurrency:
 
 jobs:
   build-and-assert:
+    # Not on a draft. In the fourteen days to 7 October a pull request took
+    # 1.7 of these builds on average, about 25 minutes each, because agent
+    # sessions open a pull request early and keep pushing to it; every push
+    # paid for a database build of work that was not finished. A draft gets
+    # the typecheck, lint, unit tests, build and browser suite on every push
+    # (typescript, browser), and this job once, when it is marked ready —
+    # which is also the only state a pull request can be merged from.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     # actions: read so a push to main can ask which pull request runs left a
     # catalogue pass behind ("Or a pull request proved this same tree today").
@@ -1769,7 +1780,7 @@ jobs:
     # supabase/ rather than supabase/migrations/, because each side's bootstrap
     # is part of what built its dump, and a change there could in principle
     # move a door too.
-    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.schema == 'true' }}
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.changes.outputs.schema == 'true' }}
     runs-on: ubuntu-latest
     env:
       PGHOST: localhost
