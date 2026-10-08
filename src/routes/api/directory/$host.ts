@@ -14,9 +14,12 @@ import { directoryHost, readDirectoryEntry } from "../../../lib/deployment-direc
  *
  * Cacheable, because a host's project does not change from one minute to the
  * next and the control plane should not be asked on every page load: five
- * minutes fresh, a day stale while revalidating, so a brief absence of the
- * control plane does not stop a client's people signing in. Nothing is
- * answered to a host the register does not hold, and nothing about why.
+ * minutes fresh, then a day stale only if the control plane cannot answer
+ * (stale-if-error), so its brief absence does not stop a client's people
+ * signing in. Not stale-while-revalidate: that served a retired client's
+ * project once more to every browser that had seen it, for a day, while
+ * the directory already said nothing was there. Nothing is answered to a
+ * host the register does not hold, and nothing about why.
  */
 const CORS = { "access-control-allow-origin": "*" };
 
@@ -51,7 +54,7 @@ export const Route = createFileRoute("/api/directory/$host")({
         return Response.json(entry, {
           headers: {
             ...CORS,
-            "cache-control": "public, max-age=300, stale-while-revalidate=86400",
+            "cache-control": "public, max-age=300, stale-if-error=86400",
           },
         });
       },

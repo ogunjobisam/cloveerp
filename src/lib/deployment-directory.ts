@@ -41,7 +41,8 @@ export function directoryHost(raw: string | null | undefined): string | null {
 /**
  * The last answer the browser kept, so a client's people reach their own
  * project while the control plane is briefly away. A day, which is how long
- * the directory's own cache header lets an edge serve it stale.
+ * the directory's own cache header lets a cache serve it when the control
+ * plane cannot answer.
  */
 export const DIRECTORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
