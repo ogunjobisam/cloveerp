@@ -128,7 +128,11 @@ case "$cmd" in
     # The name, not the code, is what the dashboard shows and what a second
     # run would duplicate. A project of that name already in the organisation
     # is a build that got this far before: carry it on with its ref.
-    existing=$(api GET "/v1/projects" | jq -r --arg n "$project_name" '[.[] | select(.name == $n)] | .[0].ref // empty')
+    # Listed through the organisation, which needs the organisation's
+    # projects-read permission — the one an org-scoped token surely holds,
+    # since it is the same scope that creates projects. GET /v1/projects
+    # needs an account-wide permission that such a token may not have.
+    existing=$(api GET "/v1/organizations/${ORG_SLUG}/projects?limit=100" | jq -r --arg n "$project_name" '[.projects[] | select(.name == $n)] | .[0].ref // empty')
     [[ -z "$existing" ]] ||
       refuse "a project named '${project_name}' already exists (${existing}). Carry that build on with confirm_project_ref=${existing} rather than making a second project for ${code}."
     body=$(jq -cn --arg name "$project_name" --arg org "$ORG_SLUG" --arg region "$REGION" --arg size "$INSTANCE_SIZE" --arg pass "$DB_PASS" \

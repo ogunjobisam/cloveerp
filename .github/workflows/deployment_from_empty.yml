@@ -327,9 +327,34 @@ jobs:
         # Every check supabase/ci/build_from_empty.sh makes before it builds,
         # and nothing else: no extension, no bucket, no table is created until
         # these pass.
+        #
+        # Carrying on needs something to carry on from. The Fleet view's
+        # Retry asks to resume whenever the client's project exists, and a
+        # build can stop after the project is made and before its first
+        # migration is recorded — in the provisioning steps, these checks,
+        # or the first migration itself. build_from_empty.sh refuses
+        # RESUME=yes with nothing recorded, as it should, so here the
+        # database decides: with no migration recorded, the build starts
+        # from the beginning, and the checks for a fresh build (no erp
+        # schema, nothing recorded) still guard it. BUILD_RESUME, not
+        # RESUME, carries the answer to the replay, so nothing depends on a
+        # $GITHUB_ENV write overriding the job's own env.
         run: |
           set -euo pipefail
-          CHECK_ONLY=yes RESUME="${RESUME}" supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL"
+          resume="${RESUME}"
+          if [[ "$resume" == yes ]]; then
+            recorded=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regclass('supabase_migrations.schema_migrations') is not null")
+            n=0
+            if [[ "$recorded" == "t" ]]; then
+              n=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select count(*) from supabase_migrations.schema_migrations")
+            fi
+            if [[ "$n" == 0 ]]; then
+              echo "::notice::resume was asked for, and no migration is recorded on ${CODE} yet: building from the start."
+              resume=no
+            fi
+          fi
+          echo "BUILD_RESUME=${resume}" >> "$GITHUB_ENV"
+          CHECK_ONLY=yes RESUME="${resume}" supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL"
 
       - name: The erp schema is not exposed
         # As release.yml checks before every release, and for the same reason:
@@ -399,7 +424,7 @@ jobs:
           # shares this workflow's concurrency group, and the scheduler's
           # minutely job finds no organisation to work for until the build
           # is done.
-          RESUME="${RESUME}" PAUSE_SECONDS=1 VACUUM_EVERY=20 \
+          RESUME="${BUILD_RESUME:-${RESUME}}" PAUSE_SECONDS=1 VACUUM_EVERY=20 \
             supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL" 2>&1 | tee "$log"
           status=${PIPESTATUS[0]}
           set -e
@@ -528,8 +553,10 @@ jobs:
 
       - name: Record a stopped build
         # Whatever stopped it, the row says so, and the Fleet view offers to
-        # carry on.
-        if: failure() && env.KIND == 'client'
+        # carry on. Cancelled too, which is what a job that runs out of time
+        # is: failure() alone left a timed-out build reading "building" for
+        # ever, with no Retry offered.
+        if: (failure() || cancelled()) && env.KIND == 'client'
         run: |
           supabase/ci/fleet_register.sh event "${CODE}" "${PHASE:-request}" failed "run ${GITHUB_RUN_ID} stopped at ${PHASE:-the start}; carry on with Retry from the Fleet view" || true
 
