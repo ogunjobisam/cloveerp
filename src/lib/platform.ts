@@ -81,6 +81,32 @@ export const CHECKLIST_ITEMS = [
 
 export type ChecklistItem = (typeof CHECKLIST_ITEMS)[number]["key"];
 
+/**
+ * What the fleet poll last read from one client's own database
+ * (erp_meta.record_deployment_health, 20261012010000). Every key may be
+ * missing: a poll that could not read something leaves it out and says why
+ * in errors.
+ */
+export type DeploymentHealth = {
+  /** The commit the client's database says it was last released at. */
+  release_sha?: string | null;
+  /** How many assurance checks failed when the poll ran them; 0 is clean. */
+  assurance_failures?: number | null;
+  assurance_at?: string | null;
+  database_bytes?: number | null;
+  /** When the dispatch function last finished draining the client's queue. */
+  last_drain_pass_at?: string | null;
+  open_support_windows?: number | null;
+  /** Whether the client's staff list matches the control plane's. */
+  staff_in_step?: boolean | null;
+  /** The newest backup of the client's project, and how many are kept. */
+  backups_latest_at?: string | null;
+  backups_count?: number | null;
+  /** What the poll could not read, in plain words. */
+  errors?: string[] | null;
+  polled_at?: string | null;
+};
+
 /** One client deployment as the register holds it, for the Fleet view (erp_platform_deployments). */
 export type ClientDeployment = {
   code: string;
@@ -118,13 +144,36 @@ export type ClientDeployment = {
    */
   restartable?: boolean;
   last_event: { phase: string; status: string; detail: string | null; at: string } | null;
+  /**
+   * What the fleet poll last read from the client's database, and when it was
+   * recorded; null until a poll has reached it (20261012010000). Absent from
+   * a register older than the poll.
+   */
+  health?: DeploymentHealth | null;
+  health_at?: string | null;
+  /**
+   * The database's own judgement: built or live, and not heard from for 26
+   * hours, or never.
+   */
+  silent?: boolean;
 };
 
 /**
+ * When the sweep starts what the console asks for, as the console says it.
+ * The control plane wakes the sweep the moment a request is written, when it
+ * has been given the means to (20261012010000); otherwise the sweep's own
+ * ten-minute schedule finds the request. The console cannot tell which, so it
+ * says both.
+ */
+export const SWEEP_STARTS =
+  "within a minute when the control plane can wake the sweep, otherwise within ten";
+
+/**
  * How long a build request may sit with nothing happening before the owner is
- * offered Start again. The sweep claims a request within ten minutes and the
- * build records its first step within a minute or two of starting, so twenty
- * minutes of silence means the request, or the run it started, is lost.
+ * offered Start again. The sweep claims a request within ten minutes at the
+ * latest, and the build records its first step within a minute or two of
+ * starting, so twenty minutes of silence means the request, or the run it
+ * started, is lost.
  */
 export const STALE_BUILD_REQUEST_MINUTES = 20;
 
@@ -212,6 +261,148 @@ export function buildRecovery(d: BuildRequestView, now: Date): "retry" | "start-
   if (d.restartable === false) return d.request_status === "done" ? "retry" : null;
   // A register from before the rule was shared.
   return "start-again";
+}
+
+/**
+ * How long ago a time was, as a person says it: "just now", "5 minutes ago",
+ * "3 hours ago", "2 days ago". Hours run to two days so that a day and a bit
+ * reads as the hours it is. A time ahead of the clock (a skewed one) is just
+ * now; one that cannot be read is null.
+ */
+export function agoText(iso: string | null | undefined, now: Date): string | null {
+  if (typeof iso !== "string") return null;
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return null;
+  const minutes = Math.floor((now.getTime() - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
+/** 1536 as "1,536", whatever the browser's locale. */
+function grouped(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/**
+ * A database's size in megabytes (of 1,048,576 bytes, as Postgres counts
+ * them): "8.4 MB" under ten, "312 MB" or "1,536 MB" above. Null for anything
+ * that is not a size.
+ */
+export function databaseSizeText(bytes: number | null | undefined): string | null {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return null;
+  const tenths = Math.round((bytes / 1_048_576) * 10) / 10;
+  if (tenths < 10) return `${tenths.toFixed(1)} MB`;
+  return `${grouped(Math.round(tenths))} MB`;
+}
+
+/**
+ * A count the poll wrote: a whole number, or one written as text. Anything
+ * else is not known.
+ */
+function countOf(v: unknown): number | null {
+  if (typeof v === "number") return Number.isInteger(v) && v >= 0 ? v : null;
+  if (typeof v === "string" && /^\d+$/.test(v.trim())) return Number(v.trim());
+  return null;
+}
+
+export type HealthTone = "ok" | "warn" | "bad" | "muted";
+
+/** One phrase of a deployment's health line. */
+export type HealthPart = { key: string; text: string; tone: HealthTone };
+
+/**
+ * A built or live deployment's health, compact: a sentence first when the
+ * database marks it silent, then a phrase for each thing the poll read, then
+ * what the poll could not read.
+ */
+export type HealthLine = { silence: string | null; parts: HealthPart[]; errors: string[] };
+
+/**
+ * What the Fleet view says of a deployment's health (erp_platform_deployments'
+ * health, health_at and silent).
+ *
+ * Only for a built or live deployment, which is all the poll reads, and only
+ * when the register says something: a register older than the poll says
+ * nothing, so nothing is shown. Each phrase appears only when the poll read
+ * it. Colour is kept for assurance, green when it is clean, and for what
+ * wants attention: a failing assurance check, a support window open, staff
+ * out of step, no backup, and errors. Silence is the database's judgement and
+ * is said first, with when the poll last read the deployment, if it ever has.
+ */
+export function deploymentHealthLine(
+  d: Pick<ClientDeployment, "status" | "health" | "health_at" | "silent">,
+  now: Date,
+): HealthLine | null {
+  if (d.status !== "built" && d.status !== "live") return null;
+  const h: DeploymentHealth | null = d.health ?? null;
+  const silent = d.silent === true;
+  if (h === null && !silent) return null;
+
+  const heard = agoText(h?.polled_at, now) ?? agoText(d.health_at, now);
+  const silence = !silent
+    ? null
+    : heard === null
+      ? "Not heard from yet: the fleet poll has never read it."
+      : `Not heard from for over a day: the fleet poll last read it ${heard}.`;
+
+  const parts: HealthPart[] = [];
+  if (h === null) return { silence, parts, errors: [] };
+  if (!silent && heard !== null)
+    parts.push({ key: "polled", text: `polled ${heard}`, tone: "muted" });
+
+  const failures = countOf(h.assurance_failures);
+  if (failures === 0) parts.push({ key: "assurance", text: "assurance clean", tone: "ok" });
+  else if (failures !== null)
+    parts.push({
+      key: "assurance",
+      text: `${failures} assurance ${failures === 1 ? "check" : "checks"} failing`,
+      tone: "bad",
+    });
+
+  const size = databaseSizeText(countOf(h.database_bytes));
+  if (size !== null) parts.push({ key: "size", text: `database ${size}`, tone: "muted" });
+
+  const drained = agoText(h.last_drain_pass_at, now);
+  if (drained !== null)
+    parts.push({ key: "drain", text: `queue drained ${drained}`, tone: "muted" });
+
+  const windows = countOf(h.open_support_windows);
+  if (windows === 0) parts.push({ key: "support", text: "no support window open", tone: "muted" });
+  else if (windows !== null)
+    parts.push({
+      key: "support",
+      text: `${windows} support ${windows === 1 ? "window" : "windows"} open`,
+      tone: "warn",
+    });
+
+  if (h.staff_in_step === true) parts.push({ key: "staff", text: "staff in step", tone: "muted" });
+  else if (h.staff_in_step === false)
+    parts.push({ key: "staff", text: "staff out of step", tone: "warn" });
+
+  const backups = countOf(h.backups_count);
+  const backedUp = agoText(h.backups_latest_at, now);
+  if (backups === 0) parts.push({ key: "backup", text: "no backup yet", tone: "warn" });
+  else if (backedUp !== null)
+    parts.push({
+      key: "backup",
+      text: backups === null ? `backup ${backedUp}` : `backup ${backedUp} (${backups} kept)`,
+      tone: "muted",
+    });
+  else if (backups !== null)
+    parts.push({
+      key: "backup",
+      text: `${backups} ${backups === 1 ? "backup" : "backups"} kept`,
+      tone: "muted",
+    });
+
+  const errors = (Array.isArray(h.errors) ? (h.errors as unknown[]) : [])
+    .filter((e): e is string => typeof e === "string" && e.trim() !== "")
+    .map((e) => e.trim());
+
+  return { silence, parts, errors };
 }
 
 /** The host an origin names (acme.cloveerp.com for https://acme.cloveerp.com); null if it is not one. */
