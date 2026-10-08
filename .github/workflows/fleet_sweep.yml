@@ -48,6 +48,10 @@ jobs:
     env:
       CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       GH_TOKEN: ${{ github.token }}
+      # The job checks nothing out, so gh has no git repository to read the
+      # repository from: it is named here. Without it the first request from
+      # the console failed with "not a git repository" (8 October).
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Install the psql client
         run: |
