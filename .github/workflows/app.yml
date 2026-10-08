@@ -1,0 +1,124 @@
+name: app
+
+# The application to Cloudflare, after main has proved it.
+#
+# Until 8 October the application reached a browser only through Lovable's
+# publish: whatever was in the editor, whether or not the schema build had
+# passed on it, and with a custom domain added by hand for every client's
+# subdomain. This deploys the same build (nitro's cloudflare-module output,
+# .output/) as the Worker wrangler.jsonc describes, once two things are true of
+# a commit on main:
+#
+#   - the schema build passed on it (this workflow runs when that build
+#     completes, and only on success), and
+#   - its database release did not fail. The application a merge ships may call
+#     a door the same merge adds, so it goes out after the migrations, never
+#     before them. deploy.yml usually finishes in minutes and the schema build
+#     in twenty, so the release has nearly always concluded by now; when it has
+#     not, or failed, this stops and says so rather than waiting on a runner.
+#
+# Where it goes is the repository variable CLOVEERP_APP_ROUTES:
+#
+#   unset   the top-level Worker, clove-erp-staging, on workers.dev only. No
+#           traffic moves. This is the state to check the Worker in.
+#   on      env.production, clove-erp, on cloveerp.com, www and *.cloveerp.com.
+#           The cutover. Only once cloveerp.com's DNS is on Cloudflare.
+#
+# A dispatch deploys the head of main the same way, for the first deployment
+# and for a redeploy after a variable or secret changes.
+
+on:
+  workflow_run:
+    workflows: [schema]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# One deployment at a time, and the newest wins: an application deployment that
+# a newer one has overtaken has nothing left to say.
+concurrency:
+  group: app-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    # workflow_run fires for every completed schema run on main, including the
+    # scheduled one and the failures; only a passing push or dispatch ships.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       contains(fromJSON('["push","workflow_dispatch"]'), github.event.workflow_run.event))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      TARGET: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'production' || 'staging' }}
+    steps:
+      - name: The database release for this commit did not fail
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${SHA}&branch=main&event=push&per_page=1" \
+                   --jq '.workflow_runs[0] | if . == null then "" else "\(.status) \(.conclusion // "")" end')"
+          case "$run" in
+            "completed success")
+              echo "deploy.yml released ${SHA} successfully" ;;
+            "")
+              # A dispatch of this workflow on a commit nothing pushed, or a
+              # commit deploy.yml did not run for: nothing to wait on.
+              echo "::notice::no deploy.yml run on push for ${SHA}; deploying the application on the schema build alone" ;;
+            completed\ *)
+              echo "::error::deploy.yml concluded '${run#completed }' for ${SHA}: the database this application expects may not be there. Not deploying."
+              exit 1 ;;
+            *)
+              echo "::error::deploy.yml is still ${run% *} for ${SHA}. Not deploying an application ahead of its migrations; dispatch this workflow once the release finishes."
+              exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Install Bun
+        run: |
+          set -euo pipefail
+          npm install -g bun
+          bun --version
+
+      - name: Build
+        # The same build the schema job's typescript step proves. The preset is
+        # named rather than left to the Lovable config's default, so a change
+        # there cannot quietly make this a Node build.
+        env:
+          NITRO_PRESET: cloudflare-module
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun run build
+          test -f .output/server/index.mjs || { echo "the build made no .output/server/index.mjs"; exit 1; }
+          test -d .output/public || { echo "the build made no .output/public"; exit 1; }
+
+      - name: Deploy
+        # wrangler is fetched for this step, not added to package.json: it is
+        # the deployment tool, not part of what is deployed.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN}" || { echo "::error::the CLOUDFLARE_API_TOKEN secret is not set"; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo "::error::the CLOUDFLARE_ACCOUNT_ID variable is not set"; exit 1; }
+          if [[ "$TARGET" == production ]]; then
+            bunx wrangler@4 deploy --env production --message "main ${SHA}"
+          else
+            bunx wrangler@4 deploy --message "main ${SHA}"
+          fi
+          {
+            echo "## Application"
+            echo "Deployed ${SHA} to **${TARGET}**."
+          } >> "$GITHUB_STEP_SUMMARY"
