@@ -311,10 +311,14 @@ jobs:
           # The owner's confirmed sign-in, so the build finds exactly one.
           SERVICE_KEY="$service_key" PROJECT_API_URL="https://${ref}.supabase.co" $prov owner "$ref" "${OWNER_EMAIL}"
 
+          # The publishable key is public by design (it ships in every
+          # browser bundle, and the register keeps it); "Prove it" asks the
+          # project for a sign-in link with it, as the sign-in screen does.
           {
             echo "DB_URL=${db_url}"
             echo "PROJECT_REF=${ref}"
             echo "ORIGIN=https://${CODE}.${APEX}"
+            echo "PUBLISHABLE_KEY=${publishable}"
           } >> "$GITHUB_ENV"
           {
             echo "ref=${ref}"
@@ -350,8 +354,16 @@ jobs:
         # schema, nothing recorded) still guard it. BUILD_RESUME, not
         # RESUME, carries the answer to the replay, so nothing depends on a
         # $GITHUB_ENV write overriding the job's own env.
+        #
+        # This step and every one after it says on the client's row when it
+        # starts (a note, which never moves the row's status), so the Fleet
+        # view follows a four-hour build step by step and not only at the
+        # handful of steps that change its status. A note that cannot be
+        # written is not a reason to stop a build.
         run: |
           set -euo pipefail
+          echo "PHASE=build" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" build note "checking that nobody else can be there first and that the database is empty" || true
           resume="${RESUME}"
           if [[ "$resume" == yes ]]; then
             recorded=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regclass('supabase_migrations.schema_migrations') is not null")
@@ -371,12 +383,16 @@ jobs:
         # As release.yml checks before every release, and for the same reason:
         # every table the doors read is writable by any signed-in person if
         # PostgREST serves the erp schema. Checked before the build, on a
-        # project that is public while it builds.
+        # project that is public while it builds. Through mapi
+        # (supabase/ci/management_api.sh): a 429 or a 5xx is asked again
+        # with backoff rather than stopping the build.
         run: |
           set -euo pipefail
-          body=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-                   "https://api.supabase.com/v1/projects/${PROJECT_REF}/postgrest") || {
-            echo "::error::could not read the project's PostgREST settings from the Management API. Nothing was built."
+          echo "PHASE=configure" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" configure note "checking that PostgREST exposes public and graphql_public only" || true
+          . supabase/ci/management_api.sh
+          body=$(mapi GET "/v1/projects/${PROJECT_REF}/postgrest") || {
+            echo "::error::could not read the project's PostgREST settings from the Management API (the line above says what it answered). Nothing was built."
             exit 1
           }
           schemas=$(printf '%s' "$body" | jq -r '.db_schema // empty')
@@ -402,6 +418,8 @@ jobs:
         #                schedules only where they exist.
         run: |
           set -euo pipefail
+          echo "PHASE=build" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" build note "providing pg_cron, pg_net and the document-output bucket" || true
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q \
             -c "create extension if not exists pg_cron with schema pg_catalog" \
             -c "create extension if not exists pg_net with schema extensions" \
@@ -428,6 +446,18 @@ jobs:
           # The point-in-time-recovery target, as a release records it.
           echo "DEPLOY_STARTED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
           log="$RUNNER_TEMP/build.log"
+          # Every fifty migrations a client's row says how far the replay has
+          # got ("150 of 612 migrations applied"), as a note that never moves
+          # its status: three hours of replay were one "build started" event
+          # in the Fleet view. A connection timeout of ten seconds, and the
+          # build never waits on the register or stops for it
+          # (build_from_empty.sh, PROGRESS_CMD).
+          progress_every=0
+          progress_cmd=""
+          if [[ "${KIND}" == client ]]; then
+            progress_every=50
+            progress_cmd="env PGCONNECT_TIMEOUT=10 supabase/ci/fleet_register.sh event ${CODE} build note"
+          fi
           set +e
           # Paced for a 1 GB instance: one migration at a time over one
           # connection, a second's rest between them, vacuumed every twenty.
@@ -436,6 +466,7 @@ jobs:
           # minutely job finds no organisation to work for until the build
           # is done.
           RESUME="${BUILD_RESUME:-${RESUME}}" PAUSE_SECONDS=1 VACUUM_EVERY=20 \
+          PROGRESS_EVERY="$progress_every" PROGRESS_CMD="$progress_cmd" \
             supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL" 2>&1 | tee "$log"
           status=${PIPESTATUS[0]}
           set -e
@@ -454,6 +485,8 @@ jobs:
         # built").
         run: |
           set -euo pipefail
+          echo "PHASE=identity" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" identity note "naming the platform's owner on its staff list" || true
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="$OWNER_EMAIL" <<'SQL'
           select erp_meta.register_platform_owner(:'owner');
           SQL
@@ -479,6 +512,8 @@ jobs:
         # So the next release applies only what is new.
         run: |
           set -euo pipefail
+          echo "PHASE=build" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" build note "checking that the CLI finds every migration applied" || true
           out=$(supabase db push --dry-run --include-all --db-url "$DB_URL" 2>&1) || {
             echo "$out"
             echo "::error::supabase db push --dry-run failed against ${CODE} after the build."
@@ -491,14 +526,33 @@ jobs:
           fi
 
       - name: Deploy the Edge Functions
+        # Every one: the project has none yet. Each deploy is tried three
+        # times, twenty and then forty seconds apart, because a busy minute
+        # at the Management API (one token's sixty calls a minute for the
+        # whole fleet) is not a broken function.
         run: |
           set -euo pipefail
           echo "PHASE=functions" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" functions note "deploying the Edge Functions" || true
           deployed=""
           for dir in supabase/functions/*/; do
             name=$(basename "$dir")
             [[ -f "$dir/index.ts" ]] || continue
-            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api
+            ok=no
+            for attempt in 1 2 3; do
+              if supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api; then
+                ok=yes
+                break
+              fi
+              if [[ "$attempt" -lt 3 ]]; then
+                echo "::warning::deploying ${name} to ${PROJECT_REF} failed on attempt ${attempt} of 3; trying again in $((attempt * 20)) s"
+                sleep $((attempt * 20))
+              fi
+            done
+            if [[ "$ok" != yes ]]; then
+              echo "::error::${name} could not be deployed to ${PROJECT_REF} in three attempts${deployed:+ (deployed before it:${deployed})}. The build stops here; carry on with Retry from the Fleet view, which deploys every function again."
+              exit 1
+            fi
             deployed="$deployed $name"
           done
           echo "Edge Functions deployed:${deployed}"
@@ -524,9 +578,19 @@ jobs:
         # erp.platform_assurance() and the whole-database reconciliation. The
         # release that follows proves the rest — the dispatch schedule and a
         # drain pass.
+        #
+        # And, for a client, that the project's own mail works: the owner is
+        # sent a sign-in link the way the sign-in screen asks for one
+        # (provision_project.sh sign-in-link). Supabase's own sender reaches
+        # only the project's team, so a client whose custom SMTP did not take
+        # could sign nobody in by email, and nothing else would say so until
+        # a customer tried. Before the database is told it is built, so a
+        # refusal leaves the row building (then failed, by the step after
+        # this), and Retry from the Fleet view carries on from here.
         run: |
           set -euo pipefail
           echo "PHASE=prove" >> "$GITHUB_ENV"
+          [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" prove note "proving the build: the assurance, the whole-database reconciliation, and a sign-in link to the owner" || true
           release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
             select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'lovable', 'deployment from empty, run ${GITHUB_RUN_ID}');")
           assurance="$RUNNER_TEMP/assurance.json"
@@ -539,6 +603,15 @@ jobs:
           fi
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.assert_whole_database_reconciles();"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.prove_release('${release}');"
+          if [[ "${KIND}" == client ]]; then
+            # A 2xx is the project's auth API saying its SMTP server took
+            # the message; a 429 or a 5xx is asked again, as mapi asks.
+            if ! supabase/ci/provision_project.sh sign-in-link "${PROJECT_REF}" "${OWNER_EMAIL}" "${ORIGIN}/signin"; then
+              echo "::error::${CODE}'s own mail did not accept a sign-in link for the owner, so no client could be sent one either (the line above says what it answered). Check the SMTP settings of project ${PROJECT_REF} (Authentication, Emails, SMTP Settings): host smtp.resend.com, port 465, user resend, the password (the RESEND_API_KEY secret), and a sender (CLOVEERP_MAIL_FROM, ${MAIL_FROM}) on a domain Resend has verified. ${CODE} is not marked built; carry on with Retry from the Fleet view once that is fixed."
+              exit 1
+            fi
+            supabase/ci/fleet_register.sh event "${CODE}" prove note "a sign-in link was sent to the owner through the project's own mail, which accepted it" || true
+          fi
           # Proved: now, and only now, the database is told what it is
           # (20261010060000, 20261011010000). This is the marker a release
           # reads as "built"; nothing before this point writes it.

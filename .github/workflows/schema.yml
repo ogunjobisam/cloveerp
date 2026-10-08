@@ -174,7 +174,10 @@ jobs:
         # what each sends (sign-up closed, addresses confirmed, the site URL,
         # custom SMTP, the exposed schemas, a confirmed owner), that a setting
         # read back wrong stops it, and that no password or key is printed.
-        # Seconds, no API.
+        # And mapi (supabase/ci/management_api.sh), through which every
+        # workflow asks the Management API: a 429 or a 5xx asked again with
+        # backoff and Retry-After honoured, given up after MAPI_ATTEMPTS,
+        # any other 4xx never asked again. Seconds, no API.
         run: supabase/ci/provision_project_rehearsal.sh
 
       - name: An ungoverned entry point cannot survive its own transaction

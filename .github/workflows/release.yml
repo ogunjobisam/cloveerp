@@ -201,6 +201,11 @@ jobs:
       DISPATCH_URL: ${{ inputs.dispatch_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history: "Deploy the Edge Functions" compares this
+          # commit with the one this target last released, which a depth-1
+          # checkout does not have.
+          fetch-depth: 0
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
@@ -504,6 +509,12 @@ jobs:
         # Management API and the deploy stops if erp, erp_ref, erp_meta or
         # erp_test is listed. Only when SUPABASE_ACCESS_TOKEN is set, like the
         # Edge Functions step; without it, a notice says nothing was checked.
+        #
+        # Through mapi (supabase/ci/management_api.sh): a train of four
+        # clients shares one token's sixty calls a minute, and a 429 taken
+        # as a verdict would stop a release that would pass a minute later.
+        # A 429 or a 5xx is asked again with backoff; any other answer of
+        # 400 or more still stops the release.
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.supabase_access_token }}
         run: |
@@ -517,9 +528,9 @@ jobs:
             echo "::error::CLOVEERP_PROJECT_REF must be a 20-character project ref; got '${PROJECT_REF}'."
             exit 1
           fi
-          body=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-                   "https://api.supabase.com/v1/projects/${PROJECT_REF}/postgrest") || {
-            echo "::error::could not read the project's PostgREST settings from the Management API, so nothing says the erp schema is private. Nothing was applied."
+          . supabase/ci/management_api.sh
+          body=$(mapi GET "/v1/projects/${PROJECT_REF}/postgrest") || {
+            echo "::error::could not read the project's PostgREST settings from the Management API (the line above says what it answered), so nothing says the erp schema is private. Nothing was applied."
             exit 1
           }
           schemas=$(printf '%s' "$body" | jq -r '.db_schema // empty')
@@ -873,6 +884,34 @@ jobs:
         # calling them. With the token set, the integration's production
         # deploy can be switched off and this workflow is the one route again.
         # The CLI reads [functions.*] (verify_jwt, import_map) from config.toml.
+        #
+        # Only what changed, since 8 October. Every function was deployed on
+        # every release, each at least one Management API call, and one
+        # token's sixty calls a minute serve the whole fleet: a train of four
+        # clients asked for thirty-two deploys against that allowance, most
+        # of them of code that had not changed. A function is deployed when
+        #
+        #   it is not on the project yet (one GET of the project's functions);
+        #   anything it is built from changed between the commit this target
+        #   last released and this one: its own directory, and every file
+        #   those import by a relative path, followed through worker/src/core
+        #   and src/lib as the bundler follows them; or
+        #   anything every function shares changed: supabase/functions/_shared,
+        #   import_map.json, deno.json, supabase/config.toml.
+        #
+        # And every function is deployed whenever that comparison cannot be
+        # trusted: no earlier release of this target is known to have
+        # succeeded, its commit is not in this checkout or not an ancestor of
+        # this one, an import cannot be followed, or the project's functions
+        # cannot be listed. The commit last released is the target's own
+        # record: for a client, the control plane's register
+        # (last_release_sha, only when that release succeeded); for the
+        # demonstration and production, the newest proved release in their
+        # own database (erp_meta.release, proved_at set; this run's row,
+        # recorded above, is not proved yet).
+        #
+        # Each deploy is tried three times, twenty and then forty seconds
+        # apart: a busy minute at the Management API is not a broken function.
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.supabase_access_token }}
@@ -887,17 +926,164 @@ jobs:
             echo "::error::CLOVEERP_PROJECT_REF must be a 20-character project ref; got '${PROJECT_REF}'."
             exit 1
           fi
-          deployed=""
+          . supabase/ci/management_api.sh
+
+          # The commit this target last released, from its own record.
+          last=""
+          if [[ "${KIND}" == client ]]; then
+            if [[ -n "${CP_URL}" ]]; then
+              last=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" <<'SQL'
+          select coalesce((select d.last_release_sha from erp_meta.deployment d
+                            where d.code = :'code' and d.last_release_outcome = 'success'), '');
+          SQL
+              ) || { echo "::warning::the control plane's register could not be read for ${TARGET}'s last release, so every function is deployed."; last=""; }
+            fi
+          else
+            last=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA <<'SQL'
+          select coalesce((select r.git_sha from erp_meta.release r
+                            where r.proved_at is not null
+                            order by r.recorded_at desc limit 1), '');
+          SQL
+            ) || { echo "::warning::the ${TARGET}'s releases could not be read, so every function is deployed."; last=""; }
+          fi
+
+          # Why every function goes, if one reason covers them all.
+          all=""
+          changed=""
+          if [[ -z "$last" ]]; then
+            all="no earlier release of the ${TARGET} is known to have succeeded"
+          elif ! [[ "$last" =~ ^[0-9a-f]{7,40}$ ]]; then
+            all="the last release's commit ('${last}') is not a commit id"
+          elif ! git cat-file -e "${last}^{commit}" 2> /dev/null; then
+            all="the last release's commit ${last:0:12} is not in this checkout"
+          elif ! git merge-base --is-ancestor "$last" "${GITHUB_SHA}"; then
+            all="the last release's commit ${last:0:12} is not an ancestor of ${GITHUB_SHA:0:12}"
+          else
+            changed=$(git diff --no-renames --name-only "$last" "${GITHUB_SHA}")
+            shared=$(grep -m 1 -E '^(supabase/functions/_shared/|supabase/functions/import_map\.json$|supabase/functions/deno\.json$|supabase/config\.toml$)' <<< "$changed" || true)
+            [[ -z "$shared" ]] || all="${shared} changed, and every function shares it"
+          fi
+
+          # What the project has already.
+          listed=no
+          existing=""
+          if answer=$(mapi GET "/v1/projects/${PROJECT_REF}/functions"); then
+            if existing=$(jq -r 'if type == "array" then .[].slug else error("not a list") end' <<< "$answer"); then
+              listed=yes
+            fi
+          fi
+          if [[ "$listed" != yes && -z "$all" ]]; then
+            all="the functions on ${PROJECT_REF} could not be listed"
+          fi
+
+          # norm <path>: the path with ./ and dir/../ taken out.
+          norm() {
+            local rest="$1/" part out=""
+            while [[ -n "$rest" ]]; do
+              part="${rest%%/*}"; rest="${rest#*/}"
+              case "$part" in
+                ""|.) ;;
+                ..) if [[ "$out" == */* ]]; then out="${out%/*}"; else out=""; fi ;;
+                *) out="${out:+${out}/}${part}" ;;
+              esac
+            done
+            printf '%s\n' "$out"
+          }
+          # imports <file>: the repository files it imports by a relative
+          # specifier (from, import, import()), one a line; ?<path> for one
+          # that names no file.
+          imports() {
+            local dir spec target
+            dir=$(dirname "$1")
+            { grep -oE "(from|import)[[:space:]]*[(]?[[:space:]]*[\"'][.]{1,2}/[^\"']+[\"']" "$1" || true; } \
+              | sed -E "s/^[^\"']*[\"']//; s/[\"']$//" \
+              | while IFS= read -r spec; do
+                  target=$(norm "${dir}/${spec}")
+                  if [[ -f "$target" ]]; then echo "$target"; else echo "?${target}"; fi
+                done
+          }
+          # sources <function>: every file it is built from, one a line: its
+          # own directory and, transitively, what those files import.
+          sources() {
+            local queue seen="" f more
+            queue=$(find "supabase/functions/$1" -type f | sort)
+            while [[ -n "$queue" ]]; do
+              f="${queue%%$'\n'*}"
+              if [[ "$queue" == *$'\n'* ]]; then queue="${queue#*$'\n'}"; else queue=""; fi
+              if grep -qxF -- "$f" <<< "$seen"; then continue; fi
+              seen+="${f}"$'\n'
+              case "$f" in
+                \?*) ;;
+                *.ts|*.tsx|*.mts|*.js|*.jsx|*.mjs)
+                  more=$(imports "$f")
+                  if [[ -n "$more" ]]; then queue+="${queue:+$'\n'}${more}"; fi ;;
+              esac
+            done
+            printf '%s' "$seen"
+          }
+          deploy_function() {
+            local attempt
+            for attempt in 1 2 3; do
+              # --use-api bundles on Supabase's side, as the integration did: it follows
+              # the relative imports into worker/src/core and src/lib, and needs no Docker.
+              if supabase functions deploy "$1" --project-ref "$PROJECT_REF" --use-api; then
+                return 0
+              fi
+              if [[ "$attempt" -lt 3 ]]; then
+                echo "::warning::deploying $1 to ${PROJECT_REF} failed on attempt ${attempt} of 3; trying again in $((attempt * 20)) s"
+                sleep $((attempt * 20))
+              fi
+            done
+            return 1
+          }
+
+          {
+            echo "## Edge Functions"
+            if [[ -n "$all" ]]; then
+              echo "Every function is deployed: ${all}."
+            else
+              echo "Compared with ${last:0:12}, the ${TARGET}'s last release:"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          deployed=""; skipped=""; failed=""
           for dir in supabase/functions/*/; do
             name=$(basename "$dir")
             [[ -f "$dir/index.ts" ]] || continue
-            # --use-api bundles on Supabase's side, as the integration did: it follows
-            # the relative imports into worker/src/core and src/lib, and needs no Docker.
-            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api
-            deployed="$deployed $name"
+            why="$all"
+            if [[ -z "$why" ]] && ! grep -qxF -- "$name" <<< "$existing"; then
+              why="it is not on the project yet"
+            fi
+            if [[ -z "$why" ]]; then
+              files=$(sources "$name")
+              unfollowed=$(grep -m 1 '^?' <<< "$files" || true)
+              grep -v '^$' <<< "$files" > "$RUNNER_TEMP/sources.txt" || true
+              hit=$(grep -m 1 -xF -f "$RUNNER_TEMP/sources.txt" <<< "$changed" || true)
+              [[ -n "$hit" ]] || hit=$(grep -m 1 "^supabase/functions/${name}/" <<< "$changed" || true)
+              if [[ -n "$unfollowed" ]]; then
+                why="an import could not be followed (${unfollowed#?})"
+              elif [[ -n "$hit" ]]; then
+                why="${hit} changed"
+              fi
+            fi
+            if [[ -z "$why" ]]; then
+              skipped="${skipped} ${name}"
+              echo "- ${name}: skipped, nothing it is built from changed" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            echo "${name}: deploying, because ${why}"
+            if deploy_function "$name"; then
+              deployed="${deployed} ${name}"
+              echo "- ${name}: deployed, because ${why}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              failed="${failed} ${name}"
+              echo "- ${name}: NOT deployed in 3 attempts (${why})" >> "$GITHUB_STEP_SUMMARY"
+            fi
           done
-          echo "Edge Functions deployed:${deployed}"
-          echo "- Edge Functions deployed:${deployed}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Edge Functions deployed:${deployed:- none}; skipped:${skipped:- none}"
+          if [[ -n "$failed" ]]; then
+            echo "::error::these Edge Functions could not be deployed to ${PROJECT_REF} in three attempts each:${failed}. The ones listed as deployed are; the release stops here, before the dispatch schedule calls a function that may be stale, and the next release deploys every function again."
+            exit 1
+          fi
 
       - name: Schedule the dispatch function
         id: schedule_dispatch

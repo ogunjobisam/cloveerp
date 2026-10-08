@@ -12,8 +12,10 @@
 # owner's, a database that is not empty — the order it applies in, that each
 # migration is one transaction with the timeout off and the owner (bound to
 # their sign-in) and the record inside it, that a deadlock goes again and
-# anything else stops it, and that it will not call a build finished unless
-# the staff list is exactly the owner.
+# anything else stops it, that it will not call a build finished unless
+# the staff list is exactly the owner, and that the progress it reports for
+# the Fleet view (PROGRESS_EVERY, PROGRESS_CMD) comes when it should and can
+# never stop it.
 #
 # What this does not prove is that the migrations apply to a real Supabase
 # project; the nightly stack replay and the build itself do that. It proves
@@ -74,17 +76,32 @@ FAKE
 chmod +x "$work/psql"
 
 # ── And a Management API that answers from the environment ───────────────────
+# It answers as mapi asks (supabase/ci/management_api.sh, curl -w): the body,
+# then the status on a line of its own. A refusal is a 401, which mapi takes
+# as a verdict and does not ask again.
 cat > "$work/curl" <<'FAKE'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_DIR/curl"
-[[ -z "${FAKE_CURL_FAIL:-}" ]] || exit 22
+if [[ -n "${FAKE_CURL_FAIL:-}" ]]; then
+  printf '%s\n%s' '{"message":"Unauthorized"}' 401
+  exit 0
+fi
 if [[ -n "${FAKE_AUTH:-}" ]]; then
-  printf '%s\n' "$FAKE_AUTH"
+  printf '%s\n%s' "$FAKE_AUTH" 200
 else
-  echo '{"disable_signup":true,"mailer_autoconfirm":false}'
+  printf '%s\n%s' '{"disable_signup":true,"mailer_autoconfirm":false}' 200
 fi
 FAKE
 chmod +x "$work/curl"
+
+# And a progress reporter that writes down each argument it was given.
+cat > "$work/progress" <<'FAKE'
+#!/usr/bin/env bash
+for a in "$@"; do printf '[%s]' "$a"; done >> "$FAKE_DIR/progress"
+echo >> "$FAKE_DIR/progress"
+exit "${FAKE_PROGRESS_EXIT:-0}"
+FAKE
+chmod +x "$work/progress"
 
 # Three migrations, named the way the repository names them.
 mig="$work/migrations"
@@ -206,6 +223,29 @@ check '[[ $status -eq 2 && "$out" == *"Add user"* && ! -e "$work/fake/applied" ]
 run "checking only" CHECK_ONLY=yes
 check '[[ $status -eq 0 && "$out" == *"checked:"* && ! -e "$work/fake/applied" ]] && ! grep -q "create schema" "$work/fake/log"' \
       "every check, and nothing created or applied"
+
+check '[[ "$(head -n 1 "$work/fake/curl")" == *"https://api.supabase.com/v1/projects/abcdefghijklmnopqrst/config/auth"* && "$(head -n 1 "$work/fake/curl")" == *"-w"* ]]' \
+      "the auth settings are read through mapi, from the Management API"
+
+# 13. Progress, for the Fleet view (deployment_from_empty.yml records it on
+# the client's row): every PROGRESS_EVERY migrations, never a reason to stop
+run "no progress asked for"
+check '[[ $status -eq 0 && ! -e "$work/fake/progress" ]]' "nothing reported"
+run "progress after every migration" PROGRESS_EVERY=1 PROGRESS_CMD="$work/progress acme build note"
+check '[[ $status -eq 0 && "$(tr "\n" ";" < "$work/fake/progress")" == "[acme][build][note][1 of 3 migrations applied];[acme][build][note][2 of 3 migrations applied];[acme][build][note][3 of 3 migrations applied];" ]]' \
+      "after each one, the words one argument after the command's own"
+run "progress after every two" PROGRESS_EVERY=2 PROGRESS_CMD="$work/progress acme build note"
+check '[[ $status -eq 0 && "$(tr "\n" ";" < "$work/fake/progress")" == "[acme][build][note][2 of 3 migrations applied];" ]]' \
+      "after the second only"
+run "progress carried on" RESUME=yes FAKE_ERP=t FAKE_HISTORY=t FAKE_RECORDED=1 FAKE_TENANTS=0 FAKE_APPLIED=$'0001\n' PROGRESS_EVERY=1 PROGRESS_CMD="$work/progress acme build note"
+check '[[ $status -eq 0 && "$(tr "\n" ";" < "$work/fake/progress")" == "[acme][build][note][2 of 3 migrations applied];[acme][build][note][3 of 3 migrations applied];" ]]' \
+      "counting what was already recorded"
+run "progress that cannot be reported" PROGRESS_EVERY=1 PROGRESS_CMD="$work/progress acme build note" FAKE_PROGRESS_EXIT=3
+check '[[ $status -eq 0 && "$(tr "\n" " " < "$work/fake/applied")" == "0001 20260830091046 20261010062000 " && "$out" == *"progress was not reported"* && "$out" == *"built: 3 migration(s) applied"* ]]' \
+      "said, and the build finishes anyway"
+run "progress with nothing to report it" PROGRESS_EVERY=50
+check '[[ $status -eq 2 && "$out" == *"PROGRESS_CMD is not set"* && ! -e "$work/fake/applied" ]]' \
+      "refused before anything connects"
 
 echo "$CASES checks over the build from empty, $FAILED failed"
 [[ "$FAILED" -eq 0 ]]

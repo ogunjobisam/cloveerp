@@ -555,18 +555,45 @@ jobs:
     # the control plane was not released, and the application (app.yml) stays
     # where it is until every database carries a later commit. Said in one
     # place rather than left as skipped jobs that look like a quiet day.
+    #
+    # Cancelled as well as failed. A release that reaches its sixty minutes
+    # (release.yml) is cancelled by GitHub, not failed, and so is one pushed
+    # out of its concurrency group by a later arrival; either holds the
+    # control plane back exactly as a failure does (apply needs success),
+    # and checking for failure alone left that hold grey and unexplained.
+    # The run itself being cancelled is somebody's decision, and says so on
+    # its own: !cancelled() keeps this quiet then.
     needs: [targets, demonstration, clients, apply]
     if: >-
       ${{ !cancelled() && needs.targets.result == 'success'
           && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
           && needs.targets.outputs.want_control == 'true'
           && needs.apply.result == 'skipped'
-          && (needs.demonstration.result == 'failure' || needs.clients.result == 'failure') }}
+          && (needs.demonstration.result == 'failure' || needs.demonstration.result == 'cancelled'
+              || needs.clients.result == 'failure' || needs.clients.result == 'cancelled') }}
     name: the control plane was held back
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - run: |
-          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released, and the application stays where it is: it ships only what every database carries. Fix forward (the Fleet view names the client and the step) and release the client again; or, to release the control plane without waiting for it, dispatch this workflow with targets=control. The application follows the first train after which every database has the same commit or a later one."
+      - env:
+          DEMONSTRATION: ${{ needs.demonstration.result }}
+          CLIENTS: ${{ needs.clients.result }}
+        run: |
+          why=""
+          case "${DEMONSTRATION}" in
+            failure) why="the demonstration's release failed" ;;
+            cancelled) why="the demonstration's release was cancelled (a release that reaches its 60-minute limit is cancelled, not failed)" ;;
+          esac
+          case "${CLIENTS}" in
+            failure) why="${why:+${why}; and }a client's release failed (the clients job)" ;;
+            cancelled) why="${why:+${why}; and }a client's release was cancelled (the clients job; a release that reaches its 60-minute limit is cancelled, not failed)" ;;
+          esac
+          echo "::error::${why}, so the control plane was NOT released, and the application stays where it is: it ships only what every database carries. Fix forward (the Fleet view names the client and the step) and release again; or, to release the control plane without waiting, dispatch this workflow with targets=control. The application follows the first train after which every database has the same commit or a later one."
+          {
+            echo "## The control plane was held back"
+            echo "- demonstration: ${DEMONSTRATION}"
+            echo "- clients: ${CLIENTS}"
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
   application:
