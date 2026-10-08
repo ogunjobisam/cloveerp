@@ -32,12 +32,17 @@
 #                         mended by running it again: setting a password needs
 #                         only the access token, never the old password.
 #   set_function_secrets  RESEND_API_KEY, CLOVEERP_APP_URL (the deployment's
-#                         origin, https://<code>.<APEX>) and CLOVEERP_INVITE_FROM,
-#                         as a build sets them.
+#                         origin, https://<address>.<APEX>) and
+#                         CLOVEERP_INVITE_FROM, as a build sets them.
 #   patch_auth            the auth and PostgREST settings a build applies
 #                         (provision_project.sh configure): sign-up closed,
 #                         addresses confirmed, the site URL and redirects of
-#                         https://<code>.<APEX>, custom SMTP through Resend.
+#                         https://<address>.<APEX>, custom SMTP through Resend.
+#
+#   A client's address is the register's: its code until a rename moves it
+#   (fleet_rename.sh, 20261012020000), and the code never changes. Set from the
+#   code after a rename, these would send its sign-in links and its emails'
+#   links back to an address that only redirects.
 #
 #   code    a client's code, which must be built or live in the register; or
 #           all, every client that is.
@@ -114,10 +119,12 @@ for n in "$PAUSE_SECONDS" "$PROVE_ATTEMPTS" "$PROVE_WAIT"; do
 done
 [[ "$PROVE_ATTEMPTS" -ge 1 ]] || refuse "PROVE_ATTEMPTS must be 1 or more; nothing was changed."
 
-# Which clients: built or live, with a project. On standard input, not -c:
-# psql substitutes :'code' only there.
+# Which clients: built or live, with a project, and where each is served.
+# On standard input, not -c: psql substitutes :'code' only there. The address
+# through to_jsonb: a control plane before 20261012020000 has no such column,
+# and every client was served at its code.
 if ! rows=$($PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -v code="$code" <<'SQL'
-select d.code, d.status, coalesce(d.project_ref, '')
+select d.code, d.status, coalesce(d.project_ref, ''), coalesce(to_jsonb(d) ->> 'address', d.code)
   from erp_meta.deployment d
  where (:'code' = 'all' and d.status in ('built', 'live') and d.project_ref is not null)
     or d.code = :'code'
@@ -126,14 +133,16 @@ SQL
 ); then
   refuse "the register could not be read, so nothing was changed."
 fi
-codes=(); refs=()
-while IFS='|' read -r c s r; do
+codes=(); refs=(); addrs=()
+while IFS='|' read -r c s r a; do
   [[ -n "$c" ]] || continue
+  a="${a:-$c}"
   if [[ "$s" != built && "$s" != live ]]; then
     refuse "${c} is ${s}, not built or live, so its secrets are not this workflow's to change; nothing was changed."
   fi
   [[ "$r" =~ ^[a-z0-9]{20}$ ]] || refuse "${c} has no project ref in the register ('${r}'); nothing was changed."
-  codes+=("$c"); refs+=("$r")
+  [[ "$a" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]] || refuse "${c}'s address in the register ('${a}') is not one; nothing was changed."
+  codes+=("$c"); refs+=("$r"); addrs+=("$a")
 done <<< "$rows"
 count=${#codes[@]}
 if [[ "$count" -eq 0 ]]; then
@@ -231,8 +240,8 @@ rotate_db_password() {
 }
 
 set_function_secrets() {
-  local c="$1" ref="$2" origin
-  origin="https://${c}.${APEX}"
+  local c="$1" ref="$2" addr="$3" origin
+  origin="https://${addr}.${APEX}"
   if ! "$PROV" secrets "$ref" "RESEND_API_KEY=${RESEND_API_KEY}" "CLOVEERP_APP_URL=${origin}" "CLOVEERP_INVITE_FROM=${INVITE_FROM}" > /dev/null; then
     FAILED_WHY="the Management API did not take ${c}'s function secrets, so they are as they were"
     return 1
@@ -241,24 +250,24 @@ set_function_secrets() {
 }
 
 patch_auth() {
-  local c="$1" ref="$2"
-  if ! "$PROV" configure "$ref" "$c" > /dev/null; then
+  local c="$1" ref="$2" addr="$3"
+  if ! "$PROV" configure "$ref" "$addr" > /dev/null; then
     FAILED_WHY="${c}'s auth settings were not all applied (the line above says which did not take); run this again for ${c} once that is mended"
     return 1
   fi
-  DONE_WHAT="auth settings applied again: sign-up closed, addresses confirmed, site https://${c}.${APEX}, SMTP through Resend; PostgREST exposes public and graphql_public only"
+  DONE_WHAT="auth settings applied again: sign-up closed, addresses confirmed, site https://${addr}.${APEX}, SMTP through Resend; PostgREST exposes public and graphql_public only"
 }
 
 i=0
 while [[ "$i" -lt "$count" ]]; do
-  c="${codes[$i]}"; ref="${refs[$i]}"
+  c="${codes[$i]}"; ref="${refs[$i]}"; addr="${addrs[$i]}"
   if [[ "$i" -gt 0 && "$PAUSE_SECONDS" -gt 0 ]]; then
     echo "a pause of ${PAUSE_SECONDS} s before ${c}, so the Management API serves the rest of the fleet too"
     $SLEEP_CMD "$PAUSE_SECONDS"
   fi
   echo "${c} (${ref}): ${action}"
   FAILED_WHY=""; DONE_WHAT=""
-  if "$action" "$c" "$ref"; then
+  if "$action" "$c" "$ref" "$addr"; then
     note "$c" done "${DONE_WHAT} (fleet_secrets.yml: ${reason})"
     echo "${c}: ${DONE_WHAT}"
     summary "- ${c}: ${DONE_WHAT}"

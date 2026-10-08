@@ -366,14 +366,16 @@ check '[[ $status -eq 1 && "$out" == *"::error::acme: its health could not be wr
 fresh
 run "one client" -- light acme
 check '[[ $status -eq 0 && "$(var "$(calls cp cp-clients | tr -d " ")" only)" == acme ]]' "only that client is asked for"
+check 'grep -qF "d.status in ('"'"'built'"'"', '"'"'live'"'"', '"'"'suspended'"'"', '"'"'retiring'"'"')" "$work/fake/sql.$(calls cp cp-clients | tr -d " ")"' \
+      "every client whose database is up: a suspended one runs on, a retiring one until it is purged"
 fresh
 answer cp cp-clients '[]'
 run "a client the register does not hold" -- light zed
-check '[[ $status -eq 1 && "$out" == *"is not a built or live client"* ]]' "refused"
+check '[[ $status -eq 1 && "$out" == *"is not a client in the register whose database is up"* ]]' "refused"
 fresh
 answer cp cp-clients '[]'
 run "no built client" -- light
-check '[[ $status -eq 0 && "$out" == *"no built or live client"* ]]' "nothing to poll, and said"
+check '[[ $status -eq 0 && "$out" == *"no client in the register has a database that is up"* ]]' "nothing to poll, and said"
 
 # 8. Off a runner nothing is masked, because nothing is printed
 fresh

@@ -4,10 +4,10 @@ name: fleet poll
 #
 # One Supabase project per client (the owner's decision of 7 October), so a
 # client's health is in a database the control plane cannot see. This poll
-# reads each built or live client in turn (supabase/ci/fleet_poll.sh): its
-# newest proved release, its size, its last drain pass, its open support
-# windows, whether its staff are the control plane's, and, from the
-# Management API, its backups; and once a day, the full poll, the same
+# reads each client whose database is up (built, live, suspended or retiring)
+# in turn (supabase/ci/fleet_poll.sh): its newest proved release, its size,
+# its last drain pass, its open support windows, whether its staff are the
+# control plane's, and, from the Management API, its backups; and once a day, the full poll, the same
 # assurance every release proves. It writes them on the client's row in the
 # control plane's register (erp_meta.record_deployment_health); a client
 # whose row has not been written for 26 hours reads "silent" there.
@@ -35,7 +35,7 @@ on:
         options: [light, full]
         default: light
       code:
-        description: "One client's code, as the register holds it; empty for every built or live client."
+        description: "One client's code, as the register holds it; empty for every client whose database is up (built, live, suspended or retiring)."
         type: string
         default: ''
 

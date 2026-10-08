@@ -65,12 +65,14 @@ case "$sql" in
   *"from erp_meta.deployment d"*)
     say "register read for ${v_code}"
     [[ "${FAKE_REGISTER_DOWN:-}" == yes ]] && { echo "psql: error: could not connect" >&2; exit 2; }
-    printf '%s\n' "${FAKE_ROWS:-}" | while IFS='|' read -r c s r; do
+    # code|status|ref[|address]: where it is served, its code unless given
+    # (the register answers coalesce(address, code), 20261012020000).
+    printf '%s\n' "${FAKE_ROWS:-}" | while IFS='|' read -r c s r a; do
       [[ -n "$c" ]] || continue
       if [[ "$v_code" == all ]]; then
-        if [[ ( "$s" == built || "$s" == live ) && -n "$r" ]]; then echo "${c}|${s}|${r}"; fi
+        if [[ ( "$s" == built || "$s" == live ) && -n "$r" ]]; then echo "${c}|${s}|${r}|${a:-$c}"; fi
       elif [[ "$c" == "$v_code" ]]; then
-        echo "${c}|${s}|${r}"
+        echo "${c}|${s}|${r}|${a:-$c}"
       fi
     done ;;
   *"vault.create_secret"*)
@@ -289,6 +291,14 @@ check '[[ $status -eq 0 && "$(order)" == "register read for acme;PATCH /v1/proje
 check '[[ "$(body 1 | jq -r .site_url)" == "https://acme.cloveerp.com" && "$(body 1 | jq -r .uri_allow_list)" == "https://acme.cloveerp.com/**" && "$(body 1 | jq -r .disable_signup)" == true && "$(body 1 | jq -r .smtp_pass)" == re_rehearsal_key ]]' \
       "the deployment's own address, sign-up closed, SMTP through Resend"
 check '[[ "$out" != *"re_rehearsal_key"* ]]' "the key is not printed"
+run "a renamed client's function secrets" "FAKE_ROWS=acme|live|${ACME}|acme-foods" -- set_function_secrets acme "$REASON"
+check '[[ $status -eq 0 && "$(body 1 | jq -r ".[1].value")" == "https://acme-foods.cloveerp.com" && "$(events)" == *"CLOVEERP_APP_URL (https://acme-foods.cloveerp.com)"* ]]' \
+      "the address the register has it at, not its code: a rename is not undone"
+run "a renamed client's auth settings" "FAKE_ROWS=acme|live|${ACME}|acme-foods" -- patch_auth acme "$REASON"
+check '[[ $status -eq 0 && "$(body 1 | jq -r .site_url)" == "https://acme-foods.cloveerp.com" && "$(body 1 | jq -r .uri_allow_list)" == "https://acme-foods.cloveerp.com/**" ]]' \
+      "the site and the one redirect at its address, not its code"
+run "an address in the register that is not one" "FAKE_ROWS=acme|live|${ACME}|Acme Foods" -- patch_auth acme "$REASON"
+check '[[ $status -eq 2 && "$out" == *"acme'"'"'s address in the register ('"'"'Acme Foods'"'"') is not one"* ]] && untouched' "refused before anything is touched"
 run "auth settings that do not take" 'FAKE_AUTH={"disable_signup":false,"mailer_autoconfirm":false,"site_url":"https://acme.cloveerp.com","smtp_host":"smtp.resend.com"}' -- patch_auth acme "$REASON"
 check '[[ $status -eq 1 && "$out" == *"sign-up is still open"* && "$out" == *"auth settings were not all applied"* && "$(events)" == "acme|note|failed|"* ]]' "red, saying which did not take"
 

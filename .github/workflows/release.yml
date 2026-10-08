@@ -108,10 +108,16 @@ jobs:
     # between was still released to, and with its project deleted that
     # release failed and held the control plane back. So, under the row's
     # lock, erp_meta.begin_deployment_release() says whether the client is
-    # still built or live and, if it is, records that a release has started,
-    # which the retire door then refuses to overtake. A client that is no
-    # longer a target is released nothing, and this ends green, so the train
-    # carries on to the control plane.
+    # still a release target and, if it is, records that a release has
+    # started, which the retire door then refuses to overtake. A client that
+    # is no longer a target is released nothing, and this ends green, so the
+    # train carries on to the control plane.
+    #
+    # A target is a client whose database is up: built, live, suspended (its
+    # address is not served, its project runs on and keeps up with every
+    # release) or retiring (offboarding, up until it is purged), since
+    # 20261012020000. A control plane before that never answers suspended or
+    # retiring, because nothing there could make a client either.
     #
     # Production and the demonstration are not in the register and always
     # go on.
@@ -159,7 +165,7 @@ jobs:
           SQL
           )
           case "$status" in
-            built|live)
+            built|live|suspended|retiring)
               echo "go=true" >> "$GITHUB_OUTPUT"
               echo "${TARGET} is ${status}: released, and the register says a release has started" ;;
             *)
@@ -253,7 +259,7 @@ jobs:
           SQL
           )
           case "$status" in
-            built|live) echo "${TARGET} is ${status}" ;;
+            built|live|suspended|retiring) echo "${TARGET} is ${status}" ;;
             *)
               echo "::error::${TARGET} is ${status:-not in the register} since this run read its targets, so nothing was released to it. Re-run ALL jobs, or dispatch the deploy workflow with targets=control, so the train reads the register afresh."
               exit 1 ;;
@@ -794,6 +800,12 @@ jobs:
         # the first time, confirmed after, and refused if they differ — the
         # database's half of "the connection is the target's". Only once the
         # routine exists; the first release after that migration writes it.
+        #
+        # A client's address is read from the register again here, not taken
+        # from when the train began: a client renamed in between
+        # (fleet_rename.yml, which waits for a running train but not for one
+        # that starts after it) is served at its new address, and a release
+        # that said the old one would undo the rename in its own database.
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
         run: |
           set -euo pipefail
@@ -807,14 +819,28 @@ jobs:
             fi
             echo "deployment: ${KIND}, as its build said"
           fi
+          origin="${APP_ORIGIN}"
+          if [[ "${KIND}" == client && -n "${CP_URL}" && "$origin" =~ ^https://[a-z0-9-]+\.([a-z0-9.-]+(:[0-9]{1,5})?)$ ]]; then
+            apex="${BASH_REMATCH[1]}"
+            # Through to_jsonb: a control plane without the column (before
+            # 20261012020000) gives the code, which was the address.
+            address=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" <<'SQL'
+          select coalesce(to_jsonb(d) ->> 'address', d.code) from erp_meta.deployment d where d.code = :'code';
+          SQL
+            )
+            if [[ "$address" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ && "https://${address}.${apex}" != "$origin" ]]; then
+              echo "::notice::${TARGET} has been moved to ${address} since this train began; it is told it is served at https://${address}.${apex}, not ${origin}."
+              origin="https://${address}.${apex}"
+            fi
+          fi
           if [[ "$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp_meta.set_deployment_identity(text,text)') is not null")" == "t" ]]; then
             # On standard input, not -c: psql substitutes :'ref' only there
             # (the first release after 20261011010000 failed here with
             # "syntax error at or near :").
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${APP_ORIGIN}" <<'SQL'
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${origin}" <<'SQL'
           select erp_meta.set_deployment_identity(:'ref', nullif(:'origin', ''));
           SQL
-            echo "identity: project ${PROJECT_REF}${APP_ORIGIN:+, served at ${APP_ORIGIN}}"
+            echo "identity: project ${PROJECT_REF}${origin:+, served at ${origin}}"
           fi
 
       - name: Record the release

@@ -289,7 +289,7 @@ check '[[ $status -eq 0 && "$out" == *"no register of deployments yet"* && "$(ca
 fresh
 answer cp cp-clients '[]'
 run "no built client" --
-check '[[ $status -eq 0 && "$out" == *"no built or live client"* && "$(ncalls "$A")" -eq 0 ]]' "nothing to keep, and said"
+check '[[ $status -eq 0 && "$out" == *"no client in the register has a database that is up"* && "$(ncalls "$A")" -eq 0 ]]' "nothing to keep, and said"
 fresh
 mkdir -p "$work/fake/answers/cp"; echo "FATAL:  password authentication failed" > "$work/fake/answers/cp/CONNECT"
 run "a control plane that cannot be reached" --
@@ -470,6 +470,8 @@ check '[[ $status -eq 1 && "$out" == *"its staff list could not be read (ERROR: 
 fresh
 run "one client" -- acme
 check '[[ $status -eq 0 && "$(var "$(calls cp cp-clients | tr -d " ")" only)" == acme ]]' "only that client is asked for"
+check 'grep -qF "d.status in ('"'"'built'"'"', '"'"'live'"'"', '"'"'suspended'"'"', '"'"'retiring'"'"')" "$work/fake/sql.$(calls cp cp-clients | tr -d " ")"' \
+      "every client whose database is up: support may need to enter a suspended one"
 fresh
 answer cp cp-clients '[]'
 answer cp cp-status 'retired'

@@ -5,9 +5,10 @@ name: fleet staff
 # One Supabase project per client (the owner's decision of 7 October), and
 # staff kept on the control plane only (20261011100000): the owner adds,
 # re-ranks and removes staff on the control plane's console, and on a
-# client's own console those doors refuse. This workflow makes every built or
-# live client's list match the control plane's, through
-# supabase/ci/fleet_staff_sync.sh: a confirmed sign-in made on the client for
+# client's own console those doors refuse. This workflow makes the list of
+# every client whose database is up (built, live, suspended or retiring)
+# match the control plane's, through supabase/ci/fleet_staff_sync.sh: a
+# confirmed sign-in made on the client for
 # anyone who has none there (its own admin API, a password nobody knows; they
 # sign in with an emailed link), a staff row at the control plane's rank,
 # bound to that sign-in, for everyone on the list, and anyone the list no
@@ -26,7 +27,7 @@ name: fleet staff
 # over CLOVEERP_LIVE_DATABASE_URL and masked before anything else is printed.
 # Nothing here touches the control plane's own staff list, the
 # demonstration's (which is its owner and only its owner, release.yml), or a
-# client that is not built or live.
+# client whose database is not up.
 
 on:
   schedule:
@@ -34,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: "One client's code, as the register holds it; empty for every built or live client."
+        description: "One client's code, as the register holds it; empty for every client whose database is up (built, live, suspended or retiring)."
         type: string
         default: ''
 

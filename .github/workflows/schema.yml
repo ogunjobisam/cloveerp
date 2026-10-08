@@ -227,6 +227,37 @@ jobs:
         # never used, and nothing secret printed. Seconds, no database.
         run: supabase/ci/fleet_poll_rehearsal.sh
 
+      - name: A client's rename is rehearsed
+        # supabase/ci/fleet_rename.sh (fleet_rename.yml) moves a paying
+        # client to a new address in four places that must agree: its
+        # project's auth settings, its functions' address, its own database
+        # and the control plane's register. Here first, against the shared
+        # stand-ins (fleet_rehearsal_fakes.sh): what it refuses before
+        # touching anything, the four in order with an event for each, every
+        # step undone when a later one fails, a lost commit taken as one, a
+        # stopped rename carried on, and nothing secret printed. Seconds.
+        run: supabase/ci/fleet_rename_rehearsal.sh
+
+      - name: A client's export is rehearsed
+        # supabase/ci/fleet_export.sh (fleet_export.yml) is what a client
+        # leaving takes with it. Here first, with a pg_dump, an age and an
+        # aws that keep what they are given: refused, naming what to make,
+        # until the bucket and the key exist; the client's own database and
+        # its sign-ins dumped, sealed to the owner's key, uploaded and asked
+        # for again before the register is told; and nothing secret
+        # printed. Seconds, no database, no bucket.
+        run: supabase/ci/fleet_export_rehearsal.sh
+
+      - name: The fleet's weekly off-platform copies are rehearsed
+        # supabase/ci/fleet_backup.sh (fleet_backup.yml) copies the control
+        # plane, the demonstration and every client whose database is up
+        # off the platform each Sunday and keeps the newest eight of each.
+        # Here first: a notice and green until the bucket exists, one at a
+        # time with a pause, one database's trouble never stopping the next,
+        # only that database's old copies deleted and only after this week's
+        # is found, and nothing secret printed. Seconds.
+        run: supabase/ci/fleet_backup_rehearsal.sh
+
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the
         # whole schema, which catches an ungoverned door eventually. This closes

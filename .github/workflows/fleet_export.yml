@@ -1,0 +1,124 @@
+name: fleet export
+
+# One client's database, exported off the platform.
+#
+# When a client leaves, the owner begins offboarding from the Fleet view
+# (20261012020000), which asks for an export; and the owner may ask for one at
+# any other time (Export now). The sweep (fleet_sweep.yml) starts this with
+# the client's code. supabase/ci/fleet_export.sh dumps the client's database
+# as the restore drill dumps it, with its sign-ins, seals the copy to the
+# owner's age key, puts it in the owner's bucket at
+# exports/<code>/<UTC time>.dump.age, asks the bucket for it again, and only
+# then writes it on the client's row in the register, where the Fleet view
+# shows it (rehearsed on every build by fleet_export_rehearsal.sh).
+#
+# The bucket and the key are the owner's to make: the age public key in the
+# repository variable CLOVEERP_BACKUP_AGE_RECIPIENT, and the bucket (Cloudflare
+# R2 works) in the repository secrets CLOVEERP_BACKUP_S3_ENDPOINT,
+# CLOVEERP_BACKUP_S3_BUCKET, CLOVEERP_BACKUP_S3_KEY_ID and
+# CLOVEERP_BACKUP_S3_SECRET. Until they exist, this fails at once, naming
+# what is missing, and nothing is dumped, uploaded or recorded.
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "The client's code, as the register holds it (built, live, suspended or retiring)."
+        type: string
+        required: true
+
+permissions:
+  # Read: whether a release train is running (below).
+  actions: read
+  contents: read
+
+# Per client: two exports of one client queue; a third arriving while one
+# waits displaces the waiting one, which is the same export.
+concurrency:
+  group: fleet-export-${{ inputs.code }}
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: export ${{ inputs.code }}
+    runs-on: ubuntu-latest
+    # A dump of a 1 GB instance takes minutes; the rest is the wait for a
+    # release train to finish (below).
+    timeout-minutes: 180
+    env:
+      CODE: ${{ inputs.code }}
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      CLOVEERP_BACKUP_AGE_RECIPIENT: ${{ vars.CLOVEERP_BACKUP_AGE_RECIPIENT }}
+      CLOVEERP_BACKUP_S3_REGION: ${{ vars.CLOVEERP_BACKUP_S3_REGION || 'auto' }}
+      CLOVEERP_BACKUP_S3_ENDPOINT: ${{ secrets.CLOVEERP_BACKUP_S3_ENDPOINT }}
+      CLOVEERP_BACKUP_S3_BUCKET: ${{ secrets.CLOVEERP_BACKUP_S3_BUCKET }}
+      CLOVEERP_BACKUP_S3_KEY_ID: ${{ secrets.CLOVEERP_BACKUP_S3_KEY_ID }}
+      CLOVEERP_BACKUP_S3_SECRET: ${{ secrets.CLOVEERP_BACKUP_S3_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Masked, and only from main
+        run: |
+          set -euo pipefail
+          for value in "${CLOVEERP_LIVE_DATABASE_URL}" "${CLOVEERP_BACKUP_S3_ENDPOINT}" "${CLOVEERP_BACKUP_S3_BUCKET}" \
+                       "${CLOVEERP_BACKUP_S3_KEY_ID}" "${CLOVEERP_BACKUP_S3_SECRET}"; do
+            if [[ -n "$value" ]]; then
+              echo "::add-mask::${value}"
+            fi
+          done
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::run this from main, where supabase/ci/fleet_export.sh has been reviewed and merged; this run is on ${GITHUB_REF}, and nothing was exported."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Somewhere to put it
+        # Before anything is installed or waited for: without the bucket and
+        # the key there is nothing to do, and the error says what to make.
+        run: CHECK_ONLY=yes supabase/ci/fleet_export.sh "${CODE}"
+
+      - name: Install the client tools of the live major version, and age
+        # pg_dump must be at least the server's version (restore_drill.yml);
+        # age seals the copy.
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17 age
+          pg_dump --version
+          age --version
+          aws --version
+
+      - name: No release train is running
+        # A dump holds a share lock on every table it copies, and a release
+        # replaying into the same database waits behind it until its own
+        # thirty-second lock limit fails it. A train already under way is
+        # waited out, up to two hours, rather than raced.
+        run: |
+          set -euo pipefail
+          R="repos/${GH_REPO}"
+          deadline=$(( $(date +%s) + 120 * 60 ))
+          while :; do
+            if ! going=$(gh api "${R}/actions/workflows/deploy.yml/runs?per_page=50" \
+                           --jq '[.workflow_runs[] | select(.status != "completed" and .event != "pull_request") | .id | tostring] | join(" ")'); then
+              going="(GitHub could not be asked)"
+            fi
+            if [[ -z "$going" ]]; then
+              echo "no release train is running"
+              break
+            fi
+            if [[ "$(date +%s)" -ge "$deadline" ]]; then
+              echo "::error::a release train is still running after two hours (run ${going}), so ${CODE} was not exported. Ask for the export again once it has finished."
+              exit 1
+            fi
+            echo "a release train is running (run ${going}); asking again in a minute"
+            sleep 60
+          done
+
+      - name: Export
+        run: supabase/ci/fleet_export.sh "${CODE}"

@@ -11,8 +11,10 @@
 # control plane's, and whether Supabase has backed it up. Until this, each of
 # those was a question somebody had to think to ask, one project at a time.
 #
-# For each built or live client in the register (or the one code given), one
-# at a time, over its connection string from the control plane's vault
+# For each client in the register whose database is up (built, live,
+# suspended or retiring: a suspended client's address is not served, and its
+# project runs on), or the one code given, one at a time, over its connection
+# string from the control plane's vault
 # (masked the moment it is read, refused unless it names its own project and
 # no other deployment's, and its database must say it is a client's):
 #
@@ -165,7 +167,7 @@ select coalesce(jsonb_agg(jsonb_build_object('code', d.code, 'ref', d.project_re
                                              'health', coalesce(to_jsonb(d) -> 'health', '{}'::jsonb))
                           order by d.code), '[]'::jsonb)
   from erp_meta.deployment d
- where d.status in ('built', 'live')
+ where d.status in ('built', 'live', 'suspended', 'retiring')
    and d.project_ref is not null
    and (:'only' = '' or d.code = :'only');
 SQL
@@ -180,10 +182,10 @@ all_refs="${all_refs},${PRODUCTION_REF:-xpzffnnhnhcqyjqcueja},${DEMO_REF:-}"
 count=$(jq 'length' <<< "$clients")
 if [[ "$count" -eq 0 ]]; then
   if [[ -n "$ONLY" ]]; then
-    echo "::error::'${ONLY}' is not a built or live client in the register. Nothing was polled."
+    echo "::error::'${ONLY}' is not a client in the register whose database is up (built, live, suspended or retiring). Nothing was polled."
     exit 1
   fi
-  echo "no built or live client in the register; nothing to poll"
+  echo "no client in the register has a database that is up (built, live, suspended or retiring); nothing to poll"
   exit 0
 fi
 
