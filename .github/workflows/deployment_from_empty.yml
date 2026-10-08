@@ -582,3 +582,24 @@ jobs:
     secrets:
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+
+  application:
+    # The application follows (app.yml), which ships nothing while anything is
+    # being built from empty: this run took its commit when it started, and
+    # would come up behind an application shipped meanwhile. Asked here, built
+    # or not, because a run the sweep started with GITHUB_TOKEN is not promised
+    # a workflow_run event when it ends; after_run tells app.yml that this run,
+    # still finishing, is building nothing any more.
+    needs: [build, release]
+    if: ${{ always() }}
+    name: the application follows
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Ask app.yml to look again
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+        run: gh workflow run app.yml --ref main -f after_run="$RUN"

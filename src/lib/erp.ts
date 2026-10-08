@@ -55,9 +55,9 @@ import {
  * build that reads only the environment is a build that can arrive
  * unconfigured, and one did: the values lived in a tracked `.env` until it left
  * version control, and from then on every publish shipped an application whose
- * first screen told the visitor to set two variables. The application is
- * published by hand from Lovable and the values are inlined at build time, so
- * nothing downstream could repair it either.
+ * first screen told the visitor to set two variables. The application was
+ * then published by hand from Lovable, and the values are inlined at build
+ * time, so nothing downstream could repair it either.
  *
  * The publishable key is public by design. Supabase ships it in the client
  * bundle of every application built on it — this one included, before and after

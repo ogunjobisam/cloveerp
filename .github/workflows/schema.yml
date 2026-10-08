@@ -1595,9 +1595,10 @@ jobs:
   # Both directions of a release
   #
   # The schema and the application are deployed separately: the schema by
-  # deploy.yml on merge, the application by a publish somebody does by hand.
-  # So for a while after either, the other is behind — and a rollback of the
-  # application is a publish of the previous build against the current schema.
+  # deploy.yml, the application by app.yml once every database carries the
+  # commit. So for a while the application is behind the schema — and a
+  # rollback of the application is a deploy of the previous build against the
+  # current schema.
   # This job takes the schema as main has it and as this pull request leaves
   # it — from the databases the build job cached, or by building them when it
   # must — extracts every door name from the application on each side, and
@@ -1607,7 +1608,7 @@ jobs:
   #   that this PR removes breaks the running app the moment the schema
   #   deploys, and breaks a rollback for good. That fails the build.
   #   this PR's application against main's schema — the doors this PR adds
-  #   are reported, so whoever publishes knows the schema must deploy first.
+  #   are reported: the schema deploys first, and app.yml waits for it.
   #
   # Pull requests only: on main there is no other side to compare with.
   # ---------------------------------------------------------------------------
