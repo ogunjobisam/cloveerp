@@ -1842,6 +1842,14 @@ jobs:
             git worktree add "$RUNNER_TEMP/worker" "$worker"
             echo "worker=$worker" >> "$GITHUB_ENV"
             echo "and against $worker, which the application Worker runs"
+            # app.yml ships the newest commit every database carries, which can
+            # be any commit on main from the Worker's up to the merge base: a
+            # door any of them calls must outlive this pull request as well.
+            if git merge-base --is-ancestor "$worker" "$base"; then
+              range=$(git rev-list --first-parent "${worker}..${base}" | tr '\n' ' ')
+              echo "worker_range=${range}" >> "$GITHUB_ENV"
+              echo "and against the $(wc -w <<< "$range") commits on main between them"
+            fi
           fi
 
       - name: The database main built, if the cache still has it
@@ -1947,6 +1955,11 @@ jobs:
           if [[ -n "${worker:-}" ]]; then
             names "$RUNNER_TEMP/worker/src" | sort -u - names_base.txt -o names_base.txt
           fi
+          # Every commit between them, read from history rather than checked
+          # out: the same names, by the same pattern, from the same files.
+          for c in ${worker_range:-}; do
+            git grep -hoE '"erp_[a-z0-9_]+"' "$c" -- 'src/*.ts' 'src/*.tsx' ':!*.test.ts' ':!*.test.tsx' ':!src/integrations' || true
+          done | tr -d '"' | sort -u - names_base.txt -o names_base.txt
 
           removed=$(comm -23 doors_base.txt doors_head.txt)
           added=$(comm -13 doors_base.txt doors_head.txt)
@@ -1967,7 +1980,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ -n "$breaks_rollback" ]]; then
-            echo "::error::the application on main${worker:+, or the one the Worker runs (${worker:0:12}),} calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim until a release train has shipped an application that no longer calls it, or say so in the pull request:"
+            echo "::error::the application on main${worker:+, or one the Worker runs or may ship next (from ${worker:0:12}),} calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim until a release train has shipped an application that no longer calls it, or say so in the pull request:"
             echo "$breaks_rollback"
             exit 1
           fi
