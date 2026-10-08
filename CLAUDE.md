@@ -101,8 +101,35 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   production by accident. Needing one of them for an incident is a reason to
   add it deliberately and take it out again, not a reason to leave it on.
 
+## Hosting: Cloudflare, not Lovable
+
+- The application is a Cloudflare Worker, `clove-erp`, serving
+  `cloveerp.com`, `www`, `demo` and every client's `<code>.cloveerp.com`
+  through one wildcard route. DNS for `cloveerp.com` is on Cloudflare.
+- **`.github/workflows/app.yml` is the only way the application reaches
+  production.** It runs after `schema` passes on main, and refuses to deploy
+  unless that commit's `deploy.yml` release succeeded, so the application
+  never ships ahead of its migrations. Not Lovable's publish, not
+  `wrangler deploy` by hand.
+- `wrangler.jsonc` is the staging Worker; `wrangler.production.jsonc` is the
+  live one. `app.yml` copies the production file over `wrangler.jsonc` before
+  the build when the repository variable `CLOVEERP_APP_ROUTES` is `on`. Never
+  add an `env` block: nitro writes the deployed config from `wrangler.jsonc`
+  at build time, and wrangler refuses a generated config with environments.
+- The build is nitro's `cloudflare-module` output in `.output/`. Workers run
+  with `nodejs_compat`, not full Node: a dependency that needs Node APIs the
+  runtime lacks will break the deploy, not the typecheck. Heavy work (PDF
+  rendering) belongs in an Edge Function or the dispatch worker.
+- The server reads `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` (vars in the
+  wrangler files) and `SUPABASE_SERVICE_ROLE_KEY` (a Worker secret, set in
+  the Cloudflare dashboard, never in the repository).
+- A new client needs no hosting step: the directory (`/api/directory/<host>`)
+  maps a subdomain to its project.
+
 ## Lovable
 
+- Lovable no longer serves the application. It stays connected to this
+  repository as an editor and preview only.
 - `AGENTS.md` is Lovable-managed. Leave it alone.
 - Commits on the connected branch sync into the Lovable editor, so keep that
   branch working.
