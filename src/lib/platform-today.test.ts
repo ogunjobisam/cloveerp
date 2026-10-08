@@ -210,6 +210,15 @@ describe("renewals and invoices", () => {
     opensARealTab(two[0]!);
   });
 
+  test("a client deployment's late invoice opens contracts, not an organisation it is not", () => {
+    const own = invoiceCards([
+      invoice({ tenant_code: "acme", deployment_code: "acme", overdue: true, days_overdue: 3 }),
+    ]);
+    expect(own[0]!.action).toBe("Open contracts");
+    expect(own[0]!.target).toEqual({ section: "sales", view: "contracts" });
+    opensARealTab(own[0]!);
+  });
+
   test("the card says how far the chase has got, when it has got anywhere", () => {
     const chased = invoiceCards([
       invoice({

@@ -20,7 +20,13 @@ import {
   storeInvitation,
 } from "../../lib/invitation-token";
 import { DEMO_ADDRESS } from "../../lib/backend";
-import { atLeast, demonstrationsLiveElsewhere, usePlatformMe } from "../../lib/platform";
+import {
+  atLeast,
+  demonstrationsLiveElsewhere,
+  usePlatformMe,
+  type PlatformTenant,
+} from "../../lib/platform";
+import { onboardingHere } from "../../lib/platform-console";
 import { onboardingView, pastedToken, selfServiceIsOpen } from "../../lib/self-service";
 import { tenantStorageKey } from "../../lib/tenant-storage";
 import {
@@ -416,7 +422,24 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
       ? false
       : undefined;
 
-  const view = onboardingView({ invitation, staff, open });
+  // On a client's own host the deployment holds one organisation. Once it
+  // does, staff have nothing to create here and are shown what everybody
+  // else is: the invitation they need, and the way to the console.
+  const heldHere = useQuery({
+    queryKey: ["erp_platform_tenants"],
+    queryFn: () => callErp<PlatformTenant[]>("erp_platform_tenants"),
+    enabled: Boolean(supabase) && fixedCode !== null && staff === true,
+  });
+  const base = onboardingView({ invitation, staff, open });
+  const view =
+    base === "create" && staff === true && fixedCode !== null
+      ? heldHere.isPending
+        ? "checking"
+        : onboardingHere("client", fixedCode, heldHere.isSuccess ? heldHere.data.length : null)
+              .offered
+          ? "create"
+          : "invitation-only"
+      : base;
 
   // Only ever from the Join button. Nothing claims on arrival.
   async function join(held: string) {

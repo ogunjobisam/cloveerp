@@ -102,6 +102,22 @@ describe("a build that has stalled", () => {
     expect(buildRequestIsStale(row({ request_created_at: "not a date" }), NOW)).toBe(false);
   });
 
+  test("the database's own answer decides Start again when the register gives it", () => {
+    const now = row({ request_created_at: ago(5), restartable: true });
+    expect(buildRecovery(now, NOW)).toBe("start-again");
+    const refused = row({
+      request_status: "done",
+      request_created_at: ago(60),
+      request_claimed_at: ago(55),
+      request_settled_at: ago(50),
+      last_event: { phase: "dispatch", status: "done", detail: "run 1 started", at: ago(49) },
+      restartable: false,
+    });
+    expect(buildRecovery(refused, NOW)).toBe("retry");
+    const waiting = row({ request_created_at: ago(30), restartable: false });
+    expect(buildRecovery(waiting, NOW)).toBeNull();
+  });
+
   test("Retry stays for a failed build, and for a request that is not in flight", () => {
     expect(buildRecovery(row({ status: "failed", request_status: "done" }), NOW)).toBe("retry");
     for (const s of ["failed", "cancelled", null] as const) {

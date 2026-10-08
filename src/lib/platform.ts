@@ -111,6 +111,12 @@ export type ClientDeployment = {
   request_created_at?: string | null;
   request_claimed_at?: string | null;
   request_settled_at?: string | null;
+  /**
+   * Whether Start again would be accepted now: the database's own rule
+   * (erp_meta.deployment_restart_refusal, 20261011110000), so the console
+   * offers the door only when the door would open.
+   */
+  restartable?: boolean;
   last_event: { phase: string; status: string; detail: string | null; at: string } | null;
 };
 
@@ -130,6 +136,7 @@ export type BuildRequestView = Pick<
   | "request_created_at"
   | "request_claimed_at"
   | "request_settled_at"
+  | "restartable"
   | "last_event"
 >;
 
@@ -196,7 +203,15 @@ export function buildRecovery(d: BuildRequestView, now: Date): "retry" | "start-
     d.request_status === "claimed" ||
     d.request_status === "done";
   if (!inFlight) return "retry";
-  return buildRequestIsStale(d, now) ? "start-again" : null;
+  // The database says whether Start again would be accepted; follow it.
+  if (d.restartable === true) return "start-again";
+  if (!buildRequestIsStale(d, now)) return null;
+  // Silent for twenty minutes, yet the door refuses: a run that said it had
+  // started and was lost before it made anything. No request is open, so
+  // Retry takes it.
+  if (d.restartable === false) return d.request_status === "done" ? "retry" : null;
+  // A register from before the rule was shared.
+  return "start-again";
 }
 
 /** The host an origin names (acme.cloveerp.com for https://acme.cloveerp.com); null if it is not one. */
@@ -365,6 +380,8 @@ export type OpenInvoice = {
   total_minor: number;
   overdue: boolean;
   days_overdue: number;
+  /** The client deployment the contract names, when it names one (20261011130000). */
+  deployment_code?: string | null;
 };
 
 /**
