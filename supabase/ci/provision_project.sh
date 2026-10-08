@@ -121,7 +121,10 @@ case "$cmd" in
     [[ -n "${ORG_SLUG:-}" ]] || refuse "ORG_SLUG (the Supabase organisation's slug, from the dashboard URL) is not set."
     [[ -n "${REGION:-}" ]] || refuse "REGION is not set (production and the demonstration are eu-central-1)."
     [[ -n "${INSTANCE_SIZE:-}" ]] || refuse "INSTANCE_SIZE is not set (the owner's choice for a client is micro)."
-    project_name="Clove ERP – ${name}"
+    # Plain ASCII: the name travels through the Management API and the
+    # dashboard, and the first real call is no place to learn what either
+    # does with a typographic dash.
+    project_name="Clove ERP - ${name}"
     # The name, not the code, is what the dashboard shows and what a second
     # run would duplicate. A project of that name already in the organisation
     # is a build that got this far before: carry it on with its ref.
@@ -213,11 +216,22 @@ case "$cmd" in
     base="${PROJECT_API_URL:-https://${ref}.supabase.co}"
     # A password nobody knows: the owner signs in by emailed link, or sets
     # one from the console. Confirmed, so the build's check passes and the
-    # staff row binds to it (20261010063000).
-    body=$(jq -cn --arg email "$owner" --arg pass "$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)" \
+    # staff row binds to it (20261010063000). Thirty-two random letters and
+    # digits, then one of each kind the project's password rule asks for
+    # (configure sets it), so the rule can never refuse it by chance.
+    pass="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)aZ7"
+    body=$(jq -cn --arg email "$owner" --arg pass "$pass" \
              '{email: $email, email_confirm: true, password: $pass}')
+    # A secret key in the new format (sb_secret_…) is not a JWT and must not
+    # travel as a bearer, as supabase/functions/invite says; a legacy
+    # service_role key is a JWT and goes as both.
+    if [[ "${SERVICE_KEY}" == sb_* ]]; then
+      auth_headers=(-H "apikey: ${SERVICE_KEY}")
+    else
+      auth_headers=(-H "apikey: ${SERVICE_KEY}" -H "Authorization: Bearer ${SERVICE_KEY}")
+    fi
     out=$($CURL_CMD -sS -w '\n%{http_code}' -X POST \
-            -H "apikey: ${SERVICE_KEY}" -H "Authorization: Bearer ${SERVICE_KEY}" -H "Content-Type: application/json" \
+            "${auth_headers[@]}" -H "Content-Type: application/json" \
             --data "$body" "${base}/auth/v1/admin/users" 2>&1) || refuse "the admin API of ${ref} could not be reached."
     status=$(printf '%s' "$out" | tail -n 1)
     reply=$(printf '%s' "$out" | sed '$d')
@@ -242,6 +256,15 @@ case "$cmd" in
     [[ -n "$row" ]] || refuse "${ref} answered no primary pooler."
     host=$(jq -r '.db_host' <<< "$row"); port=$(jq -r '.db_port' <<< "$row")
     user=$(jq -r '.db_user' <<< "$row"); dbname=$(jq -r '.db_name' <<< "$row")
+    # The SESSION pooler, always: the same host serves session mode on 5432
+    # and transaction mode on 6543, and the API reports whichever mode the
+    # project defaults to. Every build and release here holds a session
+    # (set statement_timeout, one transaction per migration, pg_dump-like
+    # reads), which is why every connection string in this repository is the
+    # session pooler's.
+    if [[ "$(jq -r '.pool_mode' <<< "$row")" != "session" ]]; then
+      port=5432
+    fi
     [[ "$user" == *"${ref}"* ]] || refuse "the pooler's user '${user}' does not name ${ref}; release.yml would refuse the connection it makes."
     echo "host=${host}"; echo "port=${port}"; echo "user=${user}"; echo "dbname=${dbname}"
     ;;

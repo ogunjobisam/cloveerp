@@ -22,7 +22,7 @@ cat > "$work/curl" <<'FAKE'
 #!/usr/bin/env bash
 # Every request is written down as "METHOD URL", its body kept under the
 # request's number, and the answer chosen by the path.
-method=GET; url=""; body=""; want_status=no; fail=no
+method=GET; url=""; body=""; want_status=no; fail=no; headers=""
 DEFAULT_CREATE='{"ref":"abcdefghijklmnopqrst","status":"COMING_UP"}'
 DEFAULT_POSTGREST='{"db_schema":"public, graphql_public"}'
 DEFAULT_KEYS='[{"type":"publishable","name":"default","api_key":"sb_publishable_rehearsal"},{"type":"secret","name":"default","api_key":"sb_secret_rehearsal"}]'
@@ -34,7 +34,8 @@ while [[ $# -gt 0 ]]; do
     --data|-d) body="$2"; shift 2 ;;
     -w) want_status=yes; shift 2 ;;
     --fail-with-body) fail=yes; shift ;;
-    -H|-o) shift 2 ;;
+    -H) headers+="$2"$'\n'; shift 2 ;;
+    -o) shift 2 ;;
     http*) url="$1"; shift ;;
     *) shift ;;
   esac
@@ -43,6 +44,7 @@ n=$(( $(cat "$FAKE_DIR/calls" 2>/dev/null || echo 0) + 1 ))
 echo "$n" > "$FAKE_DIR/calls"
 echo "$method $url" >> "$FAKE_DIR/curl.log"
 [[ -z "$body" ]] || printf '%s' "$body" > "$FAKE_DIR/body.$n"
+printf '%s' "$headers" > "$FAKE_DIR/headers.$n"
 path="${url#*//*/}"
 status="${FAKE_HTTP_STATUS:-200}"
 answer=""
@@ -117,13 +119,13 @@ run "a code that is not an address" "${CREATE[@]}" -- create "Acme!" "Acme Ltd"
 check '[[ $status -eq 2 && "$out" == *"not an address-shaped code"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
 run "a short password" ORG_SLUG=o REGION=r INSTANCE_SIZE=micro DB_PASS=short -- create acme "Acme Ltd"
 check '[[ $status -eq 2 && "$out" == *"DB_PASS must be set, 24 characters"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
-run "a project of that name already" "${CREATE[@]}" 'FAKE_LIST=[{"ref":"zzzzzzzzzzzzzzzzzzzz","name":"Clove ERP – Acme Ltd"}]' -- create acme "Acme Ltd"
+run "a project of that name already" "${CREATE[@]}" 'FAKE_LIST=[{"ref":"zzzzzzzzzzzzzzzzzzzz","name":"Clove ERP - Acme Ltd"}]' -- create acme "Acme Ltd"
 check '[[ $status -eq 2 && "$out" == *"already exists (zzzzzzzzzzzzzzzzzzzz)"* && "$(requests)" == "GET https://api.example/v1/projects;" ]]' \
       "refused with the existing ref, and no second project made"
 run "a new project" "${CREATE[@]}" -- create acme "Acme Ltd"
 check '[[ $status -eq 0 && "$out" == *"ref=abcdefghijklmnopqrst"* ]]' "prints the ref"
 check '[[ "$(requests)" == "GET https://api.example/v1/projects;POST https://api.example/v1/projects;" ]]' "lists, then creates"
-check '[[ "$(body 2 | jq -r .name)" == "Clove ERP – Acme Ltd" && "$(body 2 | jq -r .organization_slug)" == "orgslug" && "$(body 2 | jq -r .region)" == "eu-central-1" && "$(body 2 | jq -r .desired_instance_size)" == "micro" && "$(body 2 | jq -r .db_pass)" == "$PASS" ]]' \
+check '[[ "$(body 2 | jq -r .name)" == "Clove ERP - Acme Ltd" && "$(body 2 | jq -r .organization_slug)" == "orgslug" && "$(body 2 | jq -r .region)" == "eu-central-1" && "$(body 2 | jq -r .desired_instance_size)" == "micro" && "$(body 2 | jq -r .db_pass)" == "$PASS" ]]' \
       "the body names the project, the organisation, the region, the size and the password"
 check '[[ "$out" != *"$PASS"* ]]' "the password is not printed"
 
@@ -172,6 +174,11 @@ run "owner made" SERVICE_KEY=sb_secret_rehearsal PROJECT_API_URL=https://api.exa
 check '[[ $status -eq 0 && "$out" == *"owner=owner@example.com"* && "$(requests)" == "POST https://api.example/auth/v1/admin/users;" ]]' "one call to the admin API"
 check '[[ "$(body 1 | jq -r .email)" == "owner@example.com" && "$(body 1 | jq -r .email_confirm)" == "true" && -n "$(body 1 | jq -r .password)" ]]' "confirmed, with a password nobody knows"
 check '[[ "$out" != *"$(body 1 | jq -r .password)"* && "$out" != *"sb_secret_rehearsal"* ]]' "neither the password nor the key is printed"
+run "owner made with a new-format secret key" SERVICE_KEY=sb_secret_rehearsal PROJECT_API_URL=https://api.example -- owner abcdefghijklmnopqrst owner@example.com
+check '[[ $status -eq 0 && "$(cat "$work/fake/headers.1")" == *"apikey: sb_secret_rehearsal"* && "$(cat "$work/fake/headers.1")" != *"Authorization"* ]]' "the new-format secret key goes as apikey only, never as a bearer"
+check '[[ "$(body 1 | jq -r .password)" =~ [a-z] && "$(body 1 | jq -r .password)" =~ [A-Z] && "$(body 1 | jq -r .password)" =~ [0-9] && $(body 1 | jq -r .password | tr -d "\n" | wc -c) -ge 12 ]]' "the password always meets the project's rule"
+run "owner made with a legacy service key" SERVICE_KEY=eyJlegacy.jwt.key PROJECT_API_URL=https://api.example -- owner abcdefghijklmnopqrst owner@example.com
+check '[[ $status -eq 0 && "$(cat "$work/fake/headers.1")" == *"Authorization: Bearer eyJlegacy.jwt.key"* ]]' "a legacy service key, a JWT, goes as a bearer too"
 run "owner already there" SERVICE_KEY=k PROJECT_API_URL=https://api.example FAKE_ADMIN_STATUS=422 'FAKE_ADMIN_BODY={"msg":"A user with this email address has already been registered"}' -- owner abcdefghijklmnopqrst owner@example.com
 check '[[ $status -eq 0 && "$out" == *"already exists"* ]]' "fine"
 run "the admin API refuses" SERVICE_KEY=k PROJECT_API_URL=https://api.example FAKE_ADMIN_STATUS=401 'FAKE_ADMIN_BODY={"msg":"invalid"}' -- owner abcdefghijklmnopqrst owner@example.com
@@ -181,6 +188,8 @@ check '[[ $status -eq 2 && "$out" == *"answered 401"* ]]' "refused"
 run "the pooler" -- pooler abcdefghijklmnopqrst
 check '[[ $status -eq 0 && "$out" == *"host=aws-0-eu-central-1.pooler.supabase.com"* && "$out" == *"port=5432"* && "$out" == *"user=postgres.abcdefghijklmnopqrst"* && "$out" == *"dbname=postgres"* ]]' \
       "prints the session pooler's parts"
+run "a project whose pooler defaults to transaction mode" 'FAKE_POOLER=[{"database_type":"PRIMARY","pool_mode":"transaction","db_host":"aws-1-eu-central-1.pooler.supabase.com","db_port":6543,"db_user":"postgres.abcdefghijklmnopqrst","db_name":"postgres"}]' -- pooler abcdefghijklmnopqrst
+check '[[ $status -eq 0 && "$out" == *"host=aws-1-eu-central-1.pooler.supabase.com"* && "$out" == *"port=5432"* && "$out" != *"6543"* ]]' "the connection is the session pooler on 5432, whatever mode the project defaults to"
 run "a pooler user naming another project" 'FAKE_POOLER=[{"database_type":"PRIMARY","pool_mode":"session","db_host":"h","db_port":5432,"db_user":"postgres.zzzzzzzzzzzzzzzzzzzz","db_name":"postgres"}]' -- pooler abcdefghijklmnopqrst
 check '[[ $status -eq 2 && "$out" == *"does not name abcdefghijklmnopqrst"* ]]' "refused"
 

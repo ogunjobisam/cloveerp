@@ -15,6 +15,14 @@
 # door. A door renamed in a migration without its callers, or a caller typed
 # against a door that was never built, fails the build here.
 #
+# And from supabase/functions. Since 8 October the work the application's
+# own server did on a person's behalf — issuing an invoice, signing a link
+# to a commercial document, answering a supplier's link — runs in Edge
+# Functions in each project, and the doors it calls are named there rather
+# than in src. A screen calls the function and the function calls the door:
+# that is a home. Without this the thirteen doors that moved read as
+# homeless (CLOVEERP_DOOR_HAS_NO_HOME on #467).
+#
 # Usage: supabase/ci/app_doors.sh [src-dir]   (default: src beside this script's repo)
 # Reads PSQL from the environment like run_checks.sh. Prints the count.
 set -euo pipefail
@@ -22,12 +30,14 @@ set -euo pipefail
 PSQL_CMD="${PSQL:-psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="${1:-$here/src}"
+FUNCTIONS="$here/supabase/functions"
 
-# Every quoted erp_* identifier in the application, once. Tests and the unused
-# generated client are left out: a test may name a door on purpose to prove a
-# refusal, and the generated file is a copy of the schema, not a caller.
+# Every quoted erp_* identifier in the application and its Edge Functions,
+# once. Tests and the unused generated client are left out: a test may name a
+# door on purpose to prove a refusal, and the generated file is a copy of the
+# schema, not a caller.
 mapfile -t doors < <(
-  grep -rhoE '"erp_[a-z0-9_]+"' "$SRC" \
+  grep -rhoE '"erp_[a-z0-9_]+"' "$SRC" $( [[ -d "$FUNCTIONS" ]] && printf '%s' "$FUNCTIONS" ) \
     --include='*.ts' --include='*.tsx' \
     --exclude='*.test.ts' --exclude='*.test.tsx' \
     --exclude-dir=integrations \
