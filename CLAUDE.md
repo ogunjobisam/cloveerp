@@ -146,6 +146,10 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
 ## How to work with me
 
 - Plan first for anything touching more than three files. Show the plan, wait.
+- Open pull requests as **drafts**, and mark one ready for review only when the
+  work is finished and the local checks pass. A draft runs the cheap jobs on
+  every push; the database build (about 25 minutes) runs once, when it is
+  marked ready. Group related changes into one pull request rather than many.
 - For a scoped change, edit and run the checks — do not ask permission per file.
 - Never create README or documentation files unless I ask. `docs/` figures are
   checked against the database; adding prose there breaks the build.
