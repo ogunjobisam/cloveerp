@@ -157,9 +157,13 @@ function DeploymentRow({
       callErp("erp_platform_deployment_checklist", { p_code: d.code, p_item: item, p_done: done }),
     onSuccess: onDone,
   });
+  // Retry once a build has stopped, or a request never became a run. Not
+  // while one is creating or building: a second build started under a
+  // running one waits for it (they share a concurrency group) and then finds
+  // the row built, and the running one can no longer mark it built.
   const retryable =
     d.status === "failed" ||
-    ((d.status === "requested" || d.status === "creating" || d.status === "building") &&
+    (d.status === "requested" &&
       d.request_status !== "requested" &&
       d.request_status !== "claimed");
   const lastRun = d.last_release_run_id ?? d.build_run_id;

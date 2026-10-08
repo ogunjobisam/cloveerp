@@ -28,6 +28,7 @@ DEFAULT_POSTGREST='{"db_schema":"public, graphql_public"}'
 DEFAULT_KEYS='[{"type":"publishable","name":"default","api_key":"sb_publishable_rehearsal"},{"type":"secret","name":"default","api_key":"sb_secret_rehearsal"}]'
 DEFAULT_POOLER='[{"database_type":"PRIMARY","pool_mode":"session","db_host":"aws-0-eu-central-1.pooler.supabase.com","db_port":5432,"db_user":"postgres.abcdefghijklmnopqrst","db_name":"postgres"}]'
 DEFAULT_ADMIN='{"id":"u1","email":"owner@example.com"}'
+DEFAULT_LIST='{"projects":[],"pagination":{"count":0}}'
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -X) method="$2"; shift 2 ;;
@@ -49,7 +50,7 @@ path="${url#*//*/}"
 status="${FAKE_HTTP_STATUS:-200}"
 answer=""
 case "$method $path" in
-  "GET v1/projects") answer="${FAKE_LIST:-[]}" ;;
+  "GET v1/organizations/"*"/projects"*) answer="${FAKE_LIST:-$DEFAULT_LIST}" ;;
   "POST v1/projects") answer="${FAKE_CREATE:-$DEFAULT_CREATE}" ;;
   "GET v1/projects/"*"/config/auth")
     if [[ -n "${FAKE_AUTH:-}" ]]; then answer="$FAKE_AUTH"
@@ -119,12 +120,12 @@ run "a code that is not an address" "${CREATE[@]}" -- create "Acme!" "Acme Ltd"
 check '[[ $status -eq 2 && "$out" == *"not an address-shaped code"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
 run "a short password" ORG_SLUG=o REGION=r INSTANCE_SIZE=micro DB_PASS=short -- create acme "Acme Ltd"
 check '[[ $status -eq 2 && "$out" == *"DB_PASS must be set, 24 characters"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
-run "a project of that name already" "${CREATE[@]}" 'FAKE_LIST=[{"ref":"zzzzzzzzzzzzzzzzzzzz","name":"Clove ERP - Acme Ltd"}]' -- create acme "Acme Ltd"
-check '[[ $status -eq 2 && "$out" == *"already exists (zzzzzzzzzzzzzzzzzzzz)"* && "$(requests)" == "GET https://api.example/v1/projects;" ]]' \
+run "a project of that name already" "${CREATE[@]}" 'FAKE_LIST={"projects":[{"ref":"zzzzzzzzzzzzzzzzzzzz","name":"Clove ERP - Acme Ltd"}],"pagination":{"count":1}}' -- create acme "Acme Ltd"
+check '[[ $status -eq 2 && "$out" == *"already exists (zzzzzzzzzzzzzzzzzzzz)"* && "$(requests)" == "GET https://api.example/v1/organizations/orgslug/projects?limit=100;" ]]' \
       "refused with the existing ref, and no second project made"
 run "a new project" "${CREATE[@]}" -- create acme "Acme Ltd"
 check '[[ $status -eq 0 && "$out" == *"ref=abcdefghijklmnopqrst"* ]]' "prints the ref"
-check '[[ "$(requests)" == "GET https://api.example/v1/projects;POST https://api.example/v1/projects;" ]]' "lists, then creates"
+check '[[ "$(requests)" == "GET https://api.example/v1/organizations/orgslug/projects?limit=100;POST https://api.example/v1/projects;" ]]' "lists the organisation's projects, then creates"
 check '[[ "$(body 2 | jq -r .name)" == "Clove ERP - Acme Ltd" && "$(body 2 | jq -r .organization_slug)" == "orgslug" && "$(body 2 | jq -r .region)" == "eu-central-1" && "$(body 2 | jq -r .desired_instance_size)" == "micro" && "$(body 2 | jq -r .db_pass)" == "$PASS" ]]' \
       "the body names the project, the organisation, the region, the size and the password"
 check '[[ "$out" != *"$PASS"* ]]' "the password is not printed"
@@ -207,7 +208,7 @@ check '[[ "$out" != *"re_rehearsal_key"* ]]' "the values are not printed"
 
 # 10. The API answering an error
 run "an API error" "${CREATE[@]}" FAKE_HTTP_STATUS=401 -- create acme "Acme Ltd"
-check '[[ $status -eq 2 && "$out" == *"GET /v1/projects"* && "$out" == *"failed"* ]]' "refused, naming the call"
+check '[[ $status -eq 2 && "$out" == *"GET /v1/organizations/orgslug/projects"* && "$out" == *"failed"* ]]' "refused, naming the call"
 
 echo "$CASES checks over the project provisioning, $FAILED failed"
 [[ "$FAILED" -eq 0 ]]
