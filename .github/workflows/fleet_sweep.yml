@@ -69,8 +69,11 @@ jobs:
           # At most five in one sweep: a sweep is a tick, not a drain, and
           # each dispatch is a run of its own that the next tick can follow.
           for _ in 1 2 3 4 5; do
-            claim=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v run="${GITHUB_RUN_ID}" \
-                      -c "select coalesce(erp_meta.claim_fleet_request(:'run')::text, '')")
+            # On standard input, not -c: psql substitutes :'run' only there.
+            claim=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v run="${GITHUB_RUN_ID}" <<'SQL'
+          select coalesce(erp_meta.claim_fleet_request(:'run')::text, '');
+          SQL
+            )
             [[ -n "$claim" ]] || break
             id=$(jq -r '.id' <<< "$claim")
             kind=$(jq -r '.kind' <<< "$claim")
@@ -103,8 +106,9 @@ jobs:
                 outcome="failure: unknown request kind ${kind}"
                 ;;
             esac
-            psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${id}" -v outcome="${outcome}" \
-              -c "select erp_meta.settle_fleet_request(:'id'::uuid, :'outcome');" > /dev/null
+            psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${id}" -v outcome="${outcome}" > /dev/null <<'SQL'
+          select erp_meta.settle_fleet_request(:'id'::uuid, :'outcome');
+          SQL
             echo "request ${id} (${kind}): ${outcome}"
             started=$((started + 1))
           done

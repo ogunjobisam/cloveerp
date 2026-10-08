@@ -244,8 +244,10 @@ jobs:
           reg=supabase/ci/fleet_register.sh
           prov=supabase/ci/provision_project.sh
           ref="${REF_KNOWN}"
-          client_name=$(psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${CODE}" \
-                          -c "select d.client_name from erp_meta.deployment d where d.code = :'code'")
+          client_name=$(psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${CODE}" <<'SQL'
+          select d.client_name from erp_meta.deployment d where d.code = :'code';
+          SQL
+          )
           pass_name="cloveerp:provision:${CODE}:db_pass"
 
           if [[ -z "$ref" ]]; then
@@ -428,8 +430,10 @@ jobs:
           set -euo pipefail
           echo "PHASE=identity" >> "$GITHUB_ENV"
           if [[ "$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp_meta.set_deployment_identity(text,text)') is not null")" == "t" ]]; then
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${ORIGIN}" \
-              -c "select erp_meta.set_deployment_identity(:'ref', :'origin');"
+            # On standard input, not -c: psql substitutes :'ref' only there.
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${ORIGIN}" <<'SQL'
+          select erp_meta.set_deployment_identity(:'ref', :'origin');
+          SQL
           else
             echo "::notice::this build predates 20261011010000, so the database was not told its project or address; the first release will."
           fi
