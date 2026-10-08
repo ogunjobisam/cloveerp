@@ -30,27 +30,127 @@ name: restore drill
 # organisation. That is recorded as per_tenant_restore, scoped to the
 # organisation. The drill fails unless both commitments read proved on live.
 #
-# Runs on the first day of every third month and on demand.
+# Per client, since 8 October. One Supabase project per client (the owner's
+# decision of 7 October) is one database per client to restore, and each
+# holds its own continuity commitments, its own restore register and its own
+# erp.continuity_report(): a drill of the control plane proves nothing about
+# any of them. So a drill has a target. Empty is the control plane, as it
+# always was. A client's code drills that client: its connection string is
+# read from the control plane's vault as deploy.yml's dry run reads it
+# (supabase/ci/fleet_register.sh row and vault-get, masked the moment it is
+# read, refused unless it names the client's project and no other), the dump
+# is taken from it, the drill is recorded in it, where its commitments are,
+# and its second half restores the client's one organisation, whose code is
+# the deployment's. A note on the client's row in the control plane's
+# register says the drill ran and how it went.
+#
+# Runs on the first day of every third month — the control plane first, then
+# every built or live client, one at a time, since each drill dumps a live
+# database and the fleet's databases are small instances — and on demand,
+# for one target.
 
 on:
   schedule:
     - cron: '0 6 1 */3 *'
   workflow_dispatch:
     inputs:
+      target:
+        description: "A client's code, to drill that client's database. Empty: the control plane, as always."
+        type: string
+        default: ''
       tenant_code:
-        description: 'The organisation to restore alone in the second half. Empty: the oldest active one.'
+        description: "The organisation to restore alone in the second half. Empty: on the control plane the oldest active one; on a client its own, whose code is the client's."
         type: string
         default: ''
 
-concurrency:
-  group: restore-drill
-  cancel-in-progress: false
-
 jobs:
-  drill:
+  targets:
+    # Which databases this run drills, as a list the drill job runs one at a
+    # time. Nothing secret: a code, and the organisation to restore alone.
+    name: which databases
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      drills: ${{ steps.read.outputs.drills }}
     env:
-      DB_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      EVENT: ${{ github.event_name }}
+      TARGET: ${{ inputs.target }}
+      TENANT_CODE: ${{ inputs.tenant_code }}
+    steps:
+      - name: Install the psql client
+        if: github.event_name == 'schedule'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Read the register
+        id: read
+        run: |
+          set -euo pipefail
+          if [[ -z "${CP_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set; there is nothing to restore from, and no register to find the clients in. Nothing was drilled."
+            exit 1
+          fi
+          if [[ "${EVENT}" == workflow_dispatch ]]; then
+            target="${TARGET// /}"
+            tenant="${TENANT_CODE// /}"
+            if [[ -n "$target" ]] && ! [[ "$target" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
+              echo "::error::'${target}' is not a client's code. Name a built or live client, or leave target empty for the control plane. Nothing was drilled."
+              exit 1
+            fi
+            # Written into SQL further on, so only the characters a code is made of.
+            if [[ -n "$tenant" ]] && ! [[ "$tenant" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+              echo "::error::'${tenant}' is not an organisation's code. Nothing was drilled."
+              exit 1
+            fi
+            drills=$(jq -cn --arg t "$target" --arg c "$tenant" \
+                       '[{target: $t, tenant_code: (if $c != "" then $c else $t end)}]')
+          else
+            # The quarter's drill: the control plane, then every built or live
+            # client, each restoring its own organisation alone.
+            clients='[]'
+            if [[ "$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regclass('erp_meta.deployment') is not null")" == "t" ]]; then
+              clients=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "
+                select coalesce(jsonb_agg(d.code order by d.code), '[]'::jsonb)
+                  from erp_meta.deployment d
+                 where d.status in ('built', 'live')
+                   and d.project_ref is not null;")
+            fi
+            drills=$(jq -c '[{target: "", tenant_code: ""}] + map({target: ., tenant_code: .})' <<< "$clients")
+          fi
+          echo "drills=${drills}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Restore drills"
+            jq -r '.[] | "- " + (if .target == "" then "the control plane" else .target end)' <<< "$drills"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  drill:
+    needs: targets
+    name: drill ${{ matrix.target || 'the control plane' }}
+    runs-on: ubuntu-latest
+    # A dump, a restore and the whole console twice. Long for any database
+    # the fleet holds, and short enough that a drill stuck on a lock does not
+    # hold the next one back for the default six hours.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      # One at a time: each drill dumps a live database.
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.drills) }}
+    # Per target, so a drill of one client never waits on, or displaces, a
+    # drill of another.
+    concurrency:
+      group: restore-drill-${{ matrix.target || 'control-plane' }}
+      cancel-in-progress: false
+    env:
+      # The control plane: the register and the vault. DB_URL, the database
+      # drilled, is written by "The database to drill" below.
+      CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      TARGET: ${{ matrix.target }}
+      TENANT_CODE: ${{ matrix.tenant_code }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
       PGHOST: localhost
       PGPORT: '5432'
       PGUSER: postgres
@@ -61,7 +161,7 @@ jobs:
 
       - name: The secret exists
         run: |
-          if [[ -z "${DB_URL}" ]]; then
+          if [[ -z "${CP_URL}" ]]; then
             echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set; there is nothing to restore from."
             exit 1
           fi
@@ -76,6 +176,67 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-17
+
+      - name: The database to drill
+        # The control plane's own connection, or a client's from the
+        # control plane's vault: read, masked before anything else is
+        # printed, and refused unless it names the client's project and no
+        # other deployment's. Every step after this one reads DB_URL.
+        run: |
+          set -euo pipefail
+          if [[ -z "${TARGET}" ]]; then
+            echo "DB_URL=${CP_URL}" >> "$GITHUB_ENV"
+            echo "DRILL_SOURCE=live" >> "$GITHUB_ENV"
+            echo "drilling the control plane"
+            exit 0
+          fi
+          reg=supabase/ci/fleet_register.sh
+          row=$(CLOVEERP_LIVE_DATABASE_URL="$CP_URL" $reg row "${TARGET}")
+          if [[ -z "$row" ]]; then
+            echo "::error::${TARGET} is not in the control plane's register, so there is no database of that name to drill. Nothing was dumped."
+            exit 1
+          fi
+          status=$(sed -n 's/^status=//p' <<< "$row")
+          ref=$(sed -n 's/^ref=//p' <<< "$row")
+          case "$status" in
+            built|live|suspended|retiring) : ;;
+            *)
+              echo "::error::${TARGET} is ${status}: only a client whose database exists (built, live, suspended or retiring) is drilled. Nothing was dumped."
+              exit 1 ;;
+          esac
+          if ! [[ "$ref" =~ ^[a-z0-9]{20}$ ]]; then
+            echo "::error::the register gives ${TARGET} no project ref ('${ref}'). Nothing was dumped."
+            exit 1
+          fi
+          vault="cloveerp:deployment:${ref}:db_url"
+          url=$(CLOVEERP_LIVE_DATABASE_URL="$CP_URL" $reg vault-get "$vault")
+          [[ -z "$url" ]] || echo "::add-mask::${url}"
+          if [[ -z "$url" ]]; then
+            echo "::error::the control plane's vault has no ${vault}, so ${TARGET} cannot be reached. Its build from empty writes that entry. Nothing was dumped."
+            exit 1
+          fi
+          if [[ "$url" != *"${ref}"* ]]; then
+            echo "::error::${vault} does not name ${TARGET}'s project (${ref}). Nothing was dumped."
+            exit 1
+          fi
+          # On standard input, not -c: psql substitutes :'code' only there.
+          others=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" <<'SQL'
+          select coalesce(string_agg(d.project_ref, ','), '')
+            from erp_meta.deployment d
+           where d.code <> :'code' and d.project_ref is not null;
+          SQL
+          )
+          IFS=',' read -r -a refs <<< "${others},${PRODUCTION_REF},${DEMO_REF}"
+          for other in ${refs[@]+"${refs[@]}"}; do
+            other="${other// /}"
+            if [[ -n "$other" && "$other" != "$ref" && "$url" == *"$other"* ]]; then
+              echo "::error::${vault} names another deployment's project (${other}), not ${TARGET}'s (${ref}). Nothing was dumped."
+              exit 1
+            fi
+          done
+          echo "DB_URL=${url}" >> "$GITHUB_ENV"
+          echo "DRILL_SOURCE=${TARGET} (project ${ref})" >> "$GITHUB_ENV"
+          echo "drilling ${TARGET}: project ${ref}, ${status}"
 
       - name: Take the backup
         # The product's own schemas and the migration history. auth and storage
@@ -97,7 +258,7 @@ jobs:
             --schema=supabase_migrations \
             --file=live.dump
           ls -l live.dump
-          echo "backup: $(stat -c %s live.dump) bytes" >> "$GITHUB_STEP_SUMMARY"
+          echo "backup of ${DRILL_SOURCE}: $(stat -c %s live.dump) bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Start an isolated PostgreSQL
         run: |
@@ -180,15 +341,17 @@ jobs:
           fi
           echo "$out"
           {
-            echo "## Restore drill"
+            echo "## Restore drill of ${DRILL_SOURCE}"
             echo "- platform_assurance: $PASSED check(s) green on the restored database"
             echo "- $out"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Record the drill on live
+      - name: Record the drill in the database it restored
         # Whichever way it went. A passed drill names every assertion it ran; a
         # failed one carries what failed as its note. Recorded over the owner
-        # connection, which is what erp.record_restore_drill() trusts.
+        # connection of the database drilled — the control plane, or the
+        # client, whose commitments are its own — which is what
+        # erp.record_restore_drill() trusts.
         if: always() && env.DRILL_RAN != ''
         run: |
           set -euo pipefail
@@ -200,7 +363,7 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
             select erp.record_restore_drill(
               'restore_drill', '${STARTED_AT}'::timestamptz, now(),
-              'pg_dump of live on $(date -u +%F)',
+              'pg_dump of ${DRILL_SOURCE} on $(date -u +%F)',
               'github runner, supabase/postgres:17.6.1.167, database clove_restore',
               array[${DRILL_RAN},'erp.assert_whole_database_reconciles']::text[],
               ${DRILL_PASSED} + 1, ${DRILL_FAILED}, '${outcome}', null, \$note\$${note}\$note\$, 'restore_drill.yml');"
@@ -211,11 +374,29 @@ jobs:
         # itself, declares itself a restore target for one transaction, and
         # keeps one organisation. Then the same two checks over what is left,
         # and a second record.
+        #
+        # A client holds one organisation, whose code is the deployment's. A
+        # client built and not yet onboarded holds none: there is nothing to
+        # restore alone, and this says so rather than failing the quarter.
         run: |
           set -euo pipefail
-          CODE="${{ inputs.tenant_code }}"
+          CODE="${TENANT_CODE}"
+          if [[ -n "${TARGET}" && "$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select count(*) from erp.tenant")" == 0 ]]; then
+            echo "::notice::${TARGET} holds no organisation yet, so no organisation was restored alone; per_tenant_restore stays as it was."
+            echo "PER_TENANT=skipped" >> "$GITHUB_ENV"
+            echo "- one organisation restored alone: skipped, ${TARGET} holds none yet" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [[ -z "$CODE" ]]; then
             CODE=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select code from erp.tenant where status = 'active' order by created_at limit 1")
+          fi
+          if [[ -z "$CODE" ]]; then
+            echo "::error::the restored copy of ${DRILL_SOURCE} holds no active organisation to restore alone."
+            exit 1
+          fi
+          if [[ "$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select count(*) from erp.tenant where code = '$CODE'")" == 0 ]]; then
+            echo "::error::the restored copy of ${DRILL_SOURCE} holds no organisation ${CODE}. Name one with tenant_code."
+            exit 1
           fi
           started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
@@ -243,14 +424,33 @@ jobs:
           echo "- one organisation ($CODE) restored alone: ${outcome}; $out" >> "$GITHUB_STEP_SUMMARY"
           [[ "$outcome" == "passed" ]]
 
-      - name: Both commitments read proved on live
+      - name: Both commitments read proved
+        # In the database drilled: a client's commitments are its own.
         run: |
           set -euo pipefail
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select '- ' || commitment_code || ': ' || state from erp.continuity_report()" | tee -a "$GITHUB_STEP_SUMMARY"
+          wanted="'restore_drill', 'per_tenant_restore'"
+          [[ "${PER_TENANT:-}" != skipped ]] || wanted="'restore_drill'"
           not_proved=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
             select string_agg(commitment_code, ', ') from erp.continuity_report()
-             where commitment_code in ('restore_drill', 'per_tenant_restore') and state <> 'proved';")
+             where commitment_code in (${wanted}) and state <> 'proved';")
           if [[ -n "$not_proved" ]]; then
-            echo "::error::not proved after this drill: $not_proved"
+            echo "::error::not proved on ${DRILL_SOURCE} after this drill: $not_proved"
             exit 1
           fi
+
+      - name: Say so on the client's row
+        # The control plane's register, so the Fleet view shows when each
+        # client was last drilled and how it went: a note, which never moves
+        # the client's status. Never the reason a drill goes red.
+        if: always() && env.TARGET != ''
+        env:
+          CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          case "${OUTCOME}" in
+            success) words="restore drill passed: a dump restored into an isolated PostgreSQL, the console and the reconciliation green, recorded in its own database" ;;
+            *) words="restore drill ${OUTCOME}: run ${GITHUB_RUN_ID} says which step" ;;
+          esac
+          supabase/ci/fleet_register.sh event "${TARGET}" note note "${words}" ||
+            echo "::warning::the control plane's register could not be told about ${TARGET}'s drill; the drill itself is recorded in ${TARGET}'s database."

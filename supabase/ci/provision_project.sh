@@ -54,6 +54,13 @@
 #                                  user=, dbname= for the primary in session
 #                                  mode. The password never passes through
 #                                  here; the workflow composes the URL.
+#   sign-in-link <ref> <email> <redirect url>
+#                                  the end of a build: the owner is sent a
+#                                  sign-in link through the project's own
+#                                  auth API, as the sign-in screen asks for
+#                                  one (PUBLISHABLE_KEY). Accepted proves the
+#                                  project's own SMTP delivers beyond its team;
+#                                  refused names the SMTP settings to check.
 #   password <ref>                 PATCH the database password to DB_PASS, for
 #                                  a build carried on after the password was
 #                                  lost, and for rotation.
@@ -63,7 +70,10 @@
 #
 # Environment: SUPABASE_ACCESS_TOKEN (required; org-scoped, with the
 # projects permissions), CURL (the curl command, default curl), API (default
-# https://api.supabase.com).
+# https://api.supabase.com), and the MAPI_* settings of
+# supabase/ci/management_api.sh, through which every Management API call
+# here is made: a 429 or a 5xx is asked again with backoff, never refused at
+# the first answer.
 #
 # Nothing here touches a database: that is build_from_empty.sh, over a
 # connection the workflow composes from `pooler` and the vault.
@@ -71,6 +81,11 @@ set -euo pipefail
 
 CURL_CMD="${CURL:-curl}"
 API="${API:-https://api.supabase.com}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# mapi and patient_request: a 429 or a 5xx asked again with backoff, any
+# other 4xx a verdict (supabase/ci/management_api.sh).
+# shellcheck source=supabase/ci/management_api.sh
+. "$HERE/management_api.sh"
 
 refuse() {
   echo "x $*" >&2
@@ -84,28 +99,14 @@ is_ref() { [[ "$1" =~ ^[a-z0-9]{20}$ ]]; }
 is_code() { [[ "$1" =~ ^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$ ]]; }
 
 # api <method> <path> [json body]: the body on success, a refusal naming the
-# path and the status on failure. --fail-with-body so the API's own message
-# reaches the log; a 4xx from this API says what was wrong in plain words.
+# path on failure, after mapi has said the status and the API's own message
+# (a 4xx from this API says what was wrong in plain words). A busy minute is
+# waited out by mapi rather than refused here.
 api() {
   local method="$1" path="$2" body="${3:-}"
-  local out status
-  if [[ -n "$body" ]]; then
-    out=$($CURL_CMD -sS --fail-with-body -w '\n%{http_code}' -X "$method" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" \
-            --data "$body" "${API}${path}" 2>&1) || {
-      echo "$out" | sed '$d' >&2
-      refuse "${method} ${path} failed."
-    }
-  else
-    out=$($CURL_CMD -sS --fail-with-body -w '\n%{http_code}' -X "$method" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" "${API}${path}" 2>&1) || {
-      echo "$out" | sed '$d' >&2
-      refuse "${method} ${path} failed."
-    }
-  fi
-  status=$(printf '%s' "$out" | tail -n 1)
-  [[ "$status" =~ ^2 ]] || refuse "${method} ${path} answered ${status}: $(printf '%s' "$out" | sed '$d' | head -c 300)"
-  printf '%s' "$out" | sed '$d'
+  local out
+  out=$(mapi "$method" "$path" "$body") || refuse "${method} ${path} failed."
+  printf '%s' "$out"
 }
 
 cmd="${1:-}"
@@ -137,9 +138,26 @@ case "$cmd" in
       refuse "a project named '${project_name}' already exists (${existing}). Carry that build on with confirm_project_ref=${existing} rather than making a second project for ${code}."
     body=$(jq -cn --arg name "$project_name" --arg org "$ORG_SLUG" --arg region "$REGION" --arg size "$INSTANCE_SIZE" --arg pass "$DB_PASS" \
              '{name: $name, organization_slug: $org, region: $region, desired_instance_size: $size, db_pass: $pass}')
-    made=$(api POST "/v1/projects" "$body")
-    ref=$(printf '%s' "$made" | jq -r '.ref // .id // empty')
-    is_ref "$ref" || refuse "the Management API made a project but answered no ref: $(printf '%s' "$made" | head -c 300)"
+    # Asked again only after a 429, which says nothing was made: making a
+    # project is not safe to repeat, and a 5xx or no answer may come after the
+    # project was made. Then the organisation is looked at again, by name,
+    # before anything else is asked: a project that appeared is this build's
+    # (none of that name existed a moment ago) and is carried on with.
+    if made=$(MAPI_RETRY_ONLY_429=yes MAPI_TIMEOUT="${CREATE_TIMEOUT:-180}" mapi POST "/v1/projects" "$body"); then
+      ref=$(printf '%s' "$made" | jq -r '.ref // .id // empty')
+      is_ref "$ref" || refuse "the Management API made a project but answered no ref: $(printf '%s' "$made" | head -c 300)"
+    else
+      ref=""
+      for pause in ${CREATE_RECHECK_PAUSES:-15 30 60}; do
+        ${MAPI_SLEEP:-sleep} "$pause"
+        ref=$(api GET "/v1/organizations/${ORG_SLUG}/projects?limit=100" | jq -r --arg n "$project_name" '[.projects[] | select(.name == $n)] | .[0].ref // empty')
+        [[ -z "$ref" ]] || break
+      done
+      [[ -n "$ref" ]] ||
+        refuse "POST /v1/projects gave no project, and none named '${project_name}' has appeared in ${ORG_SLUG}. Retry the build: it looks for the project by name again before making one."
+      is_ref "$ref" || refuse "a project named '${project_name}' appeared, but its ref '${ref}' is not a ref."
+      echo "POST /v1/projects had no clear answer, but '${project_name}' now exists (${ref}); carrying on with it" >&2
+    fi
     echo "made ${project_name} (${ref}) in ${REGION} on ${INSTANCE_SIZE}" >&2
     echo "ref=${ref}"
     ;;
@@ -273,6 +291,39 @@ case "$cmd" in
     echo "host=${host}"; echo "port=${port}"; echo "user=${user}"; echo "dbname=${dbname}"
     ;;
 
+  sign-in-link)
+    ref="${1:?usage: provision_project.sh sign-in-link <ref> <email> <redirect url>}"
+    email="${2:?usage: provision_project.sh sign-in-link <ref> <email> <redirect url>}"
+    redirect="${3:?usage: provision_project.sh sign-in-link <ref> <email> <redirect url>}"
+    is_ref "$ref" || refuse "'$ref' is not a project ref."
+    [[ "$email" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || refuse "'$email' is not an email address."
+    [[ "$redirect" =~ ^https://[^[:space:]]+$ ]] || refuse "'$redirect' is not an https address for the link to come back to."
+    [[ -n "${PUBLISHABLE_KEY:-}" ]] || refuse "PUBLISHABLE_KEY is not set; the link is asked for the way the application asks for one, with the project's publishable key."
+    base="${PROJECT_API_URL:-https://${ref}.supabase.co}"
+    # Exactly what the sign-in screen sends (src/components/erp/gate.tsx,
+    # signInWithOtp with shouldCreateUser false): nobody is made, and a link
+    # goes to a sign-in that already exists. The project's auth API answers
+    # only once its mailer has handed the message to the SMTP server, so a
+    # 2xx is the proof that the project's own mail (configure: custom SMTP
+    # through Resend) accepts a message for an address outside the
+    # project's team, which Supabase's own sender never would.
+    body=$(jq -cn --arg email "$email" '{email: $email, create_user: false}')
+    back=$(jq -rn --arg r "$redirect" '$r | @uri')
+    # A publishable key in the new format (sb_publishable_…) is not a JWT and
+    # goes as apikey only, as owner's secret key does; a legacy anon key goes
+    # as a bearer too.
+    if [[ "${PUBLISHABLE_KEY}" == sb_* ]]; then
+      key_headers=(-H "apikey: ${PUBLISHABLE_KEY}")
+    else
+      key_headers=(-H "apikey: ${PUBLISHABLE_KEY}" -H "Authorization: Bearer ${PUBLISHABLE_KEY}")
+    fi
+    patient_request "POST /auth/v1/otp on ${ref}" POST "${base}/auth/v1/otp?redirect_to=${back}" "$body" \
+        "${key_headers[@]}" > /dev/null ||
+      refuse "${ref}'s own mail did not accept a sign-in link for ${email}, so a client could not be sent one either. Check the project's SMTP settings (Authentication, Emails, SMTP Settings): host ${SMTP_HOST:-smtp.resend.com}, port 465, user ${SMTP_USER:-resend}, the password (the RESEND_API_KEY secret, which must be a live Resend key), and a sender (MAIL_FROM) on a domain Resend has verified."
+    echo "a sign-in link for ${email} was accepted by ${ref}'s own mail, to come back to ${redirect}" >&2
+    echo "sign-in-link=sent"
+    ;;
+
   password)
     ref="${1:?usage: provision_project.sh password <ref>}"
     is_ref "$ref" || refuse "'$ref' is not a project ref."
@@ -302,6 +353,6 @@ case "$cmd" in
     ;;
 
   *)
-    refuse "usage: provision_project.sh create|wait|configure|keys|owner|pooler|password|secrets ..."
+    refuse "usage: provision_project.sh create|wait|configure|keys|owner|pooler|sign-in-link|password|secrets ..."
     ;;
 esac

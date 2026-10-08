@@ -174,8 +174,58 @@ jobs:
         # what each sends (sign-up closed, addresses confirmed, the site URL,
         # custom SMTP, the exposed schemas, a confirmed owner), that a setting
         # read back wrong stops it, and that no password or key is printed.
-        # Seconds, no API.
+        # And mapi (supabase/ci/management_api.sh), through which every
+        # workflow asks the Management API: a 429 or a 5xx asked again with
+        # backoff and Retry-After honoured, given up after MAPI_ATTEMPTS,
+        # any other 4xx never asked again. Seconds, no API.
         run: supabase/ci/provision_project_rehearsal.sh
+
+      - name: A client's secrets are changed as rehearsed
+        # supabase/ci/fleet_secrets.sh (fleet_secrets.yml) rotates a client's
+        # database password, sets its functions' secrets and re-applies its
+        # auth settings, for one client or every one, and runs for real only
+        # against paying clients' projects. So it runs here first, against a
+        # psql that keeps the register and the vault in files and a curl that
+        # answers from a script: what it refuses before touching anything,
+        # that a new password is in the vault before the project has it and
+        # its connection is stored, read back and connected to, that a
+        # failure says what changed and leaves the rest of the fleet alone,
+        # and that nothing secret is printed. Seconds, no database, no API.
+        run: supabase/ci/fleet_secrets_rehearsal.sh
+
+      - name: Which Edge Functions a release deploys is rehearsed
+        # supabase/ci/functions_to_deploy.sh decides, for release.yml, which
+        # functions changed since a target's last release. Wrong one way, a
+        # client is served a stale function and nothing says so. So it runs
+        # here first, against a small git repository made in a temporary
+        # directory: imports followed through worker/src/core and src/lib,
+        # the shared files that send every function, and every case in which
+        # the comparison cannot be trusted. Seconds.
+        run: supabase/ci/functions_to_deploy_rehearsal.sh
+
+      - name: Every client's staff is kept as the control plane's, rehearsed
+        # supabase/ci/fleet_staff_sync.sh (fleet_sync.yml) grants and removes
+        # the platform's ranks on every client's own project, every hour: a
+        # mistake in it is somebody let into a client's console, or its owner
+        # shut out. So it runs here first, against a psql that answers from
+        # files and a stand-in for each project's admin API: what it refuses
+        # before touching anything (a list without an owner above all), that
+        # the control plane's list is followed owners first and removals
+        # last, that a sign-in is made only where there is none and only
+        # confirmed, that the last owner's refusal is reported and the rest
+        # kept, that one client's trouble never stops the next, and that no
+        # connection string, key or password is printed. Seconds, no database.
+        run: supabase/ci/fleet_staff_sync_rehearsal.sh
+
+      - name: The fleet's poll is rehearsed
+        # supabase/ci/fleet_poll.sh (fleet_poll.yml) reads every client's
+        # database every hour and writes its health where the Fleet view
+        # shows it. Here first, against the same stand-ins: each reading and
+        # its type, the assurance only once a day and carried forward between,
+        # the backups, what could not be read written in errors without
+        # stopping the next client, a connection that is not the client's
+        # never used, and nothing secret printed. Seconds, no database.
+        run: supabase/ci/fleet_poll_rehearsal.sh
 
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the

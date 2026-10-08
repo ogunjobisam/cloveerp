@@ -1,0 +1,88 @@
+name: fleet staff
+
+# Every client's platform staff, kept as the control plane's list says.
+#
+# One Supabase project per client (the owner's decision of 7 October), and
+# staff kept on the control plane only (20261011100000): the owner adds,
+# re-ranks and removes staff on the control plane's console, and on a
+# client's own console those doors refuse. This workflow makes every built or
+# live client's list match the control plane's, through
+# supabase/ci/fleet_staff_sync.sh: a confirmed sign-in made on the client for
+# anyone who has none there (its own admin API, a password nobody knows; they
+# sign in with an emailed link), a staff row at the control plane's rank,
+# bound to that sign-in, for everyone on the list, and anyone the list no
+# longer names removed, softly, never the last owner. One client at a time;
+# what changed is written on each client's row in the register, which the
+# Fleet view shows.
+#
+# It runs every hour, so a change on the control plane reaches every client
+# within the hour; after every release train (deploy.yml), so a client that
+# has just been released the routines is kept at once; after a client's build
+# from empty (deployment_from_empty.yml, with its code), so a new client has
+# the staff before anyone needs to support it; and by hand, for every client
+# or one.
+#
+# Every connection string and key comes from the control plane's vault, read
+# over CLOVEERP_LIVE_DATABASE_URL and masked before anything else is printed.
+# Nothing here touches the control plane's own staff list, the
+# demonstration's (which is its owner and only its owner, release.yml), or a
+# client that is not built or live.
+
+on:
+  schedule:
+    - cron: '37 * * * *'
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "One client's code, as the register holds it; empty for every built or live client."
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# One sync at a time: two would both find the same member missing on a client
+# and both make a sign-in, and the second would be refused as already there.
+concurrency:
+  group: fleet-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: every client's staff as the control plane's
+    runs-on: ubuntu-latest
+    # A few statements per member per client, one client at a time with a
+    # pause, each statement under a 30-second limit: minutes for a fleet of
+    # twenty. The limit is for a sync stuck on something none of those limits
+    # covers.
+    timeout-minutes: 30
+    env:
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      # Every release to a client checks this owner is there (release.yml),
+      # so a control plane list that does not make them one is not followed.
+      PLATFORM_OWNER_EMAIL: ${{ vars.CLOVEERP_PLATFORM_OWNER_EMAIL }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      # In the environment, never in the script's text: an input is whatever
+      # was typed.
+      CODE: ${{ github.event_name == 'workflow_dispatch' && inputs.code || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Keep every client's staff as the control plane's
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so the control plane's staff list and its register cannot be read. No client's staff was changed."
+            exit 1
+          fi
+          if [[ -n "${CODE}" ]]; then
+            supabase/ci/fleet_staff_sync.sh "${CODE}"
+          else
+            supabase/ci/fleet_staff_sync.sh
+          fi

@@ -95,6 +95,9 @@ on:
       control_plane_database_url:
         description: "CLOVEERP_LIVE_DATABASE_URL: where a client's connection string is read from (vault_secret_name), and where its release is recorded."
         required: false
+      sweep_token:
+        description: "CLOVEERP_SWEEP_TOKEN, production only and optional: a fine-grained GitHub token with Actions read and write on this repository, kept in the control plane's vault so that the control plane can wake fleet_sweep.yml the moment the console asks for something."
+        required: false
 
 jobs:
   gate:
@@ -201,6 +204,11 @@ jobs:
       DISPATCH_URL: ${{ inputs.dispatch_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history: "Deploy the Edge Functions" compares this
+          # commit with the one this target last released, which a depth-1
+          # checkout does not have.
+          fetch-depth: 0
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
@@ -504,6 +512,12 @@ jobs:
         # Management API and the deploy stops if erp, erp_ref, erp_meta or
         # erp_test is listed. Only when SUPABASE_ACCESS_TOKEN is set, like the
         # Edge Functions step; without it, a notice says nothing was checked.
+        #
+        # Through mapi (supabase/ci/management_api.sh): a train of four
+        # clients shares one token's sixty calls a minute, and a 429 taken
+        # as a verdict would stop a release that would pass a minute later.
+        # A 429 or a 5xx is asked again with backoff; any other answer of
+        # 400 or more still stops the release.
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.supabase_access_token }}
         run: |
@@ -517,9 +531,9 @@ jobs:
             echo "::error::CLOVEERP_PROJECT_REF must be a 20-character project ref; got '${PROJECT_REF}'."
             exit 1
           fi
-          body=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-                   "https://api.supabase.com/v1/projects/${PROJECT_REF}/postgrest") || {
-            echo "::error::could not read the project's PostgREST settings from the Management API, so nothing says the erp schema is private. Nothing was applied."
+          . supabase/ci/management_api.sh
+          body=$(mapi GET "/v1/projects/${PROJECT_REF}/postgrest") || {
+            echo "::error::could not read the project's PostgREST settings from the Management API (the line above says what it answered), so nothing says the erp schema is private. Nothing was applied."
             exit 1
           }
           schemas=$(printf '%s' "$body" | jq -r '.db_schema // empty')
@@ -873,6 +887,29 @@ jobs:
         # calling them. With the token set, the integration's production
         # deploy can be switched off and this workflow is the one route again.
         # The CLI reads [functions.*] (verify_jwt, import_map) from config.toml.
+        #
+        # Only what changed, since 8 October: every function was deployed on
+        # every release, each at least one Management API call, and one
+        # token's sixty calls a minute serve the whole fleet. Which functions
+        # go, and why, is decided by supabase/ci/functions_to_deploy.sh
+        # (rehearsed by functions_to_deploy_rehearsal.sh on every build): a
+        # function is deployed when it is not on the project yet, when
+        # anything it is built from changed since the commit this target last
+        # released (its own directory and what it imports, followed through
+        # worker/src/core and src/lib), or when anything every function shares
+        # changed; and every function is deployed whenever that comparison
+        # cannot be trusted. The commit last released is the target's own
+        # record: for a client, the control plane's register
+        # (last_release_sha, only when that release succeeded); for the
+        # demonstration and production, the release just before this one in
+        # their own database (erp_meta.release), and only when it was proved:
+        # one that deployed functions and then failed was not, so every
+        # function is deployed after it, and a revert cannot leave its
+        # functions running. If the script itself cannot decide, every
+        # function is deployed.
+        #
+        # Each deploy is tried three times, twenty and then forty seconds
+        # apart: a busy minute at the Management API is not a broken function.
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.supabase_access_token }}
@@ -887,17 +924,100 @@ jobs:
             echo "::error::CLOVEERP_PROJECT_REF must be a 20-character project ref; got '${PROJECT_REF}'."
             exit 1
           fi
-          deployed=""
-          for dir in supabase/functions/*/; do
-            name=$(basename "$dir")
-            [[ -f "$dir/index.ts" ]] || continue
-            # --use-api bundles on Supabase's side, as the integration did: it follows
-            # the relative imports into worker/src/core and src/lib, and needs no Docker.
-            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api
-            deployed="$deployed $name"
-          done
-          echo "Edge Functions deployed:${deployed}"
-          echo "- Edge Functions deployed:${deployed}" >> "$GITHUB_STEP_SUMMARY"
+          . supabase/ci/management_api.sh
+
+          # The commit this target last released, from its own record.
+          last=""
+          if [[ "${KIND}" == client ]]; then
+            if [[ -n "${CP_URL}" ]]; then
+              last=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" <<'SQL'
+          select coalesce((select d.last_release_sha from erp_meta.deployment d
+                            where d.code = :'code' and d.last_release_outcome = 'success'), '');
+          SQL
+              ) || { echo "::warning::the control plane's register could not be read for ${TARGET}'s last release, so every function is deployed."; last=""; }
+            fi
+          else
+            # The release just before this one, and only if it was proved: a
+            # release that deployed functions and then failed is not proved,
+            # and a revert after it must not be compared with the one before.
+            last=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v this="${RELEASE_ID:-}" <<'SQL'
+          select coalesce((select case when r.proved_at is not null then r.git_sha else '' end
+                             from erp_meta.release r
+                            where r.id::text <> :'this'
+                            order by r.recorded_at desc limit 1), '');
+          SQL
+            ) || { echo "::warning::the ${TARGET}'s releases could not be read, so every function is deployed."; last=""; }
+          fi
+
+          # What the project has already: its functions' slugs, one a line.
+          # Not listed, the script deploys every function.
+          on_project=(--not-listed)
+          if answer=$(mapi GET "/v1/projects/${PROJECT_REF}/functions"); then
+            if jq -r 'if type == "array" then .[].slug else error("not a list") end' <<< "$answer" > "$RUNNER_TEMP/functions_on_project.txt"; then
+              on_project=(--on-project "$RUNNER_TEMP/functions_on_project.txt")
+            fi
+          fi
+
+          deploy_function() {
+            local attempt
+            for attempt in 1 2 3; do
+              # --use-api bundles on Supabase's side, as the integration did: it follows
+              # the relative imports into worker/src/core and src/lib, and needs no Docker.
+              if supabase functions deploy "$1" --project-ref "$PROJECT_REF" --use-api; then
+                return 0
+              fi
+              if [[ "$attempt" -lt 3 ]]; then
+                echo "::warning::deploying $1 to ${PROJECT_REF} failed on attempt ${attempt} of 3; trying again in $((attempt * 20)) s"
+                sleep $((attempt * 20))
+              fi
+            done
+            return 1
+          }
+
+          # One line a decision, tab-separated: the basis, then deploy or skip
+          # for each function, with why.
+          if ! plan=$(supabase/ci/functions_to_deploy.sh --last "$last" "${on_project[@]}" --head "${GITHUB_SHA}" --target "the ${TARGET}"); then
+            echo "::warning::which Edge Functions changed could not be worked out (supabase/ci/functions_to_deploy.sh said why, above), so every function is deployed."
+            why="which functions changed could not be worked out"
+            plan="basis"$'\t'"every"$'\t'"${why}"
+            for dir in supabase/functions/*/; do
+              if [[ -f "${dir}index.ts" ]]; then
+                plan+=$'\n'"deploy"$'\t'"$(basename "$dir")"$'\t'"${why}"
+              fi
+            done
+          fi
+
+          echo "## Edge Functions" >> "$GITHUB_STEP_SUMMARY"
+          deployed=""; skipped=""; failed=""
+          # The plan on a descriptor of its own, so that nothing a deploy
+          # reads from standard input can take the rest of it.
+          while IFS=$'\t' read -r verdict name why <&3; do
+            case "$verdict" in
+              basis)
+                if [[ "$name" == every ]]; then
+                  echo "Every function is deployed: ${why}." >> "$GITHUB_STEP_SUMMARY"
+                else
+                  echo "Compared with ${why:0:12}, the ${TARGET}'s last release:" >> "$GITHUB_STEP_SUMMARY"
+                fi ;;
+              skip)
+                skipped="${skipped} ${name}"
+                echo "- ${name}: skipped, ${why}" >> "$GITHUB_STEP_SUMMARY" ;;
+              deploy)
+                echo "${name}: deploying, because ${why}"
+                if deploy_function "$name"; then
+                  deployed="${deployed} ${name}"
+                  echo "- ${name}: deployed, because ${why}" >> "$GITHUB_STEP_SUMMARY"
+                else
+                  failed="${failed} ${name}"
+                  echo "- ${name}: NOT deployed in 3 attempts (${why})" >> "$GITHUB_STEP_SUMMARY"
+                fi ;;
+            esac
+          done 3<<< "$plan"
+          echo "Edge Functions deployed:${deployed:- none}; skipped:${skipped:- none}"
+          if [[ -n "$failed" ]]; then
+            echo "::error::these Edge Functions could not be deployed to ${PROJECT_REF} in three attempts each:${failed}. The ones listed as deployed are; the release stops here, before the dispatch schedule calls a function that may be stale, and the next release deploys every function again."
+            exit 1
+          fi
 
       - name: Schedule the dispatch function
         id: schedule_dispatch
@@ -1357,6 +1477,108 @@ jobs:
           if [[ "$failed" -gt 0 ]]; then
             echo "::warning::a drain pass since this deploy had ${failed} failed stage(s). Email is leaving; something in at least one organisation is not. The dispatch function's log names the organisation and the stage."
           fi
+
+      - name: The sweep can be woken
+        # The console's requests (a client's build, a release train) are
+        # started by fleet_sweep.yml, which runs every ten minutes: up to ten
+        # minutes of "Queued" after the owner pressed a button. The control
+        # plane can start the sweep at once instead, the moment a request is
+        # written (20261012010000: a trigger on erp_meta.fleet_request posts a
+        # workflow_dispatch to GitHub through pg_net), if it holds a token
+        # GitHub accepts for that. The application never holds it: a token in
+        # the application's secrets is a token in every host it serves.
+        #
+        # The token is CLOVEERP_SWEEP_TOKEN, a fine-grained GitHub token with
+        # Actions read and write on this repository only, which the owner
+        # creates and sets as a repository secret. This puts it in the
+        # control plane's vault as cloveerp_sweep_token, the way the dispatch
+        # secret is kept: written inside the database, never printed, updated
+        # when the secret changes. Then erp_meta.set_fleet_dispatch() is told
+        # which repository's sweep to wake. Without the secret, nothing is
+        # stored and the sweep runs on its schedule, as it always has.
+        #
+        # Production only, last, and only when everything before it passed:
+        # the release is applied and proved by now, so this failing leaves the
+        # release standing and says what was not stored.
+        if: ${{ success() && env.KIND == 'production' && !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
+        env:
+          SWEEP_TOKEN: ${{ secrets.sweep_token }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${SWEEP_TOKEN}" ]]; then
+            echo "::add-mask::${SWEEP_TOKEN}"
+          fi
+          held=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select exists (select 1 from vault.secrets where name = 'cloveerp_sweep_token');")
+          if [[ -z "${SWEEP_TOKEN}" ]]; then
+            if [[ "$held" == t ]]; then
+              echo "::notice::CLOVEERP_SWEEP_TOKEN is not set, so this release stored no token. The control plane's vault still holds the one an earlier release put there (cloveerp_sweep_token), which wakes the sweep for as long as GitHub accepts it; once GitHub refuses it, the console's requests wait for the sweep's ten-minute schedule."
+              echo "- The sweep: CLOVEERP_SWEEP_TOKEN not set; the vault keeps the token an earlier release stored" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::notice::CLOVEERP_SWEEP_TOKEN is not set, so the control plane cannot wake the sweep: the console's requests are started by fleet_sweep.yml's ten-minute schedule only. To start them at once, create a fine-grained GitHub token with Actions read and write on ${GITHUB_REPOSITORY} and set it as the repository secret CLOVEERP_SWEEP_TOKEN; the next release to the control plane stores it."
+              echo "- The sweep: runs on its ten-minute schedule only (no CLOVEERP_SWEEP_TOKEN)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
+          # A GitHub token is letters, digits and underscores. Anything else (a
+          # space or a line break pasted with it) would break the request
+          # header it goes in, and every wake would fail without a word.
+          if ! [[ "${SWEEP_TOKEN}" =~ ^[A-Za-z0-9_]+$ ]]; then
+            echo "::error::CLOVEERP_SWEEP_TOKEN has characters a GitHub token never has (a space or a line break pasted with it?), so it was not stored and the sweep is not woken by it. Set the secret again with the token alone. The release itself is applied and proved."
+            exit 1
+          fi
+          if ! [[ "${GITHUB_REPOSITORY}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::the repository's name (${GITHUB_REPOSITORY}) is not owner/name, so the control plane was not told which sweep to wake. The release itself is applied and proved."
+            exit 1
+          fi
+
+          # What will become of the token, read first (created, updated or
+          # unchanged), then the change itself in one transaction: updated
+          # where it is held and differs, created where it is not. On standard
+          # input, not -c: psql substitutes :'token' only there.
+          if ! stored=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v token="${SWEEP_TOKEN}" <<'SQL'
+          select case
+                   when not exists (select 1 from vault.secrets s where s.name = 'cloveerp_sweep_token') then 'created'
+                   when exists (select 1 from vault.decrypted_secrets d
+                                 where d.name = 'cloveerp_sweep_token' and d.decrypted_secret is distinct from :'token') then 'updated'
+                   else 'unchanged'
+                 end;
+          SQL
+          ); then
+            echo "::error::the control plane's vault could not be read (the error is above), so the sweep's token was not stored and the console's requests wait for the sweep's ten-minute schedule. The release itself is applied and proved; the next release to the control plane tries again."
+            exit 1
+          fi
+          if [[ "$stored" != unchanged ]]; then
+            if ! psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v token="${SWEEP_TOKEN}" > /dev/null <<'SQL'
+          begin;
+          select vault.update_secret(d.id, :'token')
+            from vault.decrypted_secrets d
+           where d.name = 'cloveerp_sweep_token' and d.decrypted_secret is distinct from :'token';
+          select vault.create_secret(:'token', 'cloveerp_sweep_token',
+                   'A fine-grained GitHub token (Actions read and write on this repository) with which the control plane wakes fleet_sweep.yml when the console asks for something. Stored by release.yml from CLOVEERP_SWEEP_TOKEN and never printed.')
+           where not exists (select 1 from vault.secrets s where s.name = 'cloveerp_sweep_token');
+          commit;
+          SQL
+            then
+              echo "::error::the sweep's token could not be stored in the control plane's vault (the error is above), so the console's requests wait for the sweep's ten-minute schedule. The release itself is applied and proved; the next release to the control plane tries again."
+              exit 1
+            fi
+          fi
+
+          has=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regprocedure('erp_meta.set_fleet_dispatch(text)') is not null")
+          if [[ "$has" != t ]]; then
+            echo "::notice::the sweep's token is in the control plane's vault (${stored}), and the control plane predates 20261012010000, which wakes the sweep with it; until a release brings that, the console's requests wait for the sweep's ten-minute schedule."
+            echo "- The sweep: token ${stored}; the control plane cannot wake the sweep yet (20261012010000 not released)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v repo="${GITHUB_REPOSITORY}" > /dev/null <<'SQL'
+          select erp_meta.set_fleet_dispatch(:'repo');
+          SQL
+          then
+            echo "::error::the sweep's token is in the control plane's vault (${stored}), and erp_meta.set_fleet_dispatch() refused ${GITHUB_REPOSITORY} (the error is above), so the control plane does not know which sweep to wake. The release itself is applied and proved."
+            exit 1
+          fi
+          echo "the sweep's token: ${stored}; the control plane wakes fleet_sweep.yml on ${GITHUB_REPOSITORY} when the console asks for something"
+          echo "- The sweep: woken by the control plane on ${GITHUB_REPOSITORY} (token ${stored}); its ten-minute schedule stays as the fallback" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Record the outcome in the control plane's register
         # A client's release, whatever became of it, is written on its row in

@@ -11,11 +11,15 @@ import {
   buildRequestIsStale,
   CHECKLIST_ITEMS,
   deploymentAddress,
+  deploymentHealthLine,
   STALE_BUILD_REQUEST_MINUTES,
+  SWEEP_STARTS,
   type ChecklistItem,
   type ClientDeployment,
   type ClientDeploymentStatus,
   type DeploymentEvent,
+  type HealthLine,
+  type HealthTone,
   type PlatformRole,
 } from "../../lib/platform";
 import { FormDialog } from "./dialogs";
@@ -31,10 +35,15 @@ import { Card, Fail, INPUT, LINK_BUTTON } from "./kit";
  * client's database holds one customer and knows nothing of the others.
  *
  * The console holds no token for GitHub. Asking for a build, or for a release
- * train, writes a request the scheduled sweep (fleet_sweep.yml) claims within
- * ten minutes and starts; the row then follows the run through the events the
- * workflow records on it, so a build's progress is read here and not in a
- * run log.
+ * train, writes a request; the control plane wakes the sweep (fleet_sweep.yml)
+ * at once when it has been given the means to, and the sweep's ten-minute
+ * schedule finds the request otherwise (SWEEP_STARTS). The row then follows
+ * the run through the events the workflow records on it, so a build's
+ * progress is read here and not in a run log.
+ *
+ * A built or live row also says what the fleet poll last read from the
+ * client's own database (deploymentHealthLine), and says so when the poll has
+ * not heard from it for a day.
  */
 
 /** Where a run's log is: the repository the workflows run in. */
@@ -71,6 +80,13 @@ function statusWord(d: ClientDeployment): string {
 function when(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
+
+const TONE_TEXT: Record<HealthTone, string> = {
+  ok: "text-emerald-700 dark:text-emerald-400",
+  warn: "text-amber-700 dark:text-amber-400",
+  bad: "text-destructive",
+  muted: "text-muted-foreground",
+};
 
 export function Fleet({ role }: { role: PlatformRole }) {
   const queryClient = useQueryClient();
@@ -198,10 +214,13 @@ function DeploymentRow({
   const recovery = buildRecovery(d, now);
   const stalled = buildRequestIsStale(d, now);
   const lastRun = d.last_release_run_id ?? d.build_run_id;
+  // Built or live, and the register says something of it: a line of its own
+  // under the row, so the row and its health read as one.
+  const health = deploymentHealthLine(d, now);
 
   return (
     <>
-      <tr className="border-b border-border/60 align-top last:border-0">
+      <tr className={health ? "align-top" : "border-b border-border/60 align-top last:border-0"}>
         <td className="py-3 pr-4">
           <div className="text-sm font-medium">{d.client_name}</div>
           <div className="font-mono text-[11px] text-muted-foreground">{d.code}</div>
@@ -226,7 +245,7 @@ function DeploymentRow({
             </div>
           ) : d.status === "requested" && d.request_status === "requested" ? (
             <div className="mt-1 text-[11px] text-muted-foreground">
-              The build starts within ten minutes.
+              The build starts {SWEEP_STARTS}.
             </div>
           ) : null}
         </td>
@@ -340,6 +359,13 @@ function DeploymentRow({
           </div>
         </td>
       </tr>
+      {health ? (
+        <tr className="border-b border-border/60 last:border-0">
+          <td colSpan={7} className="pb-3 pr-0 pt-0">
+            <DeploymentHealthSummary line={health} />
+          </td>
+        </tr>
+      ) : null}
       {open ? (
         <tr className="border-b border-border/60 last:border-0">
           <td colSpan={7} className="py-2 pr-0">
@@ -348,6 +374,36 @@ function DeploymentRow({
         </tr>
       ) : null}
     </>
+  );
+}
+
+/**
+ * What the fleet poll last read from a client's database, in one line: when
+ * it was polled, its assurance, its size, when its queue was last drained,
+ * support windows open, whether its staff are in step, and its latest backup.
+ * Silence comes first and what the poll could not read last.
+ */
+function DeploymentHealthSummary({ line }: { line: HealthLine }) {
+  return (
+    <div className="flex flex-col gap-0.5 text-[11px]">
+      {line.silence ? <p className="text-amber-700 dark:text-amber-400">{line.silence}</p> : null}
+      {line.parts.length > 0 ? (
+        <p className="text-muted-foreground">
+          <span className="font-medium uppercase tracking-wide">Health</span>
+          {line.parts.map((part) => (
+            <span key={part.key}>
+              {" · "}
+              <span className={TONE_TEXT[part.tone]}>{part.text}</span>
+            </span>
+          ))}
+        </p>
+      ) : null}
+      {line.errors.map((error, i) => (
+        <p key={`${i}-${error}`} className="text-destructive">
+          Poll error: {error}
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -412,7 +468,7 @@ function RequestDeployment({ onDone }: { onDone: () => void }) {
         </button>
       }
       title="Request a client deployment"
-      description="A row in the register and a build the sweep starts within ten minutes. The reason is kept with the deployment and in the activity log."
+      description={`A row in the register and a build, which starts ${SWEEP_STARTS}. The reason is kept with the deployment and in the activity log.`}
       submitLabel="Request the build"
       busyLabel="Requesting…"
       ready={ready}
@@ -496,7 +552,7 @@ function RequestRelease({
         </button>
       }
       title="Ask for a release"
-      description="The sweep starts deploy.yml within ten minutes: the demonstration, then the clients named, then the control plane."
+      description={`The release starts ${SWEEP_STARTS}, and goes to the demonstration, then the clients named, then the control plane.`}
       submitLabel="Ask for the release"
       busyLabel="Asking…"
       ready={ready}
@@ -652,7 +708,7 @@ function StartAgain({ d, onDone }: { d: ClientDeployment; onDone: () => void }) 
         </button>
       }
       title={`Start the build of ${d.client_name} again`}
-      description={`Its last request has had ${STALE_BUILD_REQUEST_MINUTES} minutes with nothing happening. Starting again cancels that request and queues a new one, which the sweep starts within ten minutes.${
+      description={`Its last request has had ${STALE_BUILD_REQUEST_MINUTES} minutes with nothing happening. Starting again cancels that request and queues a new one, which starts ${SWEEP_STARTS}.${
         d.project_ref
           ? " Its project exists, so the build carries on from where it stopped."
           : " No project was made yet, so the build starts from the beginning."

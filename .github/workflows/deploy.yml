@@ -549,24 +549,54 @@ jobs:
       database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      # Optional: the token the control plane wakes fleet_sweep.yml with,
+      # stored in its vault by release.yml ("The sweep can be woken").
+      sweep_token: ${{ secrets.CLOVEERP_SWEEP_TOKEN }}
 
   held:
     # A train that stopped: something before the control plane went red, so
     # the control plane was not released, and the application (app.yml) stays
     # where it is until every database carries a later commit. Said in one
     # place rather than left as skipped jobs that look like a quiet day.
+    #
+    # Cancelled as well as failed. A release that reaches its sixty minutes
+    # (release.yml) is cancelled by GitHub, not failed, and so is one pushed
+    # out of its concurrency group by a later arrival; either holds the
+    # control plane back exactly as a failure does (apply needs success),
+    # and checking for failure alone left that hold grey and unexplained.
+    # The run itself being cancelled is somebody's decision, and says so on
+    # its own: !cancelled() keeps this quiet then.
     needs: [targets, demonstration, clients, apply]
     if: >-
       ${{ !cancelled() && needs.targets.result == 'success'
           && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
           && needs.targets.outputs.want_control == 'true'
           && needs.apply.result == 'skipped'
-          && (needs.demonstration.result == 'failure' || needs.clients.result == 'failure') }}
+          && (needs.demonstration.result == 'failure' || needs.demonstration.result == 'cancelled'
+              || needs.clients.result == 'failure' || needs.clients.result == 'cancelled') }}
     name: the control plane was held back
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - run: |
-          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released, and the application stays where it is: it ships only what every database carries. Fix forward (the Fleet view names the client and the step) and release the client again; or, to release the control plane without waiting for it, dispatch this workflow with targets=control. The application follows the first train after which every database has the same commit or a later one."
+      - env:
+          DEMONSTRATION: ${{ needs.demonstration.result }}
+          CLIENTS: ${{ needs.clients.result }}
+        run: |
+          why=""
+          case "${DEMONSTRATION}" in
+            failure) why="the demonstration's release failed" ;;
+            cancelled) why="the demonstration's release was cancelled (a release that reaches its 60-minute limit is cancelled, not failed)" ;;
+          esac
+          case "${CLIENTS}" in
+            failure) why="${why:+${why}; and }a client's release failed (the clients job)" ;;
+            cancelled) why="${why:+${why}; and }a client's release was cancelled (the clients job; a release that reaches its 60-minute limit is cancelled, not failed)" ;;
+          esac
+          echo "::error::${why}, so the control plane was NOT released, and the application stays where it is: it ships only what every database carries. Fix forward (the Fleet view names the client and the step) and release again; or, to release the control plane without waiting, dispatch this workflow with targets=control. The application follows the first train after which every database has the same commit or a later one."
+          {
+            echo "## The control plane was held back"
+            echo "- demonstration: ${DEMONSTRATION}"
+            echo "- clients: ${CLIENTS}"
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
   application:
@@ -587,3 +617,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: gh workflow run app.yml --ref main
+
+  staff:
+    # Last, once a train has been to any client: every client's staff made
+    # the control plane's (fleet_sync.yml) at once, rather than at the next
+    # hour. A train is what brings a client the routines that keep its staff
+    # (20261011100000), so a client that could not be kept before the train
+    # can be kept now. Whatever the train's outcome: a client it reached is
+    # kept, one it did not is said to be a release behind, and the sync never
+    # stops for one client.
+    needs: [targets, demonstration, clients, apply]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.targets.result == 'success' && needs.targets.outputs.count != '0' }}
+    name: the clients' staff follow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Ask fleet_sync.yml to keep every client's staff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run fleet_sync.yml --ref main

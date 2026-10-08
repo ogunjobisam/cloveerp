@@ -57,8 +57,18 @@
 #                 keeps the build from being one long burst
 #   SUPABASE_ACCESS_TOKEN, PROJECT_REF
 #                 required: the project's auth settings are read through the
-#                 Management API (GET /v1/projects/<ref>/config/auth)
+#                 Management API (GET /v1/projects/<ref>/config/auth), with
+#                 the patience of supabase/ci/management_api.sh (API, MAPI_*)
 #   CURL          the curl command (default: curl)
+#   PROGRESS_EVERY
+#                 report progress after every this many migrations applied
+#                 (default 0: never). A build runs for hours, and its log is
+#                 not where the Fleet view looks
+#   PROGRESS_CMD  the command that reports it, given "<n> of <total>
+#                 migrations applied" as its last argument; split on spaces,
+#                 so a plain command and its first arguments. Its failure
+#                 never stops the build: progress is a courtesy, the
+#                 migrations are the work
 #   CHECK_ONLY    yes to make every check that comes before the build and stop
 #                 there, changing nothing (deployment_from_empty.yml runs it before it
 #                 provides anything)
@@ -70,9 +80,12 @@ PSQL_CMD="${PSQL:-psql}"
 RESUME="${RESUME:-no}"
 VACUUM_EVERY="${VACUUM_EVERY:-20}"
 PAUSE_SECONDS="${PAUSE_SECONDS:-0}"
-CURL_CMD="${CURL:-curl}"
 CHECK_ONLY="${CHECK_ONLY:-no}"
+PROGRESS_EVERY="${PROGRESS_EVERY:-0}"
+PROGRESS_CMD="${PROGRESS_CMD:-}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=supabase/ci/management_api.sh
+. "$HERE/management_api.sh"
 
 refuse() {
   echo "x $*" >&2
@@ -86,8 +99,20 @@ refuse() {
   refuse "'$OWNER' is not an email address; the platform's owner is named by the address they sign in with."
 [[ "$VACUUM_EVERY" =~ ^[0-9]+$ ]] || refuse "VACUUM_EVERY must be a whole number."
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || refuse "PAUSE_SECONDS must be a whole number."
+[[ "$PROGRESS_EVERY" =~ ^[0-9]+$ ]] || refuse "PROGRESS_EVERY must be a whole number."
+[[ "$PROGRESS_EVERY" -eq 0 || -n "${PROGRESS_CMD// /}" ]] ||
+  refuse "PROGRESS_EVERY is ${PROGRESS_EVERY} and PROGRESS_CMD is not set: there is nothing to report progress with."
 
 q() { $PSQL_CMD "$DB" -v ON_ERROR_STOP=1 -X -q -tA "$@"; }
+
+# progress <words>: PROGRESS_CMD with the words as its last argument. Never
+# fatal, and never reading the replay's standard input.
+progress() {
+  local cmd
+  read -r -a cmd <<< "$PROGRESS_CMD"
+  "${cmd[@]}" "$1" < /dev/null ||
+    echo "! progress was not reported (${cmd[0]} exited $?); the build carries on"
+}
 
 # The owner as a SQL literal, for the few checks below that are not run
 # through a psql variable.
@@ -96,9 +121,8 @@ OWNER_SQL="'$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]' | sed "s/'/''/g"
 # ── Nobody can be there first ────────────────────────────────────────────────
 [[ -n "${SUPABASE_ACCESS_TOKEN:-}" && "${PROJECT_REF:-}" =~ ^[a-z0-9]{20}$ ]] ||
   refuse "SUPABASE_ACCESS_TOKEN and PROJECT_REF are needed to read the project's auth settings; without them nothing says a stranger cannot sign up first."
-auth=$($CURL_CMD -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-         "https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth") ||
-  refuse "could not read the project's auth settings from the Management API."
+auth=$(mapi GET "/v1/projects/${PROJECT_REF}/config/auth") ||
+  refuse "could not read the project's auth settings from the Management API, so nothing says a stranger cannot sign up first. Nothing was changed."
 [[ "$(jq -r '.disable_signup' <<< "$auth")" == "true" ]] ||
   refuse "sign-up is open on ${PROJECT_REF}. Turn it off (Authentication, Sign In / Providers, Allow new users to sign up) before the build: anybody who signs up while it runs could be matched to the platform's staff."
 [[ "$(jq -r '.mailer_autoconfirm' <<< "$auth")" == "false" ]] ||
@@ -248,6 +272,9 @@ SQL
   done_now=$((done_now + 1))
   since_vacuum=$((since_vacuum + 1))
   echo "- $base ($((done_now + skipped))/$total)"
+  if [[ "$PROGRESS_EVERY" -gt 0 && $((done_now % PROGRESS_EVERY)) -eq 0 ]]; then
+    progress "$((done_now + skipped)) of ${total} migrations applied"
+  fi
 
   if [[ "$VACUUM_EVERY" -gt 0 && "$since_vacuum" -ge "$VACUUM_EVERY" ]]; then
     # Outside the transaction, which VACUUM cannot run inside. Best effort:
