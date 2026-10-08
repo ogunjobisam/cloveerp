@@ -16,7 +16,13 @@ import { Wordmark } from "../components/erp/logo";
 import { Pill } from "../components/erp/panel";
 import { TOUCH } from "../components/erp/page";
 import { callErp, isConfigured, supabase } from "../lib/erp";
-import { ROLE_BLURB, ROLE_TONE, usePlatformMe, type PlatformRole } from "../lib/platform";
+import {
+  ROLE_BLURB,
+  ROLE_TONE,
+  usePlatformMe,
+  type PlatformMe,
+  type PlatformRole,
+} from "../lib/platform";
 import {
   consoleSearch,
   locate,
@@ -103,16 +109,25 @@ const ICONS: Record<SectionKey, ReactNode> = {
   platform: <Server className="size-4" />,
 };
 
-type ViewContext = { role: PlatformRole; org: string | null };
+/**
+ * What every panel is given: the rank, the organisation whose page is open,
+ * and what erp_platform_me said of the deployment, so a panel shows a client's
+ * console what a client's project does and nothing it would refuse.
+ */
+type ViewContext = { role: PlatformRole; org: string | null; me: PlatformMe };
 
 /**
  * Every tab's panel. Keyed by the view keys in platform-console.ts, so a tab
  * added there without a panel here does not compile.
  */
 const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
-  today: () => <Today />,
-  organisations: ({ role, org }) =>
-    org ? <OrganisationPage code={org} role={role} /> : <Companies role={role} />,
+  today: ({ me }) => <Today deployment={me.deployment} />,
+  organisations: ({ role, org, me }) =>
+    org ? (
+      <OrganisationPage code={org} role={role} deployment={me.deployment} />
+    ) : (
+      <Companies role={role} me={me} />
+    ),
   fleet: ({ role }) => <Fleet role={role} />,
   ownership: () => <Ownership />,
   enquiries: ({ role }) => <Enquiries role={role} />,
@@ -127,7 +142,7 @@ const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
   queue: ({ role }) => <Queue role={role} />,
   deployment: () => <Deployment />,
   incidents: () => <Incidents />,
-  staff: ({ role }) => <Staff role={role} />,
+  staff: ({ role, me }) => <Staff role={role} deployment={me.deployment} />,
   activity: () => <Activity />,
   decisions: () => <Decisions />,
 };
@@ -378,7 +393,7 @@ function PlatformConsole() {
             </nav>
           ) : null}
 
-          {PANELS[view.key]({ role, org })}
+          {PANELS[view.key]({ role, org, me: me.data })}
         </div>
       </div>
     </Frame>

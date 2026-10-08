@@ -1,7 +1,8 @@
 import { useState } from "react";
 
+import { deploymentCode } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
-import { displayAddress } from "../../lib/tenant-address";
+import { deploymentAddress, displayAddress } from "../../lib/tenant-address";
 import { ActionButtons } from "./actions-bar";
 import { addressHost } from "./gate";
 import { Prose } from "./page";
@@ -14,6 +15,11 @@ import { useErpSession } from "./session-context";
  * no second door to ask. Changing it goes through erp_set_tenant_address,
  * which authorises administration.configure; the old address keeps opening
  * the new one, so a link already sent does not break.
+ *
+ * On a client's own project the address is the deployment's host,
+ * acme.cloveerp.com, as the directory named it (src/lib/erp.ts): the project
+ * holds one organisation, the host is its door, and nothing here changes a
+ * host, so changing it is not offered there.
  */
 export function TenantAddressCard() {
   const { ui } = useT();
@@ -21,7 +27,8 @@ export function TenantAddressCard() {
   const [copied, setCopied] = useState(false);
   const code = session.tenant?.code;
   if (!code) return null;
-  const address = displayAddress(addressHost(), code);
+  const fixed = deploymentCode;
+  const address = fixed !== null ? deploymentAddress(fixed) : displayAddress(addressHost(), code);
 
   async function copy() {
     try {
@@ -53,30 +60,32 @@ export function TenantAddressCard() {
           {copied ? ui("Copied") : ui("Copy")}
         </button>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <ActionButtons
-          actions={[
-            {
-              label: "Change the address",
-              description:
-                "The address changes at once. The old one keeps working and opens the new one, and no other organisation can take it.",
-              permission: "administration.configure",
-              fn: "erp_set_tenant_address",
-              fields: [
-                {
-                  kind: "text",
-                  name: "p_code",
-                  label: "New address",
-                  required: true,
-                  placeholder: "acme",
-                  hint: "Letters, digits and hyphens, three to 63 characters.",
-                },
-              ],
-              invalidates: ["erp_session"],
-            },
-          ]}
-        />
-      </div>
+      {fixed !== null ? null : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <ActionButtons
+            actions={[
+              {
+                label: "Change the address",
+                description:
+                  "The address changes at once. The old one keeps working and opens the new one, and no other organisation can take it.",
+                permission: "administration.configure",
+                fn: "erp_set_tenant_address",
+                fields: [
+                  {
+                    kind: "text",
+                    name: "p_code",
+                    label: "New address",
+                    required: true,
+                    placeholder: "acme",
+                    hint: "Letters, digits and hyphens, three to 63 characters.",
+                  },
+                ],
+                invalidates: ["erp_session"],
+              },
+            ]}
+          />
+        </div>
+      )}
     </section>
   );
 }

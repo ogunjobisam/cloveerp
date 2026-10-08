@@ -2,13 +2,20 @@ import { describe, expect, test } from "bun:test";
 
 import {
   APEX_HOST,
+  APEX_ORIGIN,
   DEMO_ADDRESS,
   DEMO_BACKEND,
   DEMO_HOST,
   PRODUCTION_BACKEND,
+  apexHref,
+  apexRedirect,
   chooseBackend,
   clientCodeOf,
   isClientHost,
+  isDirectoryHost,
+  isPublicSiteHost,
+  marketingIsElsewhere,
+  normalHost,
   pageHost,
 } from "./backend";
 import { demonstrationsLiveElsewhere } from "./platform";
@@ -56,6 +63,32 @@ describe("the project a page talks to", () => {
     expect(chooseBackend("acme.example.com", stack)).toEqual(stack);
   });
 
+  test("every other name under the apex fails closed, whatever its shape, never production", () => {
+    for (const host of [
+      "ab.cloveerp.com",
+      "a.cloveerp.com",
+      "a.b.cloveerp.com",
+      "abc.def.cloveerp.com",
+      "-x.cloveerp.com",
+      "x-.cloveerp.com",
+      "a_b.cloveerp.com",
+      `${"a".repeat(64)}.cloveerp.com`,
+      "acme.cloveerp.com.",
+      "ACME.CLOVEERP.COM.",
+    ]) {
+      expect(chooseBackend(host, none)).toBeNull();
+      expect(chooseBackend(host, stack)).toBeNull();
+    }
+  });
+
+  test("a fully qualified name is the same host as the one without its trailing dot", () => {
+    expect(chooseBackend("demo.cloveerp.com.", none)).toEqual(DEMO_BACKEND);
+    expect(chooseBackend("cloveerp.com.", none)).toEqual(PRODUCTION_BACKEND);
+    expect(chooseBackend("www.cloveerp.com.", none)).toEqual(PRODUCTION_BACKEND);
+    expect(normalHost(" Acme.CloveERP.com. ")).toBe("acme.cloveerp.com");
+    expect(normalHost("cloveerp.com")).toBe("cloveerp.com");
+  });
+
   test("a client's host is one label under the apex, and the label is its code", () => {
     expect(isClientHost("acme.cloveerp.com")).toBe(true);
     expect(clientCodeOf("Acme-Tools.cloveerp.com")).toBe("acme-tools");
@@ -70,6 +103,43 @@ describe("the project a page talks to", () => {
     ]) {
       expect(isClientHost(notClient)).toBe(false);
       expect(clientCodeOf(notClient)).toBeNull();
+    }
+  });
+
+  test("a directory host is any name under the apex but the apex, www and the demonstration", () => {
+    for (const host of [
+      "acme.cloveerp.com",
+      "ab.cloveerp.com",
+      "a.cloveerp.com",
+      "a.b.cloveerp.com",
+      "-x.cloveerp.com",
+      "acme.cloveerp.com.",
+      "Acme.CloveERP.com",
+    ]) {
+      expect(isDirectoryHost(host)).toBe(true);
+    }
+    for (const host of [
+      APEX_HOST,
+      `www.${APEX_HOST}`,
+      DEMO_HOST,
+      "cloveerp.com.",
+      "www.cloveerp.com.",
+      "demo.cloveerp.com.",
+      "acme.cloveerp.com.example.net",
+      "notcloveerp.com",
+      "acmecloveerp.com",
+      "localhost",
+      "127.0.0.1",
+      null,
+    ]) {
+      expect(isDirectoryHost(host)).toBe(false);
+    }
+  });
+
+  test("every host shaped like a client's is a directory host", () => {
+    for (const host of ["acme.cloveerp.com", "acme-tools.cloveerp.com", "abc.cloveerp.com"]) {
+      expect(isClientHost(host)).toBe(true);
+      expect(isDirectoryHost(host)).toBe(true);
     }
   });
 
@@ -104,5 +174,52 @@ describe("where demonstrations are made", () => {
     expect(demonstrationsLiveElsewhere({ deployment: "demonstration" })).toBe(false);
     expect(demonstrationsLiveElsewhere({})).toBe(false);
     expect(demonstrationsLiveElsewhere(undefined)).toBe(false);
+  });
+});
+
+describe("the apex's own pages", () => {
+  test("the public site is the apex and www, and nowhere else", () => {
+    expect(isPublicSiteHost(APEX_HOST)).toBe(true);
+    expect(isPublicSiteHost("www.cloveerp.com")).toBe(true);
+    expect(isPublicSiteHost("CloveERP.com.")).toBe(true);
+    for (const host of [DEMO_HOST, "acme.cloveerp.com", "ab.cloveerp.com", "localhost", null]) {
+      expect(isPublicSiteHost(host)).toBe(false);
+    }
+  });
+
+  test("are elsewhere on the demonstration and on every directory host", () => {
+    for (const host of [DEMO_HOST, "demo.cloveerp.com.", "acme.cloveerp.com", "a.b.cloveerp.com"]) {
+      expect(marketingIsElsewhere(host)).toBe(true);
+    }
+    for (const host of [APEX_HOST, "www.cloveerp.com", "localhost", "127.0.0.1", null]) {
+      expect(marketingIsElsewhere(host)).toBe(false);
+    }
+  });
+
+  test("a link to one goes to the apex from a host where they are elsewhere, and stays a path elsewhere", () => {
+    expect(apexHref("/product", DEMO_HOST)).toBe(`${APEX_ORIGIN}/product`);
+    expect(apexHref("/contact", "acme.cloveerp.com")).toBe(`${APEX_ORIGIN}/contact`);
+    expect(apexHref("/product", APEX_HOST)).toBe("/product");
+    expect(apexHref("/contact", "www.cloveerp.com")).toBe("/contact");
+    expect(apexHref("/contact", "localhost")).toBe("/contact");
+    expect(apexHref("/contact", null)).toBe("/contact");
+  });
+
+  test("asked for where they are elsewhere, the page is the apex's, query and all", () => {
+    expect(apexRedirect("/product", "", DEMO_HOST)).toBe(`${APEX_ORIGIN}/product`);
+    expect(apexRedirect("/contact", "?plan=growth", "acme.cloveerp.com")).toBe(
+      `${APEX_ORIGIN}/contact?plan=growth`,
+    );
+    expect(apexRedirect("/product/", "", "ab.cloveerp.com")).toBe(`${APEX_ORIGIN}/product`);
+  });
+
+  test("anything else stays where it is", () => {
+    expect(apexRedirect("/product", "", APEX_HOST)).toBeNull();
+    expect(apexRedirect("/contact", "", "www.cloveerp.com")).toBeNull();
+    expect(apexRedirect("/product", "", "localhost")).toBeNull();
+    expect(apexRedirect("/product", "", null)).toBeNull();
+    expect(apexRedirect("/signin", "", DEMO_HOST)).toBeNull();
+    expect(apexRedirect("/", "", "acme.cloveerp.com")).toBeNull();
+    expect(apexRedirect("/products", "", DEMO_HOST)).toBeNull();
   });
 });

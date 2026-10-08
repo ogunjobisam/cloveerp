@@ -16,6 +16,7 @@ import { callErp } from "../../lib/erp";
 import { formatMinorWhole } from "../../lib/money";
 import {
   atLeast,
+  type DeploymentKind,
   type MyTenancy,
   type OrganisationPerson,
   type PlatformRole,
@@ -23,7 +24,7 @@ import {
   type SupportWindow,
   type TenantConfiguration,
 } from "../../lib/platform";
-import { isDemoCode } from "../../lib/platform-console";
+import { consoleReach, isDemoCode } from "../../lib/platform-console";
 import { Card, ConsoleLink, Fail, LINK_BUTTON, statusLabel, statusTone } from "./kit";
 import { OrganisationActions } from "./organisation-actions";
 import type { PlatformPlans } from "./plans";
@@ -81,7 +82,18 @@ const RENEWAL: Record<string, string> = {
   none: "does not renew",
 };
 
-export function OrganisationPage({ code, role }: { code: string; role: PlatformRole }) {
+export function OrganisationPage({
+  code,
+  role,
+  deployment,
+}: {
+  code: string;
+  role: PlatformRole;
+  deployment: DeploymentKind | undefined;
+}) {
+  // A client's own project holds no contract and sells nothing: its contract,
+  // invoices and the catalogue live on the control plane (consoleReach).
+  const business = consoleReach(deployment).controlPlaneBusiness;
   const tenants = useQuery({
     queryKey: ["erp_platform_tenants"],
     queryFn: () => callErp<PlatformTenant[]>("erp_platform_tenants"),
@@ -160,19 +172,26 @@ export function OrganisationPage({ code, role }: { code: string; role: PlatformR
             : ""}
         </p>
         <div className="mt-4">
-          <OrganisationActions tenant={t} role={role} inside={inside} member={member} size="full" />
+          <OrganisationActions
+            tenant={t}
+            role={role}
+            inside={inside}
+            member={member}
+            size="full"
+            deployment={deployment}
+          />
         </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <People tenant={t} inside={inside} />
-        <Subscription code={t.code} />
+        <Subscription code={t.code} catalogue={business} />
       </div>
 
       {atLeast(role, "operator") ? <PeopleList tenantId={t.id} /> : null}
 
       <Setup tenantId={t.id} />
-      <Contract code={t.code} />
+      {business ? <Contract code={t.code} /> : null}
     </div>
   );
 }
@@ -313,7 +332,11 @@ function PeopleList({ tenantId }: { tenantId: string }) {
   );
 }
 
-function Subscription({ code }: { code: string }) {
+/**
+ * The organisation's plan. `catalogue` is whether this console offers the
+ * Catalogue, where every plan is listed; a client's console does not.
+ */
+function Subscription({ code, catalogue }: { code: string; catalogue: boolean }) {
   const q = useQuery({
     queryKey: ["erp_platform_plans"],
     queryFn: () => callErp<PlatformPlans>("erp_platform_plans"),
@@ -324,9 +347,11 @@ function Subscription({ code }: { code: string }) {
       title="Plan and subscription"
       icon={<CreditCard className="size-4 text-primary" />}
       action={
-        <ConsoleLink section="catalogue" view="plans" className={LINK_BUTTON}>
-          All plans
-        </ConsoleLink>
+        catalogue ? (
+          <ConsoleLink section="catalogue" view="plans" className={LINK_BUTTON}>
+            All plans
+          </ConsoleLink>
+        ) : null
       }
     >
       {q.isPending ? (
@@ -376,8 +401,8 @@ function Subscription({ code }: { code: string }) {
               ) : null}
               {subs.length > 1 ? (
                 <p className="text-xs text-muted-foreground">
-                  {subs.length - 1} earlier {subs.length - 1 === 1 ? "term" : "terms"} under Plans
-                  and subscriptions.
+                  {subs.length - 1} earlier {subs.length - 1 === 1 ? "term" : "terms"}
+                  {catalogue ? " under Plans and subscriptions" : ""}.
                 </p>
               ) : null}
             </div>

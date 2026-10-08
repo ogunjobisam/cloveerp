@@ -75,6 +75,11 @@ export type OpenInvoiceRow = {
   due_on: string;
   overdue: boolean;
   days_overdue: number;
+  /**
+   * The client deployment the invoice's contract names, when it names one
+   * (20261011130000). Its code is not an organisation on this deployment.
+   */
+  deployment_code?: string | null;
   /** How far the chase has got (20260915070000). */
   reminders_sent?: number | null;
   last_reminder_at?: string | null;
@@ -305,6 +310,9 @@ export function invoiceCards(rows: OpenInvoiceRow[]): TodayCard[] {
       : ` ${chased} ${plural(chased, "reminder has", "reminders have")} gone${
           last ? `, the last on ${new Date(last).toLocaleDateString("en-GB")}` : ""
         }.`;
+  // One customer opens its page, unless that customer is a client deployment,
+  // whose code names no organisation here: its contract is where it lives.
+  const toOrganisation = codes.length === 1 && late.every((i) => !i.deployment_code);
   return [
     {
       key: "overdue-invoices",
@@ -312,11 +320,10 @@ export function invoiceCards(rows: OpenInvoiceRow[]): TodayCard[] {
       title: plural(late.length, "Invoice overdue", "Invoices overdue"),
       sentence: `${what} ${plural(late.length, "is", "are")} past the due date; the oldest is ${oldest} ${plural(oldest, "day", "days")} late.${chase}`,
       tone: "bad",
-      action: codes.length === 1 ? "Open the organisation" : "Open contracts",
-      target:
-        codes.length === 1
-          ? { section: "customers", view: "organisations", org: codes[0]! }
-          : { section: "sales", view: "contracts" },
+      action: toOrganisation ? "Open the organisation" : "Open contracts",
+      target: toOrganisation
+        ? { section: "customers", view: "organisations", org: codes[0]! }
+        : { section: "sales", view: "contracts" },
     },
   ];
 }
@@ -552,6 +559,66 @@ export function organisationCards(tenants: TenantRow[]): TodayCard[] {
 /* -------------------------------------------------------------------------- */
 /* The page.                                                                  */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Every door Today reads, in the order of importance the page gives them: a
+ * card from a door earlier in the list comes first within its tone.
+ */
+export const TODAY_SOURCES = [
+  "incidents",
+  "assurance",
+  "revenue",
+  "invoices",
+  "delivery",
+  "enquiries",
+  "transfers",
+  "organisations",
+  "windows",
+  "selling",
+  "payment",
+] as const;
+
+export type TodaySourceKey = (typeof TODAY_SOURCES)[number];
+
+/**
+ * The doors that are the control plane's own business: renewals, invoices,
+ * enquiries, selling and payment details. A client's own project refuses them
+ * (erp.require_not_client, 20261011090000).
+ */
+export const CONTROL_PLANE_SOURCES: ReadonlySet<TodaySourceKey> = new Set<TodaySourceKey>([
+  "revenue",
+  "invoices",
+  "enquiries",
+  "selling",
+  "payment",
+]);
+
+/**
+ * The doors Today reads on a deployment, in order.
+ *
+ * A client's Today leaves the control plane's doors out altogether. Disabling
+ * their queries is not enough: a query that is never enabled stays pending for
+ * ever, so the page would say "still checking" for good and never be clear.
+ */
+export function todaySourcesFor(
+  deployment: "production" | "demonstration" | "client" | undefined,
+): TodaySourceKey[] {
+  return deployment === "client"
+    ? TODAY_SOURCES.filter((k) => !CONTROL_PLANE_SOURCES.has(k))
+    : [...TODAY_SOURCES];
+}
+
+/**
+ * The sentence that closes Today's all-clear, saying what was looked at. A
+ * client's Today read no renewal or invoice, so it does not claim to have.
+ */
+export function allClearSentence(
+  deployment: "production" | "demonstration" | "client" | undefined,
+): string {
+  return deployment === "client"
+    ? "No incident is open, and the organisation on this project is running."
+    : "No incident is open, no renewal or invoice is waiting, and every organisation is running.";
+}
 
 /** One door's contribution to Today, however far it has got. */
 export type TodaySource =

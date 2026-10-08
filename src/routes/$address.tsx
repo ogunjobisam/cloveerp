@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import { Centred, Gate, SignIn } from "../components/erp/gate";
 import { NotFoundComponent } from "../components/erp/not-found";
-import { isClientHost, pageHost } from "../lib/backend";
+import { isDirectoryHost, pageHost } from "../lib/backend";
 import { isConfigured } from "../lib/erp";
 import { addressPath, addressShaped } from "../lib/tenant-address";
 import { tenantByAddress } from "../lib/tenant-address.functions";
@@ -46,7 +46,7 @@ function AddressPage() {
 
   // A client's own host has one organisation and no addresses: its door is
   // its sign-in.
-  const onClientHost = isClientHost(pageHost());
+  const onClientHost = isDirectoryHost(pageHost());
 
   const lookup = useQuery({
     queryKey: ["erp_tenant_by_address", code],

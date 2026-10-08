@@ -4,12 +4,14 @@ import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { callErp } from "../../lib/erp";
 import type {
   CheckResult,
+  DeploymentKind,
   OpenInvoice,
   OwnershipTransfer,
   PlatformTenant,
   SupportWindow,
 } from "../../lib/platform";
 import {
+  allClearSentence,
   assuranceCards,
   emailDeliveryCards,
   enquiryCards,
@@ -22,6 +24,7 @@ import {
   sellingCards,
   summariseToday,
   supportWindowCards,
+  todaySourcesFor,
   transferCards,
   type BillingDetailsRead,
   type EmailDeliveryRead,
@@ -31,6 +34,7 @@ import {
   type SellingRead,
   type TodayCard,
   type TodaySource,
+  type TodaySourceKey,
 } from "../../lib/platform-today";
 import { Card, ConsoleLink, Fail, LINK_BUTTON } from "./kit";
 
@@ -48,6 +52,11 @@ import { Card, ConsoleLink, Fail, LINK_BUTTON } from "./kit";
  * fails shows its own error in its own card and takes nothing else with it.
  * What deserves a card is decided in src/lib/platform-today.ts, where it is
  * tested.
+ *
+ * On a client's own project the control plane's doors — renewals, invoices,
+ * enquiries, selling and payment details — are refused, so Today neither asks
+ * them nor waits for them (todaySourcesFor): their queries are not enabled and
+ * their sources are left out of the page altogether.
  */
 
 function source<T>(
@@ -61,7 +70,10 @@ function source<T>(
   return { key, label, state: "ready", cards: cards(query.data) };
 }
 
-export function Today() {
+export function Today({ deployment }: { deployment: DeploymentKind | undefined }) {
+  const reads = todaySourcesFor(deployment);
+  const asks = (key: TodaySourceKey) => reads.includes(key);
+
   const incidents = useQuery({
     queryKey: ["erp_platform_incidents"],
     queryFn: () => callErp<IncidentRow[]>("erp_platform_incidents"),
@@ -74,10 +86,12 @@ export function Today() {
   const revenue = useQuery({
     queryKey: ["erp_platform_revenue"],
     queryFn: () => callErp<RevenueRead>("erp_platform_revenue"),
+    enabled: asks("revenue"),
   });
   const enquiries = useQuery({
     queryKey: ["erp_platform_enquiries"],
     queryFn: () => callErp<EnquiryRow[]>("erp_platform_enquiries", { p_limit: 200 }),
+    enabled: asks("enquiries"),
   });
   const transfers = useQuery({
     queryKey: ["erp_platform_ownership_transfers"],
@@ -94,10 +108,12 @@ export function Today() {
   const selling = useQuery({
     queryKey: ["erp_platform_commercial_state"],
     queryFn: () => callErp<SellingRead>("erp_platform_commercial_state"),
+    enabled: asks("selling"),
   });
   const invoices = useQuery({
     queryKey: ["erp_platform_open_invoices"],
     queryFn: () => callErp<OpenInvoice[]>("erp_platform_open_invoices"),
+    enabled: asks("invoices"),
   });
   const delivery = useQuery({
     queryKey: ["erp_platform_email_delivery"],
@@ -106,6 +122,7 @@ export function Today() {
   const payment = useQuery({
     queryKey: ["erp_platform_billing_details"],
     queryFn: () => callErp<BillingDetailsRead>("erp_platform_billing_details"),
+    enabled: asks("payment"),
   });
   const windows = useQuery({
     queryKey: ["erp_platform_support_windows"],
@@ -113,19 +130,30 @@ export function Today() {
   });
 
   const now = new Date();
-  const summary = summariseToday([
-    source("incidents", "Incidents", incidents, (rows) => incidentCards(rows ?? [])),
-    source("assurance", "Checks", assurance, (rows) => assuranceCards(rows ?? [])),
-    source("revenue", "Renewals", revenue, (d) => (d ? revenueCards(d) : [])),
-    source("invoices", "Invoices", invoices, (rows) => invoiceCards(rows ?? [])),
-    source("delivery", "Email delivery", delivery, (d) => (d ? emailDeliveryCards(d) : [])),
-    source("enquiries", "Enquiries", enquiries, (rows) => enquiryCards(rows ?? [], now)),
-    source("transfers", "Ownership transfers", transfers, (rows) => transferCards(rows ?? [])),
-    source("organisations", "Organisations", tenants, (rows) => organisationCards(rows ?? [])),
-    source("windows", "Support windows", windows, (rows) => supportWindowCards(rows ?? [], now)),
-    source("selling", "Selling setup", selling, (d) => (d ? sellingCards(d) : [])),
-    source("payment", "Payment details", payment, (d) => (d ? paymentDetailsCards(d) : [])),
-  ]);
+  // Each door's contribution, read only when it is one this deployment reads:
+  // a query that was never enabled is pending for good, and waiting on it
+  // would keep the page from ever being clear.
+  const contribution: Record<TodaySourceKey, () => TodaySource> = {
+    incidents: () =>
+      source("incidents", "Incidents", incidents, (rows) => incidentCards(rows ?? [])),
+    assurance: () => source("assurance", "Checks", assurance, (rows) => assuranceCards(rows ?? [])),
+    revenue: () => source("revenue", "Renewals", revenue, (d) => (d ? revenueCards(d) : [])),
+    invoices: () => source("invoices", "Invoices", invoices, (rows) => invoiceCards(rows ?? [])),
+    delivery: () =>
+      source("delivery", "Email delivery", delivery, (d) => (d ? emailDeliveryCards(d) : [])),
+    enquiries: () =>
+      source("enquiries", "Enquiries", enquiries, (rows) => enquiryCards(rows ?? [], now)),
+    transfers: () =>
+      source("transfers", "Ownership transfers", transfers, (rows) => transferCards(rows ?? [])),
+    organisations: () =>
+      source("organisations", "Organisations", tenants, (rows) => organisationCards(rows ?? [])),
+    windows: () =>
+      source("windows", "Support windows", windows, (rows) => supportWindowCards(rows ?? [], now)),
+    selling: () => source("selling", "Selling setup", selling, (d) => (d ? sellingCards(d) : [])),
+    payment: () =>
+      source("payment", "Payment details", payment, (d) => (d ? paymentDetailsCards(d) : [])),
+  };
+  const summary = summariseToday(reads.map((key) => contribution[key]()));
 
   const health = assurance.data ? healthSummary(assurance.data) : null;
 
@@ -145,8 +173,7 @@ export function Today() {
                     : ""
                 }.`
               : "Every check on this deployment holds."}{" "}
-            No incident is open, no renewal or invoice is waiting, and every organisation is
-            running.
+            {allClearSentence(deployment)}
           </p>
           <ConsoleLink
             section="platform"

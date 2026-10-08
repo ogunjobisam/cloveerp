@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { CONSOLE_SECTIONS } from "./platform-console";
+import { CONSOLE_SECTIONS, sectionsFor } from "./platform-console";
 import {
+  allClearSentence,
   assuranceCards,
+  CONTROL_PLANE_SOURCES,
+  TODAY_SOURCES,
+  todaySourcesFor,
   emailDeliveryCards,
   enquiryCards,
   healthSummary,
@@ -204,6 +208,15 @@ describe("renewals and invoices", () => {
     );
     expect(two[0]!.target).toEqual({ section: "sales", view: "contracts" });
     opensARealTab(two[0]!);
+  });
+
+  test("a client deployment's late invoice opens contracts, not an organisation it is not", () => {
+    const own = invoiceCards([
+      invoice({ tenant_code: "acme", deployment_code: "acme", overdue: true, days_overdue: 3 }),
+    ]);
+    expect(own[0]!.action).toBe("Open contracts");
+    expect(own[0]!.target).toEqual({ section: "sales", view: "contracts" });
+    opensARealTab(own[0]!);
   });
 
   test("the card says how far the chase has got, when it has got anywhere", () => {
@@ -482,6 +495,99 @@ describe("the page", () => {
     expect(
       summariseToday([{ key: "one", label: "One", state: "error", error: "no" }]).allClear,
     ).toBe(false);
+  });
+});
+
+describe("Today on each kind of deployment", () => {
+  test("the control plane, the demonstration and an older database read every door, in order", () => {
+    for (const d of ["production", "demonstration", undefined] as const) {
+      expect(todaySourcesFor(d)).toEqual([...TODAY_SOURCES]);
+    }
+  });
+
+  test("a client leaves out renewals, invoices, enquiries, selling and payment details", () => {
+    expect(todaySourcesFor("client")).toEqual([
+      "incidents",
+      "assurance",
+      "delivery",
+      "transfers",
+      "organisations",
+      "windows",
+    ]);
+    for (const k of todaySourcesFor("client")) expect(CONTROL_PLANE_SOURCES.has(k)).toBe(false);
+    expect([...CONTROL_PLANE_SOURCES].map(String).sort()).toEqual([
+      "enquiries",
+      "invoices",
+      "payment",
+      "revenue",
+      "selling",
+    ]);
+  });
+
+  test("a client's Today is all clear once the doors it reads have answered", () => {
+    // Were the left-out doors only disabled, each would stay pending and the
+    // page would never be clear; left out, they are not waited for.
+    const sources = todaySourcesFor("client").map((key) => ({
+      key,
+      label: key,
+      state: "ready" as const,
+      cards: [],
+    }));
+    const summary = summariseToday(sources);
+    expect(summary.pending).toEqual([]);
+    expect(summary.allClear).toBe(true);
+  });
+
+  test("every card a client's Today can show opens a tab the client's console offers", () => {
+    const offered = sectionsFor("client");
+    const cards = [
+      ...incidentCards([{ code: "INC-1", title: "Slow", state: "declared", overdue: true }]),
+      ...assuranceCards([{ code: "a", title: "Isolation", ok: false }]),
+      ...emailDeliveryCards({
+        trouble: [
+          {
+            event_id: "e",
+            state: "bounced",
+            occurred_at: NOW.toISOString(),
+            to_address: "a@b.test",
+            matched: "invitation",
+            suppressed: true,
+          },
+        ],
+        suppressed: [],
+        recent: {},
+      }),
+      ...transferCards([{ status: "pending", is_mine_to_answer: true }]),
+      ...organisationCards([
+        { code: "acme", name: "Acme", status: "suspended", deleted_at: null },
+        { code: "acme2", name: "Acme", status: "deleted", deleted_at: NOW.toISOString() },
+      ]),
+      ...supportWindowCards(
+        [
+          {
+            tenant_code: "acme",
+            tenant_name: "Acme",
+            staff_email: "sam@clove.test",
+            is_write_access: true,
+            expires_at: new Date(NOW.getTime() + 3600_000).toISOString(),
+          },
+        ],
+        NOW,
+      ),
+    ];
+    expect(cards.length).toBeGreaterThanOrEqual(6);
+    for (const card of cards) {
+      const section = offered.find((s) => s.key === card.target.section);
+      expect(section).toBeDefined();
+      expect(section!.views.some((v) => v.key === card.target.view)).toBe(true);
+    }
+  });
+
+  test("a client's all-clear claims nothing about renewals or invoices", () => {
+    expect(allClearSentence("client")).not.toMatch(/renewal|invoice/i);
+    for (const d of ["production", "demonstration", undefined] as const) {
+      expect(allClearSentence(d)).toContain("no renewal or invoice is waiting");
+    }
   });
 });
 

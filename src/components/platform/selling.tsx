@@ -38,7 +38,17 @@ export type CommercialState = {
     reason: string | null;
     status: string | null;
   } | null;
+  /**
+   * Organisations here that may be designated the platform organisation, and
+   * may be a quote's or contract's customer. Never a deployment.
+   */
   candidates: { code: string; name: string; is_demonstration: boolean }[];
+  /**
+   * The client deployments in the register (20261011090000), kept apart from
+   * the candidates: a quote or contract may be for one, but a deployment can
+   * never be the platform organisation. Absent from an older database.
+   */
+  deployments?: { code: string; name: string; status: string }[];
   price_items: number;
   selling: {
     installed: boolean;

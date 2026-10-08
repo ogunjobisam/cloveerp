@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { SignIn } from "../components/erp/gate";
+import { marketingIsElsewhere } from "../lib/backend";
 import { safeReturnPath } from "../lib/return-path";
 
 /**
@@ -18,7 +19,7 @@ import { safeReturnPath } from "../lib/return-path";
  */
 
 export const Route = createFileRoute("/signin")({
-  head: () => ({
+  head: (ctx) => ({
     meta: [
       { title: "Sign in — Clove ERP" },
       {
@@ -29,7 +30,13 @@ export const Route = createFileRoute("/signin")({
       // page is what a search should find.
       { name: "robots", content: "noindex, follow" },
     ],
-    links: [{ rel: "canonical", href: "https://cloveerp.com/signin" }],
+    // A client's sign-in, or the demonstration's, is that deployment's own
+    // door and no copy of the apex's: it names no canonical page. Read
+    // defensively: the title is also read from here with no route context
+    // (__root.tsx).
+    links: marketingIsElsewhere(ctx?.match?.context?.host ?? null)
+      ? []
+      : [{ rel: "canonical", href: "https://cloveerp.com/signin" }],
   }),
   component: SignInPage,
 });

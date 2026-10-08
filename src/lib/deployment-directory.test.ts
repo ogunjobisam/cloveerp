@@ -5,6 +5,7 @@ import {
   cacheKey,
   cachedEntryJson,
   directoryHost,
+  directoryOutcome,
   readCachedEntry,
   readDirectoryEntry,
 } from "./deployment-directory";
@@ -90,5 +91,54 @@ describe("what the register answered", () => {
         key: "",
       }),
     ).toBeNull();
+  });
+});
+
+describe("what the browser concludes about a host", () => {
+  const entry = {
+    code: "acme",
+    client_name: "Acme Ltd",
+    url: "https://abcdefghijklmnopqrst.supabase.co",
+    key: "sb_publishable_x",
+  };
+  const older = { ...entry, client_name: "Acme Limited" };
+
+  test("an answer naming the project is found, and kept again", () => {
+    expect(directoryOutcome({ status: 200, body: entry }, null)).toEqual({
+      kind: "found",
+      entry,
+      fresh: true,
+    });
+    // The directory's own answer wins over a copy kept from before.
+    expect(directoryOutcome({ status: 200, body: entry }, older)).toEqual({
+      kind: "found",
+      entry,
+      fresh: true,
+    });
+  });
+
+  test("nobody here is nobody here, whatever was kept", () => {
+    expect(directoryOutcome({ status: 404, body: null }, null)).toEqual({ kind: "none" });
+    expect(directoryOutcome({ status: 404, body: null }, entry)).toEqual({ kind: "none" });
+    expect(directoryOutcome({ status: 400, body: null }, entry)).toEqual({ kind: "none" });
+  });
+
+  test("a directory that cannot answer is not one that says nobody is here", () => {
+    for (const response of [
+      null,
+      { status: 503, body: null },
+      { status: 500, body: null },
+      { status: 429, body: null },
+      { status: 200, body: { code: "acme" } },
+      { status: 200, body: null },
+    ]) {
+      expect(directoryOutcome(response, null)).toEqual({ kind: "unreachable" });
+    }
+  });
+
+  test("while it cannot answer, a fresh copy kept from before is used, and not kept again", () => {
+    for (const response of [null, { status: 503, body: null }, { status: 200, body: "x" }]) {
+      expect(directoryOutcome(response, entry)).toEqual({ kind: "found", entry, fresh: false });
+    }
   });
 });

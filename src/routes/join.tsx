@@ -5,7 +5,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Centred, Gate, GoogleGlyph, SignIn } from "../components/erp/gate";
 import { Wordmark } from "../components/erp/logo";
 import { useErpSession } from "../components/erp/session-context";
-import { callInvite, supabase, supabaseUrl } from "../lib/erp";
+import { useGoogleSignIn } from "../lib/auth-settings";
+import { callInvite, deploymentName, supabase, supabaseUrl } from "../lib/erp";
 import { readJoinArrival, verifiedSignInLink, type JoinArrival } from "../lib/invitation-email";
 import {
   clearStoredInvitation,
@@ -118,6 +119,9 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
   const [password, setPassword] = useState(false);
   const [resend, setResend] = useState<"idle" | "sending" | "sent" | "not-sent">("idle");
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const google = useGoogleSignIn();
+  // On a client's own host, the client, as the directory named it.
+  const invitedTo = deploymentName ?? "Clove ERP";
 
   if (!token) {
     return (
@@ -183,8 +187,8 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
         {arrival.failure
           ? "A sign-in link works once and only for a short while, so it runs out long before the invitation does. Your invitation is still here."
           : signin
-            ? "You have been invited to Clove ERP. Continue to sign in with the address the invitation was sent to, then join the organisation that invited you."
-            : "You have been invited to Clove ERP. Sign in with the address the invitation was sent to, then join the organisation that invited you."}
+            ? `You have been invited to ${invitedTo}. Continue to sign in with the address the invitation was sent to, then join the organisation that invited you.`
+            : `You have been invited to ${invitedTo}. Sign in with the address the invitation was sent to, then join the organisation that invited you.`}
       </p>
 
       {signin ? (
@@ -224,24 +228,31 @@ function JoinSignedOut({ arrival }: { arrival: JoinArrival }) {
         </>
       )}
 
-      <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" />
-        or
-        <span className="h-px flex-1 bg-border" />
-      </div>
+      {/* Only where this project's Auth has Google switched on
+          (src/lib/auth-settings.ts): a client's own project, and the
+          demonstration, do not, and the button led to a page of raw JSON. */}
+      {google ? (
+        <>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or
+            <span className="h-px flex-1 bg-border" />
+          </div>
 
-      <button
-        type="button"
-        onClick={() => void continueWithGoogle()}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-      >
-        <GoogleGlyph />
-        Continue with Google
-      </button>
-      {googleError ? (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {googleError}
-        </p>
+          <button
+            type="button"
+            onClick={() => void continueWithGoogle()}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            <GoogleGlyph />
+            Continue with Google
+          </button>
+          {googleError ? (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {googleError}
+            </p>
+          ) : null}
+        </>
       ) : null}
 
       <p className="mt-4 text-center text-xs text-muted-foreground">

@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
-const BASE_URL = "https://cloveerp.com";
+import { APEX_ORIGIN } from "../lib/backend";
+import { requestHost, sitemapRedirect } from "../lib/request-host";
+
+const BASE_URL = APEX_ORIGIN;
 
 interface SitemapEntry {
   path: string;
@@ -24,10 +27,23 @@ const entries: SitemapEntry[] = [
   { path: "/contact", changefreq: "monthly", priority: "0.7" },
 ];
 
+/**
+ * The apex's, and served only there. One Worker answers every host, so a
+ * client's host, the demonstration and www would each have served the apex's
+ * list as their own; a sitemap names pages on its own host only, so anywhere
+ * else the answer is a permanent move to the apex's.
+ */
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
+        const elsewhere = sitemapRedirect(requestHost(request) || null);
+        if (elsewhere !== null) {
+          return new Response(null, {
+            status: 301,
+            headers: { Location: elsewhere, "Cache-Control": "public, max-age=3600" },
+          });
+        }
         const urls = entries.map((e) =>
           [
             `  <url>`,
