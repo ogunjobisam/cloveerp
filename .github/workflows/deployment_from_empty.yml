@@ -686,3 +686,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: gh workflow run app.yml --ref main
+
+  staff:
+    # Last: the new client is given the control plane's staff
+    # (fleet_sync.yml, for this code alone), so whoever supports it has a
+    # confirmed sign-in and their rank there before anyone asks, rather than
+    # at the next hour. Once it is built, whatever its first release did: a
+    # built client is kept as a live one is.
+    needs: [build, release]
+    if: ${{ always() && inputs.code != 'demo' && needs.build.result == 'success' }}
+    name: its staff follow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Ask fleet_sync.yml to give it the control plane's staff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # In the environment, never in the script's text: an input is
+          # whatever was typed.
+          CODE: ${{ inputs.code }}
+        run: gh workflow run fleet_sync.yml --ref main -f "code=${CODE}"

@@ -617,3 +617,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: gh workflow run app.yml --ref main
+
+  staff:
+    # Last, once a train has been to any client: every client's staff made
+    # the control plane's (fleet_sync.yml) at once, rather than at the next
+    # hour. A train is what brings a client the routines that keep its staff
+    # (20261011100000), so a client that could not be kept before the train
+    # can be kept now. Whatever the train's outcome: a client it reached is
+    # kept, one it did not is said to be a release behind, and the sync never
+    # stops for one client.
+    needs: [targets, demonstration, clients, apply]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.targets.result == 'success' && needs.targets.outputs.count != '0' }}
+    name: the clients' staff follow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Ask fleet_sync.yml to keep every client's staff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run fleet_sync.yml --ref main
