@@ -53,10 +53,10 @@ name: deploy
 # runs: a deploy that applied and did not check is the silent-job problem
 # moved to production. Then it schedules the dispatch function from inside
 # the database and waits for a drain pass, because a schedule nobody proved
-# fires is the same problem again, one layer out. After a green train the
-# application is published in Lovable, so that the application and every
-# database carry the same commit; between trains only the demonstration
-# moves ahead, which is the direction the compat job proves.
+# fires is the same problem again, one layer out. The application follows
+# on its own (app.yml): it ships a commit only once every database carries
+# it, so between trains only the demonstration moves ahead, which is the
+# direction the compat job proves.
 #
 # A project starts empty, and is built from empty once, by
 # deployment_from_empty.yml, not by a release: until it has been, its release

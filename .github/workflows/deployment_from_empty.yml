@@ -542,8 +542,8 @@ jobs:
             echo '```'
             echo
             if [[ "${KIND}" == client ]]; then
-              echo "Next: the release below schedules its dispatch function and proves a drain pass. Then, by hand:"
-              echo "add ${CODE}.${APEX} in Lovable (Settings, Domains) and its DNS records, and tick them on the Fleet view."
+              echo "Next: the release below schedules its dispatch function and proves a drain pass. Its address,"
+              echo "https://${CODE}.${APEX}, answers once that release is recorded: every subdomain is served by the one application."
             else
               echo "Next: run the deploy workflow on main (Actions, deploy, Run workflow). It releases to the"
               echo "demonstration — the dispatch schedule, the proof, the release record — and then to production."

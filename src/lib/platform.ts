@@ -60,10 +60,13 @@ export type ClientDeploymentStatus =
   | "retired"
   | "failed";
 
-/** The steps a person still does by hand after a client's build, in the order they are done. */
+/**
+ * The steps a person still does by hand after a client's build, in the order they are done.
+ * Since 8 October the application is a Cloudflare Worker serving every subdomain through one
+ * wildcard route, so a client needs no domain or DNS record of its own; the register still
+ * accepts those two items for a row ticked before then.
+ */
 export const CHECKLIST_ITEMS = [
-  { key: "lovable_domain", label: "Lovable domain added" },
-  { key: "dns", label: "DNS records set" },
   { key: "google_sign_in", label: "Google sign-in (if wanted)" },
   { key: "resend_webhook", label: "Resend webhook" },
 ] as const;

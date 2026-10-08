@@ -9,13 +9,22 @@ name: app
 # .output/) as the Worker wrangler.jsonc describes, once two things are true of
 # a commit on main:
 #
-#   - the schema build passed on it (this workflow runs when that build
-#     completes, and only on success), and
-#   - its database release did not fail. The application a merge ships may call
-#     a door the same merge adds, so it goes out after the migrations, never
-#     before them. deploy.yml usually finishes in minutes and the schema build
-#     in twenty, so the release has nearly always concluded by now; when it has
-#     not, or failed, this stops and says so rather than waiting on a runner.
+#   - the schema build passed on it, and
+#   - every database the application talks to carries it: the demonstration,
+#     the control plane, and every built client. The application a merge
+#     ships may call a door the same merge adds, so it goes out after the
+#     migrations, never before them.
+#
+# Since 8 October a merge releases the demonstration at once but the control
+# plane and the clients only on a release train (deploy.yml: once a client is
+# built, a push releases the demonstration alone). An application shipped on
+# the schema build alone would then serve cloveerp.com and every client's
+# subdomain an application calling doors their databases do not have yet. So
+# this runs when the schema build completes AND when a release completes, and
+# ships a commit only once each database's newest proved release is that
+# commit or a later one on main. A commit that is not yet everywhere is
+# skipped with a notice, not failed: the train that carries it ends with a
+# completed release, and that run ships it.
 #
 # Where it goes is the repository variable CLOVEERP_APP_ROUTES:
 #
@@ -35,7 +44,7 @@ name: app
 
 on:
   workflow_run:
-    workflows: [schema]
+    workflows: [schema, deploy]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -52,8 +61,9 @@ permissions:
 
 jobs:
   deploy:
-    # workflow_run fires for every completed schema run on main, including the
-    # scheduled one and the failures; only a passing push or dispatch ships.
+    # workflow_run fires for every completed schema or deploy run on main,
+    # including the scheduled schema run and the failures; only a passing push
+    # or dispatch is looked at, and the readiness step decides whether it ships.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
@@ -64,39 +74,83 @@ jobs:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       TARGET: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'production' || 'staging' }}
     steps:
-      - name: The database release for this commit did not fail
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${SHA}&branch=main&event=push&per_page=1" \
-                   --jq '.workflow_runs[0] | if . == null then "" else "\(.status) \(.conclusion // "")" end')"
-          case "$run" in
-            "completed success")
-              echo "deploy.yml released ${SHA} successfully" ;;
-            "")
-              # A dispatch of this workflow on a commit nothing pushed, or a
-              # commit deploy.yml did not run for: nothing to wait on.
-              echo "::notice::no deploy.yml run on push for ${SHA}; deploying the application on the schema build alone" ;;
-            completed\ *)
-              echo "::error::deploy.yml concluded '${run#completed }' for ${SHA}: the database this application expects may not be there. Not deploying."
-              exit 1 ;;
-            *)
-              echo "::error::deploy.yml is still ${run% *} for ${SHA}. Not deploying an application ahead of its migrations; dispatch this workflow once the release finishes."
-              exit 1 ;;
-          esac
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.SHA }}
+          # The whole of main's history, so the readiness step can tell whether
+          # a database's release is this commit or a later one.
+          fetch-depth: 0
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Every database carries this commit
+        id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIVE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+          DEMO_URL: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          wait_for() {
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::not shipping ${SHA} yet: $1"
+            echo "Not shipped: $1" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          # Is the released commit this one, or a later one on main?
+          carries() {
+            local released="$1"
+            [[ -n "$released" ]] || return 1
+            git cat-file -e "${released}^{commit}" 2>/dev/null || return 1
+            git merge-base --is-ancestor "${SHA}" "${released}"
+          }
+
+          # The schema build passed on this commit (whichever run it was).
+          schema="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/schema.yml/runs?head_sha=${SHA}&branch=main&per_page=20" \
+                      --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          [[ "${schema:-0}" -gt 0 ]] || wait_for "the schema build has not passed on it"
+
+          [[ -n "${LIVE_URL}" && -n "${DEMO_URL}" ]] || {
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL and CLOVEERP_DEMO_DATABASE_URL are needed to see what the databases carry. Not deploying."
+            exit 1
+          }
+          newest="select coalesce((select r.git_sha from erp_meta.release r where r.proved_at is not null order by r.recorded_at desc limit 1), '')"
+
+          demo=$(psql "$DEMO_URL" -v ON_ERROR_STOP=1 -X -q -tAc "$newest")
+          carries "$demo" || wait_for "the demonstration's newest proved release is ${demo:-none}"
+
+          control=$(psql "$LIVE_URL" -v ON_ERROR_STOP=1 -X -q -tAc "$newest")
+          carries "$control" || wait_for "the control plane's newest proved release is ${control:-none}; a release train brings it"
+
+          if [[ "$(psql "$LIVE_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regclass('erp_meta.deployment') is not null")" == t ]]; then
+            clients=$(psql "$LIVE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -c "
+              select d.code, coalesce(d.last_release_sha, ''), coalesce(d.last_release_outcome, '')
+                from erp_meta.deployment d
+               where d.status in ('built', 'live')
+               order by d.code")
+            while IFS='|' read -r code sha outcome; do
+              [[ -n "$code" ]] || continue
+              if [[ "$outcome" != success ]] || ! carries "$sha"; then
+                wait_for "client ${code}'s last release is ${sha:-none} (${outcome:-none}); a release train brings it"
+              fi
+            done <<< "$clients"
+          fi
+
+          echo "go=true" >> "$GITHUB_OUTPUT"
+          echo "every database carries ${SHA}: the demonstration (${demo:0:12}), the control plane (${control:0:12}) and every built client"
 
       - name: Install Bun
+        if: steps.ready.outputs.go == 'true'
         run: |
           set -euo pipefail
           npm install -g bun
           bun --version
 
       - name: Build
+        if: steps.ready.outputs.go == 'true'
         # The same build the schema job's typescript step proves. The preset is
         # named rather than left to the Lovable config's default, so a change
         # there cannot quietly make this a Node build.
@@ -115,6 +169,7 @@ jobs:
           test -d .output/public || { echo "the build made no .output/public"; exit 1; }
 
       - name: Deploy
+        if: steps.ready.outputs.go == 'true'
         # wrangler is fetched for this step, not added to package.json: it is
         # the deployment tool, not part of what is deployed.
         env:
