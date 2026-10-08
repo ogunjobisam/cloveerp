@@ -38,6 +38,19 @@ const RUN_URL = "https://github.com/ogunjobisam/cloveerp/actions/runs/";
 
 const ACTIVE: ReadonlySet<ClientDeploymentStatus> = new Set(["requested", "creating", "building"]);
 
+/**
+ * Where the owner may retire a deployment (20261011040000): any state but a
+ * build in progress, which would refuse to finish, and retired already.
+ */
+const RETIRABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
+  "requested",
+  "failed",
+  "built",
+  "live",
+  "suspended",
+  "retiring",
+]);
+
 function statusTone(status: ClientDeploymentStatus): "ok" | "warn" | "bad" | "muted" {
   if (status === "live") return "ok";
   if (status === "failed") return "bad";
@@ -174,7 +187,9 @@ function DeploymentRow({
         <td className="py-3 pr-4">
           <div className="text-sm font-medium">{d.client_name}</div>
           <div className="font-mono text-[11px] text-muted-foreground">{d.code}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{d.owner_email}</div>
+          {d.owner_email ? (
+            <div className="mt-1 text-xs text-muted-foreground">{d.owner_email}</div>
+          ) : null}
         </td>
         <td className="py-3 pr-4">
           <Pill tone={statusTone(d.status)}>{statusWord(d)}</Pill>
@@ -247,7 +262,7 @@ function DeploymentRow({
                     <input
                       type="checkbox"
                       checked={state?.done ?? false}
-                      disabled={!mayOperate || tick.isPending}
+                      disabled={!mayOperate || tick.isPending || d.status === "retired"}
                       onChange={(e) => tick.mutate({ item: item.key, done: e.target.checked })}
                     />
                     <span className={state?.done ? "text-muted-foreground line-through" : ""}>
@@ -288,6 +303,7 @@ function DeploymentRow({
               </>
             ) : null}
             {isOwner && retryable ? <RetryBuild d={d} onDone={onDone} /> : null}
+            {isOwner && RETIRABLE.has(d.status) ? <RetireDeployment d={d} onDone={onDone} /> : null}
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
@@ -492,6 +508,66 @@ function RequestRelease({
           />
         </label>
       </div>
+    </FormDialog>
+  );
+}
+
+/**
+ * Retiring a client deployment before its project is deleted
+ * (20261011040000): it stops being a release target, its address answers
+ * nothing, its code stays held, and its first administrator's address is
+ * cleared. It deletes nothing, so the dialog says what is left to do by hand.
+ */
+function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <FormDialog
+      trigger={
+        <button
+          type="button"
+          className="text-xs text-destructive underline-offset-2 hover:underline"
+        >
+          Retire
+        </button>
+      }
+      title={`Retire ${d.client_name}`}
+      description="It stops receiving releases and its address shows nothing. Its code stays held, so nobody else can take it. It is refused while a build or a release is running for it. Nothing is deleted: its project is yours to delete afterwards."
+      submitLabel="Retire it"
+      busyLabel="Retiring…"
+      danger
+      ready={reason.trim().length >= 20}
+      run={() =>
+        callErp("erp_platform_retire_deployment", { p_code: d.code, p_reason: reason.trim() })
+      }
+      onDone={onDone}
+      done={() => (
+        <div className="flex flex-col gap-2 text-sm">
+          <p>
+            {d.client_name} is retired, and nothing runs for it now. What is left is yours, by hand:
+          </p>
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {d.project_ref ? (
+              <li>
+                Delete project <code className="font-mono text-xs">{d.project_ref}</code> in the
+                Supabase dashboard.
+              </li>
+            ) : null}
+            <li>Remove its domain in Lovable and its DNS records.</li>
+          </ul>
+        </div>
+      )}
+      onClosed={() => setReason("")}
+    >
+      <label className="block text-sm font-medium">
+        Why it is retired
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="What it was for, and what becomes of its project. At least twenty characters."
+          rows={3}
+          className={INPUT}
+        />
+      </label>
     </FormDialog>
   );
 }

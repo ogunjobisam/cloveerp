@@ -75,7 +75,8 @@ export type ClientDeployment = {
   code: string;
   client_name: string;
   status: ClientDeploymentStatus;
-  owner_email: string;
+  /** The first administrator; cleared when the deployment is retired (20261011040000). */
+  owner_email: string | null;
   project_ref: string | null;
   api_url: string | null;
   region: string;
