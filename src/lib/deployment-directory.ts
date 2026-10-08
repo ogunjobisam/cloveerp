@@ -40,9 +40,9 @@ export function directoryHost(raw: string | null | undefined): string | null {
 
 /**
  * The last answer the browser kept, so a client's people reach their own
- * project while the control plane is briefly away. A day, which is how long
- * the directory's own cache header lets a cache serve it when the control
- * plane cannot answer.
+ * project while the control plane is briefly away: used when the directory
+ * cannot answer (a 503, or no answer at all), forgotten when it answers 404.
+ * A day.
  */
 export const DIRECTORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 

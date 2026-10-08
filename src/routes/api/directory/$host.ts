@@ -14,12 +14,17 @@ import { directoryHost, readDirectoryEntry } from "../../../lib/deployment-direc
  *
  * Cacheable, because a host's project does not change from one minute to the
  * next and the control plane should not be asked on every page load: five
- * minutes fresh, then a day stale only if the control plane cannot answer
- * (stale-if-error), so its brief absence does not stop a client's people
- * signing in. Not stale-while-revalidate: that served a retired client's
- * project once more to every browser that had seen it, for a day, while
- * the directory already said nothing was there. Nothing is answered to a
- * host the register does not hold, and nothing about why.
+ * minutes fresh. A brief absence of the control plane does not stop a
+ * client's people signing in, because the register that cannot be read is
+ * answered 503, never kept, and the browser then uses the copy it keeps for
+ * a day (lookupDirectory in src/lib/erp.ts). A register that holds nothing
+ * for the host is answered 404, which makes the browser forget its copy:
+ * the two must never be confused, or an outage would wipe every copy kept
+ * for exactly that case. The header's stale-if-error asks any cache that
+ * honours it for the same grace. Not stale-while-revalidate: that served a
+ * retired client's project once more to every browser that had seen it,
+ * while the directory already said nothing was there. Nothing is answered
+ * to a host the register does not hold, and nothing about why.
  */
 const CORS = { "access-control-allow-origin": "*" };
 
@@ -42,7 +47,14 @@ export const Route = createFileRoute("/api/directory/$host")({
           ) => Promise<{ data: unknown; error: { message: string } | null }>
         ).bind(supabaseAdmin);
         const { data, error } = await rpc("erp_deployment_for_host", { p_host: host });
-        const entry = error ? null : readDirectoryEntry(data);
+        if (error) {
+          // The register could not be read, which is not "nobody is here".
+          return Response.json(
+            { error: "the directory cannot answer just now" },
+            { status: 503, headers: { ...CORS, "cache-control": "no-store" } },
+          );
+        }
+        const entry = readDirectoryEntry(data);
         if (entry === null) {
           return Response.json(
             { error: "no deployment at this address" },
