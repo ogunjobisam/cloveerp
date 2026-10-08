@@ -9,26 +9,27 @@
 // nitro with the cloudflare-module preset, into .output/ (the schema build's
 // typescript job reads .output/public). This file only says where it goes.
 //
-// Two shapes, chosen by app.yml:
+// This is the staging Worker: clove-erp-staging, on workers.dev only, with no
+// routes. wrangler.production.jsonc is the same Worker on cloveerp.com, www and
+// every other subdomain through one wildcard route, so a client the fleet adds
+// needs no hosting step: the directory (/api/directory/<host>) already says
+// which project a host belongs to.
 //
-//   top level         — workers.dev only, no routes. The address to test the
-//                       Worker at before any traffic is moved to it.
-//   env.production    — the same Worker on cloveerp.com, www, demo and every
-//                       client's subdomain, through one wildcard route. A
-//                       client added by the fleet needs no hosting step: the
-//                       directory (/api/directory/<host>) already says which
-//                       project a host belongs to.
+// Two files rather than one with an `env` block, because nitro reads this file
+// at build time and writes the deployable config from it
+// (.output/server/wrangler.json, with .wrangler/deploy/config.json pointing
+// wrangler at it), and wrangler refuses a generated config that carries
+// environments. So the target is chosen before the build: app.yml copies
+// wrangler.production.jsonc over this file when the repository variable
+// CLOVEERP_APP_ROUTES is "on" — the cutover, set once the staging Worker has
+// been checked and cloveerp.com's DNS is on Cloudflare. Unset it and the next
+// deploy goes to staging again; delete the routes in the dashboard and
+// Lovable's publish answers again.
 //
-// app.yml deploys env.production only once the repository variable
-// CLOVEERP_APP_ROUTES is "on", which is the cutover: set it after the
-// workers.dev deployment has been checked and cloveerp.com's DNS is on
-// Cloudflare. Unset it and the next deploy leaves the routes alone; delete the
-// routes in the dashboard and Lovable's publish answers again.
+// Secrets are not here. One, set once per Worker by the owner:
 //
-// Secrets are not here. One, set once per environment by the owner:
-//
-//   bunx wrangler@4 secret put SUPABASE_SERVICE_ROLE_KEY
-//   bunx wrangler@4 secret put SUPABASE_SERVICE_ROLE_KEY --env production
+//   bunx wrangler@4 secret put SUPABASE_SERVICE_ROLE_KEY --name clove-erp-staging
+//   bunx wrangler@4 secret put SUPABASE_SERVICE_ROLE_KEY --name clove-erp
 //
 // It is the control plane's (production's) service-role key, the one Lovable
 // holds today: src/integrations/supabase/client.server.ts reads it for the
@@ -53,32 +54,5 @@
   "vars": {
     "SUPABASE_URL": "https://xpzffnnhnhcqyjqcueja.supabase.co",
     "SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwemZmbm5obmhjcXlqcWN1ZWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMDIyNDIsImV4cCI6MjEwMzU3ODI0Mn0.PKnEUURM8CTNVkBjgA_pCoQJheGmL_6I7UD1-5Uywjk"
-  },
-  "env": {
-    "production": {
-      "name": "clove-erp",
-      "workers_dev": false,
-      // Vars and assets are not inherited by an environment; named again.
-      "assets": {
-        "directory": ".output/public",
-        "binding": "ASSETS"
-      },
-      "vars": {
-        "SUPABASE_URL": "https://xpzffnnhnhcqyjqcueja.supabase.co",
-        "SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwemZmbm5obmhjcXlqcWN1ZWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMDIyNDIsImV4cCI6MjEwMzU3ODI0Mn0.PKnEUURM8CTNVkBjgA_pCoQJheGmL_6I7UD1-5Uywjk"
-      },
-      // The apex and www are custom domains: Cloudflare makes their DNS
-      // records and certificates. Every other subdomain — demo and each
-      // client's — arrives through the wildcard, which needs one proxied DNS
-      // record, `*` AAAA 100::, made by hand once (a custom domain cannot be a
-      // wildcard). A more specific route wins, so status.cloveerp.com keeps
-      // its own Worker (infra/status). Records with no web address — mail,
-      // DKIM, Resend's — are not touched by a route.
-      "routes": [
-        { "pattern": "cloveerp.com", "custom_domain": true },
-        { "pattern": "www.cloveerp.com", "custom_domain": true },
-        { "pattern": "*.cloveerp.com/*", "zone_name": "cloveerp.com" }
-      ]
-    }
   }
 }
