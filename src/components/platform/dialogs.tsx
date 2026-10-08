@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { useId, useState, type ReactNode } from "react";
+import { useContext, useId, useState, type ReactNode } from "react";
 
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { TOUCH } from "../erp/page";
+import { DialogOpenContext } from "./dialog-open";
 import { Fail, INPUT } from "./kit";
 
 /**
@@ -56,7 +57,12 @@ export function FormDialog<T>({
   /** Whether what has been answered is enough to send. */
   ready: boolean;
   run: () => Promise<T>;
-  /** After the door has agreed: refresh what it changed. */
+  /**
+   * After the door has agreed: refresh what it changed. With `done`, once
+   * what it shows has been closed, not before: the refresh can stop offering
+   * the button this dialog belongs to, and the dialog would go with it
+   * before anybody had read what it says.
+   */
   onDone?: (result: T) => void;
   /**
    * What to show once it has worked, instead of closing: a link shown once, a
@@ -68,18 +74,24 @@ export function FormDialog<T>({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const held = useContext(DialogOpenContext);
   const action = useMutation({
     mutationFn: run,
     onSuccess: (result) => {
+      if (done) return;
       onDone?.(result);
-      if (!done) close();
+      close();
     },
   });
 
   function close() {
+    // Closing what `done` showed is when the refresh it waited for happens.
+    const shown = done && action.isSuccess ? { result: action.data } : null;
     setOpen(false);
     action.reset();
     onClosed?.();
+    held?.(false);
+    if (shown) onDone?.(shown.result);
   }
 
   return (
@@ -88,8 +100,10 @@ export function FormDialog<T>({
       onOpenChange={(next) => {
         // Never while the door is answering: what it did would be shown nowhere.
         if (!next && action.isPending) return;
-        if (next) setOpen(true);
-        else close();
+        if (next) {
+          setOpen(true);
+          held?.(true);
+        } else close();
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>

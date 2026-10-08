@@ -157,22 +157,59 @@ export type ClientDeployment = {
    */
   silent?: boolean;
   /**
-   * The address it is served at, <address>.cloveerp.com (20261012020000):
+   * The address it is served at, <address>.cloveerp.com (20261012030000):
    * its code until it is renamed. The code never changes; a rename gives a
    * new address. Absent from a register older than renaming, where the
    * address is the code.
    */
   address?: string;
-  /** The address it was renamed from, which sends people on until previous_address_until. */
+  /**
+   * The newest address it was renamed from that still sends people on, and
+   * until when. Every address a deployment leaves stays held for it for good,
+   * never given to another; only the sending on ends. So does every address
+   * it was ever asked to be renamed to, whatever became of the asking.
+   */
   previous_address?: string | null;
   previous_address_until?: string | null;
-  /** When offboarding began: the day its project is due to be purged. */
+  /** While it is being offboarded: the day its project is due to be purged. */
   purge_due_at?: string | null;
-  /** Why its service is suspended, while it is. */
+  /** When its offboarding began; null when it is not being offboarded. */
+  offboarding_at?: string | null;
+  /**
+   * Why its service is suspended, while it is: set when it is suspended, and
+   * when it is suspended while being offboarded (serviceSuspended).
+   */
   suspended_reason?: string | null;
-  /** The last export of its database off the platform, and the object it was written to. */
+  /**
+   * When its service was suspended, while it is: set and cleared with the
+   * reason, and kept when its offboarding begins or is cancelled. Once it is
+   * being offboarded, only a copy of its data taken at or after this, and
+   * after its offboarding began, lets it be retired
+   * (exportedSinceServiceStopped).
+   */
+  suspended_at?: string | null;
+  /**
+   * The last export of its database off the platform: when it was recorded,
+   * once written, and the object it was written to.
+   */
   last_export_at?: string | null;
   last_export_object?: string | null;
+  /**
+   * When the last export's copy was taken (20261012030000): the moment its
+   * dump began, by the control plane's clock. A copy holds the data as it
+   * stood then, not when it was recorded, so this is the time that says
+   * whether it is a copy of the data after its service stopped.
+   */
+  last_export_taken_at?: string | null;
+  /**
+   * Whether the last export's copy was taken after the client's own
+   * organisation was confirmed stopped. An export of a client whose service
+   * is suspended first suspends its organisation on its own project, and
+   * takes the copy after; when that cannot be confirmed, the copy is still
+   * taken, and this is false. Only a copy taken with it true can be the last
+   * one (exportedSinceServiceStopped). Absent from a register older than it.
+   */
+  last_export_service_stopped?: boolean;
 };
 
 /**
@@ -488,6 +525,32 @@ export function isDeploymentAddress(value: string): boolean {
   return DEPLOYMENT_ADDRESS_PATTERN.test(value);
 }
 
+/**
+ * What the rename dialog says of a rename before it is asked for
+ * (erp_platform_rename_deployment, 20261012030000). Every address a client
+ * leaves stays its own for good, and so does every address it is asked to
+ * move to, from the moment it is asked, whatever becomes of the rename: so a
+ * rename that stops part-way is finished by asking for it again, and nobody
+ * else can take the address meanwhile.
+ */
+export function renameDescription(
+  d: Pick<ClientDeployment, "code" | "origin"> & { address?: string | null | undefined },
+): string {
+  return `Its people sign in at the new address once the rename has run, which starts ${SWEEP_STARTS}. Its old address, ${deploymentAddress(d)}, sends them on for ninety days and stays its own afterwards: it is never given to another client. The new address is its own from the moment it is asked for, even if the rename stops, so asking for it again finishes the move. Its code, ${d.code}, stays the same.`;
+}
+
+/**
+ * What the rename dialog says under the new address as it is typed: the
+ * shape it must have, that it is the address already, or who may have it.
+ */
+export function renameAddressHint(typed: string, current: string): string {
+  if (typed !== "" && !isDeploymentAddress(typed)) {
+    return "Three to sixty-three lower-case letters, digits or hyphens, not starting or ending with a hyphen.";
+  }
+  if (typed === current) return "That is its address now.";
+  return "Held once across the fleet, like a code: refused if any other client has it, ever had it or was ever asked to move to it. Its own code, any address it had before and any address it was asked to move to can be given to it.";
+}
+
 const MONTHS = [
   "January",
   "February",
@@ -529,25 +592,283 @@ export function earliestPurgeDate(now: Date): string {
 }
 
 /**
- * What a row in the Fleet view offers, in the order it offers them.
+ * Whether a client's service is suspended (20261012030000): its suspension
+ * is its reason, so it is suspended, or being offboarded while suspended.
+ * Its address then shows only that its service is suspended, and its
+ * organisation is suspended on its own project too.
+ */
+export function serviceSuspended(
+  d: Pick<ClientDeployment, "status" | "suspended_reason">,
+): boolean {
+  if (d.status === "suspended") return true;
+  return d.status === "retiring" && typeof d.suspended_reason === "string";
+}
+
+/**
+ * Whether the day a deployment being offboarded may be purged has come. A
+ * day that cannot be read has not come.
+ */
+export function purgeDateHasCome(d: Pick<ClientDeployment, "purge_due_at">, now: Date): boolean {
+  if (typeof d.purge_due_at !== "string") return false;
+  const due = Date.parse(d.purge_due_at);
+  return !Number.isNaN(due) && due <= now.getTime();
+}
+
+/** A time as milliseconds; null when there is none, or it cannot be read. */
+function timeOf(iso: string | null | undefined): number | null {
+  if (typeof iso !== "string") return null;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : t;
+}
+
+/**
+ * Whether a deployment being offboarded has nothing left to export: it never
+ * had a database (never built), or the last copy of its database is one it
+ * can leave with (erp_platform_retire_deployment, 20261012030000). That copy
+ * was taken after its own organisation was confirmed stopped, and taken — its
+ * dump begun, not merely recorded — at or after both the moment its
+ * offboarding began and the moment its service was suspended. So the copy it
+ * leaves with is its data as it stood once nobody could change it any more:
+ * a dump begun while its people could still write, and recorded after the
+ * suspension, is not. An export asked for after suspending it is taken that
+ * way. A time that cannot be read, or is not there, is no copy: without all
+ * three, no copy can be shown to be since. Whether its service is suspended
+ * now is serviceSuspended's to say.
+ */
+export function exportedSinceServiceStopped(
+  d: Pick<
+    ClientDeployment,
+    | "built_at"
+    | "offboarding_at"
+    | "suspended_at"
+    | "last_export_taken_at"
+    | "last_export_service_stopped"
+  >,
+): boolean {
+  if (d.built_at === null) return true;
+  if (d.last_export_service_stopped !== true) return false;
+  const taken = timeOf(d.last_export_taken_at);
+  const began = timeOf(d.offboarding_at);
+  const stopped = timeOf(d.suspended_at);
+  if (taken === null || began === null || stopped === null) return false;
+  return taken >= Math.max(began, stopped);
+}
+
+/** What is left before a client being offboarded is retired, in the order it is done. */
+export type OffboardingStep = "suspend" | "export" | "retire";
+
+/**
+ * What is left to do, once its purge date has come, before a client being
+ * offboarded that ever had a database is retired (20261012030000), naming
+ * only the steps not yet done, in order:
  *
- *   open-console  its own console: built, live or being offboarded, the
- *                 states whose address is served. Not suspended: its address
- *                 shows only that it is suspended.
+ *   suspend  its service, so its address stops being served and its own
+ *            organisation can be stopped;
+ *   export   its database, after that: a copy taken once its own
+ *            organisation was stopped is the last one, the data as it stood
+ *            when nobody could change it any more. An export asked for after
+ *            suspending it stops that organisation first, if the status sync
+ *            has not yet, and takes the copy after;
+ *   retire   it.
+ *
+ * Nothing before its purge date, and nothing for one never built: it has no
+ * data to keep, and is retired on its purge date as it is.
+ */
+export function offboardingStepsLeft(
+  d: Pick<
+    ClientDeployment,
+    | "status"
+    | "built_at"
+    | "purge_due_at"
+    | "suspended_reason"
+    | "suspended_at"
+    | "offboarding_at"
+    | "last_export_taken_at"
+    | "last_export_service_stopped"
+  >,
+  now: Date,
+): OffboardingStep[] {
+  if (d.status !== "retiring" || d.built_at === null || !purgeDateHasCome(d, now)) return [];
+  const suspended = serviceSuspended(d);
+  const steps: OffboardingStep[] = [];
+  if (!suspended) steps.push("suspend");
+  // A copy taken before its own organisation was stopped is never the last one.
+  if (!suspended || !exportedSinceServiceStopped(d)) steps.push("export");
+  steps.push("retire");
+  return steps;
+}
+
+/**
+ * When a copy of a client being offboarded is the one it leaves with
+ * (exportedSinceServiceStopped), as the console says it: the steps left, the
+ * export owed, and the Suspend, Export and Retire dialogs.
+ */
+export const LAST_COPY_RULE =
+  "Only a copy taken after its own organisation was stopped counts as the last one";
+
+const STEP_TEXT: Record<OffboardingStep, string> = {
+  suspend: "suspend it",
+  export: "export it",
+  retire: "retire it",
+};
+
+/**
+ * The steps left, as the row says them: "Left to do, in order: export it,
+ * then retire it.", and when exporting it is among them, which copy counts.
+ */
+function stepsLeftText(steps: readonly OffboardingStep[]): string | null {
+  const said = steps.map((s) => STEP_TEXT[s]);
+  const last = said.pop();
+  if (last === undefined) return null;
+  const left =
+    said.length === 0
+      ? `Left to do: ${last}.`
+      : `Left to do, in order: ${said.join(", ")}, then ${last}.`;
+  if (!steps.includes("export")) return left;
+  return `${left} ${LAST_COPY_RULE}: an export asked for after suspending it makes sure of that first.`;
+}
+
+/**
+ * What a row says, beside its last export, while a client being offboarded
+ * is suspended and its last copy is not the one it leaves with
+ * (exportedSinceServiceStopped), before its purge date (once the date has
+ * come its lifecycle note names every step left, this among them). Null
+ * otherwise: a client still served is not owed an export yet, because its
+ * people can still change its data.
+ *
+ * It says why the last copy does not count, where the row can tell, and that
+ * an export asked for now is one that does: its service is suspended, so the
+ * export stops its own organisation first.
+ */
+export function exportOwedText(
+  d: Pick<
+    ClientDeployment,
+    | "status"
+    | "built_at"
+    | "purge_due_at"
+    | "suspended_reason"
+    | "suspended_at"
+    | "offboarding_at"
+    | "last_export_at"
+    | "last_export_taken_at"
+    | "last_export_service_stopped"
+  >,
+  now: Date,
+): string | null {
+  if (d.status !== "retiring" || d.built_at === null || purgeDateHasCome(d, now)) return null;
+  if (!serviceSuspended(d) || exportedSinceServiceStopped(d)) return null;
+  const taken = timeOf(d.last_export_taken_at);
+  const stopped = timeOf(d.suspended_at);
+  const began = timeOf(d.offboarding_at);
+  // Taken once its organisation was stopped, but before its offboarding began.
+  const beforeOffboarding =
+    d.last_export_service_stopped === true &&
+    taken !== null &&
+    stopped !== null &&
+    began !== null &&
+    taken >= stopped &&
+    taken < began;
+  const first =
+    timeOf(d.last_export_at) === null && taken === null
+      ? "Not exported yet."
+      : beforeOffboarding
+        ? "Its last copy was taken before its offboarding began, so it does not count."
+        : "Its last copy does not count.";
+  return `${first} ${LAST_COPY_RULE} and lets it be retired: an export asked for now makes sure of that first.`;
+}
+
+/**
+ * What the Export dialog says (erp_platform_request_export, 20261012030000):
+ * where the copy goes and when it starts, and, while its service is
+ * suspended, that the export stops its own organisation before it takes the
+ * copy. For a client being offboarded, whether this copy can be the last one:
+ * only one taken after its own organisation was stopped is, so one still
+ * served has to be suspended first. One already waiting is reused; so is one
+ * being written, unless it started before the suspension, when a new one is
+ * queued beside it and only the new one can be the last.
+ */
+export function exportDescription(
+  d: Pick<ClientDeployment, "code" | "status" | "suspended_reason">,
+): string {
+  const suspended = serviceSuspended(d);
+  const where = `A copy of its database and of the documents it has produced, encrypted to the backup key and written to the off-platform bucket under exports/${d.code}/. It starts ${SWEEP_STARTS}, and its row says when it is made or why it was not.`;
+  const again = suspended
+    ? " While one is waiting, or being written since its service was suspended, asking again queues nothing more; one that started before the suspension does not stop a new one."
+    : " While one is waiting or being written, asking again queues nothing more.";
+  const stopped = !suspended
+    ? d.status === "retiring"
+      ? ` Its people can still change its data, so this is not the copy it is retired with. ${LAST_COPY_RULE}: suspend it first, and an export asked for after that makes sure of it.`
+      : ""
+    : d.status === "retiring"
+      ? ` Its service is suspended, so the export first makes sure its own organisation is stopped, then takes the copy. ${LAST_COPY_RULE}, and lets it be retired; if the organisation cannot be shown to be stopped, the copy is still taken, but it does not count.`
+      : " Its service is suspended, so the export first makes sure its own organisation is stopped, then takes the copy.";
+  return `${where}${again}${stopped}`;
+}
+
+/**
+ * The states a release goes to (deploy.yml's targets and
+ * erp_platform_request_release, 20261012030000): the project is up. A
+ * suspended client's project keeps running, and one being offboarded is
+ * released to while it has a database.
+ */
+const RELEASED: ReadonlySet<ClientDeploymentStatus> = new Set([
+  "built",
+  "live",
+  "suspended",
+  "retiring",
+]);
+
+/**
+ * Whether a client takes releases: built, live or suspended, or being
+ * offboarded once it was built. One being offboarded whose build never
+ * finished has no database to release to; the release door refuses its code
+ * and deploy.yml leaves it out.
+ */
+export function takesReleases(d: Pick<ClientDeployment, "status" | "built_at">): boolean {
+  if (!RELEASED.has(d.status)) return false;
+  return d.status !== "retiring" || d.built_at !== null;
+}
+
+/**
+ * What a row in the Fleet view offers, in the order it offers them
+ * (20261012030000).
+ *
+ *   open-console  its own console: built, live, or being offboarded once
+ *                 built and not suspended, the states whose address is
+ *                 served. Not when its service is suspended: its address
+ *                 shows only that. Not one being offboarded whose build never
+ *                 finished: its address answers nothing.
  *   onboard       its first organisation, on its own console: built or live.
  *   retry, start-again
  *                 getting a build going again (buildRecovery); the owner's.
- *   suspend       stop its address being served: built or live; the owner's.
- *   reinstate     serve it again: suspended; the owner's.
+ *   suspend       stop serving it: built, live, or being offboarded once
+ *                 built and not suspended; the owner's. One never built has
+ *                 no service to stop.
+ *   reinstate     serve it again: suspended, or being offboarded while
+ *                 suspended; the owner's.
  *   rename        a new address: built, live or suspended; the owner's.
- *   export        an encrypted copy of its database off the platform: built,
- *                 live, suspended or being offboarded; an operator's and up.
- *   offboard      begin offboarding: built, live or suspended; the owner's.
- *   retire        the last step, before its project is deleted: any state
- *                 but a build under way and retired already; the owner's.
+ *   export        an encrypted copy of its database off the platform: one
+ *                 that has a database (built_at) and is built, live,
+ *                 suspended or being offboarded; an operator's and up.
+ *   offboard      begin offboarding: requested, failed, built, live or
+ *                 suspended; not while a build runs; the owner's. A
+ *                 requested one whose build the sweep has already started is
+ *                 refused by the door for a while, which the row cannot
+ *                 always tell, so it is offered on every requested row.
+ *   cancel-offboarding
+ *                 stop offboarding it: being offboarded; the owner's.
+ *   retire        the last step, before its project is deleted: requested,
+ *                 failed, built, live or suspended; and one being offboarded
+ *                 only once its purge date has come and, if it ever had a
+ *                 database, its service is suspended and its last copy was
+ *                 taken after its own organisation was stopped and its
+ *                 offboarding began (exportedSinceServiceStopped;
+ *                 offboardingStepsLeft says what is left). The owner's.
  *
  * The doors decide regardless (each requires its rank and refuses a state it
- * does not take); this is so the console offers only what would open.
+ * does not take, and retiring refuses while a contract in force names the
+ * deployment, which a row does not say); this is so the console offers only
+ * what would open.
  */
 export type FleetAction =
   | "open-console"
@@ -559,18 +880,33 @@ export type FleetAction =
   | "rename"
   | "export"
   | "offboard"
+  | "cancel-offboarding"
   | "retire";
 
-/** The states whose address is served: the directory names their project. */
-const SERVED: ReadonlySet<ClientDeploymentStatus> = new Set(["built", "live", "retiring"]);
+/** The parts of a register row that decide what it offers. */
+export type FleetRowView = BuildRequestView &
+  Pick<
+    ClientDeployment,
+    | "built_at"
+    | "suspended_reason"
+    | "suspended_at"
+    | "purge_due_at"
+    | "offboarding_at"
+    | "last_export_taken_at"
+    | "last_export_service_stopped"
+  >;
 
-/**
- * Where the owner may retire a deployment (20261011040000): any state but a
- * build in progress, which would refuse to finish, and retired already.
- */
-const RETIRABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
+/** The states a deployment can be offboarded from: any but a build under way, retiring and retired. */
+const OFFBOARDABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
   "requested",
   "failed",
+  "built",
+  "live",
+  "suspended",
+]);
+
+/** The states that hold a database a copy can be made of, once it was built. */
+const EXPORTABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
   "built",
   "live",
   "suspended",
@@ -578,7 +914,7 @@ const RETIRABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
 ]);
 
 export function fleetActions(
-  d: BuildRequestView,
+  d: FleetRowView,
   role: PlatformRole | null | undefined,
   now: Date,
 ): FleetAction[] {
@@ -586,20 +922,38 @@ export function fleetActions(
   const operator = atLeast(role, "operator");
   const s = d.status;
   const up = s === "built" || s === "live";
+  const suspended = serviceSuspended(d);
+  const offboarding = s === "retiring";
+  const built = d.built_at !== null;
+  // Being offboarded, its address is served only if it was ever built and
+  // its service is not suspended (erp_deployment_for_host).
+  const served = up || (offboarding && built && !suspended);
   const actions: FleetAction[] = [];
-  if (SERVED.has(s)) actions.push("open-console");
+  if (served) actions.push("open-console");
   if (up) actions.push("onboard");
   if (owner) {
     const recovery = buildRecovery(d, now);
     if (recovery !== null) actions.push(recovery);
-    if (up) actions.push("suspend");
-    if (s === "suspended") actions.push("reinstate");
+    if (served) actions.push("suspend");
+    if (suspended) actions.push("reinstate");
     if (up || s === "suspended") actions.push("rename");
   }
-  if (operator && (up || s === "suspended" || s === "retiring")) actions.push("export");
+  if (operator && built && EXPORTABLE.has(s)) actions.push("export");
   if (owner) {
-    if (up || s === "suspended") actions.push("offboard");
-    if (RETIRABLE.has(s)) actions.push("retire");
+    if (OFFBOARDABLE.has(s)) actions.push("offboard");
+    if (offboarding) actions.push("cancel-offboarding");
+    // Retired directly from any state it could be offboarded from (a contract
+    // in force refuses it at the door). Once offboarding, only at the end:
+    // its purge date come and, if it ever had a database, its service
+    // stopped and its data copied once its own organisation was stopped.
+    if (
+      OFFBOARDABLE.has(s) ||
+      (offboarding &&
+        purgeDateHasCome(d, now) &&
+        (!built || (suspended && exportedSinceServiceStopped(d))))
+    ) {
+      actions.push("retire");
+    }
   }
   return actions;
 }
@@ -607,7 +961,10 @@ export function fleetActions(
 /**
  * What the Fleet view says of where a deployment stands in its lifecycle,
  * under its state: why it is suspended, when its project is due to be
- * purged, and the address it moved from while that still sends people on.
+ * purged, once that day has come what is left before it is retired
+ * (offboardingStepsLeft), and the address it moved from while that still
+ * sends people on. A deployment suspended while it is being offboarded says
+ * both.
  */
 export type LifecycleNote = { key: string; text: string; tone: HealthTone };
 
@@ -617,15 +974,20 @@ export function deploymentLifecycleNotes(
     | "code"
     | "origin"
     | "status"
+    | "built_at"
     | "previous_address"
     | "previous_address_until"
     | "purge_due_at"
+    | "offboarding_at"
     | "suspended_reason"
+    | "suspended_at"
+    | "last_export_taken_at"
+    | "last_export_service_stopped"
   >,
   now: Date,
 ): LifecycleNote[] {
   const notes: LifecycleNote[] = [];
-  if (d.status === "suspended") {
+  if (serviceSuspended(d)) {
     const why = typeof d.suspended_reason === "string" ? d.suspended_reason.trim() : "";
     notes.push({
       key: "suspended",
@@ -641,9 +1003,13 @@ export function deploymentLifecycleNotes(
       text:
         due === null
           ? "Being offboarded."
-          : `Being offboarded: its project is due to be purged on ${due}.`,
+          : purgeDateHasCome(d, now)
+            ? `Being offboarded: its purge date, ${due}, has come.`
+            : `Being offboarded: its project is due to be purged on ${due}.`,
       tone: "warn",
     });
+    const left = stepsLeftText(offboardingStepsLeft(d, now));
+    if (left !== null) notes.push({ key: "steps", text: left, tone: "warn" });
   }
   const until = dayText(d.previous_address_until);
   const untilAt =
@@ -654,9 +1020,11 @@ export function deploymentLifecycleNotes(
     until !== null &&
     untilAt > now.getTime()
   ) {
+    // The newest old address still sending people on. Every address it left
+    // stays its own for good, so none is ever another client's.
     notes.push({
       key: "moved",
-      text: `Was ${d.previous_address}.${apexOfOrigin(d.origin) ?? APEX_HOST}, which sends people here until ${until}.`,
+      text: `Was ${d.previous_address}.${apexOfOrigin(d.origin) ?? APEX_HOST}, which sends people here until ${until} and is never given to another client.`,
       tone: "muted",
     });
   }
@@ -739,14 +1107,18 @@ export function customerChoices(
   return [...organisations, ...clients];
 }
 
-/** How a choice reads in a picker; a client deployment says it is one. */
+/**
+ * How a choice reads in a picker; a client deployment says it is one. Not
+ * where it is served: a rename moves its address while its code stays, and
+ * the picker has only the code.
+ */
 export function customerChoiceText(c: {
   code: string;
   name: string;
   where?: "organisation" | "deployment" | undefined;
 }): string {
   return c.where === "deployment"
-    ? `${c.name} (${c.code}), client deployment at ${c.code}.${APEX_HOST}`
+    ? `${c.name} (${c.code}), a client deployment`
     : `${c.name} (${c.code})`;
 }
 

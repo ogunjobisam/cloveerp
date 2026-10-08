@@ -14,21 +14,27 @@
  * the route and the browser read the same thing, and both are tested without
  * a server.
  *
- * Since 20261012020000 the register answers three ways for a host it holds,
+ * Since 20261012030000 the register answers three ways for a host it holds,
  * because a client can be paused and can move:
  *
- *   a project    built, live or being offboarded: the project to talk to.
- *   suspended    the owner has suspended the client's service. Its project
- *                keeps running and keeps receiving releases (Supabase cannot
- *                pause a project on a paid plan), but its address is not
- *                served: no URL and no key are given, so no page can boot.
- *   moved        the host is an address the client was renamed from, within
- *                the ninety days it is kept: where the client is now.
+ *   a project    built, live, or being offboarded once built and not
+ *                suspended: the project to talk to. One being offboarded
+ *                whose build never finished answers nothing, as a failed
+ *                one does: its project was never finished or proved.
+ *   suspended    the owner has suspended the client's service, whether or
+ *                not it is being offboarded. Its project keeps running and
+ *                keeps receiving releases (Supabase cannot pause a project on
+ *                a paid plan), but its address is not served: no URL and no
+ *                key are given, so no page can boot.
+ *   moved        the host is an address the client was renamed from, for the
+ *                ninety days it sends people on: where the client is now.
+ *                The address stays the client's for good afterwards, and
+ *                answers nothing.
  */
 
-import { isDirectoryHost, normalHost } from "./backend";
+import { APEX_HOST, isDirectoryHost, normalHost } from "./backend";
 
-/** A project to talk to: what a built, live or offboarding deployment answers. */
+/** A project to talk to: what a built or live deployment answers, or one being offboarded once built. */
 export type DirectoryProject = {
   code: string;
   client_name: string;
@@ -149,6 +155,69 @@ export function readDirectoryEntry(answer: unknown): DirectoryEntry | null {
   if (typeof url !== "string" || !/^https:\/\/[a-z0-9.-]+$/.test(url)) return null;
   if (typeof key !== "string" || key === "") return null;
   return { code, client_name: name, url, key };
+}
+
+/**
+ * What the directory route (/api/directory/<host>) answers, decided here so
+ * that the route only asks and the answer can be tested without a server.
+ *
+ *   400  not a host anybody could hold (directoryHost), so the register
+ *        was not asked: `register` is null.
+ *   503  the register could not be read: not "nobody is here", and never
+ *        kept by a cache.
+ *   404  the register holds nothing for the host, or answered something
+ *        that is none of the three shapes; kept a minute, so a client whose
+ *        build finished a minute ago does not wait long.
+ *   200  one of the three shapes, and only what that shape carries
+ *        (readDirectoryEntry): a suspension or a move never carries a URL or
+ *        a key. Fresh for five minutes, and kept a day by a cache that
+ *        honours stale-if-error.
+ */
+export type DirectoryReply = {
+  status: 200 | 400 | 404 | 503;
+  body: DirectoryEntry | { error: string };
+  cacheControl: string;
+};
+
+export function directoryReply(register: { data: unknown; error: unknown } | null): DirectoryReply {
+  if (register === null) {
+    return { status: 400, body: { error: "not a host" }, cacheControl: "no-store" };
+  }
+  if (register.error !== null && register.error !== undefined) {
+    return {
+      status: 503,
+      body: { error: "the directory cannot answer just now" },
+      cacheControl: "no-store",
+    };
+  }
+  const entry = readDirectoryEntry(register.data);
+  if (entry === null) {
+    return {
+      status: 404,
+      body: { error: "no deployment at this address" },
+      cacheControl: "public, max-age=60",
+    };
+  }
+  return { status: 200, body: entry, cacheControl: "public, max-age=300, stale-if-error=86400" };
+}
+
+/**
+ * What cloveerp.com/<address> answers when the register holds a client at
+ * <address>.cloveerp.com (tenantByAddress): the client's name and where to
+ * send the visitor. Its own address, where its door says whether it is
+ * served or suspended; or, for an address it has moved from, its new one.
+ * Never an origin built from the register's code, which a rename leaves
+ * behind.
+ */
+export function deploymentAddressLookup(
+  address: string,
+  entry: DirectoryEntry,
+): { code: string; name: string; origin: string } {
+  return {
+    code: address,
+    name: entry.client_name,
+    origin: "moved_to" in entry ? entry.moved_to : `https://${address}.${APEX_HOST}`,
+  };
 }
 
 /**

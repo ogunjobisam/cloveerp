@@ -202,7 +202,7 @@ function useToastsGoWithThePage() {
  * browser, is not that: the page says it could not find out, and Try again
  * asks once more.
  *
- * Two more since 20261012020000, and neither boots a project. A client whose
+ * Two more since 20261012030000, and neither boots a project. A client whose
  * service is suspended shows only that it is suspended. An address a client
  * has moved from takes the page to the new one, with the same path and query,
  * so a bookmark still lands where it pointed.

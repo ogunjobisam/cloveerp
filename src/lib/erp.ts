@@ -116,7 +116,7 @@ export let isConfigured = false;
  * host until the directory has answered, which is before any screen shows.
  *
  * The code is the address the page was opened at, not the register's key.
- * Since 20261012020000 a client can be renamed: the register keeps its code,
+ * Since 20261012030000 a client can be renamed: the register keeps its code,
  * which never changes, and gives it a new address, which is the host and the
  * code its one organisation is renamed to.
  */

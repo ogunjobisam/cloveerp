@@ -4,13 +4,16 @@ import {
   DIRECTORY_CACHE_TTL_MS,
   cacheKey,
   cachedEntryJson,
+  deploymentAddressLookup,
   directoryHost,
   directoryOutcome,
+  directoryReply,
   keptCopyAfter,
   movedHref,
   readCachedEntry,
   readDirectoryEntry,
 } from "./deployment-directory";
+import { readAddressLookup } from "./tenant-address";
 
 describe("the answer a browser keeps", () => {
   const entry = {
@@ -334,5 +337,117 @@ describe("what the browser keeps for a host after an answer", () => {
     expect(keptCopyAfter(directoryOutcome({ status: 503, body: null }, project))).toBeNull();
     expect(keptCopyAfter(directoryOutcome(null, suspended))).toBeNull();
     expect(keptCopyAfter(directoryOutcome(null, null))).toBeNull();
+  });
+});
+
+describe("what the directory route answers", () => {
+  const project = {
+    code: "acme",
+    client_name: "Acme Ltd",
+    url: "https://abcdefghijklmnopqrst.supabase.co",
+    key: "sb_publishable_x",
+  };
+  const KEPT = "public, max-age=300, stale-if-error=86400";
+
+  test("not a host: 400, and the register is never asked", () => {
+    expect(directoryReply(null)).toEqual({
+      status: 400,
+      body: { error: "not a host" },
+      cacheControl: "no-store",
+    });
+  });
+
+  test("a register that cannot be read: 503, kept by nobody, never 'nobody is here'", () => {
+    for (const error of [{ message: "timeout" }, "down"]) {
+      expect(directoryReply({ data: project, error })).toEqual({
+        status: 503,
+        body: { error: "the directory cannot answer just now" },
+        cacheControl: "no-store",
+      });
+    }
+  });
+
+  test("nothing held, or an answer of no shape: 404, briefly", () => {
+    for (const data of [
+      null,
+      { code: "acme" },
+      { ...project, url: "http://x.supabase.co" },
+      { code: "acme", client_name: "Acme Ltd", moved_to: "https://evil.example.com" },
+      { code: "acme", client_name: "Acme Ltd", suspended: "yes" },
+    ]) {
+      expect(directoryReply({ data, error: null })).toEqual({
+        status: 404,
+        body: { error: "no deployment at this address" },
+        cacheControl: "public, max-age=60",
+      });
+    }
+  });
+
+  test("a project: 200, the four things public by design, kept five minutes", () => {
+    expect(
+      directoryReply({ data: { ...project, status: "live", note: "x" }, error: null }),
+    ).toEqual({ status: 200, body: project, cacheControl: KEPT });
+  });
+
+  test("a suspension: 200, the client named and nothing to talk to", () => {
+    // Whatever else the register sends with it, no URL and no key go out.
+    expect(directoryReply({ data: { ...project, suspended: true }, error: null })).toEqual({
+      status: 200,
+      body: { code: "acme", client_name: "Acme Ltd", suspended: true },
+      cacheControl: KEPT,
+    });
+  });
+
+  test("a move: 200, the client named and its new origin, and nothing to talk to", () => {
+    expect(
+      directoryReply({
+        data: { ...project, moved_to: "https://acme-group.cloveerp.com" },
+        error: null,
+      }),
+    ).toEqual({
+      status: 200,
+      body: { code: "acme", client_name: "Acme Ltd", moved_to: "https://acme-group.cloveerp.com" },
+      cacheControl: KEPT,
+    });
+  });
+});
+
+describe("what cloveerp.com/<address> answers for a client's address", () => {
+  test("a served or suspended client: its own address, never one built from its code", () => {
+    // Renamed from acme to acme-group: the register's code stays acme.
+    const project = {
+      code: "acme",
+      client_name: "Acme Group",
+      url: "https://abcdefghijklmnopqrst.supabase.co",
+      key: "sb_publishable_x",
+    };
+    const atItsAddress = {
+      code: "acme-group",
+      name: "Acme Group",
+      origin: "https://acme-group.cloveerp.com",
+    };
+    expect(deploymentAddressLookup("acme-group", project)).toEqual(atItsAddress);
+    expect(
+      deploymentAddressLookup("acme-group", {
+        code: "acme",
+        client_name: "Acme Group",
+        suspended: true,
+      }),
+    ).toEqual(atItsAddress);
+  });
+
+  test("an address the client has moved from: straight to its new origin", () => {
+    const moved = deploymentAddressLookup("acme", {
+      code: "acme",
+      client_name: "Acme Group",
+      moved_to: "https://acme-group.cloveerp.com",
+    });
+    expect(moved).toEqual({
+      code: "acme",
+      name: "Acme Group",
+      origin: "https://acme-group.cloveerp.com",
+    });
+    // And the sign-in page reads it as a client's door, origin and all.
+    expect(readAddressLookup(moved)).toEqual(moved);
   });
 });
