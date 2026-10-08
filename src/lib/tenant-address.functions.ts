@@ -22,7 +22,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { APEX_HOST, DEMO_HOST, isClientHost } from "./backend";
+import { APEX_HOST, DEMO_HOST, isDirectoryHost, normalHost } from "./backend";
 import { readDirectoryEntry } from "./deployment-directory";
 import { requestHost } from "./request-host";
 import { ADDRESS_MAX, readAddressLookup, type AddressLookup } from "./tenant-address";
@@ -34,7 +34,9 @@ export const tenantByAddress = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<AddressLookup | null> => {
     const { getRequest } = await import("@tanstack/react-start/server");
     const host = requestHost(getRequest());
-    if (host === DEMO_HOST || isClientHost(host)) return null;
+    // Every name under the apex but the apex and www is another deployment's,
+    // or nobody's, whatever its shape (isDirectoryHost).
+    if (normalHost(host) === DEMO_HOST || isDirectoryHost(host)) return null;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const rpc = (
       supabaseAdmin.rpc as unknown as (

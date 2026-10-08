@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { isConfigured, supabasePublishableKey, supabaseUrl } from "./erp";
+import {
+  deploymentCode,
+  deploymentName,
+  ensureBackend,
+  isConfigured,
+  supabasePublishableKey,
+  supabaseUrl,
+} from "./erp";
 
 /**
  * A build with no environment is still a build that connects.
@@ -41,5 +48,13 @@ describe("the project a build talks to when the host names none", () => {
       expect(payload.ref).toBe(ref);
       expect(payload.role).toBe("anon");
     }
+  });
+
+  test("with no page there is no client deployment, and the project is known at once", async () => {
+    // Loaded where there is no window, as on the server: nothing at module
+    // level may need one, and no directory is asked.
+    expect(deploymentName).toBeNull();
+    expect(deploymentCode).toBeNull();
+    expect(await ensureBackend()).toBe("ready");
   });
 });

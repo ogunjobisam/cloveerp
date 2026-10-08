@@ -9,13 +9,15 @@ import {
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { chooseBackend, isClientHost, pageHost, type Backend } from "./backend";
+import { chooseBackend, isDirectoryHost, normalHost, pageHost, type Backend } from "./backend";
 import {
   cacheKey,
   cachedEntryJson,
+  directoryOutcome,
   readCachedEntry,
-  readDirectoryEntry,
   type DirectoryEntry,
+  type DirectoryOutcome,
+  type DirectoryResponse,
 } from "./deployment-directory";
 import type {
   InviteRequest,
@@ -96,6 +98,17 @@ export let supabaseUrl = "";
 export let supabasePublishableKey = "";
 
 export let isConfigured = false;
+
+/**
+ * The client deployment this page is the door of, as the directory named it:
+ * the client's name, for the sign-in's heading and the tab's title, and its
+ * code, which is the host's own label and the one organisation's address
+ * there. Null on every host this build knows (the apex, www, the
+ * demonstration, a preview, a local stack, the server), and on a directory
+ * host until the directory has answered, which is before any screen shows.
+ */
+export let deploymentName: string | null = null;
+export let deploymentCode: string | null = null;
 
 /**
  * This browser tab's own storage, where it keeps whom it acts as in a
@@ -180,68 +193,100 @@ function localStore(): Storage | null {
   }
 }
 
-/**
- * The directory's answer for this host: asked on this page's own origin, so
- * it needs no cross-origin anything; kept for a day in this browser, so the
- * control plane being away for a moment does not stop a client's people
- * signing in; forgotten when the directory says nobody is here.
- */
-async function lookupDirectory(host: string): Promise<DirectoryEntry | null> {
-  const store = localStore();
-  const kept = cacheKey(host);
-  try {
-    const response = await fetch(`/api/directory/${encodeURIComponent(host)}`, {
-      headers: { accept: "application/json" },
-    });
-    if (response.status === 404) {
-      try {
-        store?.removeItem(kept);
-      } catch {
-        /* nothing kept, or nowhere to keep it */
-      }
-      return null;
-    }
-    if (response.ok) {
-      const entry = readDirectoryEntry(await response.json());
-      if (entry) {
-        try {
-          store?.setItem(kept, cachedEntryJson(entry, Date.now()));
-        } catch {
-          /* a private window, or site data blocked: the answer is still the answer */
-        }
-        return entry;
-      }
-    }
-  } catch {
-    /* the control plane could not be reached: the last answer, if it is fresh */
+/** How long the directory is waited for before the page says it could not find out. */
+const DIRECTORY_TIMEOUT_MS = 10_000;
+
+/** The directory route's answer, or null when there was none in time. */
+async function askDirectory(host: string): Promise<DirectoryResponse | null> {
+  const init: RequestInit = { headers: { accept: "application/json" } };
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    init.signal = AbortSignal.timeout(DIRECTORY_TIMEOUT_MS);
   }
   try {
-    return readCachedEntry(store?.getItem(kept) ?? null, Date.now());
+    const response = await fetch(`/api/directory/${encodeURIComponent(host)}`, init);
+    let body: unknown = null;
+    if (response.ok) {
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+    }
+    return { status: response.status, body };
   } catch {
     return null;
   }
 }
 
-let directoryBoot: Promise<Backend | null> | null = null;
+/**
+ * The directory's answer for this host: asked on this page's own origin, so
+ * it needs no cross-origin anything; kept for a day in this browser, so the
+ * control plane being away for a moment does not stop a client's people
+ * signing in; forgotten when the directory says nobody is here. What the
+ * answer means is decided in ./deployment-directory.ts (directoryOutcome).
+ */
+async function lookupDirectory(host: string): Promise<DirectoryOutcome> {
+  const store = localStore();
+  const kept = cacheKey(host);
+  const response = await askDirectory(host);
+  let keptEntry: DirectoryEntry | null = null;
+  try {
+    keptEntry = readCachedEntry(store?.getItem(kept) ?? null, Date.now());
+  } catch {
+    keptEntry = null;
+  }
+  const outcome = directoryOutcome(response, keptEntry);
+  try {
+    if (outcome.kind === "found" && outcome.fresh) {
+      store?.setItem(kept, cachedEntryJson(outcome.entry, Date.now()));
+    } else if (outcome.kind === "none") {
+      store?.removeItem(kept);
+    }
+  } catch {
+    /* a private window, or site data blocked: the answer is still the answer */
+  }
+  return outcome;
+}
+
+/**
+ * Where the page stands with its project:
+ *
+ *   ready        it has one, and screens can run against it
+ *   none         the directory says nobody is at this host
+ *   unreachable  the directory could not say, and nothing fresh was kept
+ */
+export type BackendState = "ready" | "none" | "unreachable";
+
+let directoryBoot: Promise<BackendState> | null = null;
 
 /**
  * The project this page talks to, once it is known: at once for every host
- * this build knows, after the directory has answered for a client's host, and
- * null for a client's host nobody holds. Asked once; every later call answers
- * the same. The root route asks it before it shows any screen on a client's
- * host, so no screen ever runs against no project.
+ * this build knows, after the directory has answered for a directory host.
+ * Asked once; every later call answers the same, until askDirectoryAgain.
+ * The root route asks it before it shows any screen on a directory host, so
+ * no screen ever runs against no project.
  */
-export function ensureBackend(): Promise<Backend | null> {
-  if (supabase) return Promise.resolve({ url: supabaseUrl, key: supabasePublishableKey });
+export function ensureBackend(): Promise<BackendState> {
+  if (supabase) return Promise.resolve("ready");
   const host = pageHost();
-  if (host === null || !isClientHost(host)) return Promise.resolve(null);
-  directoryBoot ??= lookupDirectory(host).then((entry) => {
-    if (!entry) return null;
-    const backend: Backend = { url: entry.url, key: entry.key };
-    bootBackend(backend);
-    return backend;
+  if (host === null || !isDirectoryHost(host)) return Promise.resolve("none");
+  directoryBoot ??= lookupDirectory(normalHost(host)).then((outcome): BackendState => {
+    if (outcome.kind !== "found") return outcome.kind;
+    deploymentName = outcome.entry.client_name.trim() || null;
+    deploymentCode = outcome.entry.code;
+    bootBackend({ url: outcome.entry.url, key: outcome.entry.key });
+    return "ready";
   });
   return directoryBoot;
+}
+
+/**
+ * Ask the directory again, after it could not say: the Try again on the page
+ * that says so. A page that already has its project keeps it.
+ */
+export function askDirectoryAgain(): Promise<BackendState> {
+  if (!supabase) directoryBoot = null;
+  return ensureBackend();
 }
 
 /**

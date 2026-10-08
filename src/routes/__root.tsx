@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   createRootRouteWithContext,
+  redirect,
   useRouter,
   HeadContent,
   Scripts,
@@ -14,9 +15,9 @@ import { Toaster } from "../components/ui/sonner";
 import { goesWithThePage } from "../lib/toast-age";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NotFoundComponent } from "../components/erp/not-found";
-import { APEX_ORIGIN } from "../lib/backend";
-import { ensureBackend } from "../lib/erp";
-import { requestHostKind } from "../lib/request-host";
+import { APEX_ORIGIN, apexRedirect } from "../lib/backend";
+import { askDirectoryAgain, ensureBackend, type BackendState } from "../lib/erp";
+import { hostKindOf, requestPageHost } from "../lib/request-host";
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
@@ -57,10 +58,21 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  // Which host this is, read on both sides of the first render
-  // (src/lib/request-host.ts): a client's host shows nothing until the
-  // directory has said which project it talks to.
-  beforeLoad: async () => ({ hostKind: await requestHostKind() }),
+  // Which host this is (src/lib/request-host.ts): a directory host shows
+  // nothing until the directory has said which project it talks to.
+  //
+  // The product page and the enquiry form are the apex's. Asked for on a
+  // client's host or the demonstration, they are the apex's page instead:
+  // answered with a redirect on the server, and a whole-page move on a
+  // navigation inside the page, so no link or typed address renders them
+  // there. The demonstration's enquiry form would otherwise post to the
+  // demonstration's project, where nobody reads it.
+  beforeLoad: async ({ location }) => {
+    const host = await requestPageHost();
+    const away = apexRedirect(location.pathname, location.searchStr, host);
+    if (away !== null) throw redirect({ href: away });
+    return { hostKind: hostKindOf(host), host };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -173,39 +185,38 @@ function useToastsGoWithThePage() {
   );
 }
 
-/** The marketing pages are the apex's; on a client's host they are not here. */
-const APEX_PATHS = new Set(["/product", "/contact"]);
-
 /**
- * On a client's host, nothing until the project is known.
+ * On a directory host, nothing until the project is known.
  *
  * One build serves every client, and a page opened at acme.cloveerp.com
  * learns which project it talks to from the directory on the control plane
  * (src/lib/erp.ts, ensureBackend). Until it has, no screen is shown: a screen
  * rendered against no project would say "not connected", and one rendered
  * against production would be worse. The server renders this same shell for
- * a client's host, so the first paint and the hydration agree. A host the
- * directory does not hold is nobody's, and says so; it never falls through
- * to production.
+ * a directory host, so the first paint and the hydration agree.
+ *
+ * Two answers that look alike are kept apart. A host the directory does not
+ * hold is nobody's, and says so; it never falls through to production. A
+ * directory that cannot answer just now, with no fresh copy kept in this
+ * browser, is not that: the page says it could not find out, and Try again
+ * asks once more.
  */
 function BackendBoundary({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<"pending" | "ready" | "none">("pending");
+  const [state, setState] = useState<"pending" | BackendState>("pending");
+  // How many times the visitor has asked again: each asks the directory anew.
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    const here = window.location;
-    if (APEX_PATHS.has(here.pathname)) {
-      here.replace(`${APEX_ORIGIN}${here.pathname}${here.search}`);
-      return;
-    }
     let live = true;
-    void ensureBackend().then((backend) => {
-      if (live) setState(backend ? "ready" : "none");
+    void (attempt === 0 ? ensureBackend() : askDirectoryAgain()).then((answer) => {
+      if (live) setState(answer);
     });
     return () => {
       live = false;
     };
-  }, []);
+  }, [attempt]);
 
   if (state === "ready") return <>{children}</>;
+  const where = typeof window === "undefined" ? "this address" : window.location.host;
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md text-center">
@@ -213,15 +224,34 @@ function BackendBoundary({ children }: { children: ReactNode }) {
           <p role="status" className="text-sm text-muted-foreground">
             Connecting…
           </p>
+        ) : state === "unreachable" ? (
+          <>
+            <h1 className="font-display text-xl font-medium tracking-tight text-foreground">
+              Cannot connect just now
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The service that says which organisation is at {where} did not answer. Nothing is
+              wrong with your account or your organisation. Try again in a moment.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setState("pending");
+                setAttempt((n) => n + 1);
+              }}
+              className="mt-6 inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Try again
+            </button>
+          </>
         ) : (
           <>
             <h1 className="font-display text-xl font-medium tracking-tight text-foreground">
               No organisation at this address
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Nothing is served at{" "}
-              {typeof window === "undefined" ? "this address" : window.location.host}. Check the
-              address you were given, or start from the front door.
+              Nothing is served at {where}. Check the address you were given, or start from the
+              front door.
             </p>
             <a
               href={APEX_ORIGIN}

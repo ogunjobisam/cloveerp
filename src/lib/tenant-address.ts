@@ -12,6 +12,8 @@
  * Supabase client.
  */
 
+import { APEX_HOST } from "./backend";
+
 /**
  * The shape the database holds an address to: lower-case letters, digits and
  * hyphens, starting and ending with a letter or digit, three to sixty-three
@@ -91,6 +93,16 @@ export function addressPath(code: string): string {
 /** How an address is written for a person to read: host and path, no scheme. */
 export function displayAddress(host: string, code: string): string {
   return `${host}${addressPath(code)}`;
+}
+
+/**
+ * A client deployment's address, written for a person to read: its own host,
+ * acme.cloveerp.com. A client's project holds one organisation, whose address
+ * is the deployment's code, so there is no path after it and nothing to
+ * change: the code is the host.
+ */
+export function deploymentAddress(code: string): string {
+  return `${code}.${APEX_HOST}`;
 }
 
 /**

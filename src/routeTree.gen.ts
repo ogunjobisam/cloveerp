@@ -21,6 +21,7 @@ import { Route as PlatformRouteImport } from './routes/platform'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RespondRouteImport } from './routes/respond'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SigninRouteImport } from './routes/signin'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
@@ -137,6 +138,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const RespondRoute = RespondRouteImport.update({
   id: '/respond',
   path: '/respond',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -449,6 +455,7 @@ export interface FileRoutesByFullPath {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/respond': typeof RespondRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -520,6 +527,7 @@ export interface FileRoutesByTo {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/respond': typeof RespondRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -592,6 +600,7 @@ export interface FileRoutesById {
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/respond': typeof RespondRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -665,6 +674,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/respond'
+    | '/robots.txt'
     | '/settings'
     | '/signin'
     | '/sitemap.xml'
@@ -736,6 +746,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/respond'
+    | '/robots.txt'
     | '/settings'
     | '/signin'
     | '/sitemap.xml'
@@ -807,6 +818,7 @@ export interface FileRouteTypes {
     | '/product'
     | '/profile'
     | '/respond'
+    | '/robots.txt'
     | '/settings'
     | '/signin'
     | '/sitemap.xml'
@@ -879,6 +891,7 @@ export interface RootRouteChildren {
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
   RespondRoute: typeof RespondRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
   SettingsRoute: typeof SettingsRoute
   SigninRoute: typeof SigninRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -1022,6 +1035,13 @@ declare module '@tanstack/react-router' {
       path: '/respond'
       fullPath: '/respond'
       preLoaderRoute: typeof RespondRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -1439,6 +1459,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
   RespondRoute: RespondRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
   SettingsRoute: SettingsRoute,
   SigninRoute: SigninRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,

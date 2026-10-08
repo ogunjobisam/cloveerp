@@ -340,6 +340,15 @@ async function install(page: Page, session: ErpSession | null): Promise<Backend>
       return route.fulfill({ status: 204, headers: CORS, body: "" });
     }
     const path = new URL(route.request().url()).pathname;
+    // Which providers the project has (src/lib/auth-settings.ts): Google on,
+    // as production has it, so every flow still sees the button.
+    if (path.endsWith("/settings")) {
+      return json(route, {
+        external: { email: true, google: true, phone: false },
+        disable_signup: true,
+        mailer_autoconfirm: false,
+      });
+    }
     if (path.endsWith("/user")) return json(route, AUTH_USER);
     if (path.endsWith("/logout")) return route.fulfill({ status: 204, headers: CORS, body: "" });
     return json(route, {

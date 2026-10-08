@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   addressShaped,
+  deploymentAddress,
   displayAddress,
   readAddressLookup,
   suggestAddress,
@@ -81,4 +82,9 @@ describe("readAddressLookup", () => {
 
 test("displayAddress writes host and path", () => {
   expect(displayAddress("cloveerp.com", "acme")).toBe("cloveerp.com/acme");
+});
+
+test("a client deployment's address is its own host, with no path", () => {
+  expect(deploymentAddress("acme")).toBe("acme.cloveerp.com");
+  expect(deploymentAddress("acme-tools")).toBe("acme-tools.cloveerp.com");
 });

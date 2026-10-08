@@ -4,7 +4,7 @@ import { Sparkles } from "lucide-react";
 import { ApprovalsWaiting } from "../components/erp/approvals-waiting";
 import { FirstRun } from "../components/erp/first-run";
 import { Gate } from "../components/erp/gate";
-import { isClientHost, pageHost } from "../lib/backend";
+import { marketingIsElsewhere, pageHost } from "../lib/backend";
 import { hasStoredSession } from "../lib/erp";
 import { Launchpad } from "../components/erp/launchpad";
 import { useErpSession, useScope } from "../components/erp/session-context";
@@ -30,7 +30,7 @@ import { demonstrationsLiveElsewhere, usePlatformMe } from "../lib/platform";
  */
 
 export const Route = createFileRoute("/")({
-  head: () => ({
+  head: (ctx) => ({
     meta: [
       { title: "Home — Clove ERP" },
       {
@@ -44,7 +44,13 @@ export const Route = createFileRoute("/")({
       // card and the canonical URL a link should resolve to.
       { name: "robots", content: "noindex, follow" },
     ],
-    links: [{ rel: "canonical", href: "https://cloveerp.com/product" }],
+    // Where the product page is the apex's (a client's door, the
+    // demonstration) this is a fork to the sign-in, not to the product page,
+    // and names no page of the apex's as its own. Read defensively: the title
+    // is also read from here with no route context (__root.tsx).
+    links: marketingIsElsewhere(ctx?.match?.context?.host ?? null)
+      ? []
+      : [{ rel: "canonical", href: "https://cloveerp.com/product" }],
   }),
   component: Home,
 });
@@ -81,10 +87,11 @@ function Home() {
 }
 
 function Fork() {
-  // A client's own host has no front door but its sign-in: the product page
-  // is the apex's (src/routes/__root.tsx sends it there).
+  // A client's own host, and the demonstration, have no front door but their
+  // sign-in: the product page is the apex's (src/routes/__root.tsx sends it
+  // there), and a visitor here came to sign in to this deployment.
   if (!hasStoredSession()) {
-    return <Navigate to={isClientHost(pageHost()) ? "/signin" : "/product"} replace />;
+    return <Navigate to={marketingIsElsewhere(pageHost()) ? "/signin" : "/product"} replace />;
   }
   return (
     <Gate>

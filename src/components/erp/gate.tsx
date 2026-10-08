@@ -5,7 +5,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { ResourceProvider } from "../../lib/i18n";
-import { callErp, isConfigured, supabase, type ErpSession } from "../../lib/erp";
+import { useGoogleSignIn } from "../../lib/auth-settings";
+import {
+  callErp,
+  deploymentCode,
+  deploymentName,
+  isConfigured,
+  supabase,
+  type ErpSession,
+} from "../../lib/erp";
 import {
   clearStoredInvitation,
   readStoredInvitation,
@@ -18,9 +26,11 @@ import { tenantStorageKey } from "../../lib/tenant-storage";
 import {
   ADDRESS_MAX,
   ADDRESS_PATTERN,
+  deploymentAddress,
   suggestAddress,
   typedAddress,
 } from "../../lib/tenant-address";
+import { ApexLink } from "./apex-link";
 import { Shell, type Scope } from "./shell";
 import { ErpSessionContext } from "./session-context";
 import { Wordmark } from "./logo";
@@ -68,9 +78,9 @@ function NotConfigured() {
         then reload.
       </p>
       <p className="mt-4 text-sm text-muted-foreground">
-        <Link to="/product" className="underline underline-offset-2">
+        <ApexLink to="/product" className="underline underline-offset-2">
           View the product page
-        </Link>
+        </ApexLink>
       </p>
     </Centred>
   );
@@ -113,10 +123,16 @@ export type SignInProps = {
   /**
    * The organisation whose address the person opened, named in the heading.
    * A label only: the organisation a session works in is still derived from
-   * the account that signs in.
+   * the account that signs in. When omitted, the client deployment this page
+   * is the door of, as the directory named it, and otherwise Clove ERP.
    */
   organisation?: string;
 };
+
+/** The name a sign-in is to: the page's own deployment's, where it has one. */
+function signInName(organisation: string | undefined): string {
+  return organisation ?? deploymentName ?? "Clove ERP";
+}
 
 /**
  * The sign-in screen, on its own so `/signin` can be a place you go.
@@ -130,16 +146,22 @@ export function SignIn({ onSignedIn, notice, returnPath, organisation }: SignInP
   // for, which is the one showing; an emailed link and Google both used to
   // return to the bare site and lose it.
   const here = useRouterState({ select: (st) => st.location.href });
+  // On a client's own host, the client's name, which the directory gave
+  // before any screen showed (src/lib/erp.ts): "Sign in to Acme Ltd" on every
+  // route that signs in, not only the one an address opened.
+  const name = signInName(organisation);
+  const google = useGoogleSignIn();
 
   // Shown in place of a gated page, the tab still named that page — "Stock —
   // Clove ERP" over a sign-in form. It names the form while the form is there.
   useEffect(() => {
     const was = document.title;
-    document.title = "Sign in — Clove ERP";
+    document.title =
+      name === "Clove ERP" ? "Sign in — Clove ERP" : `Sign in to ${name} — Clove ERP`;
     return () => {
       document.title = was;
     };
-  }, []);
+  }, [name]);
   const back = safeReturnPath(returnPath) ?? safeReturnPath(here) ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -203,7 +225,7 @@ export function SignIn({ onSignedIn, notice, returnPath, organisation }: SignInP
       {notice}
       <form onSubmit={submit} className="rounded-xl border border-border bg-card p-6">
         <Wordmark size={30} />
-        <h1 className="mt-4 text-lg font-semibold">Sign in to {organisation ?? "Clove ERP"}</h1>
+        <h1 className="mt-4 text-lg font-semibold">Sign in to {name}</h1>
 
         <p className="mt-1 text-sm text-muted-foreground">
           Your organisation is derived from your account. It is never chosen here.
@@ -278,25 +300,32 @@ export function SignIn({ onSignedIn, notice, returnPath, organisation }: SignInP
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
-        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" />
-          or
-          <span className="h-px flex-1 bg-border" />
-        </div>
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
-        >
-          <GoogleGlyph />
-          Continue with Google
-        </button>
+        {/* Only where this project's Auth has Google switched on
+            (src/lib/auth-settings.ts): elsewhere the button led to a page of
+            raw JSON saying the provider is not enabled. */}
+        {google ? (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              disabled={busy}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+            >
+              <GoogleGlyph />
+              Continue with Google
+            </button>
+          </>
+        ) : null}
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          <Link to="/product" className="underline underline-offset-2">
+          <ApexLink to="/product" className="underline underline-offset-2">
             About Clove ERP
-          </Link>
+          </ApexLink>
         </p>
       </form>
     </Centred>
@@ -351,7 +380,11 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
   const queryClient = useQueryClient();
   const platform = usePlatformMe();
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  // On a client's own host the one organisation's address is the
+  // deployment's code, which is the host itself: fixed, shown and never
+  // typed. The database refuses any other there regardless.
+  const fixedCode = deploymentCode;
+  const [code, setCode] = useState(fixedCode ?? "");
   // The address follows the name until the person types one of their own.
   const [codeTouched, setCodeTouched] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -422,7 +455,7 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
     setError(null);
     try {
       if (which === "create") {
-        await callErp("erp_onboard_tenant", { p_name: name, p_code: code });
+        await callErp("erp_onboard_tenant", { p_name: name, p_code: fixedCode ?? code });
       } else {
         await callErp("erp_seed_demo");
       }
@@ -593,38 +626,53 @@ function Onboarding({ email, onSignOut }: { email: string | null; onSignOut: () 
             value={name}
             onChange={(e) => {
               setName(e.target.value);
-              if (!codeTouched) setCode(suggestAddress(e.target.value));
+              if (!codeTouched && fixedCode === null) setCode(suggestAddress(e.target.value));
             }}
             placeholder="Acme Manufacturing"
             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
         </label>
 
-        <label className="mt-3 block text-sm font-medium">
-          Your address
-          <span className="mt-1 flex items-center rounded-md border border-input bg-background text-sm">
-            <span className="pl-3 font-mono text-muted-foreground">{addressHost()}/</span>
-            <input
-              required
-              value={code}
-              onChange={(e) => {
-                setCodeTouched(true);
-                setCode(typedAddress(e.target.value));
-              }}
-              minLength={3}
-              maxLength={ADDRESS_MAX}
-              pattern={ADDRESS_PATTERN.source.slice(1, -1)}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="acme"
-              className="w-full min-w-0 rounded-md bg-transparent py-2 pr-3 font-mono text-sm"
-            />
-          </span>
-          <span className="mt-1 block text-xs font-normal text-muted-foreground">
-            Where your people sign in. Letters, digits and hyphens; you can change it later in
-            Settings.
-          </span>
-        </label>
+        {fixedCode !== null ? (
+          <div className="mt-3 text-sm font-medium">
+            Your address
+            <span className="mt-1 flex items-center rounded-md border border-input bg-muted text-sm">
+              <span className="min-w-0 break-all px-3 py-2 font-mono">
+                {deploymentAddress(fixedCode)}
+              </span>
+            </span>
+            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+              Where your people sign in. It is this site's own address, so it is set already and is
+              not changed here.
+            </span>
+          </div>
+        ) : (
+          <label className="mt-3 block text-sm font-medium">
+            Your address
+            <span className="mt-1 flex items-center rounded-md border border-input bg-background text-sm">
+              <span className="pl-3 font-mono text-muted-foreground">{addressHost()}/</span>
+              <input
+                required
+                value={code}
+                onChange={(e) => {
+                  setCodeTouched(true);
+                  setCode(typedAddress(e.target.value));
+                }}
+                minLength={3}
+                maxLength={ADDRESS_MAX}
+                pattern={ADDRESS_PATTERN.source.slice(1, -1)}
+                spellCheck={false}
+                autoComplete="off"
+                placeholder="acme"
+                className="w-full min-w-0 rounded-md bg-transparent py-2 pr-3 font-mono text-sm"
+              />
+            </span>
+            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+              Where your people sign in. Letters, digits and hyphens; you can change it later in
+              Settings.
+            </span>
+          </label>
+        )}
 
         {refused ? (
           <div role="alert" className="mt-3 text-sm">

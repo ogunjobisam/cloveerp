@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { GoTo, PermissionName } from "../../components/erp/action";
 import { ActionBar, codeField, pickFrom } from "../../components/erp/actions-bar";
+import { ApexLink } from "../../components/erp/apex-link";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader, Prose } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
@@ -116,9 +117,9 @@ function Adoption() {
           <p className="mt-3 rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-xs">
             This organisation is not a demo. Starting a scenario here is refused once it is live; to
             keep practising after that,{" "}
-            <Link to="/contact" className="underline">
+            <ApexLink to="/contact" className="underline">
               ask Clove for a practice organisation
-            </Link>
+            </ApexLink>
             .
           </p>
         ) : null}

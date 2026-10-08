@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { GoTo } from "../components/erp/action";
+import { ApexLink } from "../components/erp/apex-link";
 import { Gate } from "../components/erp/gate";
 import { PageHeader } from "../components/erp/page";
 import { DataPanel, Pill } from "../components/erp/panel";
@@ -96,9 +97,9 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         , and the check tells you whether the task was done. Once the organisation is live,
         scenarios are refused on purpose, because practice belongs where nothing is real. To keep
         practising after that, or to train people before they touch real records,{" "}
-        <Link to="/contact" className="underline">
+        <ApexLink to="/contact" className="underline">
           ask Clove
-        </Link>{" "}
+        </ApexLink>{" "}
         for a practice organisation of your own.
       </>
     ),

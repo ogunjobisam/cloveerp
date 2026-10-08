@@ -87,3 +87,45 @@ export function readDirectoryEntry(answer: unknown): DirectoryEntry | null {
   if (typeof key !== "string" || key === "") return null;
   return { code, client_name: name, url, key };
 }
+
+/**
+ * What the directory route answered the browser: its status, and its body
+ * when it answered OK. Null when there was no answer at all: the request
+ * failed or ran out of time.
+ */
+export type DirectoryResponse = { status: number; body: unknown };
+
+/**
+ * What the browser concludes about a host, three ways, because two of them
+ * look alike and must never be confused.
+ *
+ *   found        the directory named the project; or it could not answer and
+ *                a copy kept from an earlier answer is still fresh. `fresh`
+ *                is true when the directory itself just answered, and the
+ *                copy is to be kept again.
+ *   none         the directory said nobody is at this host (404), or that it
+ *                is not a host anybody could hold (400). Believed at once,
+ *                and any copy kept for the host is to be forgotten.
+ *   unreachable  the directory could not say (a 503, any other status, a
+ *                half answer, a timeout, no network) and nothing fresh is
+ *                kept. Not "nobody is here": the page says it could not find
+ *                out, and offers to ask again.
+ */
+export type DirectoryOutcome =
+  | { kind: "found"; entry: DirectoryEntry; fresh: boolean }
+  | { kind: "none" }
+  | { kind: "unreachable" };
+
+export function directoryOutcome(
+  response: DirectoryResponse | null,
+  kept: DirectoryEntry | null,
+): DirectoryOutcome {
+  if (response !== null) {
+    if (response.status === 404 || response.status === 400) return { kind: "none" };
+    if (response.status >= 200 && response.status < 300) {
+      const entry = readDirectoryEntry(response.body);
+      if (entry) return { kind: "found", entry, fresh: true };
+    }
+  }
+  return kept ? { kind: "found", entry: kept, fresh: false } : { kind: "unreachable" };
+}
