@@ -6,6 +6,7 @@ import {
   isDemoCode,
   locate,
   parseConsoleSearch,
+  sectionsFor,
 } from "./platform-console";
 
 describe("the console's address", () => {
@@ -102,6 +103,29 @@ describe("the console's address", () => {
       "Billing",
       "Platform",
     ]);
+  });
+});
+
+describe("the console a deployment offers", () => {
+  const views = (deployment: Parameters<typeof sectionsFor>[0]) =>
+    sectionsFor(deployment).flatMap((s) => s.views.map((v) => `${s.key}/${v.key}`));
+
+  test("the control plane offers everything, including the register of client deployments", () => {
+    expect(sectionsFor("production").map((s) => s.key)).toEqual(CONSOLE_SECTIONS.map((s) => s.key));
+    expect(views("production")).toContain("customers/fleet");
+  });
+
+  test("a client's own console has no Sales, Catalogue or Billing, and no register", () => {
+    expect(sectionsFor("client").map((s) => s.key)).toEqual(["today", "customers", "platform"]);
+    expect(views("client")).not.toContain("customers/fleet");
+    expect(views("client")).toContain("customers/organisations");
+  });
+
+  test("the demonstration, and a database older than the marker, are as they were, less the register", () => {
+    for (const d of ["demonstration", undefined] as const) {
+      expect(sectionsFor(d).map((s) => s.key)).toEqual(CONSOLE_SECTIONS.map((s) => s.key));
+      expect(views(d)).not.toContain("customers/fleet");
+    }
   });
 });
 

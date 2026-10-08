@@ -6,7 +6,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { toast } from "sonner";
@@ -14,6 +14,9 @@ import { Toaster } from "../components/ui/sonner";
 import { goesWithThePage } from "../lib/toast-age";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NotFoundComponent } from "../components/erp/not-found";
+import { APEX_ORIGIN } from "../lib/backend";
+import { ensureBackend } from "../lib/erp";
+import { requestHostKind } from "../lib/request-host";
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
@@ -54,6 +57,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // Which host this is, read on both sides of the first render
+  // (src/lib/request-host.ts): a client's host shows nothing until the
+  // directory has said which project it talks to.
+  beforeLoad: async () => ({ hostKind: await requestHostKind() }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -166,15 +173,84 @@ function useToastsGoWithThePage() {
   );
 }
 
+/** The marketing pages are the apex's; on a client's host they are not here. */
+const APEX_PATHS = new Set(["/product", "/contact"]);
+
+/**
+ * On a client's host, nothing until the project is known.
+ *
+ * One build serves every client, and a page opened at acme.cloveerp.com
+ * learns which project it talks to from the directory on the control plane
+ * (src/lib/erp.ts, ensureBackend). Until it has, no screen is shown: a screen
+ * rendered against no project would say "not connected", and one rendered
+ * against production would be worse. The server renders this same shell for
+ * a client's host, so the first paint and the hydration agree. A host the
+ * directory does not hold is nobody's, and says so; it never falls through
+ * to production.
+ */
+function BackendBoundary({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<"pending" | "ready" | "none">("pending");
+  useEffect(() => {
+    const here = window.location;
+    if (APEX_PATHS.has(here.pathname)) {
+      here.replace(`${APEX_ORIGIN}${here.pathname}${here.search}`);
+      return;
+    }
+    let live = true;
+    void ensureBackend().then((backend) => {
+      if (live) setState(backend ? "ready" : "none");
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (state === "ready") return <>{children}</>;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md text-center">
+        {state === "pending" ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Connecting…
+          </p>
+        ) : (
+          <>
+            <h1 className="font-display text-xl font-medium tracking-tight text-foreground">
+              No organisation at this address
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Nothing is served at{" "}
+              {typeof window === "undefined" ? "this address" : window.location.host}. Check the
+              address you were given, or start from the front door.
+            </p>
+            <a
+              href={APEX_ORIGIN}
+              className="mt-6 inline-flex items-center justify-center rounded-full border border-input bg-background px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+            >
+              Go to cloveerp.com
+            </a>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient, hostKind } = Route.useRouteContext();
   useTitleFollowsTheRoute();
   useToastsGoWithThePage();
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      {hostKind === "directory" ? (
+        <BackendBoundary>
+          <Outlet />
+        </BackendBoundary>
+      ) : (
+        <Outlet />
+      )}
       {/* What an action did is said out loud, once, wherever it was pressed —
           and then goes. Bottom right put it on top of the record panel's
           buttons: "GRN-2026-000003 created" sat over "Receive an order" through

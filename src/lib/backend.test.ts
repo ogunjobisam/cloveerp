@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  APEX_HOST,
   DEMO_ADDRESS,
   DEMO_BACKEND,
   DEMO_HOST,
   PRODUCTION_BACKEND,
   chooseBackend,
+  clientCodeOf,
+  isClientHost,
   pageHost,
 } from "./backend";
 import { demonstrationsLiveElsewhere } from "./platform";
@@ -42,7 +45,32 @@ describe("the project a page talks to", () => {
 
   test("a host that only looks like the demonstration's is not it", () => {
     expect(chooseBackend("demo.cloveerp.com.example.net", none)).toEqual(PRODUCTION_BACKEND);
-    expect(chooseBackend("notdemo.cloveerp.com", none)).toEqual(PRODUCTION_BACKEND);
+  });
+
+  test("a subdomain nobody in this build knows is nobody's until the directory says so, never production's", () => {
+    expect(chooseBackend("notdemo.cloveerp.com", none)).toBeNull();
+    expect(chooseBackend("acme.cloveerp.com", none)).toBeNull();
+    expect(chooseBackend("Acme.CloveERP.com", stack)).toBeNull();
+    // Not under the apex at all: the environment, then production, as before.
+    expect(chooseBackend("acme.cloveerp.com.example.net", none)).toEqual(PRODUCTION_BACKEND);
+    expect(chooseBackend("acme.example.com", stack)).toEqual(stack);
+  });
+
+  test("a client's host is one label under the apex, and the label is its code", () => {
+    expect(isClientHost("acme.cloveerp.com")).toBe(true);
+    expect(clientCodeOf("Acme-Tools.cloveerp.com")).toBe("acme-tools");
+    for (const notClient of [
+      APEX_HOST,
+      `www.${APEX_HOST}`,
+      DEMO_HOST,
+      "a.b.cloveerp.com",
+      "-x.cloveerp.com",
+      "localhost",
+      null,
+    ]) {
+      expect(isClientHost(notClient)).toBe(false);
+      expect(clientCodeOf(notClient)).toBeNull();
+    }
   });
 
   test("the two projects are two, and each key belongs to its own", () => {

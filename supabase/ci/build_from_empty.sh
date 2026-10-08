@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Build an empty Supabase project from the migrations: the demonstration's
-# first build (.github/workflows/demo_from_empty.yml).
+# first build, and every client's (.github/workflows/deployment_from_empty.yml).
 #
 # A release (release.yml) applies what a deployment has not run with
 # `supabase db push`, and that is right for a database that already holds
@@ -60,7 +60,7 @@
 #                 Management API (GET /v1/projects/<ref>/config/auth)
 #   CURL          the curl command (default: curl)
 #   CHECK_ONLY    yes to make every check that comes before the build and stop
-#                 there, changing nothing (demo_from_empty.yml runs it before it
+#                 there, changing nothing (deployment_from_empty.yml runs it before it
 #                 provides anything)
 set -euo pipefail
 

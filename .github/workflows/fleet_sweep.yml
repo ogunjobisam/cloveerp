@@ -1,0 +1,115 @@
+name: fleet sweep
+
+# What the console asked for, started.
+#
+# One Supabase project per client, one subdomain each (the owner's decision
+# of 7 October). The owner asks for a client's build, or for a release train,
+# from the platform console's Fleet view. The console holds no token for
+# GitHub and never will: a token in the application's secrets is a token in
+# every host the application serves. So the console writes a row —
+# erp_meta.fleet_request (20261011020000) — and this sweep, which runs every
+# ten minutes with the repository's own token, claims the oldest open row and
+# starts the run it asks for:
+#
+#   build    deployment_from_empty.yml, with the client's code, carrying on
+#            where a build stopped when the request says so;
+#   release  deploy.yml, with the targets the owner named (all, control,
+#            demonstration, or built clients).
+#
+# A workflow_dispatch created with GITHUB_TOKEN does start a run (it is one of
+# the two event kinds that do), which is the whole trick. Each claimed row is
+# settled with whether the dispatch was accepted; what the run then did is
+# recorded on the deployment's own row by the run itself.
+#
+# Nothing here touches a client's database: it reads and writes the control
+# plane's register over CLOVEERP_LIVE_DATABASE_URL, and asks GitHub.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+# One sweep at a time: two sweeps could not claim the same row (the claim is
+# a single UPDATE with SKIP LOCKED), but two would race GitHub's rate limit
+# for nothing.
+concurrency:
+  group: fleet-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: start what the console asked for
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Claim and start
+        run: |
+          set -euo pipefail
+          if [[ -z "${CP_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so the console's requests cannot be read. Nothing was started."
+            exit 1
+          fi
+          if [[ "$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp_meta.claim_fleet_request(text)') is not null")" != "t" ]]; then
+            echo "the control plane has no register of deployments yet (20261011020000 not released); nothing to sweep"
+            exit 0
+          fi
+          started=0
+          # At most five in one sweep: a sweep is a tick, not a drain, and
+          # each dispatch is a run of its own that the next tick can follow.
+          for _ in 1 2 3 4 5; do
+            claim=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v run="${GITHUB_RUN_ID}" \
+                      -c "select coalesce(erp_meta.claim_fleet_request(:'run')::text, '')")
+            [[ -n "$claim" ]] || break
+            id=$(jq -r '.id' <<< "$claim")
+            kind=$(jq -r '.kind' <<< "$claim")
+            outcome=""
+            case "$kind" in
+              build)
+                code=$(jq -r '.payload.code // empty' <<< "$claim")
+                resume=$(jq -r 'if .payload.resume == true then "true" else "false" end' <<< "$claim")
+                # The code reaches a workflow input, so its shape is checked
+                # here as the register checks it.
+                if ! [[ "$code" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
+                  outcome="failure: '${code}' is not a code"
+                elif gh workflow run deployment_from_empty.yml --ref main -f "code=${code}" -f "resume=${resume}" 2>&1; then
+                  outcome="success: deployment_from_empty.yml started for ${code}${resume:+ (resume ${resume})}"
+                else
+                  outcome="failure: GitHub refused to start deployment_from_empty.yml for ${code}"
+                fi
+                ;;
+              release)
+                targets=$(jq -r '(.payload.targets // []) | map(select(test("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"))) | join(",")' <<< "$claim")
+                if [[ -z "$targets" ]]; then
+                  outcome="failure: no target named"
+                elif gh workflow run deploy.yml --ref main -f "targets=${targets}" 2>&1; then
+                  outcome="success: deploy.yml started for ${targets}"
+                else
+                  outcome="failure: GitHub refused to start deploy.yml for ${targets}"
+                fi
+                ;;
+              *)
+                outcome="failure: unknown request kind ${kind}"
+                ;;
+            esac
+            psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${id}" -v outcome="${outcome}" \
+              -c "select erp_meta.settle_fleet_request(:'id'::uuid, :'outcome');" > /dev/null
+            echo "request ${id} (${kind}): ${outcome}"
+            started=$((started + 1))
+          done
+          if [[ "$started" -eq 0 ]]; then
+            echo "nothing asked for"
+          else
+            echo "- ${started} request(s) claimed and settled" >> "$GITHUB_STEP_SUMMARY"
+          fi
