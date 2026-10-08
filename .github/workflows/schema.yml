@@ -1783,6 +1783,11 @@ jobs:
     # move a door too.
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.changes.outputs.schema == 'true' }}
     runs-on: ubuntu-latest
+    # deployments: read, to ask what the application Worker runs.
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
     env:
       PGHOST: localhost
       PGPORT: '5432'
@@ -1818,13 +1823,26 @@ jobs:
 
       - name: The other side of the release
         # The merge base with the target branch: what main's schema and
-        # application look like without this pull request.
+        # application look like without this pull request. And the commit
+        # the application Worker runs, which lags main between release trains
+        # (app.yml ships only what every database carries): a door it still
+        # calls must outlive this pull request as well.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'application-production' || 'application-staging' }}
         run: |
           set -euo pipefail
           base=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
           echo "base=$base" >> "$GITHUB_ENV"
           git worktree add "$RUNNER_TEMP/base" "$base"
           echo "comparing against $base"
+          deployed=$(supabase/ci/deployed_application.sh read "$ENVIRONMENT")
+          worker="${deployed%% *}"
+          if [[ -n "$worker" && "$worker" != "$base" ]] && git cat-file -e "${worker}^{commit}" 2>/dev/null; then
+            git worktree add "$RUNNER_TEMP/worker" "$worker"
+            echo "worker=$worker" >> "$GITHUB_ENV"
+            echo "and against $worker, which the application Worker runs"
+          fi
 
       - name: The database main built, if the cache still has it
         id: base_cache
@@ -1926,6 +1944,9 @@ jobs:
                       --exclude='*.test.ts' --exclude='*.test.tsx' --exclude-dir=integrations | tr -d '"' | sort -u; }
           names "$GITHUB_WORKSPACE/src" > names_head.txt
           names "$RUNNER_TEMP/base/src" > names_base.txt
+          if [[ -n "${worker:-}" ]]; then
+            names "$RUNNER_TEMP/worker/src" | sort -u - names_base.txt -o names_base.txt
+          fi
 
           removed=$(comm -23 doors_base.txt doors_head.txt)
           added=$(comm -13 doors_base.txt doors_head.txt)
@@ -1946,8 +1967,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ -n "$breaks_rollback" ]]; then
-            echo "::error::the application on main calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim for one release, or say so in the pull request:"
+            echo "::error::the application on main${worker:+, or the one the Worker runs (${worker:0:12}),} calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim until a release train has shipped an application that no longer calls it, or say so in the pull request:"
             echo "$breaks_rollback"
             exit 1
           fi
-          echo "main's application keeps every door it calls"
+          echo "main's application${worker:+, and the one the Worker runs,} keeps every door it calls"

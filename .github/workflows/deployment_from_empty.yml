@@ -125,6 +125,17 @@ jobs:
             echo "::error::run this from main, where every migration it applies has been reviewed and merged; this run is on ${GITHUB_REF}."
             exit 1
           fi
+          # A re-run keeps the commit the first attempt took. If main has moved
+          # on since, the application may already be later than that commit
+          # (app.yml stops waiting on a build once it has stopped), and the
+          # deployment would come up behind the application serving it.
+          if [[ "${GITHUB_RUN_ATTEMPT:-1}" != 1 ]]; then
+            head=$(git ls-remote origin refs/heads/main | cut -f1)
+            if [[ "$head" != "${GITHUB_SHA}" ]]; then
+              echo "::error::this is attempt ${GITHUB_RUN_ATTEMPT} of a run that took ${GITHUB_SHA:0:12} when it started, and main is now at ${head:0:12}: a re-run would build behind what main has. Carry on with Retry from the Fleet view, which starts a new run at the head of main. Nothing was built."
+              exit 1
+            fi
+          fi
           if ! [[ "${CODE}" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
             echo "::error::'${CODE}' is not a code: demo, or a client's code as the register holds it."
             exit 1
@@ -584,12 +595,12 @@ jobs:
       control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
 
   application:
-    # The application follows (app.yml), which ships nothing while anything is
-    # being built from empty: this run took its commit when it started, and
+    # The application follows (app.yml), which ships nothing while a build job
+    # from empty is running: this run took its commit when it started, and
     # would come up behind an application shipped meanwhile. Asked here, built
     # or not, because a run the sweep started with GITHUB_TOKEN is not promised
-    # a workflow_run event when it ends; after_run tells app.yml that this run,
-    # still finishing, is building nothing any more.
+    # a workflow_run event when it ends. app.yml looks at this run's build job,
+    # which has ended by now, not at the run, which is still finishing.
     needs: [build, release]
     if: ${{ always() }}
     name: the application follows
@@ -601,5 +612,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RUN: ${{ github.run_id }}
-        run: gh workflow run app.yml --ref main -f after_run="$RUN"
+        run: gh workflow run app.yml --ref main

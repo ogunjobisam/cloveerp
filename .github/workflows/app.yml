@@ -32,13 +32,16 @@ name: app
 #   3. walking back along main from there, the first commit the schema build
 #      passed on (a run cancelled while pending leaves a commit without one);
 #   4. never backwards: the commit the Worker last ran (recorded as a GitHub
-#      deployment) must be older, or the run ships nothing.
+#      deployment, supabase/ci/deployed_application.sh) must be older, or
+#      the run ships nothing; and when nothing says what the Worker runs, it
+#      ships nothing either, unless a dispatch asks to redeploy.
 #
-# It waits, green with a notice, while any deployment is being built from
-# empty: that build took its commit when it started and comes up behind
-# anything shipped meanwhile. Every state the databases can be in is read
-# afresh, so a late, repeated or out-of-order trigger ships the same thing
-# a timely one would, and a partial train ships whatever every database has.
+# It waits, green with a notice, while any deployment's build job from
+# empty has not finished: that build took its commit when it started and
+# comes up behind anything shipped meanwhile. Every state the databases can
+# be in is read afresh, so a late, repeated or out-of-order trigger ships
+# the same thing a timely one would, and a partial train ships whatever
+# every database has.
 #
 # It is woken by every completed schema, deploy or build-from-empty run on
 # main, and asked again explicitly at the end of each train and each build:
@@ -73,17 +76,6 @@ on:
         description: Deploy again even if the Worker already runs the commit that would ship (after a variable or secret changes)
         type: boolean
         default: false
-      after_run:
-        description: The build-from-empty run asking, which is finishing and so is not still being built (filled in by that workflow)
-        type: string
-        default: ''
-
-# One at a time, and none cancelled: every run reads the databases afresh, so
-# a run that waited is as good as the one it waited behind, and a run that
-# finds nothing to ship must never stop one that is shipping.
-concurrency:
-  group: app-deploy
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -99,6 +91,15 @@ jobs:
       github.event.workflow_run.event != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # One run at a time, and the one running is never cancelled: a run that
+    # finds nothing to ship must not stop one that is shipping. GitHub keeps
+    # one more pending and cancels it when another arrives. For a run with no
+    # inputs that loses nothing, since every run reads everything afresh; a
+    # redeploy dispatch that is displaced that way shows as cancelled, and has
+    # to be dispatched again.
+    concurrency:
+      group: app-deploy
+      cancel-in-progress: false
     env:
       TARGET: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'production' || 'staging' }}
       ENVIRONMENT: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'application-production' || 'application-staging' }}
@@ -122,7 +123,6 @@ jobs:
           LIVE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
           DEMO_URL: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
           REDEPLOY: ${{ github.event_name == 'workflow_dispatch' && inputs.redeploy == true }}
-          AFTER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.after_run || '' }}
         run: |
           set -euo pipefail
           shopt -s inherit_errexit
@@ -148,16 +148,23 @@ jobs:
             done
             printf '%s' "$best"
           }
-          [[ "$AFTER_RUN" =~ ^[0-9]*$ ]] || { echo "::error::after_run must be a run id"; exit 1; }
           [[ -n "${LIVE_URL}" && -n "${DEMO_URL}" ]] || {
             echo "::error::CLOVEERP_LIVE_DATABASE_URL and CLOVEERP_DEMO_DATABASE_URL are needed to see what the databases carry. Not deploying."
             exit 1
           }
 
-          # A build from empty took its commit when it started.
-          building=$(gh api "${R}/actions/workflows/deployment_from_empty.yml/runs?per_page=30" \
-            --jq "[.workflow_runs[] | select(.status != \"completed\" and (.id | tostring) != \"${AFTER_RUN}\")] | length")
-          [[ "$building" == 0 ]] || wait_for "a deployment is being built from empty; the build asks again when it ends"
+          # A build from empty took its commit when it started. Once its build
+          # job has ended, the register says built or failed, and the rest of
+          # the run (the first release, then asking this workflow again) builds
+          # nothing; a run whose jobs are not listed yet is counted as building.
+          # Every list is read as an assignment, so a failed call fails the run.
+          unfinished=$(gh api "${R}/actions/workflows/deployment_from_empty.yml/runs?per_page=30" \
+            --jq '.workflow_runs[] | select(.status != "completed") | .id')
+          for id in $unfinished; do
+            open=$(gh api "${R}/actions/runs/${id}/jobs" --jq '[.jobs[] | select(.name | test("^build .* from empty$"))]
+              | if length == 0 then 1 else (map(select(.status != "completed")) | length) end')
+            [[ "$open" == 0 ]] || wait_for "a deployment is being built from empty (run ${id}); the build asks again when it ends"
+          done
 
           # Each database's newest proved release. A release record is never
           # undone, so the latest of the recent ones is what it carries, even
@@ -181,7 +188,11 @@ jobs:
           while IFS='|' read -r code status sha outcome; do
             [[ -n "$code" ]] || continue
             case "$status" in
-              creating|building) wait_for "client ${code} is being built from empty; its first release decides what it carries" ;;
+              # No build job is running (above), so this one stopped without
+              # saying so. Not served, so it holds nothing back.
+              creating|building)
+                echo "::warning::client ${code} reads ${status}, but no build of it is running; carry it on with Retry from the Fleet view"
+                continue ;;
             esac
             [[ "$outcome" == success ]] || wait_for "client ${code}'s last release (${sha:0:12}) ended ${outcome:-without an outcome}; release it again and this follows"
             on_main "$sha" || wait_for "client ${code}'s last release ${sha:-(none)} is not a commit on main"
@@ -196,28 +207,30 @@ jobs:
           # The schema build must have passed on what ships. A run cancelled
           # while pending leaves a commit with none, so walk back to one that has.
           ship=""
-          for c in $(git rev-list --first-parent --max-count=50 "$floor"); do
+          walk=$(git rev-list --first-parent --max-count=50 "$floor")
+          for c in $walk; do
             passed=$(gh api "${R}/actions/workflows/schema.yml/runs?head_sha=${c}&branch=main&status=success&per_page=1" --jq '.total_count')
             if [[ "${passed:-0}" -gt 0 ]]; then ship="$c"; break; fi
           done
           [[ -n "$ship" ]] || wait_for "the schema build passed on none of the fifty commits up to ${floor:0:12}"
           git cat-file -e "${ship}:wrangler.production.jsonc" 2>/dev/null \
-            || wait_for "${ship:0:12} predates the application on Cloudflare"
+            || wait_for "${ship:0:12}, the newest commit every database carries (${described}), predates the application on Cloudflare"
 
-          # Never backwards. What the Worker runs is the newest application
-          # deployment recorded with a success; before the first one was
-          # recorded, the newest app run whose Deploy step passed ran on a
-          # commit at or after the one it shipped.
-          shipped=""
-          for id in $(gh api "${R}/deployments?environment=${ENVIRONMENT}&per_page=50" --jq 'sort_by(.created_at) | reverse | .[].id'); do
-            state=$(gh api "${R}/deployments/${id}/statuses?per_page=1" --jq '.[0].state // ""')
-            if [[ "$state" == success ]]; then shipped=$(gh api "${R}/deployments/${id}" --jq '.sha'); break; fi
-          done
-          if [[ -z "$shipped" ]]; then
-            for id in $(gh api "${R}/actions/workflows/app.yml/runs?status=success&per_page=30" --jq '.workflow_runs[].id'); do
-              deployed=$(gh api "${R}/actions/runs/${id}/jobs" --jq '[.jobs[].steps[] | select(.name == "Deploy" and .conclusion == "success")] | length')
-              if [[ "$deployed" -gt 0 ]]; then shipped=$(gh api "${R}/actions/runs/${id}" --jq '.head_sha'); break; fi
-            done
+          # Never backwards, and never blind: what the Worker runs is read from
+          # the record app.yml keeps, and a run that cannot tell ships nothing.
+          cp supabase/ci/deployed_application.sh "$RUNNER_TEMP/"
+          deployed=$(supabase/ci/deployed_application.sh read "$ENVIRONMENT")
+          shipped="${deployed%% *}"
+          if [[ "$deployed" == *" fallback" ]]; then
+            # The first run after records began: keep what the run history
+            # says, so that it no longer depends on how far back that goes.
+            supabase/ci/deployed_application.sh record "$ENVIRONMENT" "$shipped" \
+              "what the newest app run whose Deploy step passed ran on, recorded by app.yml run ${GITHUB_RUN_ID} when records began"
+          fi
+          [[ -n "$shipped" || "$REDEPLOY" == true ]] \
+            || wait_for "nothing records what the Worker runs; dispatch app with redeploy to ship ${ship:0:12} and record it"
+          if [[ -n "$shipped" ]] && ! on_main "$shipped" && [[ "$REDEPLOY" != true ]]; then
+            wait_for "the Worker runs ${shipped:0:12}, which is not a commit on main; dispatch app with redeploy to ship ${ship:0:12} and record it"
           fi
           if [[ -n "$shipped" ]] && on_main "$shipped"; then
             if [[ "$ship" == "$shipped" && "$REDEPLOY" != true ]]; then
@@ -303,15 +316,7 @@ jobs:
           SHIP: ${{ steps.ready.outputs.ship }}
         run: |
           set -euo pipefail
-          R="repos/${GITHUB_REPOSITORY}"
-          production=false
-          [[ "$TARGET" == production ]] && production=true
-          id=$(gh api -X POST "${R}/deployments" --jq '.id' --input - <<JSON
-          {"ref": "${SHIP}", "environment": "${ENVIRONMENT}", "auto_merge": false, "required_contexts": [],
-           "description": "the application, by app.yml run ${GITHUB_RUN_ID}", "production_environment": ${production}}
-          JSON
-          )
-          [[ "$id" =~ ^[0-9]+$ ]] || { echo "::error::the Worker runs ${SHIP}, but recording it as a deployment failed; the next run may deploy it again"; exit 1; }
-          gh api -X POST "${R}/deployments/${id}/statuses" -f state=success \
-            -f "log_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > /dev/null
-          echo "recorded ${SHIP} as deployment ${id} to ${ENVIRONMENT}"
+          # The script from main, set aside by the readiness step: the commit
+          # checked out now is the one that shipped, which may predate it.
+          "$RUNNER_TEMP/deployed_application.sh" record "$ENVIRONMENT" "$SHIP" "the application, by app.yml run ${GITHUB_RUN_ID}" \
+            || { echo "::error::the Worker runs ${SHIP}, but recording it failed; the next run may deploy it again"; exit 1; }
