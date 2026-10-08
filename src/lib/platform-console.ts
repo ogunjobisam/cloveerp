@@ -179,6 +179,57 @@ export type OfferedSection = {
   views: readonly (ConsoleView & { key: ViewKey })[];
 };
 
+/** The kind of deployment a console runs on; undefined on a database older than the marker. */
+export type ConsoleDeployment = "production" | "demonstration" | "client" | undefined;
+
+/** What a console may do on the deployment it runs on. */
+export type ConsoleReach = {
+  /**
+   * The control plane's own business: enquiries, quotes, contracts, invoices,
+   * renewals, the price list and payment details. A client's own project
+   * refuses it (erp.require_not_client, 20261011090000), so its console
+   * neither shows it nor asks for it.
+   */
+  controlPlaneBusiness: boolean;
+  /**
+   * Adding, ranking and removing platform staff. On a client the list follows
+   * the control plane's, which is where staff are managed.
+   */
+  staffManagedHere: boolean;
+  /**
+   * Changing an organisation's address. On a client the address is the
+   * subdomain, and renaming one is a fleet operation.
+   */
+  addressChangeHere: boolean;
+  /**
+   * Opening self-service sign-up. A client's project holds exactly one
+   * organisation, so sign-up may only ever be closed there.
+   */
+  selfServiceMayOpen: boolean;
+  /** The register of client deployments, which only the control plane keeps. */
+  register: boolean;
+};
+
+/**
+ * What a deployment's console reaches (decisions of 8 October).
+ *
+ * Production is the control plane and reaches everything. A client's own
+ * project holds one customer and refuses the control plane's business, the
+ * management of its staff and address changes. The demonstration and a
+ * database older than the marker are as they were, less the register, whose
+ * doors they refuse.
+ */
+export function consoleReach(deployment: ConsoleDeployment): ConsoleReach {
+  const client = deployment === "client";
+  return {
+    controlPlaneBusiness: !client,
+    staffManagedHere: !client,
+    addressChangeHere: !client,
+    selfServiceMayOpen: !client,
+    register: deployment === "production",
+  };
+}
+
 /**
  * The console a deployment offers (20261011010000).
  *
@@ -189,17 +240,46 @@ export type OfferedSection = {
  * register. The demonstration and a database older than the marker are as
  * they were, less the register, whose doors they would refuse.
  */
-export function sectionsFor(deployment: "production" | "demonstration" | "client" | undefined) {
+export function sectionsFor(deployment: ConsoleDeployment) {
+  const reach = consoleReach(deployment);
   return CONSOLE_SECTIONS.flatMap((s): OfferedSection[] => {
     if (
-      deployment === "client" &&
+      !reach.controlPlaneBusiness &&
       (s.key === "sales" || s.key === "catalogue" || s.key === "billing")
     ) {
       return [];
     }
     const views = (s.views as readonly (ConsoleView & { key: ViewKey })[]).filter(
-      (v) => v.key !== "fleet" || deployment === "production",
+      (v) => v.key !== "fleet" || reach.register,
     );
     return [{ key: s.key, label: s.label, blurb: s.blurb, views }];
   });
+}
+
+/** Whether the console offers to onboard an organisation here, and under which code. */
+export type OnboardingHere = {
+  offered: boolean;
+  /** The code the organisation must have, where the deployment fixes it; null where it is free. */
+  code: string | null;
+};
+
+/**
+ * Onboarding on the deployment the console runs on.
+ *
+ * A client's project holds exactly one organisation, whose code is the
+ * deployment's own (20261011090000): once it holds one there is nothing more
+ * to onboard, and until then the code is not the operator's to choose. Every
+ * other deployment onboards as many as it likes, under any free code.
+ * `organisations` is how many the deployment lists, whatever their status —
+ * one marked ended still holds its place until it is purged — or null while
+ * the list has not answered, when a client offers nothing yet.
+ */
+export function onboardingHere(
+  deployment: ConsoleDeployment,
+  deploymentCode: string | null | undefined,
+  organisations: number | null,
+): OnboardingHere {
+  if (deployment !== "client") return { offered: true, code: null };
+  const code = typeof deploymentCode === "string" && deploymentCode !== "" ? deploymentCode : null;
+  return { offered: organisations === 0, code };
 }

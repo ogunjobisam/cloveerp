@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 
 import {
   CONSOLE_SECTIONS,
+  consoleReach,
   consoleSearch,
   isDemoCode,
   locate,
+  onboardingHere,
   parseConsoleSearch,
   sectionsFor,
 } from "./platform-console";
@@ -126,6 +128,78 @@ describe("the console a deployment offers", () => {
       expect(sectionsFor(d).map((s) => s.key)).toEqual(CONSOLE_SECTIONS.map((s) => s.key));
       expect(views(d)).not.toContain("customers/fleet");
     }
+  });
+});
+
+describe("what a console reaches on each kind of deployment", () => {
+  test("the control plane reaches everything, the register included", () => {
+    expect(consoleReach("production")).toEqual({
+      controlPlaneBusiness: true,
+      staffManagedHere: true,
+      addressChangeHere: true,
+      selfServiceMayOpen: true,
+      register: true,
+    });
+  });
+
+  test("a client's own project refuses the control plane's business, staff and addresses", () => {
+    expect(consoleReach("client")).toEqual({
+      controlPlaneBusiness: false,
+      staffManagedHere: false,
+      addressChangeHere: false,
+      selfServiceMayOpen: false,
+      register: false,
+    });
+  });
+
+  test("the demonstration and an older database are as they were, less the register", () => {
+    for (const d of ["demonstration", undefined] as const) {
+      expect(consoleReach(d)).toEqual({
+        controlPlaneBusiness: true,
+        staffManagedHere: true,
+        addressChangeHere: true,
+        selfServiceMayOpen: true,
+        register: false,
+      });
+    }
+  });
+
+  test("the sections offered follow the reach", () => {
+    for (const d of ["production", "demonstration", "client", undefined] as const) {
+      const keys = sectionsFor(d).map((s) => s.key);
+      expect(keys.includes("sales")).toBe(consoleReach(d).controlPlaneBusiness);
+      expect(keys.includes("billing")).toBe(consoleReach(d).controlPlaneBusiness);
+      const fleet = sectionsFor(d).some((s) => s.views.some((v) => v.key === "fleet"));
+      expect(fleet).toBe(consoleReach(d).register);
+    }
+  });
+});
+
+describe("onboarding an organisation", () => {
+  test("anywhere but a client, as many as wanted under any free code, list or no list", () => {
+    for (const d of ["production", "demonstration", undefined] as const) {
+      expect(onboardingHere(d, null, 0)).toEqual({ offered: true, code: null });
+      expect(onboardingHere(d, "acme", 7)).toEqual({ offered: true, code: null });
+      expect(onboardingHere(d, null, null)).toEqual({ offered: true, code: null });
+    }
+  });
+
+  test("a client offers nothing until its list has answered", () => {
+    expect(onboardingHere("client", "acme", null)).toEqual({ offered: false, code: "acme" });
+  });
+
+  test("a client's project onboards one organisation, under its own code", () => {
+    expect(onboardingHere("client", "acme", 0)).toEqual({ offered: true, code: "acme" });
+  });
+
+  test("a client's project that holds its organisation offers no second one", () => {
+    expect(onboardingHere("client", "acme", 1)).toEqual({ offered: false, code: "acme" });
+  });
+
+  test("a client whose code is not known yet leaves the code to the operator", () => {
+    expect(onboardingHere("client", null, 0)).toEqual({ offered: true, code: null });
+    expect(onboardingHere("client", undefined, 0)).toEqual({ offered: true, code: null });
+    expect(onboardingHere("client", "", 0)).toEqual({ offered: true, code: null });
   });
 });
 

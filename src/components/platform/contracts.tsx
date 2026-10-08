@@ -6,7 +6,7 @@ import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import { formatFigure } from "../../lib/money";
-import { atLeast, type PlatformRole } from "../../lib/platform";
+import { atLeast, customerChoiceText, type PlatformRole } from "../../lib/platform";
 import { describeChanges, describeTermination, describeUplift } from "../../lib/contract-terms";
 import { DraftAmendment } from "./amendment-form";
 import { BillingContact, SendAgain, SendLines, useCommercialEmails } from "./commercial-email";
@@ -45,6 +45,12 @@ type ContractRow = {
   signed_at: string | null;
   amendments: number;
   unsigned_amendments: number;
+  /**
+   * Set when the contract names a client deployment rather than an
+   * organisation here: the customer's organisation is in a project of its
+   * own, and its subscription is pushed there (20261011090000).
+   */
+  deployment_code?: string | null;
 };
 
 type ContractsReport = {
@@ -58,13 +64,20 @@ type ContractsReport = {
     currency: string;
     term_kind: string;
   }[];
-  organisations: { code: string; name: string }[];
+  /**
+   * Who a contract can be made with: organisations here, and client
+   * deployments, each saying which it is (20261011090000). A database older
+   * than that says nothing, and every one is an organisation.
+   */
+  organisations: { code: string; name: string; where?: "organisation" | "deployment" }[];
   findings: { finding: string; reference: string; detail: string }[];
 };
 
 type Position = {
   id: string;
   tenant_code: string;
+  /** Set when the contract names a client deployment (20261011090000). */
+  deployment_code?: string | null;
   status: string;
   customer_legal_name: string;
   platform_legal_name: string;
@@ -134,6 +147,11 @@ type Position = {
     term_end: string | null;
     renews: boolean;
     status: string;
+    /**
+     * For a deployment's contract, how far the subscription pushed to its
+     * project has got (pending, claimed, applied or failed).
+     */
+    push_status?: string | null;
   } | null;
   notices: { kind: string; due_on: string; raised_at: string }[];
 };
@@ -335,6 +353,9 @@ export function Contracts({ role }: { role: PlatformRole }) {
                         <div className="font-mono text-xs text-muted-foreground">
                           {c.tenant_code} · {c.quote_number} v{c.quote_version}
                         </div>
+                        {c.deployment_code ? (
+                          <div className="text-xs text-muted-foreground">own project</div>
+                        ) : null}
                       </td>
                       <td className="py-2 pr-4 font-mono text-xs">{c.plan_code}</td>
                       <td className="py-2 pr-4 text-sm tabular-nums">
@@ -433,7 +454,7 @@ export function Contracts({ role }: { role: PlatformRole }) {
                         <option value="">Choose…</option>
                         {list.data.organisations.map((o) => (
                           <option key={o.code} value={o.code}>
-                            {o.code} — {o.name}
+                            {customerChoiceText(o)}
                           </option>
                         ))}
                       </select>
@@ -670,6 +691,9 @@ function ContractDetail({
         </button>
         <span className="text-sm font-semibold">{c.customer_legal_name}</span>
         <span className="font-mono text-xs text-muted-foreground">{c.tenant_code}</span>
+        {c.deployment_code ? (
+          <span className="text-xs text-muted-foreground">own project</span>
+        ) : null}
         <Pill tone={c.status === "active" ? "ok" : c.status === "draft" ? "warn" : "muted"}>
           {c.status}
         </Pill>
@@ -723,10 +747,17 @@ function ContractDetail({
                 <span className="font-mono text-xs">{c.subscription.plan_code}</span>{" "}
                 {day(c.subscription.term_start)} → {day(c.subscription.term_end)}{" "}
                 <Pill tone="ok">{c.subscription.status}</Pill>
+                {c.subscription.push_status ? (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    sent to its own project: {c.subscription.push_status}
+                  </span>
+                ) : null}
               </>
             ) : (
               <span className="text-muted-foreground">
-                not yet provisioned; signing provisions it
+                {c.deployment_code
+                  ? "not yet sent to its own project; signing sends it"
+                  : "not yet provisioned; signing provisions it"}
               </span>
             )}
           </dd>

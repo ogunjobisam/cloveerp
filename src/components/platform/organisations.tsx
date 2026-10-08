@@ -9,10 +9,13 @@ import { callErp, ErpError, InviteOutcomeUnknown } from "../../lib/erp";
 import type { OnboardCompanyArgs } from "../../lib/invitation-email";
 import {
   atLeast,
+  organisationWhere,
   type MyTenancy,
+  type PlatformMe,
   type PlatformRole,
   type PlatformTenant,
 } from "../../lib/platform";
+import { onboardingHere } from "../../lib/platform-console";
 import { purgeSweepSummary, readPurgeSweep } from "../../lib/purge-sweep";
 import { FormDialog } from "./dialogs";
 import { Card, ConsoleLink, Fail, INPUT, OrganisationName } from "./kit";
@@ -25,9 +28,10 @@ import { OrganisationActions } from "./organisation-actions";
  * organisation-actions.tsx, so the list and the page cannot drift apart.
  */
 
-export function Companies({ role }: { role: PlatformRole }) {
+export function Companies({ role, me }: { role: PlatformRole; me: PlatformMe }) {
   const queryClient = useQueryClient();
   const mayOperate = atLeast(role, "operator");
+  const client = me.deployment === "client";
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -103,6 +107,17 @@ export function Companies({ role }: { role: PlatformRole }) {
   const member = new Set((mine.data ?? []).filter((m) => m.is_member).map((m) => m.tenant_id));
 
   const rows = tenants.data ?? [];
+  // A client's project holds one organisation, under the deployment's own
+  // code: nothing more to onboard once it holds it, and no code to choose
+  // before then. On a client nothing is offered until the list has answered;
+  // anywhere else the form never depended on the list.
+  const here = onboardingHere(
+    me.deployment,
+    me.deployment_code,
+    tenants.isSuccess ? rows.length : null,
+  );
+  const offerOnboarding = mayOperate && here.offered;
+  const code = here.code ?? form.code;
 
   return (
     <div className="flex flex-col gap-5">
@@ -127,11 +142,15 @@ export function Companies({ role }: { role: PlatformRole }) {
         </p>
       ) : null}
 
-      {mayOperate ? (
+      {offerOnboarding ? (
         <Card
           title="Onboard an organisation"
           icon={<Plus className="size-4 text-primary" />}
-          description="Creates the organisation, its root company, its administrator role, and a single-use invitation for its first administrator."
+          description={
+            client
+              ? "This project is one client's own, and holds one organisation. Creating it makes its root company, its administrator role, and a single-use invitation for its first administrator."
+              : "Creates the organisation, its root company, its administrator role, and a single-use invitation for its first administrator."
+          }
           action={
             <button
               type="button"
@@ -147,7 +166,7 @@ export function Companies({ role }: { role: PlatformRole }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 onboard.mutate({
-                  p_code: form.code,
+                  p_code: code,
                   p_name: form.name,
                   p_admin_email: form.admin_email,
                   p_admin_display_name: form.admin_display_name || form.admin_email,
@@ -171,11 +190,17 @@ export function Companies({ role }: { role: PlatformRole }) {
                 Code
                 <input
                   required
-                  value={form.code}
+                  value={code}
+                  readOnly={here.code !== null}
                   onChange={(e) => setForm({ ...form, code: e.target.value })}
                   placeholder="acme"
-                  className={`${INPUT} font-mono`}
+                  className={`${INPUT} font-mono ${here.code !== null ? "bg-muted" : ""}`}
                 />
+                {here.code !== null ? (
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    The project&apos;s own code, which is its address.
+                  </span>
+                ) : null}
               </label>
               <label className="block text-sm font-medium">
                 First administrator email
@@ -235,7 +260,11 @@ export function Companies({ role }: { role: PlatformRole }) {
       <Card
         title="Organisations"
         icon={<Building2 className="size-4 text-primary" />}
-        description="Every organisation on this deployment. Open one to see its plan, contract, invoices and people. Suspending and marking ended change a status; purging is the only thing here that removes data."
+        description={
+          client
+            ? "The organisation this project holds. Open it to see its plan and its people. Suspending and marking ended change a status; purging is the only thing here that removes data."
+            : "Every organisation on this deployment. Open one to see its plan, contract, invoices and people. Suspending and marking ended change a status; purging is the only thing here that removes data."
+        }
       >
         {atLeast(role, "owner") ? <DeletionSweep /> : null}
 
@@ -248,7 +277,7 @@ export function Companies({ role }: { role: PlatformRole }) {
             No organisations yet. Onboarding one is the first thing to do.
           </p>
         ) : (
-          <Table columns={["Organisation", "Owner", "People", "Structure", "Actions"]}>
+          <Table columns={["Organisation", "Where", "Owner", "People", "Structure", "Actions"]}>
             {rows.map((t) => (
               <tr key={t.id} className="border-b border-border/60 align-top last:border-0">
                 <td className="py-3 pr-4">
@@ -263,6 +292,9 @@ export function Companies({ role }: { role: PlatformRole }) {
                       <ChevronRight className="size-3.5 text-muted-foreground" />
                     </ConsoleLink>
                   </OrganisationName>
+                </td>
+                <td className="py-3 pr-4 text-xs text-muted-foreground">
+                  {organisationWhere(t.code, me)}
                 </td>
                 <td className="py-3 pr-4 text-xs">
                   {t.owner_email ? (
@@ -297,6 +329,7 @@ export function Companies({ role }: { role: PlatformRole }) {
                     role={role}
                     inside={inside.has(t.id)}
                     member={member.has(t.id)}
+                    deployment={me.deployment}
                   />
                 </td>
               </tr>

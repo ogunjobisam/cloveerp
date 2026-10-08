@@ -7,7 +7,11 @@ import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
 import {
   atLeast,
+  buildRecovery,
+  buildRequestIsStale,
   CHECKLIST_ITEMS,
+  deploymentAddress,
+  STALE_BUILD_REQUEST_MINUTES,
   type ChecklistItem,
   type ClientDeployment,
   type ClientDeploymentStatus,
@@ -85,6 +89,10 @@ export function Fleet({ role }: { role: PlatformRole }) {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["erp_platform_deployments"] });
 
   const rows = fleet.data ?? [];
+  // Whether a request has stalled is a matter of time as well as of the row.
+  // Reading when the list was last fetched makes every refetch redraw the
+  // rows, even one that changed nothing, so Start again appears on time.
+  const now = new Date(Math.max(Date.now(), fleet.dataUpdatedAt));
 
   return (
     <div className="flex flex-col gap-5">
@@ -135,7 +143,15 @@ export function Fleet({ role }: { role: PlatformRole }) {
           </p>
         ) : (
           <Table
-            columns={["Client", "Where it is", "Project", "Last release", "By hand", "Actions"]}
+            columns={[
+              "Client",
+              "Address",
+              "State",
+              "Project",
+              "Last release",
+              "By hand",
+              "Actions",
+            ]}
           >
             {rows.map((d) => (
               <DeploymentRow
@@ -143,6 +159,7 @@ export function Fleet({ role }: { role: PlatformRole }) {
                 d={d}
                 mayOperate={mayOperate}
                 isOwner={isOwner}
+                now={now}
                 onDone={refresh}
               />
             ))}
@@ -157,11 +174,13 @@ function DeploymentRow({
   d,
   mayOperate,
   isOwner,
+  now,
   onDone,
 }: {
   d: ClientDeployment;
   mayOperate: boolean;
   isOwner: boolean;
+  now: Date;
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -170,15 +189,14 @@ function DeploymentRow({
       callErp("erp_platform_deployment_checklist", { p_code: d.code, p_item: item, p_done: done }),
     onSuccess: onDone,
   });
-  // Retry once a build has stopped, or a request never became a run. Not
-  // while one is creating or building: a second build started under a
-  // running one waits for it (they share a concurrency group) and then finds
-  // the row built, and the running one can no longer mark it built.
-  const retryable =
-    d.status === "failed" ||
-    (d.status === "requested" &&
-      d.request_status !== "requested" &&
-      d.request_status !== "claimed");
+  // Retry once a build has stopped, or a request never became a run; Start
+  // again once a request in flight has stalled (src/lib/platform.ts). Neither
+  // while one is creating or building, nor while a request is in flight and
+  // fresh: a second build started under a running one waits for it (they
+  // share a concurrency group) and then finds the row built, and the running
+  // one can no longer mark it built.
+  const recovery = buildRecovery(d, now);
+  const stalled = buildRequestIsStale(d, now);
   const lastRun = d.last_release_run_id ?? d.build_run_id;
 
   return (
@@ -191,6 +209,7 @@ function DeploymentRow({
             <div className="mt-1 text-xs text-muted-foreground">{d.owner_email}</div>
           ) : null}
         </td>
+        <td className="py-3 pr-4 font-mono text-xs">{deploymentAddress(d)}</td>
         <td className="py-3 pr-4">
           <Pill tone={statusTone(d.status)}>{statusWord(d)}</Pill>
           {d.last_event ? (
@@ -200,7 +219,12 @@ function DeploymentRow({
               <span className="block text-[11px]">{when(d.last_event.at)}</span>
             </div>
           ) : null}
-          {d.status === "requested" && d.request_status === "requested" ? (
+          {stalled ? (
+            <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+              Nothing has happened for {STALE_BUILD_REQUEST_MINUTES} minutes, so the build may be
+              lost.
+            </div>
+          ) : d.status === "requested" && d.request_status === "requested" ? (
             <div className="mt-1 text-[11px] text-muted-foreground">
               The build starts within ten minutes.
             </div>
@@ -302,7 +326,8 @@ function DeploymentRow({
                 </a>
               </>
             ) : null}
-            {isOwner && retryable ? <RetryBuild d={d} onDone={onDone} /> : null}
+            {isOwner && recovery === "retry" ? <RetryBuild d={d} onDone={onDone} /> : null}
+            {isOwner && recovery === "start-again" ? <StartAgain d={d} onDone={onDone} /> : null}
             {isOwner && RETIRABLE.has(d.status) ? <RetireDeployment d={d} onDone={onDone} /> : null}
             <button
               type="button"
@@ -317,7 +342,7 @@ function DeploymentRow({
       </tr>
       {open ? (
         <tr className="border-b border-border/60 last:border-0">
-          <td colSpan={6} className="py-2 pr-0">
+          <td colSpan={7} className="py-2 pr-0">
             <DeploymentEvents code={d.code} />
           </td>
         </tr>
@@ -600,6 +625,53 @@ function RetryBuild({ d, onDone }: { d: ClientDeployment; onDone: () => void }) 
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          className={INPUT}
+        />
+      </label>
+    </FormDialog>
+  );
+}
+
+/**
+ * Starting a stalled build again (erp_platform_restart_deployment).
+ *
+ * Offered only once the newest request has had twenty minutes with nothing
+ * happening (buildRequestIsStale): queued or claimed and never started, or
+ * started with no step recorded since. The door cancels that request and
+ * queues a new one, so the sweep starts a fresh run and a late answer from
+ * the lost one cannot settle it.
+ */
+function StartAgain({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <FormDialog
+      trigger={
+        <button type="button" className={`${LINK_BUTTON} text-xs`}>
+          Start again
+        </button>
+      }
+      title={`Start the build of ${d.client_name} again`}
+      description={`Its last request has had ${STALE_BUILD_REQUEST_MINUTES} minutes with nothing happening. Starting again cancels that request and queues a new one, which the sweep starts within ten minutes.${
+        d.project_ref
+          ? " Its project exists, so the build carries on from where it stopped."
+          : " No project was made yet, so the build starts from the beginning."
+      }`}
+      submitLabel="Start it again"
+      busyLabel="Queuing…"
+      ready={reason.trim().length >= 20}
+      run={() =>
+        callErp("erp_platform_restart_deployment", { p_code: d.code, p_reason: reason.trim() })
+      }
+      onDone={onDone}
+      onClosed={() => setReason("")}
+    >
+      <label className="block text-sm font-medium">
+        Why it is started again
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="What was seen, for example: queued for an hour and the sweep never started it. At least twenty characters."
           rows={3}
           className={INPUT}
         />

@@ -5,7 +5,13 @@ import { useState, type ReactNode } from "react";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
-import { atLeast, type PlatformRole } from "../../lib/platform";
+import {
+  atLeast,
+  customerChoices,
+  customerChoiceText,
+  type CustomerChoice,
+  type PlatformRole,
+} from "../../lib/platform";
 import {
   STAGES,
   contractDefaults,
@@ -245,8 +251,14 @@ export function Quotes({ role }: { role: PlatformRole }) {
 
   const book = selling.price_book.code;
   const mayWrite = atLeast(role, "operator");
-  const customers = state.data.candidates.filter(
-    (c) => !c.is_demonstration && c.code !== platform.tenant_code,
+  // The organisations here, then the client deployments, each of which holds
+  // its organisation in a project of its own. The deployments are merged here
+  // and only here: the candidates themselves are also who may be designated
+  // the platform organisation, which a deployment never can be.
+  const customers = customerChoices(
+    state.data.candidates,
+    state.data.deployments,
+    platform.tenant_code,
   );
 
   return open ? (
@@ -275,7 +287,7 @@ function Pipeline({
 }: {
   book: string;
   mayWrite: boolean;
-  customers: { code: string; name: string }[];
+  customers: CustomerChoice[];
   onOpen: (id: string) => void;
 }) {
   const [showClosed, setShowClosed] = useState(false);
@@ -506,7 +518,7 @@ function NewQuote({
   onOpened,
 }: {
   book: string;
-  customers: { code: string; name: string }[];
+  customers: CustomerChoice[];
   onCancel: () => void;
   onOpened: (id: string) => void;
 }) {
@@ -651,7 +663,7 @@ function NewQuote({
             <option value="">Choose…</option>
             {customers.map((c) => (
               <option key={c.code} value={c.code}>
-                {c.name} ({c.code})
+                {customerChoiceText(c)}
               </option>
             ))}
           </select>
@@ -842,7 +854,7 @@ function QuoteBuilder({
   documentId: string;
   book: string;
   mayWrite: boolean;
-  customers: { code: string; name: string }[];
+  customers: CustomerChoice[];
   onBack: () => void;
   onOpen: (id: string) => void;
 }) {
@@ -1496,7 +1508,7 @@ function ContractFromQuote({
   customers,
 }: {
   quote: QuoteDetail;
-  customers: { code: string; name: string }[];
+  customers: CustomerChoice[];
 }) {
   const defaults = contractDefaults(quote);
   const [customer, setCustomer] = useState(defaults.customerTenantCode);
@@ -1534,8 +1546,9 @@ function ContractFromQuote({
       ) : customers.length === 0 ? (
         <div>
           <p className="text-sm text-muted-foreground">
-            {quote.party_name ?? "The customer"} is not an organisation on Clove ERP yet. Onboard
-            them under Customers, then come back to make the contract.
+            {quote.party_name ?? "The customer"} is not an organisation on Clove ERP yet, and has no
+            deployment of its own. Onboard them under Customers, or request a deployment of their
+            own, then come back to make the contract.
           </p>
           <ConsoleLink section="customers" view="organisations" className={`${LINK_BUTTON} mt-3`}>
             Open Customers
@@ -1576,7 +1589,7 @@ function ContractFromQuote({
                 <option value="">Choose…</option>
                 {customers.map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.name} ({c.code})
+                    {customerChoiceText(c)}
                   </option>
                 ))}
               </select>

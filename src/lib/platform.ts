@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { APEX_HOST, DEMO_HOST } from "./backend";
 import { callErp, supabase } from "./erp";
+import { displayAddress } from "./tenant-address";
 
 /**
  * The platform layer: the product's own staff, above every tenant.
@@ -38,6 +40,12 @@ export type PlatformMe = {
   origin?: string | null;
   /** The Supabase project this deployment runs in, once a release has said. */
   project_ref?: string | null;
+  /**
+   * A client deployment's own code, the host label of its origin
+   * (acme for https://acme.cloveerp.com): the code its one organisation must
+   * have. Null anywhere but a client (20261011090000).
+   */
+  deployment_code?: string | null;
 };
 
 /**
@@ -99,8 +107,188 @@ export type ClientDeployment = {
   /** The latest build request: queued until the sweep starts the run, claimed once it has. */
   request_status: "requested" | "claimed" | "done" | "failed" | "cancelled" | null;
   request_run_id: string | null;
+  /** When the latest build request was made, claimed by the sweep and settled. */
+  request_created_at?: string | null;
+  request_claimed_at?: string | null;
+  request_settled_at?: string | null;
   last_event: { phase: string; status: string; detail: string | null; at: string } | null;
 };
+
+/**
+ * How long a build request may sit with nothing happening before the owner is
+ * offered Start again. The sweep claims a request within ten minutes and the
+ * build records its first step within a minute or two of starting, so twenty
+ * minutes of silence means the request, or the run it started, is lost.
+ */
+export const STALE_BUILD_REQUEST_MINUTES = 20;
+
+/** The parts of a register row the build rule reads. */
+export type BuildRequestView = Pick<
+  ClientDeployment,
+  | "status"
+  | "request_status"
+  | "request_created_at"
+  | "request_claimed_at"
+  | "request_settled_at"
+  | "last_event"
+>;
+
+/** The latest of some timestamps, in milliseconds; null when none is readable. */
+function latestOf(...values: (string | null | undefined)[]): number | null {
+  let latest: number | null = null;
+  for (const v of values) {
+    if (typeof v !== "string") continue;
+    const t = Date.parse(v);
+    if (Number.isNaN(t)) continue;
+    if (latest === null || t > latest) latest = t;
+  }
+  return latest;
+}
+
+/**
+ * Whether the newest build request of a requested deployment has stalled.
+ *
+ * Two ways, both after twenty minutes with nothing happening:
+ *
+ *   - the request is still open (queued or claimed): the sweep never started
+ *     it, or died between claiming and starting. Counted from when it last
+ *     moved, its claim if it has one, so a request claimed late is not judged
+ *     by its age alone.
+ *   - the request is done, so the sweep started a run, but the deployment is
+ *     still only requested: the run never got going. Counted from the later of
+ *     the settling and the last step recorded on the deployment.
+ *
+ * A row whose request failed, was cancelled or does not exist has nothing in
+ * flight; Retry is for that. Without the times, nothing is judged stale.
+ */
+export function buildRequestIsStale(d: BuildRequestView, now: Date): boolean {
+  if (d.status !== "requested") return false;
+  let since: number | null;
+  if (d.request_status === "requested" || d.request_status === "claimed") {
+    since = latestOf(d.request_created_at, d.request_claimed_at);
+  } else if (d.request_status === "done") {
+    since = d.request_settled_at ? latestOf(d.request_settled_at, d.last_event?.at) : null;
+  } else {
+    return false;
+  }
+  if (since === null) return false;
+  return now.getTime() - since >= STALE_BUILD_REQUEST_MINUTES * 60_000;
+}
+
+/**
+ * What the owner is offered to get a deployment's build going again.
+ *
+ *   retry        the build stopped (failed), or a requested deployment has no
+ *                request in flight (its request failed, was cancelled, or
+ *                there is none): erp_platform_retry_deployment.
+ *   start-again  a requested deployment whose newest request has stalled
+ *                (buildRequestIsStale): erp_platform_restart_deployment,
+ *                which cancels the stalled request and queues a new one.
+ *   null         nothing: a build is under way, or a request is in flight and
+ *                has not stalled yet. A second build queued behind a running
+ *                one waits for it and then finds the row built.
+ */
+export function buildRecovery(d: BuildRequestView, now: Date): "retry" | "start-again" | null {
+  if (d.status === "failed") return "retry";
+  if (d.status !== "requested") return null;
+  const inFlight =
+    d.request_status === "requested" ||
+    d.request_status === "claimed" ||
+    d.request_status === "done";
+  if (!inFlight) return "retry";
+  return buildRequestIsStale(d, now) ? "start-again" : null;
+}
+
+/** The host an origin names (acme.cloveerp.com for https://acme.cloveerp.com); null if it is not one. */
+export function hostOfOrigin(origin: string | null | undefined): string | null {
+  if (typeof origin !== "string" || origin.trim() === "") return null;
+  try {
+    const host = new URL(origin.trim()).host;
+    return host === "" ? null : host;
+  } catch {
+    return null;
+  }
+}
+
+/** A client deployment's address, as a person reads it: acme.cloveerp.com. */
+export function deploymentAddress(d: Pick<ClientDeployment, "code" | "origin">): string {
+  return hostOfOrigin(d.origin) ?? `${d.code}.${APEX_HOST}`;
+}
+
+/**
+ * Where an organisation listed on this console lives, for the Where column.
+ *
+ * On the control plane every organisation shares the one project and is
+ * reached at cloveerp.com/<code>. A client's project is the organisation's
+ * own, reached at its own address. The demonstration's organisations share
+ * its project, at its own host.
+ */
+export function organisationWhere(
+  code: string,
+  me: Pick<PlatformMe, "deployment" | "origin"> | undefined,
+): string {
+  const host = hostOfOrigin(me?.origin);
+  if (me?.deployment === "client") return `${host ?? "this address"}, own project`;
+  if (me?.deployment === "demonstration") return `${host ?? DEMO_HOST}, shared`;
+  return `${displayAddress(APEX_HOST, code)}, shared`;
+}
+
+/**
+ * Somebody a contract or quote can be for: an organisation on this
+ * deployment, or a client deployment, which holds its organisation in a
+ * project of its own (20261011090000).
+ */
+export type CustomerChoice = {
+  code: string;
+  name: string;
+  where: "organisation" | "deployment";
+};
+
+/** The deployment statuses a contract may still name: any but retiring and retired. */
+const CONTRACTABLE_DEPLOYMENT: ReadonlySet<string> = new Set([
+  "requested",
+  "creating",
+  "building",
+  "built",
+  "live",
+  "suspended",
+  "failed",
+]);
+
+/**
+ * Who a quote or contract can be for: the organisations
+ * erp_platform_commercial_state offers as candidates, less demonstrations and
+ * the platform organisation itself, then every client deployment not being
+ * retired. The deployments are never mixed into the candidates themselves,
+ * which are also who may be designated the platform organisation: a
+ * deployment cannot be. A code held by both (the database never lets it be)
+ * is the organisation's.
+ */
+export function customerChoices(
+  candidates: readonly { code: string; name: string; is_demonstration: boolean }[],
+  deployments: readonly { code: string; name: string; status: string }[] | null | undefined,
+  platformCode: string | null | undefined,
+): CustomerChoice[] {
+  const organisations: CustomerChoice[] = candidates
+    .filter((c) => !c.is_demonstration && c.code !== platformCode)
+    .map((c) => ({ code: c.code, name: c.name, where: "organisation" }));
+  const taken = new Set(organisations.map((c) => c.code));
+  const clients: CustomerChoice[] = (deployments ?? [])
+    .filter((d) => CONTRACTABLE_DEPLOYMENT.has(d.status) && !taken.has(d.code))
+    .map((d) => ({ code: d.code, name: d.name, where: "deployment" }));
+  return [...organisations, ...clients];
+}
+
+/** How a choice reads in a picker; a client deployment says it is one. */
+export function customerChoiceText(c: {
+  code: string;
+  name: string;
+  where?: "organisation" | "deployment" | undefined;
+}): string {
+  return c.where === "deployment"
+    ? `${c.name} (${c.code}), client deployment at ${c.code}.${APEX_HOST}`
+    : `${c.name} (${c.code})`;
+}
 
 /** One step a workflow recorded on a client deployment (erp_platform_deployment_events). */
 export type DeploymentEvent = {

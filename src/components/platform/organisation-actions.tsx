@@ -22,7 +22,13 @@ import {
 import { OfferOwnership } from "../erp/ownership";
 import { TOUCH } from "../erp/page";
 import { callErp, InviteOutcomeUnknown } from "../../lib/erp";
-import { atLeast, type PlatformRole, type PlatformTenant } from "../../lib/platform";
+import {
+  atLeast,
+  type DeploymentKind,
+  type PlatformRole,
+  type PlatformTenant,
+} from "../../lib/platform";
+import { consoleReach } from "../../lib/platform-console";
 import { addressShaped, displayAddress, typedAddress } from "../../lib/tenant-address";
 import { addressHost } from "../erp/gate";
 import {
@@ -60,6 +66,7 @@ export function OrganisationActions({
   inside,
   member = false,
   size = "compact",
+  deployment,
 }: {
   tenant: PlatformTenant;
   role: PlatformRole;
@@ -71,10 +78,17 @@ export function OrganisationActions({
    */
   member?: boolean;
   size?: "compact" | "full";
+  /**
+   * The deployment the console runs on. On a client's own project the
+   * organisation's address is the subdomain, so there is no address to change
+   * here: renaming a client is done to its deployment, from the control plane.
+   */
+  deployment: DeploymentKind | undefined;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const mayOperate = atLeast(role, "operator");
+  const addressHere = consoleReach(deployment).addressChangeHere;
   const mayEnd = atLeast(role, "administrator");
   const mayPurge = atLeast(role, "owner");
   const button = size === "full" ? FULL : COMPACT;
@@ -155,7 +169,9 @@ export function OrganisationActions({
       {mayOperate ? (
         <>
           <InviteAdminDialog tenant={t} className={button} icon={icon} />
-          <ChangeAddressDialog tenant={t} className={button} icon={icon} onDone={refresh} />
+          {addressHere ? (
+            <ChangeAddressDialog tenant={t} className={button} icon={icon} onDone={refresh} />
+          ) : null}
 
           {t.status === "suspended" ? (
             <button

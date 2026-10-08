@@ -24,15 +24,18 @@ import { OfferOwnership } from "../erp/ownership";
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
 import { callErp } from "../../lib/erp";
+import { APEX_ORIGIN } from "../../lib/backend";
 import {
   atLeast,
   ROLE_BLURB,
   ROLE_TONE,
+  type DeploymentKind,
   type PlatformAuditRow,
   type PlatformRole,
   type PlatformStaff,
   type PlatformTenant,
 } from "../../lib/platform";
+import { consoleReach } from "../../lib/platform-console";
 import {
   readSelfServiceChange,
   selfServiceIsOpen,
@@ -44,9 +47,18 @@ import { Card, Fail, TokenNotice, statusTone, INPUT } from "./kit";
 
 /** Who may work on the platform, and who may make an organisation without being invited. */
 
-export function Staff({ role }: { role: PlatformRole }) {
+export function Staff({
+  role,
+  deployment,
+}: {
+  role: PlatformRole;
+  deployment: DeploymentKind | undefined;
+}) {
   const queryClient = useQueryClient();
-  const mayManage = atLeast(role, "owner");
+  // Staff are kept on the control plane only (20261011100000): a client's
+  // list follows the control plane's, and its doors refuse a change made here.
+  const reach = consoleReach(deployment);
+  const mayManage = atLeast(role, "owner") && reach.staffManagedHere;
   const [form, setForm] = useState({ email: "", name: "", role: "operator" as PlatformRole });
 
   const staff = useQuery({
@@ -142,6 +154,19 @@ export function Staff({ role }: { role: PlatformRole }) {
         icon={<Users className="size-4 text-primary" />}
         description="Owner decides who works here and who each company belongs to, administrator runs the platform, operator runs the companies, support can look and be let in."
       >
+        {!reach.staffManagedHere ? (
+          <p className="mb-4 text-sm text-muted-foreground">
+            Staff are managed on the control plane&apos;s console, at{" "}
+            <a
+              href={`${APEX_ORIGIN}/platform?section=platform&view=staff`}
+              className="underline underline-offset-2"
+            >
+              cloveerp.com/platform
+            </a>
+            , and reach every client from there. This list follows that one, so nobody is added,
+            ranked or removed here.
+          </p>
+        ) : null}
         {staff.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
@@ -210,7 +235,9 @@ export function Staff({ role }: { role: PlatformRole }) {
           platform, so it moved to administrator with the door. Hiding it is the
           convenience: the door checks the rank on its first line, whoever calls
           it. */}
-      {atLeast(role, "administrator") ? <SelfServiceSignUp /> : null}
+      {atLeast(role, "administrator") ? (
+        <SelfServiceSignUp mayOpen={reach.selfServiceMayOpen} />
+      ) : null}
     </div>
   );
 }
@@ -239,8 +266,11 @@ function when(iso: string): string {
  *
  * The switch never flips on a click. It asks for the reason first, and the
  * state shown is the database's answer afterwards, not the click.
+ *
+ * `mayOpen` is false on a client's own project, which holds exactly one
+ * organisation and refuses to open sign-up: there it can only be closed.
  */
-function SelfServiceSignUp() {
+function SelfServiceSignUp({ mayOpen }: { mayOpen: boolean }) {
   const queryClient = useQueryClient();
   const [asking, setAsking] = useState<boolean | null>(null);
   const [reason, setReason] = useState("");
@@ -307,6 +337,12 @@ function SelfServiceSignUp() {
                   ? "Anybody who signs in can create an organisation or a demo for themselves. The limit on how many one sign-in may create still applies."
                   : "Only platform operators and owners can create organisations and demos. Everybody else who signs in without an organisation is asked for an invitation."}
               </p>
+              {!mayOpen ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This project is one client&apos;s own and holds one organisation, so sign-up stays
+                  closed here.
+                </p>
+              ) : null}
             </div>
             <button
               type="button"
@@ -314,7 +350,7 @@ function SelfServiceSignUp() {
               aria-checked={open === true}
               aria-label="Self-service sign-up"
               onClick={() => ask(!open)}
-              disabled={change.isPending || asking !== null}
+              disabled={change.isPending || asking !== null || (!open && !mayOpen)}
               className={`${TOUCH} inline-flex shrink-0 items-center rounded-full px-1 disabled:opacity-60`}
             >
               <span
