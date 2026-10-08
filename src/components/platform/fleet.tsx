@@ -531,7 +531,7 @@ function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => vo
         </button>
       }
       title={`Retire ${d.client_name}`}
-      description="It stops receiving releases and its address shows nothing. Its code stays held, so nobody else can take it. Nothing is deleted: its project is yours to delete afterwards."
+      description="It stops receiving releases and its address shows nothing. Its code stays held, so nobody else can take it. It is refused while a build or a release is running for it. Nothing is deleted: its project is yours to delete afterwards."
       submitLabel="Retire it"
       busyLabel="Retiring…"
       danger
@@ -542,7 +542,9 @@ function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => vo
       onDone={onDone}
       done={() => (
         <div className="flex flex-col gap-2 text-sm">
-          <p>{d.client_name} is retired. What is left is yours, by hand:</p>
+          <p>
+            {d.client_name} is retired, and nothing runs for it now. What is left is yours, by hand:
+          </p>
           <ul className="list-disc pl-5 text-muted-foreground">
             {d.project_ref ? (
               <li>

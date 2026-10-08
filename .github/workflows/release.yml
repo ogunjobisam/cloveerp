@@ -97,7 +97,67 @@ on:
         required: false
 
 jobs:
+  gate:
+    # A client's release asks the register first (20261011050000).
+    #
+    # A train reads its targets once, at its start, and releases to each
+    # client much later, after the demonstration; a client retired in
+    # between was still released to, and with its project deleted that
+    # release failed and held the control plane back. So, under the row's
+    # lock, erp_meta.begin_deployment_release() says whether the client is
+    # still built or live and, if it is, records that a release has started,
+    # which the retire door then refuses to overtake. A client that is no
+    # longer a target is released nothing, and this ends green, so the train
+    # carries on to the control plane.
+    #
+    # Production and the demonstration are not in the register and always
+    # go on.
+    name: may the ${{ inputs.target }} be released
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      go: ${{ steps.ask.outputs.go }}
+    env:
+      TARGET: ${{ inputs.target }}
+      KIND: ${{ inputs.kind || (inputs.target == 'demonstration' && 'demonstration') || (inputs.target == 'production' && 'production') || 'client' }}
+      CP_URL: ${{ secrets.control_plane_database_url }}
+    steps:
+      - name: Install the psql client
+        if: env.KIND == 'client'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Ask the register
+        id: ask
+        run: |
+          set -euo pipefail
+          if [[ "${KIND}" != client ]]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "${TARGET} is not a client: released as always"
+            exit 0
+          fi
+          if [[ -z "${CP_URL}" ]]; then
+            echo "::error::${TARGET} is a client, and no control plane connection was given to ask the register whether it may be released. Nothing was released."
+            exit 1
+          fi
+          # On standard input, not -c: psql substitutes :'code' only there.
+          status=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" -v run="${GITHUB_RUN_ID}" <<'SQL'
+          select erp_meta.begin_deployment_release(:'code', :'run');
+          SQL
+          )
+          case "$status" in
+            built|live)
+              echo "go=true" >> "$GITHUB_OUTPUT"
+              echo "${TARGET} is ${status}: released, and the register says a release has started" ;;
+            *)
+              echo "go=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::${TARGET} is ${status:-not in the register}, so it is no release target. Nothing was released, and the train carries on."
+              echo "- ${TARGET}: ${status:-not in the register}; nothing released" >> "$GITHUB_STEP_SUMMARY" ;;
+          esac
+
   release:
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
     name: release to the ${{ inputs.target }}
     runs-on: ubuntu-latest
     # A replay that blocks on a lock rather than deadlocking gets no 40P01 and

@@ -32,10 +32,10 @@ Concretely: <!-- count:erp_tables -->261<!-- /count --> tenant tables,
 <!-- count:meta_tables -->82<!-- /count --> platform tables,
 <!-- count:enums -->83<!-- /count --> enumerated types,
 <!-- count:policies -->379<!-- /count --> row-security policies and
-<!-- count:triggers -->868<!-- /count --> triggers — of which the policies and
+<!-- count:triggers -->869<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->792<!-- /count --> migrations and
-<!-- count:sql_lines -->476348<!-- /count --> lines of SQL.
+<!-- count:migrations -->793<!-- /count --> migrations and
+<!-- count:sql_lines -->476841<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
