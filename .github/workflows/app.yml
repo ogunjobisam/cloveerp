@@ -19,10 +19,16 @@ name: app
 #
 # Where it goes is the repository variable CLOVEERP_APP_ROUTES:
 #
-#   unset   the top-level Worker, clove-erp-staging, on workers.dev only. No
+#   unset   wrangler.jsonc: clove-erp-staging, on workers.dev only. No
 #           traffic moves. This is the state to check the Worker in.
-#   on      env.production, clove-erp, on cloveerp.com, www and *.cloveerp.com.
-#           The cutover. Only once cloveerp.com's DNS is on Cloudflare.
+#   on      wrangler.production.jsonc: clove-erp, on cloveerp.com, www and
+#           *.cloveerp.com. The cutover. Only once cloveerp.com's DNS is on
+#           Cloudflare.
+#
+# The choice is made before the build, not at deploy: nitro reads wrangler.jsonc
+# while building and writes the config wrangler deploys from
+# (.output/server/wrangler.json), and wrangler refuses one that carries
+# environments. That was the first run's failure, 8 October.
 #
 # A dispatch deploys the head of main the same way, for the first deployment
 # and for a redeploy after a variable or secret changes.
@@ -98,8 +104,13 @@ jobs:
           NITRO_PRESET: cloudflare-module
         run: |
           set -euo pipefail
+          if [[ "$TARGET" == production ]]; then
+            cp wrangler.production.jsonc wrangler.jsonc
+          fi
           bun install --frozen-lockfile
           bun run build
+          test -f .output/server/wrangler.json || { echo "the build made no .output/server/wrangler.json for wrangler to deploy"; exit 1; }
+          echo "building for $(jq -r .name .output/server/wrangler.json)"
           test -f .output/server/index.mjs || { echo "the build made no .output/server/index.mjs"; exit 1; }
           test -d .output/public || { echo "the build made no .output/public"; exit 1; }
 
@@ -113,10 +124,16 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDFLARE_API_TOKEN}" || { echo "::error::the CLOUDFLARE_API_TOKEN secret is not set"; exit 1; }
           test -n "${CLOUDFLARE_ACCOUNT_ID}" || { echo "::error::the CLOUDFLARE_ACCOUNT_ID variable is not set"; exit 1; }
-          if [[ "$TARGET" == production ]]; then
-            bunx wrangler@4 deploy --env production --message "main ${SHA}"
-          else
-            bunx wrangler@4 deploy --message "main ${SHA}"
+          # The config nitro wrote (.wrangler/deploy/config.json points wrangler
+          # at it), already for the target chosen before the build. Wrangler's
+          # own error lines are repeated as annotations, so a failure reads on
+          # the run's summary rather than only inside the step's log.
+          log="$RUNNER_TEMP/wrangler.log"
+          if ! bunx wrangler@4 deploy --message "main ${SHA}" 2>&1 | tee "$log"; then
+            sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -A8 -E 'ERROR|Authentication|not authorized' \
+              | grep -vE '^[[:space:]]*(--)?[[:space:]]*$' | head -10 \
+              | while IFS= read -r line; do echo "::error title=wrangler::${line}"; done
+            exit 1
           fi
           {
             echo "## Application"
