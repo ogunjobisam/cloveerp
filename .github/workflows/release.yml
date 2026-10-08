@@ -184,8 +184,11 @@ jobs:
               echo "::error::the vault entry named for ${TARGET} (${VAULT_SECRET_NAME}) is not the one for its project (${PROJECT_REF}): entries are named cloveerp:deployment:<ref>:db_url. Nothing was applied."
               exit 1
             fi
-            url=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v n="${VAULT_SECRET_NAME}" \
-                    -c "select decrypted_secret from vault.decrypted_secrets where name = :'n' limit 1")
+            # On standard input, not -c: psql substitutes :'n' only there.
+            url=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v n="${VAULT_SECRET_NAME}" <<'SQL'
+          select decrypted_secret from vault.decrypted_secrets where name = :'n' order by created_at limit 1;
+          SQL
+            )
             if [[ -z "$url" ]]; then
               echo "::error::the control plane's vault has no entry named ${VAULT_SECRET_NAME}, so ${TARGET} cannot be reached. Its build from empty writes that entry; if the build finished, run the password rotation for it. Nothing was applied."
               exit 1
@@ -694,8 +697,12 @@ jobs:
             echo "deployment: ${KIND}, as its build said"
           fi
           if [[ "$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select to_regprocedure('erp_meta.set_deployment_identity(text,text)') is not null")" == "t" ]]; then
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${APP_ORIGIN}" \
-              -c "select erp_meta.set_deployment_identity(:'ref', nullif(:'origin', ''));"
+            # On standard input, not -c: psql substitutes :'ref' only there
+            # (the first release after 20261011010000 failed here with
+            # "syntax error at or near :").
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v ref="${PROJECT_REF}" -v origin="${APP_ORIGIN}" <<'SQL'
+          select erp_meta.set_deployment_identity(:'ref', nullif(:'origin', ''));
+          SQL
             echo "identity: project ${PROJECT_REF}${APP_ORIGIN:+, served at ${APP_ORIGIN}}"
           fi
 
@@ -1272,8 +1279,10 @@ jobs:
             exit 0
           fi
           if psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA \
-               -v code="${TARGET}" -v sha="${GITHUB_SHA}" -v outcome="${OUTCOME}" -v run="${GITHUB_RUN_ID}" \
-               -c "select erp_meta.record_deployment_release(:'code', :'sha', :'outcome', :'run', null);" > /dev/null; then
+               -v code="${TARGET}" -v sha="${GITHUB_SHA}" -v outcome="${OUTCOME}" -v run="${GITHUB_RUN_ID}" > /dev/null <<'SQL'
+          select erp_meta.record_deployment_release(:'code', :'sha', :'outcome', :'run', null);
+          SQL
+          then
             echo "register: ${TARGET} release of ${GITHUB_SHA} recorded as ${OUTCOME} (run ${GITHUB_RUN_ID})"
           else
             echo "::warning::the control plane's register did not take the record of this release of ${TARGET} (${OUTCOME}); the release itself stands."
