@@ -9,13 +9,44 @@ name: app
 # .output/) as the Worker wrangler.jsonc describes, once two things are true of
 # a commit on main:
 #
-#   - the schema build passed on it (this workflow runs when that build
-#     completes, and only on success), and
-#   - its database release did not fail. The application a merge ships may call
-#     a door the same merge adds, so it goes out after the migrations, never
-#     before them. deploy.yml usually finishes in minutes and the schema build
-#     in twenty, so the release has nearly always concluded by now; when it has
-#     not, or failed, this stops and says so rather than waiting on a runner.
+#   - the schema build passed on it, and
+#   - every database the application talks to carries it: the demonstration,
+#     the control plane, and every built client. The application a merge
+#     ships may call a door the same merge adds, so it goes out after the
+#     migrations, never before them.
+#
+# Since 8 October a merge releases the demonstration at once but the control
+# plane and the clients only on a release train (deploy.yml: once a client is
+# built, a push releases the demonstration alone). An application shipped on
+# the schema build alone would then serve cloveerp.com and every client's
+# subdomain an application calling doors their databases do not have yet.
+#
+# So a run does not ask whether the commit that woke it is ready. It works out
+# what to ship from the databases themselves, every time:
+#
+#   1. each database's newest proved release: the demonstration's and the
+#      control plane's from their release records, and every client the
+#      directory serves (built, live, suspended, retiring) from the register,
+#      whose last release must have succeeded;
+#   2. the newest commit all of them carry, which is the oldest of those;
+#   3. walking back along main from there, the first commit the schema build
+#      passed on (a run cancelled while pending leaves a commit without one);
+#   4. never backwards: the commit the Worker last ran (recorded as a GitHub
+#      deployment, supabase/ci/deployed_application.sh) must be older, or
+#      the run ships nothing; and when nothing says what the Worker runs, it
+#      ships nothing either, unless a dispatch asks to redeploy.
+#
+# It waits, green with a notice, while any deployment's build job from
+# empty has not finished: that build took its commit when it started and
+# comes up behind anything shipped meanwhile. Every state the databases can
+# be in is read afresh, so a late, repeated or out-of-order trigger ships
+# the same thing a timely one would, and a partial train ships whatever
+# every database has.
+#
+# It is woken by every completed schema, deploy or build-from-empty run on
+# main, and asked again explicitly at the end of each train and each build:
+# a run started with GITHUB_TOKEN (the Fleet view's buttons, through the
+# sweep) is not promised a workflow_run event when it completes.
 #
 # Where it goes is the repository variable CLOVEERP_APP_ROUTES:
 #
@@ -30,73 +61,206 @@ name: app
 # (.output/server/wrangler.json), and wrangler refuses one that carries
 # environments. That was the first run's failure, 8 October.
 #
-# A dispatch deploys the head of main the same way, for the first deployment
-# and for a redeploy after a variable or secret changes.
+# A dispatch runs the same check. With redeploy it deploys the commit that
+# would ship even when the Worker already runs it: after a variable or a
+# secret changes, the cutover included.
 
 on:
   workflow_run:
-    workflows: [schema]
+    workflows: [schema, deploy, deployment from empty]
     types: [completed]
     branches: [main]
   workflow_dispatch:
-
-# One deployment at a time, and the newest wins: an application deployment that
-# a newer one has overtaken has nothing left to say.
-concurrency:
-  group: app-deploy
-  cancel-in-progress: true
+    inputs:
+      redeploy:
+        description: Deploy again even if the Worker already runs the commit that would ship (after a variable or secret changes)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   actions: read
+  deployments: write
 
 jobs:
   deploy:
-    # workflow_run fires for every completed schema run on main, including the
-    # scheduled one and the failures; only a passing push or dispatch ships.
+    # Every completed run on main can change what every database carries,
+    # the red ones included (a build that stopped is no longer being built).
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       contains(fromJSON('["push","workflow_dispatch"]'), github.event.workflow_run.event))
+      github.event.workflow_run.event != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # One run at a time, and the one running is never cancelled: a run that
+    # finds nothing to ship must not stop one that is shipping. GitHub keeps
+    # one more pending and cancels it when another arrives. For a run with no
+    # inputs that loses nothing, since every run reads everything afresh; a
+    # redeploy dispatch that is displaced that way shows as cancelled, and has
+    # to be dispatched again.
+    concurrency:
+      group: app-deploy
+      cancel-in-progress: false
     env:
-      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       TARGET: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'production' || 'staging' }}
+      ENVIRONMENT: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'application-production' || 'application-staging' }}
     steps:
-      - name: The database release for this commit did not fail
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${SHA}&branch=main&event=push&per_page=1" \
-                   --jq '.workflow_runs[0] | if . == null then "" else "\(.status) \(.conclusion // "")" end')"
-          case "$run" in
-            "completed success")
-              echo "deploy.yml released ${SHA} successfully" ;;
-            "")
-              # A dispatch of this workflow on a commit nothing pushed, or a
-              # commit deploy.yml did not run for: nothing to wait on.
-              echo "::notice::no deploy.yml run on push for ${SHA}; deploying the application on the schema build alone" ;;
-            completed\ *)
-              echo "::error::deploy.yml concluded '${run#completed }' for ${SHA}: the database this application expects may not be there. Not deploying."
-              exit 1 ;;
-            *)
-              echo "::error::deploy.yml is still ${run% *} for ${SHA}. Not deploying an application ahead of its migrations; dispatch this workflow once the release finishes."
-              exit 1 ;;
-          esac
-
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SHA }}
+          ref: main
+          # The whole of main's history, so the readiness step can tell which
+          # of two releases is the later one.
+          fetch-depth: 0
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: The newest commit every database carries
+        id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIVE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+          DEMO_URL: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
+          REDEPLOY: ${{ github.event_name == 'workflow_dispatch' && inputs.redeploy == true }}
+        run: |
+          set -euo pipefail
+          shopt -s inherit_errexit
+          R="repos/${GITHUB_REPOSITORY}"
+          wait_for() {
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::nothing shipped: $1"
+            echo "Nothing shipped: $1" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          main=$(git rev-parse HEAD)
+          on_main() {
+            [[ "$1" =~ ^[0-9a-f]{40}$ ]] || return 1
+            git cat-file -e "${1}^{commit}" 2>/dev/null || return 1
+            git merge-base --is-ancestor "$1" "$main"
+          }
+          # The latest of some commits (one a line): the one the others lead to.
+          newest_of() {
+            local best="" c
+            while IFS= read -r c; do
+              on_main "$c" || continue
+              if [[ -z "$best" ]] || git merge-base --is-ancestor "$best" "$c"; then best="$c"; fi
+            done
+            printf '%s' "$best"
+          }
+          [[ -n "${LIVE_URL}" && -n "${DEMO_URL}" ]] || {
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL and CLOVEERP_DEMO_DATABASE_URL are needed to see what the databases carry. Not deploying."
+            exit 1
+          }
+
+          # A build from empty took its commit when it started. Once its build
+          # job has ended, the register says built or failed, and the rest of
+          # the run (the first release, then asking this workflow again) builds
+          # nothing; a run whose jobs are not listed yet is counted as building.
+          # Every list is read as an assignment, so a failed call fails the run.
+          unfinished=$(gh api "${R}/actions/workflows/deployment_from_empty.yml/runs?per_page=30" \
+            --jq '.workflow_runs[] | select(.status != "completed") | .id')
+          for id in $unfinished; do
+            open=$(gh api "${R}/actions/runs/${id}/jobs" --jq '[.jobs[] | select(.name | test("^build .* from empty$"))]
+              | if length == 0 then 1 else (map(select(.status != "completed")) | length) end')
+            [[ "$open" == 0 ]] || wait_for "a deployment is being built from empty (run ${id}); the build asks again when it ends"
+          done
+
+          # Each database's newest proved release. A release record is never
+          # undone, so the latest of the recent ones is what it carries, even
+          # when an older commit was released again after it.
+          proved="select r.git_sha from erp_meta.release r where r.proved_at is not null and r.git_sha is not null order by r.recorded_at desc limit 30"
+          demo=$(psql "$DEMO_URL" -v ON_ERROR_STOP=1 -X -q -tAc "$proved" | newest_of)
+          [[ -n "$demo" ]] || wait_for "the demonstration has no proved release of a commit on main"
+          control=$(psql "$LIVE_URL" -v ON_ERROR_STOP=1 -X -q -tAc "$proved" | newest_of)
+          [[ -n "$control" ]] || wait_for "the control plane has no proved release of a commit on main"
+          carried=("$demo" "$control")
+          described="the demonstration ${demo:0:12}, the control plane ${control:0:12}"
+
+          # Every client the directory serves, and every one being made. Read
+          # as an assignment so a failed connection fails the run rather than
+          # passing as a register with nobody in it.
+          clients=$(psql "$LIVE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -c "
+            select d.code, d.status, coalesce(d.last_release_sha, ''), coalesce(d.last_release_outcome, '')
+              from erp_meta.deployment d
+             where d.status in ('creating', 'building', 'built', 'live', 'suspended', 'retiring')
+             order by d.code")
+          while IFS='|' read -r code status sha outcome; do
+            [[ -n "$code" ]] || continue
+            case "$status" in
+              # No build job is running (above), so this one stopped without
+              # saying so. Not served, so it holds nothing back.
+              creating|building)
+                echo "::warning::client ${code} reads ${status}, but no build of it is running; carry it on with Retry from the Fleet view"
+                continue ;;
+            esac
+            [[ "$outcome" == success ]] || wait_for "client ${code}'s last release (${sha:0:12}) ended ${outcome:-without an outcome}; release it again and this follows"
+            on_main "$sha" || wait_for "client ${code}'s last release ${sha:-(none)} is not a commit on main"
+            carried+=("$sha")
+            described="${described}, ${code} ${sha:0:12}"
+          done <<< "$clients"
+
+          # The newest commit all of them carry: their common ancestor.
+          floor=$(git merge-base --octopus "${carried[@]}")
+          on_main "$floor" || wait_for "the releases (${described}) have no common commit on main"
+
+          # The schema build must have passed on what ships. A run cancelled
+          # while pending leaves a commit with none, so walk back to one that has.
+          ship=""
+          walk=$(git rev-list --first-parent --max-count=50 "$floor")
+          for c in $walk; do
+            passed=$(gh api "${R}/actions/workflows/schema.yml/runs?head_sha=${c}&branch=main&status=success&per_page=1" --jq '.total_count')
+            if [[ "${passed:-0}" -gt 0 ]]; then ship="$c"; break; fi
+          done
+          [[ -n "$ship" ]] || wait_for "the schema build passed on none of the fifty commits up to ${floor:0:12}"
+          git cat-file -e "${ship}:wrangler.production.jsonc" 2>/dev/null \
+            || wait_for "${ship:0:12}, the newest commit every database carries (${described}), predates the application on Cloudflare"
+
+          # Never backwards, and never blind: what the Worker runs is read from
+          # the record app.yml keeps, and a run that cannot tell ships nothing.
+          cp supabase/ci/deployed_application.sh "$RUNNER_TEMP/"
+          deployed=$(supabase/ci/deployed_application.sh read "$ENVIRONMENT")
+          shipped="${deployed%% *}"
+          if [[ "$deployed" == *" fallback" ]]; then
+            # The first run after records began: keep what the run history
+            # says, so that it no longer depends on how far back that goes.
+            supabase/ci/deployed_application.sh record "$ENVIRONMENT" "$shipped" \
+              "what the newest app run whose Deploy step passed ran on, recorded by app.yml run ${GITHUB_RUN_ID} when records began"
+          fi
+          [[ -n "$shipped" || "$REDEPLOY" == true ]] \
+            || wait_for "nothing records what the Worker runs; dispatch app with redeploy to ship ${ship:0:12} and record it"
+          if [[ -n "$shipped" ]] && ! on_main "$shipped" && [[ "$REDEPLOY" != true ]]; then
+            wait_for "the Worker runs ${shipped:0:12}, which is not a commit on main; dispatch app with redeploy to ship ${ship:0:12} and record it"
+          fi
+          if [[ -n "$shipped" ]] && on_main "$shipped"; then
+            if [[ "$ship" == "$shipped" && "$REDEPLOY" != true ]]; then
+              wait_for "the Worker already runs ${ship:0:12}, the newest commit every database carries (${described})"
+            fi
+            if [[ "$ship" != "$shipped" ]] && git merge-base --is-ancestor "$ship" "$shipped"; then
+              wait_for "the Worker runs ${shipped:0:12}, later than ${ship:0:12}, the newest commit every database carries (${described}); a release train brings them up"
+            fi
+          fi
+
+          echo "go=true" >> "$GITHUB_OUTPUT"
+          echo "ship=${ship}" >> "$GITHUB_OUTPUT"
+          echo "shipping ${ship}: every database carries it (${described}); the Worker ran ${shipped:-nothing recorded}"
+          echo "Shipping ${ship:0:12}: every database carries it (${described})." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check out what ships
+        if: steps.ready.outputs.go == 'true'
+        env:
+          SHIP: ${{ steps.ready.outputs.ship }}
+        run: git checkout --detach "$SHIP"
 
       - name: Install Bun
+        if: steps.ready.outputs.go == 'true'
         run: |
           set -euo pipefail
           npm install -g bun
           bun --version
 
       - name: Build
+        if: steps.ready.outputs.go == 'true'
         # The same build the schema job's typescript step proves. The preset is
         # named rather than left to the Lovable config's default, so a change
         # there cannot quietly make this a Node build.
@@ -115,9 +279,11 @@ jobs:
           test -d .output/public || { echo "the build made no .output/public"; exit 1; }
 
       - name: Deploy
+        if: steps.ready.outputs.go == 'true'
         # wrangler is fetched for this step, not added to package.json: it is
         # the deployment tool, not part of what is deployed.
         env:
+          SHIP: ${{ steps.ready.outputs.ship }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -129,7 +295,7 @@ jobs:
           # own error lines are repeated as annotations, so a failure reads on
           # the run's summary rather than only inside the step's log.
           log="$RUNNER_TEMP/wrangler.log"
-          if ! bunx wrangler@4 deploy --message "main ${SHA}" 2>&1 | tee "$log"; then
+          if ! bunx wrangler@4 deploy --message "main ${SHIP}" 2>&1 | tee "$log"; then
             sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -A8 -E 'ERROR|Authentication|not authorized' \
               | grep -vE '^[[:space:]]*(--)?[[:space:]]*$' | head -10 \
               | while IFS= read -r line; do echo "::error title=wrangler::${line}"; done
@@ -137,5 +303,20 @@ jobs:
           fi
           {
             echo "## Application"
-            echo "Deployed ${SHA} to **${TARGET}**."
+            echo "Deployed ${SHIP} to **${TARGET}**."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record what the Worker runs
+        if: steps.ready.outputs.go == 'true'
+        # The record the next run reads so that it never ships backwards: a
+        # GitHub deployment of this commit to this environment, marked
+        # successful. A newer one marks the older ones inactive.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHIP: ${{ steps.ready.outputs.ship }}
+        run: |
+          set -euo pipefail
+          # The script from main, set aside by the readiness step: the commit
+          # checked out now is the one that shipped, which may predate it.
+          "$RUNNER_TEMP/deployed_application.sh" record "$ENVIRONMENT" "$SHIP" "the application, by app.yml run ${GITHUB_RUN_ID}" \
+            || { echo "::error::the Worker runs ${SHIP}, but recording it failed; the next run may deploy it again"; exit 1; }

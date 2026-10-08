@@ -107,9 +107,11 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   `cloveerp.com`, `www`, `demo` and every client's `<code>.cloveerp.com`
   through one wildcard route. DNS for `cloveerp.com` is on Cloudflare.
 - **`.github/workflows/app.yml` is the only way the application reaches
-  production.** It runs after `schema` passes on main, and refuses to deploy
-  unless that commit's `deploy.yml` release succeeded, so the application
-  never ships ahead of its migrations. Not Lovable's publish, not
+  production.** Whenever a schema build, a release or a build from empty ends
+  on main, it ships the newest commit that every database it serves carries
+  (the demonstration, the control plane, every client) and that the schema
+  build passed on, and never one older than the Worker already runs, so the
+  application never ships ahead of its migrations. Not Lovable's publish, not
   `wrangler deploy` by hand.
 - `wrangler.jsonc` is the staging Worker; `wrangler.production.jsonc` is the
   live one. `app.yml` copies the production file over `wrangler.jsonc` before

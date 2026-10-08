@@ -92,7 +92,7 @@ export function Fleet({ role }: { role: PlatformRole }) {
         <Card
           title="Request a client deployment"
           icon={<Server className="size-4 text-primary" />}
-          description="Makes the client a Supabase project of its own, builds it from every migration, and proves it — about four hours. The Lovable domain and the DNS records are yours to add afterwards; the row says what is left."
+          description="Makes the client a Supabase project of its own, builds it from every migration, and proves it — about four hours. Its address answers as soon as it is built: every subdomain is served by the one application, so there is no domain or DNS record to add."
           action={<RequestDeployment onDone={refresh} />}
         >
           <p className="text-sm text-muted-foreground">
@@ -114,8 +114,8 @@ export function Fleet({ role }: { role: PlatformRole }) {
           action={<RequestRelease deployments={rows} onDone={refresh} />}
         >
           <p className="text-sm text-muted-foreground">
-            Start one at the end of a sprint, or whenever a fix cannot wait. Publish in Lovable
-            right after it goes green, so the application and every database carry the same commit.
+            Start one at the end of a sprint, or whenever a fix cannot wait. The application follows
+            on its own once every database carries the commit, so nothing needs publishing.
           </p>
         </Card>
       ) : null}
@@ -552,7 +552,6 @@ function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => vo
                 Supabase dashboard.
               </li>
             ) : null}
-            <li>Remove its domain in Lovable and its DNS records.</li>
           </ul>
         </div>
       )}

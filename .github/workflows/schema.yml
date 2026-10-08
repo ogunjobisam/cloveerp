@@ -1595,9 +1595,10 @@ jobs:
   # Both directions of a release
   #
   # The schema and the application are deployed separately: the schema by
-  # deploy.yml on merge, the application by a publish somebody does by hand.
-  # So for a while after either, the other is behind — and a rollback of the
-  # application is a publish of the previous build against the current schema.
+  # deploy.yml, the application by app.yml once every database carries the
+  # commit. So for a while the application is behind the schema — and a
+  # rollback of the application is a deploy of the previous build against the
+  # current schema.
   # This job takes the schema as main has it and as this pull request leaves
   # it — from the databases the build job cached, or by building them when it
   # must — extracts every door name from the application on each side, and
@@ -1607,7 +1608,7 @@ jobs:
   #   that this PR removes breaks the running app the moment the schema
   #   deploys, and breaks a rollback for good. That fails the build.
   #   this PR's application against main's schema — the doors this PR adds
-  #   are reported, so whoever publishes knows the schema must deploy first.
+  #   are reported: the schema deploys first, and app.yml waits for it.
   #
   # Pull requests only: on main there is no other side to compare with.
   # ---------------------------------------------------------------------------
@@ -1782,6 +1783,11 @@ jobs:
     # move a door too.
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.changes.outputs.schema == 'true' }}
     runs-on: ubuntu-latest
+    # deployments: read, to ask what the application Worker runs.
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
     env:
       PGHOST: localhost
       PGPORT: '5432'
@@ -1817,13 +1823,34 @@ jobs:
 
       - name: The other side of the release
         # The merge base with the target branch: what main's schema and
-        # application look like without this pull request.
+        # application look like without this pull request. And the commit
+        # the application Worker runs, which lags main between release trains
+        # (app.yml ships only what every database carries): a door it still
+        # calls must outlive this pull request as well.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT: ${{ vars.CLOVEERP_APP_ROUTES == 'on' && 'application-production' || 'application-staging' }}
         run: |
           set -euo pipefail
           base=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
           echo "base=$base" >> "$GITHUB_ENV"
           git worktree add "$RUNNER_TEMP/base" "$base"
           echo "comparing against $base"
+          deployed=$(supabase/ci/deployed_application.sh read "$ENVIRONMENT")
+          worker="${deployed%% *}"
+          if [[ -n "$worker" && "$worker" != "$base" ]] && git cat-file -e "${worker}^{commit}" 2>/dev/null; then
+            git worktree add "$RUNNER_TEMP/worker" "$worker"
+            echo "worker=$worker" >> "$GITHUB_ENV"
+            echo "and against $worker, which the application Worker runs"
+            # app.yml ships the newest commit every database carries, which can
+            # be any commit on main from the Worker's up to the merge base: a
+            # door any of them calls must outlive this pull request as well.
+            if git merge-base --is-ancestor "$worker" "$base"; then
+              range=$(git rev-list --first-parent "${worker}..${base}" | tr '\n' ' ')
+              echo "worker_range=${range}" >> "$GITHUB_ENV"
+              echo "and against the $(wc -w <<< "$range") commits on main between them"
+            fi
+          fi
 
       - name: The database main built, if the cache still has it
         id: base_cache
@@ -1925,6 +1952,14 @@ jobs:
                       --exclude='*.test.ts' --exclude='*.test.tsx' --exclude-dir=integrations | tr -d '"' | sort -u; }
           names "$GITHUB_WORKSPACE/src" > names_head.txt
           names "$RUNNER_TEMP/base/src" > names_base.txt
+          if [[ -n "${worker:-}" ]]; then
+            names "$RUNNER_TEMP/worker/src" | sort -u - names_base.txt -o names_base.txt
+          fi
+          # Every commit between them, read from history rather than checked
+          # out: the same names, by the same pattern, from the same files.
+          for c in ${worker_range:-}; do
+            git grep -hoE '"erp_[a-z0-9_]+"' "$c" -- 'src/*.ts' 'src/*.tsx' ':!*.test.ts' ':!*.test.tsx' ':!src/integrations' || true
+          done | tr -d '"' | sort -u - names_base.txt -o names_base.txt
 
           removed=$(comm -23 doors_base.txt doors_head.txt)
           added=$(comm -13 doors_base.txt doors_head.txt)
@@ -1945,8 +1980,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ -n "$breaks_rollback" ]]; then
-            echo "::error::the application on main calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim for one release, or say so in the pull request:"
+            echo "::error::the application on main${worker:+, or one the Worker runs or may ship next (from ${worker:0:12}),} calls door(s) this pull request removes; the running app breaks when the schema deploys, and a rollback of the app would call a door that no longer exists. Keep the door as a shim until a release train has shipped an application that no longer calls it, or say so in the pull request:"
             echo "$breaks_rollback"
             exit 1
           fi
-          echo "main's application keeps every door it calls"
+          echo "main's application${worker:+, and the one the Worker runs,} keeps every door it calls"

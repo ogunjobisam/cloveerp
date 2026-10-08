@@ -53,10 +53,10 @@ name: deploy
 # runs: a deploy that applied and did not check is the silent-job problem
 # moved to production. Then it schedules the dispatch function from inside
 # the database and waits for a drain pass, because a schedule nobody proved
-# fires is the same problem again, one layer out. After a green train the
-# application is published in Lovable, so that the application and every
-# database carry the same commit; between trains only the demonstration
-# moves ahead, which is the direction the compat job proves.
+# fires is the same problem again, one layer out. The application follows
+# on its own (app.yml): it ships a commit only once every database carries
+# it, so between trains only the demonstration moves ahead, which is the
+# direction the compat job proves.
 #
 # A project starts empty, and is built from empty once, by
 # deployment_from_empty.yml, not by a release: until it has been, its release
@@ -552,9 +552,9 @@ jobs:
 
   held:
     # A train that stopped: something before the control plane went red, so
-    # the control plane was not released and the application must not be
-    # published. Said in one place rather than left as skipped jobs that
-    # look like a quiet day.
+    # the control plane was not released, and the application (app.yml) stays
+    # where it is until every database carries a later commit. Said in one
+    # place rather than left as skipped jobs that look like a quiet day.
     needs: [targets, demonstration, clients, apply]
     if: >-
       ${{ !cancelled() && needs.targets.result == 'success'
@@ -566,5 +566,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released and the application must not be published. Fix forward (the Fleet view names the client and the step) and release the client again; or, to release the control plane without waiting for it, dispatch this workflow with targets=control."
+          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released, and the application stays where it is: it ships only what every database carries. Fix forward (the Fleet view names the client and the step) and release the client again; or, to release the control plane without waiting for it, dispatch this workflow with targets=control. The application follows the first train after which every database has the same commit or a later one."
           exit 1
+
+  application:
+    # The application follows the train (app.yml), whatever the train's
+    # outcome: one that stopped may still have moved the demonstration or a
+    # client. A run started with GITHUB_TOKEN (the Fleet view's Release now,
+    # through the sweep) is not promised a workflow_run event when it ends,
+    # so a dispatched train asks app.yml itself; a push needs no asking.
+    needs: [targets, demonstration, clients, apply]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.targets.result == 'success' }}
+    name: the application follows
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Ask app.yml to look again
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run app.yml --ref main
