@@ -91,7 +91,7 @@ states. Do not build screens for things happening in Outlook.
 ## Rule 7 — Parameter budget
 
 Configurability is the product. Uncontrolled configurability is why X3 needs
-consultants and why Datel can charge what it charges. So:
+consultants and why implementation partners can charge what they charge. So:
 
 - No more than 15 parameters per cycle.
 - Every parameter ships with a default that produces the clean path.
