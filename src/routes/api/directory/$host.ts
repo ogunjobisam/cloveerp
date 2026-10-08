@@ -25,6 +25,11 @@ import { directoryHost, readDirectoryEntry } from "../../../lib/deployment-direc
  * retired client's project once more to every browser that had seen it,
  * while the directory already said nothing was there. Nothing is answered
  * to a host the register does not hold, and nothing about why.
+ *
+ * Since 20261012020000 a held host may also answer that its client's service
+ * is suspended, or that the client has moved to another address; both name
+ * the client and neither carries a URL or a key (readDirectoryEntry passes
+ * on only what the shape it reads allows).
  */
 const CORS = { "access-control-allow-origin": "*" };
 

@@ -156,6 +156,23 @@ export type ClientDeployment = {
    * hours, or never.
    */
   silent?: boolean;
+  /**
+   * The address it is served at, <address>.cloveerp.com (20261012020000):
+   * its code until it is renamed. The code never changes; a rename gives a
+   * new address. Absent from a register older than renaming, where the
+   * address is the code.
+   */
+  address?: string;
+  /** The address it was renamed from, which sends people on until previous_address_until. */
+  previous_address?: string | null;
+  previous_address_until?: string | null;
+  /** When offboarding began: the day its project is due to be purged. */
+  purge_due_at?: string | null;
+  /** Why its service is suspended, while it is. */
+  suspended_reason?: string | null;
+  /** The last export of its database off the platform, and the object it was written to. */
+  last_export_at?: string | null;
+  last_export_object?: string | null;
 };
 
 /**
@@ -320,23 +337,33 @@ export type HealthPart = { key: string; text: string; tone: HealthTone };
  */
 export type HealthLine = { silence: string | null; parts: HealthPart[]; errors: string[] };
 
+/** The states whose project the fleet poll reads. */
+const POLLED: ReadonlySet<ClientDeploymentStatus> = new Set([
+  "built",
+  "live",
+  "suspended",
+  "retiring",
+]);
+
 /**
  * What the Fleet view says of a deployment's health (erp_platform_deployments'
  * health, health_at and silent).
  *
- * Only for a built or live deployment, which is all the poll reads, and only
- * when the register says something: a register older than the poll says
- * nothing, so nothing is shown. Each phrase appears only when the poll read
- * it. Colour is kept for assurance, green when it is clean, and for what
- * wants attention: a failing assurance check, a support window open, staff
- * out of step, no backup, and errors. Silence is the database's judgement and
- * is said first, with when the poll last read the deployment, if it ever has.
+ * Only for a deployment whose project is up and the poll reads — built,
+ * live, suspended (its project runs; only its address is not served) or
+ * being offboarded — and only when the register says something: a register
+ * older than the poll says nothing, so nothing is shown. Each phrase appears
+ * only when the poll read it. Colour is kept for assurance, green when it is
+ * clean, and for what wants attention: a failing assurance check, a support
+ * window open, staff out of step, no backup, and errors. Silence is the
+ * database's judgement and is said first, with when the poll last read the
+ * deployment, if it ever has.
  */
 export function deploymentHealthLine(
   d: Pick<ClientDeployment, "status" | "health" | "health_at" | "silent">,
   now: Date,
 ): HealthLine | null {
-  if (d.status !== "built" && d.status !== "live") return null;
+  if (!POLLED.has(d.status)) return null;
   const h: DeploymentHealth | null = d.health ?? null;
   const silent = d.silent === true;
   if (h === null && !silent) return null;
@@ -416,9 +443,236 @@ export function hostOfOrigin(origin: string | null | undefined): string | null {
   }
 }
 
-/** A client deployment's address, as a person reads it: acme.cloveerp.com. */
-export function deploymentAddress(d: Pick<ClientDeployment, "code" | "origin">): string {
+/**
+ * The apex an origin is served under: cloveerp.com for
+ * https://acme.cloveerp.com. Null for an origin with no label to drop.
+ */
+function apexOfOrigin(origin: string | null | undefined): string | null {
+  const host = hostOfOrigin(origin);
+  if (host === null) return null;
+  const dot = host.indexOf(".");
+  return dot > 0 && dot < host.length - 1 ? host.slice(dot + 1) : null;
+}
+
+/**
+ * A client deployment's address, as a person reads it: acme.cloveerp.com.
+ * Its address under the apex its origin is served from, once the register
+ * says what the address is (a rename changes it, never the code); before
+ * that, its origin's host; and failing both, its code under the apex.
+ */
+export function deploymentAddress(
+  d: Pick<ClientDeployment, "code" | "origin"> & { address?: string | null | undefined },
+): string {
+  if (typeof d.address === "string" && d.address !== "") {
+    return `${d.address}.${apexOfOrigin(d.origin) ?? APEX_HOST}`;
+  }
   return hostOfOrigin(d.origin) ?? `${d.code}.${APEX_HOST}`;
+}
+
+/** Where a client deployment is served: https://acme.cloveerp.com, at its address. */
+export function deploymentOrigin(
+  d: Pick<ClientDeployment, "code" | "origin"> & { address?: string | null | undefined },
+): string {
+  return `https://${deploymentAddress(d)}`;
+}
+
+/**
+ * An address a deployment can be given (erp_platform_request_deployment's
+ * code, erp_platform_rename_deployment's new address): the shape the database
+ * checks, a DNS label of three to sixty-three characters. Whether anybody
+ * already holds it is the database's to say.
+ */
+export const DEPLOYMENT_ADDRESS_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+
+export function isDeploymentAddress(value: string): boolean {
+  return DEPLOYMENT_ADDRESS_PATTERN.test(value);
+}
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/**
+ * A day as a person reads it, the same wherever the console is opened:
+ * 9 January 2027, in UTC. Null for anything that is not a time.
+ */
+export function dayText(iso: string | null | undefined): string | null {
+  if (typeof iso !== "string") return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const d = new Date(t);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()] ?? ""} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * How long after offboarding begins a client's project is purged, at the
+ * earliest: thirty days after the later of that day and the end of the
+ * current term of a contract in force naming it
+ * (erp_platform_begin_offboarding).
+ */
+export const OFFBOARDING_COOL_OFF_DAYS = 30;
+
+/** The earliest a client's project can be purged if offboarding begins at `now`. */
+export function earliestPurgeDate(now: Date): string {
+  return new Date(now.getTime() + OFFBOARDING_COOL_OFF_DAYS * 86_400_000).toISOString();
+}
+
+/**
+ * What a row in the Fleet view offers, in the order it offers them.
+ *
+ *   open-console  its own console: built, live or being offboarded, the
+ *                 states whose address is served. Not suspended: its address
+ *                 shows only that it is suspended.
+ *   onboard       its first organisation, on its own console: built or live.
+ *   retry, start-again
+ *                 getting a build going again (buildRecovery); the owner's.
+ *   suspend       stop its address being served: built or live; the owner's.
+ *   reinstate     serve it again: suspended; the owner's.
+ *   rename        a new address: built, live or suspended; the owner's.
+ *   export        an encrypted copy of its database off the platform: built,
+ *                 live, suspended or being offboarded; an operator's and up.
+ *   offboard      begin offboarding: built, live or suspended; the owner's.
+ *   retire        the last step, before its project is deleted: any state
+ *                 but a build under way and retired already; the owner's.
+ *
+ * The doors decide regardless (each requires its rank and refuses a state it
+ * does not take); this is so the console offers only what would open.
+ */
+export type FleetAction =
+  | "open-console"
+  | "onboard"
+  | "retry"
+  | "start-again"
+  | "suspend"
+  | "reinstate"
+  | "rename"
+  | "export"
+  | "offboard"
+  | "retire";
+
+/** The states whose address is served: the directory names their project. */
+const SERVED: ReadonlySet<ClientDeploymentStatus> = new Set(["built", "live", "retiring"]);
+
+/**
+ * Where the owner may retire a deployment (20261011040000): any state but a
+ * build in progress, which would refuse to finish, and retired already.
+ */
+const RETIRABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
+  "requested",
+  "failed",
+  "built",
+  "live",
+  "suspended",
+  "retiring",
+]);
+
+export function fleetActions(
+  d: BuildRequestView,
+  role: PlatformRole | null | undefined,
+  now: Date,
+): FleetAction[] {
+  const owner = atLeast(role, "owner");
+  const operator = atLeast(role, "operator");
+  const s = d.status;
+  const up = s === "built" || s === "live";
+  const actions: FleetAction[] = [];
+  if (SERVED.has(s)) actions.push("open-console");
+  if (up) actions.push("onboard");
+  if (owner) {
+    const recovery = buildRecovery(d, now);
+    if (recovery !== null) actions.push(recovery);
+    if (up) actions.push("suspend");
+    if (s === "suspended") actions.push("reinstate");
+    if (up || s === "suspended") actions.push("rename");
+  }
+  if (operator && (up || s === "suspended" || s === "retiring")) actions.push("export");
+  if (owner) {
+    if (up || s === "suspended") actions.push("offboard");
+    if (RETIRABLE.has(s)) actions.push("retire");
+  }
+  return actions;
+}
+
+/**
+ * What the Fleet view says of where a deployment stands in its lifecycle,
+ * under its state: why it is suspended, when its project is due to be
+ * purged, and the address it moved from while that still sends people on.
+ */
+export type LifecycleNote = { key: string; text: string; tone: HealthTone };
+
+export function deploymentLifecycleNotes(
+  d: Pick<
+    ClientDeployment,
+    | "code"
+    | "origin"
+    | "status"
+    | "previous_address"
+    | "previous_address_until"
+    | "purge_due_at"
+    | "suspended_reason"
+  >,
+  now: Date,
+): LifecycleNote[] {
+  const notes: LifecycleNote[] = [];
+  if (d.status === "suspended") {
+    const why = typeof d.suspended_reason === "string" ? d.suspended_reason.trim() : "";
+    notes.push({
+      key: "suspended",
+      text:
+        why === "" ? "Its address shows only that its service is suspended." : `Suspended: ${why}`,
+      tone: "warn",
+    });
+  }
+  if (d.status === "retiring") {
+    const due = dayText(d.purge_due_at);
+    notes.push({
+      key: "purge",
+      text:
+        due === null
+          ? "Being offboarded."
+          : `Being offboarded: its project is due to be purged on ${due}.`,
+      tone: "warn",
+    });
+  }
+  const until = dayText(d.previous_address_until);
+  const untilAt =
+    typeof d.previous_address_until === "string" ? Date.parse(d.previous_address_until) : NaN;
+  if (
+    typeof d.previous_address === "string" &&
+    d.previous_address !== "" &&
+    until !== null &&
+    untilAt > now.getTime()
+  ) {
+    notes.push({
+      key: "moved",
+      text: `Was ${d.previous_address}.${apexOfOrigin(d.origin) ?? APEX_HOST}, which sends people here until ${until}.`,
+      tone: "muted",
+    });
+  }
+  return notes;
+}
+
+/**
+ * The last export of a deployment's database, as the Fleet view says it:
+ * "exported 3 hours ago"; null when it has never been exported.
+ */
+export function lastExportText(
+  d: Pick<ClientDeployment, "last_export_at">,
+  now: Date,
+): string | null {
+  const ago = agoText(d.last_export_at, now);
+  return ago === null ? null : `exported ${ago}`;
 }
 
 /**

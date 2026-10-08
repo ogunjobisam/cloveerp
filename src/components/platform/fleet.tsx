@@ -4,14 +4,22 @@ import { ChevronDown, ChevronRight, ExternalLink, Rocket, Server } from "lucide-
 
 import { Pill, Table } from "../erp/panel";
 import { TOUCH } from "../erp/page";
+import { APEX_HOST } from "../../lib/backend";
 import { callErp } from "../../lib/erp";
 import {
   atLeast,
-  buildRecovery,
   buildRequestIsStale,
   CHECKLIST_ITEMS,
+  dayText,
   deploymentAddress,
   deploymentHealthLine,
+  deploymentLifecycleNotes,
+  deploymentOrigin,
+  earliestPurgeDate,
+  fleetActions,
+  isDeploymentAddress,
+  lastExportText,
+  OFFBOARDING_COOL_OFF_DAYS,
   STALE_BUILD_REQUEST_MINUTES,
   SWEEP_STARTS,
   type ChecklistItem,
@@ -20,6 +28,7 @@ import {
   type DeploymentEvent,
   type HealthLine,
   type HealthTone,
+  type LifecycleNote,
   type PlatformRole,
 } from "../../lib/platform";
 import { FormDialog } from "./dialogs";
@@ -41,9 +50,19 @@ import { Card, Fail, INPUT, LINK_BUTTON } from "./kit";
  * the run through the events the workflow records on it, so a build's
  * progress is read here and not in a run log.
  *
- * A built or live row also says what the fleet poll last read from the
- * client's own database (deploymentHealthLine), and says so when the poll has
- * not heard from it for a day.
+ * A row whose project is up also says what the fleet poll last read from
+ * the client's own database (deploymentHealthLine), and says so when the poll
+ * has not heard from it for a day.
+ *
+ * And a client can be paused, moved and let go (20261012020000), each from
+ * its row and each with a reason: suspended, its address shows only that its
+ * service is suspended while its project keeps running and receiving
+ * releases; renamed, it gets a new address while its code stays, and the old
+ * one sends people on for ninety days; offboarded, its database is exported
+ * off the platform and its project is due to be purged thirty days after its
+ * contract's term ends. What a row offers is decided by fleetActions in
+ * src/lib/platform.ts, by its state and the viewer's rank; the doors decide
+ * regardless.
  */
 
 /** Where a run's log is: the repository the workflows run in. */
@@ -51,13 +70,8 @@ const RUN_URL = "https://github.com/ogunjobisam/cloveerp/actions/runs/";
 
 const ACTIVE: ReadonlySet<ClientDeploymentStatus> = new Set(["requested", "creating", "building"]);
 
-/**
- * Where the owner may retire a deployment (20261011040000): any state but a
- * build in progress, which would refuse to finish, and retired already.
- */
-const RETIRABLE: ReadonlySet<ClientDeploymentStatus> = new Set([
-  "requested",
-  "failed",
+/** The states a release goes to (deploy.yml's targets, 20261012020000). */
+const RELEASED: ReadonlySet<ClientDeploymentStatus> = new Set([
   "built",
   "live",
   "suspended",
@@ -74,6 +88,7 @@ function statusTone(status: ClientDeploymentStatus): "ok" | "warn" | "bad" | "mu
 function statusWord(d: ClientDeployment): string {
   if (d.status === "requested" && d.request_status === "requested") return "Queued";
   if (d.status === "requested" && d.request_status === "claimed") return "Starting";
+  if (d.status === "retiring") return "Offboarding";
   return d.status.charAt(0).toUpperCase() + d.status.slice(1);
 }
 
@@ -173,8 +188,8 @@ export function Fleet({ role }: { role: PlatformRole }) {
               <DeploymentRow
                 key={d.code}
                 d={d}
+                role={role}
                 mayOperate={mayOperate}
-                isOwner={isOwner}
                 now={now}
                 onDone={refresh}
               />
@@ -188,14 +203,14 @@ export function Fleet({ role }: { role: PlatformRole }) {
 
 function DeploymentRow({
   d,
+  role,
   mayOperate,
-  isOwner,
   now,
   onDone,
 }: {
   d: ClientDeployment;
+  role: PlatformRole;
   mayOperate: boolean;
-  isOwner: boolean;
   now: Date;
   onDone: () => void;
 }) {
@@ -205,18 +220,24 @@ function DeploymentRow({
       callErp("erp_platform_deployment_checklist", { p_code: d.code, p_item: item, p_done: done }),
     onSuccess: onDone,
   });
-  // Retry once a build has stopped, or a request never became a run; Start
-  // again once a request in flight has stalled (src/lib/platform.ts). Neither
+  // What the row offers, by its state and the viewer's rank
+  // (src/lib/platform.ts). Retry once a build has stopped, or a request never
+  // became a run; Start again once a request in flight has stalled. Neither
   // while one is creating or building, nor while a request is in flight and
   // fresh: a second build started under a running one waits for it (they
   // share a concurrency group) and then finds the row built, and the running
   // one can no longer mark it built.
-  const recovery = buildRecovery(d, now);
+  const offers = new Set(fleetActions(d, role, now));
   const stalled = buildRequestIsStale(d, now);
   const lastRun = d.last_release_run_id ?? d.build_run_id;
-  // Built or live, and the register says something of it: a line of its own
-  // under the row, so the row and its health read as one.
+  // Its project is up and the register says something of it: a line of its
+  // own under the row, so the row and its health read as one.
   const health = deploymentHealthLine(d, now);
+  const notes = deploymentLifecycleNotes(d, now);
+  const moved = notes.filter((n) => n.key === "moved");
+  const standing = notes.filter((n) => n.key !== "moved");
+  const exported = lastExportText(d, now);
+  const origin = deploymentOrigin(d);
 
   return (
     <>
@@ -228,9 +249,13 @@ function DeploymentRow({
             <div className="mt-1 text-xs text-muted-foreground">{d.owner_email}</div>
           ) : null}
         </td>
-        <td className="py-3 pr-4 font-mono text-xs">{deploymentAddress(d)}</td>
+        <td className="py-3 pr-4 text-xs">
+          <div className="font-mono">{deploymentAddress(d)}</div>
+          <LifecycleLines notes={moved} />
+        </td>
         <td className="py-3 pr-4">
           <Pill tone={statusTone(d.status)}>{statusWord(d)}</Pill>
+          <LifecycleLines notes={standing} />
           {d.last_event ? (
             <div className="mt-1 max-w-[18rem] text-xs text-muted-foreground">
               {d.last_event.phase} {d.last_event.status}
@@ -260,6 +285,18 @@ function DeploymentRow({
           ) : (
             <span className="text-muted-foreground">Not made yet</span>
           )}
+          {exported ? (
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              {exported}
+              {d.last_export_object ? (
+                <span className="block break-all font-mono">{d.last_export_object}</span>
+              ) : null}
+            </div>
+          ) : d.status === "retiring" ? (
+            <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+              Not exported yet.
+            </div>
+          ) : null}
         </td>
         <td className="py-3 pr-4 text-xs">
           {d.last_release_sha ? (
@@ -324,30 +361,35 @@ function DeploymentRow({
         </td>
         <td className="py-3 pr-0">
           <div className="flex flex-col items-start gap-1.5">
-            {d.status === "built" || d.status === "live" || d.status === "suspended" ? (
-              <>
-                <a
-                  href={`${d.origin}/platform`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`${LINK_BUTTON} text-xs`}
-                >
-                  Open its console
-                  <ExternalLink className="size-3" />
-                </a>
-                <a
-                  href={`${d.origin}/platform?section=customers`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs underline-offset-2 hover:underline"
-                >
-                  Onboard its first organisation
-                </a>
-              </>
+            {offers.has("open-console") ? (
+              <a
+                href={`${origin}/platform`}
+                target="_blank"
+                rel="noreferrer"
+                className={`${LINK_BUTTON} text-xs`}
+              >
+                Open its console
+                <ExternalLink className="size-3" />
+              </a>
             ) : null}
-            {isOwner && recovery === "retry" ? <RetryBuild d={d} onDone={onDone} /> : null}
-            {isOwner && recovery === "start-again" ? <StartAgain d={d} onDone={onDone} /> : null}
-            {isOwner && RETIRABLE.has(d.status) ? <RetireDeployment d={d} onDone={onDone} /> : null}
+            {offers.has("onboard") ? (
+              <a
+                href={`${origin}/platform?section=customers`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs underline-offset-2 hover:underline"
+              >
+                Onboard its first organisation
+              </a>
+            ) : null}
+            {offers.has("retry") ? <RetryBuild d={d} onDone={onDone} /> : null}
+            {offers.has("start-again") ? <StartAgain d={d} onDone={onDone} /> : null}
+            {offers.has("suspend") ? <SuspendDeployment d={d} onDone={onDone} /> : null}
+            {offers.has("reinstate") ? <ReinstateDeployment d={d} onDone={onDone} /> : null}
+            {offers.has("rename") ? <RenameDeployment d={d} onDone={onDone} /> : null}
+            {offers.has("export") ? <RequestExport d={d} onDone={onDone} /> : null}
+            {offers.has("offboard") ? <BeginOffboarding d={d} now={now} onDone={onDone} /> : null}
+            {offers.has("retire") ? <RetireDeployment d={d} onDone={onDone} /> : null}
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
@@ -373,6 +415,20 @@ function DeploymentRow({
           </td>
         </tr>
       ) : null}
+    </>
+  );
+}
+
+/** What a row says of where a deployment stands: suspended, being offboarded, moved. */
+function LifecycleLines({ notes }: { notes: LifecycleNote[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <>
+      {notes.map((note) => (
+        <div key={note.key} className={`mt-1 max-w-[18rem] text-[11px] ${TONE_TEXT[note.tone]}`}>
+          {note.text}
+        </div>
+      ))}
     </>
   );
 }
@@ -453,7 +509,7 @@ function DeploymentEvents({ code }: { code: string }) {
 function RequestDeployment({ onDone }: { onDone: () => void }) {
   const [form, setForm] = useState({ code: "", name: "", owner_email: "", reason: "" });
   const ready =
-    /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(form.code) &&
+    isDeploymentAddress(form.code) &&
     form.name.trim().length >= 2 &&
     /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.owner_email) &&
     form.reason.trim().length >= 20;
@@ -540,7 +596,9 @@ function RequestRelease({
     .map((t) => t.trim().toLowerCase())
     .filter((t) => t !== "");
   const ready = named.length > 0 && reason.trim().length >= 20;
-  const built = deployments.filter((d) => d.status === "built" || d.status === "live");
+  // Every client whose project is up takes releases: a suspended one's project
+  // keeps running, and one being offboarded is still served.
+  const built = deployments.filter((d) => RELEASED.has(d.status));
   return (
     <FormDialog
       trigger={
@@ -574,7 +632,7 @@ function RequestRelease({
             className={`${INPUT} font-mono`}
           />
           <span className="mt-1 block text-xs font-normal text-muted-foreground">
-            all, control, demonstration, or built clients by code, separated by commas
+            all, control, demonstration, or clients by code, separated by commas
             {built.length > 0 ? `: ${built.map((d) => d.code).join(", ")}` : ""}.
           </span>
         </label>
@@ -612,7 +670,7 @@ function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => vo
         </button>
       }
       title={`Retire ${d.client_name}`}
-      description="It stops receiving releases and its address shows nothing. Its code stays held, so nobody else can take it. It is refused while a build or a release is running for it. Nothing is deleted: its project is yours to delete afterwards."
+      description="It stops receiving releases and its address shows nothing. Its code stays held, so nobody else can take it. It is refused while a build or a release is running for it, and while a contract in force names it unless its offboarding has begun. Nothing is deleted: its project is yours to delete afterwards."
       submitLabel="Retire it"
       busyLabel="Retiring…"
       danger
@@ -728,6 +786,278 @@ function StartAgain({ d, onDone }: { d: ClientDeployment; onDone: () => void }) 
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="What was seen, for example: queued for an hour and the sweep never started it. At least twenty characters."
+          rows={3}
+          className={INPUT}
+        />
+      </label>
+    </FormDialog>
+  );
+}
+
+/** The answer a lifecycle door gives, read for the one thing a dialog says back. */
+function purgeDueOf(result: unknown): string | null {
+  if (result === null || typeof result !== "object") return null;
+  const due: unknown = Reflect.get(result, "purge_due_at");
+  return typeof due === "string" ? due : null;
+}
+
+/**
+ * Suspending a client's service (erp_platform_suspend_deployment). Supabase
+ * cannot pause a project on a paid plan, so the project keeps running and
+ * keeps receiving releases; what stops is its address being served. The
+ * directory answers "suspended" for it, with nothing to talk to.
+ */
+function SuspendDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <FormDialog
+      trigger={
+        <button
+          type="button"
+          className="text-xs text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+        >
+          Suspend
+        </button>
+      }
+      title={`Suspend ${d.client_name}`}
+      description={`Its address, ${deploymentAddress(d)}, stops being served: anybody who opens it, its own console included, is told only that the organisation's service is suspended. Its project keeps running and keeps receiving releases, and nothing is deleted. Reinstate it to serve it again.`}
+      submitLabel="Suspend it"
+      busyLabel="Suspending…"
+      danger
+      ready={reason.trim().length >= 20}
+      run={() =>
+        callErp("erp_platform_suspend_deployment", { p_code: d.code, p_reason: reason.trim() })
+      }
+      onDone={onDone}
+      onClosed={() => setReason("")}
+    >
+      <label className="block text-sm font-medium">
+        Why it is suspended
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="For example: the August invoice is sixty days overdue. At least twenty characters."
+          rows={3}
+          className={INPUT}
+        />
+        <span className="mt-1 block text-xs font-normal text-muted-foreground">
+          Kept with the deployment and in the activity log. The client&apos;s people are not shown
+          it.
+        </span>
+      </label>
+    </FormDialog>
+  );
+}
+
+/** Serving a suspended client again (erp_platform_reinstate_deployment). */
+function ReinstateDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <FormDialog
+      trigger={
+        <button type="button" className={`${LINK_BUTTON} text-xs`}>
+          Reinstate
+        </button>
+      }
+      title={`Reinstate ${d.client_name}`}
+      description={`Its address, ${deploymentAddress(d)}, is served again and it is live. A browser that saw the suspension may take up to five minutes to notice.`}
+      submitLabel="Reinstate it"
+      busyLabel="Reinstating…"
+      ready={reason.trim().length >= 20}
+      run={() =>
+        callErp("erp_platform_reinstate_deployment", { p_code: d.code, p_reason: reason.trim() })
+      }
+      onDone={onDone}
+      onClosed={() => setReason("")}
+    >
+      <label className="block text-sm font-medium">
+        Why it is reinstated
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="For example: the overdue invoice was paid on 14 October. At least twenty characters."
+          rows={3}
+          className={INPUT}
+        />
+      </label>
+    </FormDialog>
+  );
+}
+
+/**
+ * Giving a client a new address (erp_platform_rename_deployment). Its code
+ * never changes — contracts, invoices and the register's history name it —
+ * so a rename is a new address: the rename workflow points the client's
+ * project, its sign-in links and its one organisation at it, and the old
+ * address sends people on for ninety days.
+ */
+function RenameDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
+  const [address, setAddress] = useState("");
+  const [reason, setReason] = useState("");
+  const current = d.address ?? d.code;
+  const shaped = isDeploymentAddress(address);
+  const ready = shaped && address !== current && reason.trim().length >= 20;
+  return (
+    <FormDialog
+      trigger={
+        <button type="button" className={`${LINK_BUTTON} text-xs`}>
+          Rename
+        </button>
+      }
+      title={`Give ${d.client_name} a new address`}
+      description={`Its people sign in at the new address once the rename has run, which starts ${SWEEP_STARTS}. Its old address, ${deploymentAddress(d)}, sends them on for ninety days. Its code, ${d.code}, stays the same.`}
+      submitLabel="Rename it"
+      busyLabel="Asking…"
+      ready={ready}
+      run={() =>
+        callErp("erp_platform_rename_deployment", {
+          p_code: d.code,
+          p_new_address: address,
+          p_reason: reason.trim(),
+        })
+      }
+      onDone={onDone}
+      onClosed={() => {
+        setAddress("");
+        setReason("");
+      }}
+    >
+      <div className="grid gap-3">
+        <label className="block text-sm font-medium">
+          New address
+          <span className="flex items-center gap-1">
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value.trim().toLowerCase())}
+              placeholder={current}
+              className={`${INPUT} font-mono`}
+            />
+            <span className="mt-1 shrink-0 font-mono text-xs text-muted-foreground">
+              .{APEX_HOST}
+            </span>
+          </span>
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
+            {address !== "" && !shaped
+              ? "Three to sixty-three lower-case letters, digits or hyphens, not starting or ending with a hyphen."
+              : address === current
+                ? "That is its address now."
+                : "Held once across the fleet, like a code: refused if any client has it, or had it in the last ninety days."}
+          </span>
+        </label>
+        <label className="block text-sm font-medium">
+          Reason
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why the client is moving address, and who asked. At least twenty characters."
+            rows={3}
+            className={INPUT}
+          />
+        </label>
+      </div>
+    </FormDialog>
+  );
+}
+
+/**
+ * Beginning to let a client go (erp_platform_begin_offboarding): it is marked
+ * as being offboarded, an export of its database is queued, and its project
+ * is due to be purged thirty days after the later of today and the end of
+ * the current term of a contract in force naming it. Its address stays
+ * served meanwhile. Retiring it and deleting its project come after.
+ */
+function BeginOffboarding({
+  d,
+  now,
+  onDone,
+}: {
+  d: ClientDeployment;
+  now: Date;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const earliest = dayText(earliestPurgeDate(now));
+  return (
+    <FormDialog
+      trigger={
+        <button
+          type="button"
+          className="text-xs text-destructive underline-offset-2 hover:underline"
+        >
+          Begin offboarding
+        </button>
+      }
+      title={`Begin offboarding ${d.client_name}`}
+      description={`An export of its database is made, encrypted, off the platform; it starts ${SWEEP_STARTS}. Its address stays served meanwhile, so its people can take what they need. Its project is due to be purged ${OFFBOARDING_COOL_OFF_DAYS} days after the later of today and the end of the current term of any contract in force naming it: ${earliest ?? "thirty days from today"} at the earliest. Nothing is deleted by this.`}
+      submitLabel="Begin offboarding"
+      busyLabel="Beginning…"
+      danger
+      ready={reason.trim().length >= 20}
+      run={() =>
+        callErp<unknown>("erp_platform_begin_offboarding", {
+          p_code: d.code,
+          p_reason: reason.trim(),
+        })
+      }
+      onDone={onDone}
+      done={(result) => {
+        const due = dayText(purgeDueOf(result));
+        return (
+          <div className="flex flex-col gap-2 text-sm">
+            <p>
+              {d.client_name} is being offboarded.{" "}
+              {due ? `Its project is due to be purged on ${due}.` : null}
+            </p>
+            <p className="text-muted-foreground">
+              Its row says when the export is made. On the purge date, retire it and delete its
+              project in the Supabase dashboard.
+            </p>
+          </div>
+        );
+      }}
+      onClosed={() => setReason("")}
+    >
+      <label className="block text-sm font-medium">
+        Why it is offboarded
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="For example: the contract ends on 31 December and the client gave notice. At least twenty characters."
+          rows={3}
+          className={INPUT}
+        />
+      </label>
+    </FormDialog>
+  );
+}
+
+/** An export of a client's database off the platform, now (erp_platform_request_export). */
+function RequestExport({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <FormDialog
+      trigger={
+        <button type="button" className={`${LINK_BUTTON} text-xs`}>
+          Export now
+        </button>
+      }
+      title={`Export ${d.client_name}'s database`}
+      description={`A copy of its database, encrypted to the backup key and written to the off-platform bucket under exports/${d.code}/. It starts ${SWEEP_STARTS}. While one is waiting, asking again queues nothing more.`}
+      submitLabel="Export it"
+      busyLabel="Asking…"
+      ready={reason.trim().length >= 20}
+      run={() =>
+        callErp("erp_platform_request_export", { p_code: d.code, p_reason: reason.trim() })
+      }
+      onDone={onDone}
+      onClosed={() => setReason("")}
+    >
+      <label className="block text-sm font-medium">
+        Why it is exported now
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="For example: the client asked for a copy of its data. At least twenty characters."
           rows={3}
           className={INPUT}
         />

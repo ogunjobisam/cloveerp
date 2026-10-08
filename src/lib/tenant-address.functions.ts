@@ -18,6 +18,12 @@
  * deployments, and an address that names one answers with where that client
  * lives — its own origin, <code>.cloveerp.com — so cloveerp.com/acme takes
  * Acme's people to Acme's own door.
+ *
+ * Since 20261012020000 the register matches a client by its address, which a
+ * rename changes while its code stays: the origin is the address asked about,
+ * never built from the register's code, and an address the client has moved
+ * from sends the visitor straight to the new one. A suspended client's
+ * address still answers, and its own door says it is suspended.
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -52,9 +58,9 @@ export const tenantByAddress = createServerFn({ method: "GET" })
     const entry = deployment.error ? null : readDirectoryEntry(deployment.data);
     if (entry) {
       return {
-        code: entry.code,
+        code,
         name: entry.client_name,
-        origin: `https://${entry.code}.${APEX_HOST}`,
+        origin: "moved_to" in entry ? entry.moved_to : `https://${code}.${APEX_HOST}`,
       };
     }
     const { data: answer, error } = await rpc("erp_tenant_by_address", { p_code: data.code });

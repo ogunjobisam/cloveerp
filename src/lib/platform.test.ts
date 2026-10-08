@@ -7,16 +7,27 @@ import {
   customerChoices,
   customerChoiceText,
   databaseSizeText,
+  dayText,
   deploymentAddress,
   deploymentHealthLine,
+  deploymentLifecycleNotes,
+  deploymentOrigin,
+  earliestPurgeDate,
+  fleetActions,
   hostOfOrigin,
+  isDeploymentAddress,
   isPlatformOperator,
+  lastExportText,
+  OFFBOARDING_COOL_OFF_DAYS,
   organisationWhere,
   STALE_BUILD_REQUEST_MINUTES,
   SWEEP_STARTS,
   type BuildRequestView,
   type ClientDeployment,
+  type ClientDeploymentStatus,
   type DeploymentHealth,
+  type FleetAction,
+  type PlatformRole,
 } from "./platform";
 
 describe("who runs the product for customers", () => {
@@ -160,6 +171,41 @@ describe("addresses", () => {
       "acme.cloveerp.com",
     );
     expect(deploymentAddress({ code: "acme", origin: "" })).toBe("acme.cloveerp.com");
+  });
+
+  test("a renamed deployment reads as its address, under its origin's apex, and its code stays", () => {
+    // The register's origin may still spell the code; the address is what is served.
+    const renamed = { code: "acme", origin: "https://acme.cloveerp.com", address: "acme-group" };
+    expect(deploymentAddress(renamed)).toBe("acme-group.cloveerp.com");
+    expect(deploymentOrigin(renamed)).toBe("https://acme-group.cloveerp.com");
+    expect(deploymentAddress({ ...renamed, origin: "https://acme.example.test" })).toBe(
+      "acme-group.example.test",
+    );
+    expect(deploymentAddress({ ...renamed, origin: "" })).toBe("acme-group.cloveerp.com");
+    // A register older than renaming gives no address: the origin, then the code.
+    expect(deploymentOrigin({ code: "acme", origin: "https://acme.cloveerp.com" })).toBe(
+      "https://acme.cloveerp.com",
+    );
+    expect(deploymentAddress({ code: "acme", origin: "", address: "" })).toBe("acme.cloveerp.com");
+  });
+
+  test("an address a deployment can be given has the database's shape", () => {
+    for (const ok of ["acme", "acme-group", "a1b", "0ab", `a${"b".repeat(61)}c`]) {
+      expect(isDeploymentAddress(ok)).toBe(true);
+    }
+    for (const bad of [
+      "",
+      "ab",
+      "-acme",
+      "acme-",
+      "Acme",
+      "acme group",
+      "acme.group",
+      "acme_group",
+      `a${"b".repeat(62)}c`,
+    ]) {
+      expect(isDeploymentAddress(bad)).toBe(false);
+    }
   });
 
   test("on the control plane an organisation is shared, at cloveerp.com/<code>", () => {
@@ -424,17 +470,12 @@ describe("a deployment's health line", () => {
     });
   });
 
-  test("only for a built or live deployment, and only when the register says something", () => {
-    expect(deploymentHealthLine(row({ status: "built" }), NOW)).not.toBeNull();
-    for (const status of [
-      "requested",
-      "creating",
-      "building",
-      "suspended",
-      "retiring",
-      "retired",
-      "failed",
-    ] as const) {
+  test("only where the project is up, and only when the register says something", () => {
+    // Suspended and offboarding projects keep running, and the poll reads them.
+    for (const status of ["built", "live", "suspended", "retiring"] as const) {
+      expect(deploymentHealthLine(row({ status }), NOW)).not.toBeNull();
+    }
+    for (const status of ["requested", "creating", "building", "retired", "failed"] as const) {
       expect(deploymentHealthLine(row({ status, silent: true }), NOW)).toBeNull();
     }
     // A register older than the poll gives neither health nor silence.
@@ -448,5 +489,220 @@ describe("when the sweep starts a request", () => {
     expect(SWEEP_STARTS).toContain("within a minute");
     expect(SWEEP_STARTS).toContain("otherwise within ten");
     expect(SWEEP_STARTS).not.toMatch(/token|secret|vault/i);
+  });
+});
+
+describe("what a row in the Fleet view offers", () => {
+  const NOW = new Date("2026-10-08T12:00:00Z");
+  const row = (status: ClientDeploymentStatus): BuildRequestView => ({
+    status,
+    request_status: status === "requested" ? "requested" : null,
+    request_created_at: NOW.toISOString(),
+    request_claimed_at: null,
+    request_settled_at: null,
+    last_event: null,
+  });
+  const offers = (status: ClientDeploymentStatus, role: PlatformRole | null) =>
+    fleetActions(row(status), role, NOW);
+
+  test("the owner, by state, in the order the row shows them", () => {
+    const owner: Record<ClientDeploymentStatus, FleetAction[]> = {
+      requested: ["retire"],
+      creating: [],
+      building: [],
+      built: ["open-console", "onboard", "suspend", "rename", "export", "offboard", "retire"],
+      live: ["open-console", "onboard", "suspend", "rename", "export", "offboard", "retire"],
+      suspended: ["reinstate", "rename", "export", "offboard", "retire"],
+      retiring: ["open-console", "export", "retire"],
+      retired: [],
+      failed: ["retry", "retire"],
+    };
+    for (const [status, expected] of Object.entries(owner)) {
+      expect(offers(status as ClientDeploymentStatus, "owner")).toEqual(expected);
+    }
+  });
+
+  test("an operator or administrator may export and open, and change nothing else", () => {
+    for (const role of ["operator", "administrator"] as const) {
+      expect(offers("live", role)).toEqual(["open-console", "onboard", "export"]);
+      expect(offers("suspended", role)).toEqual(["export"]);
+      expect(offers("retiring", role)).toEqual(["open-console", "export"]);
+      expect(offers("failed", role)).toEqual([]);
+    }
+  });
+
+  test("support, and anybody without a rank, may only open what is served", () => {
+    for (const role of ["support", null] as const) {
+      expect(offers("live", role)).toEqual(["open-console", "onboard"]);
+      expect(offers("suspended", role)).toEqual([]);
+      expect(offers("retiring", role)).toEqual(["open-console"]);
+    }
+  });
+
+  test("a suspended client's console is not offered: its address shows only the suspension", () => {
+    for (const role of ["owner", "operator", "support"] as const) {
+      expect(offers("suspended", role)).not.toContain("open-console");
+      expect(offers("suspended", role)).not.toContain("onboard");
+    }
+  });
+
+  test("Start again is offered with the rest once a request has stalled", () => {
+    const stalled: BuildRequestView = {
+      ...row("requested"),
+      request_created_at: new Date(NOW.getTime() - 25 * 60_000).toISOString(),
+    };
+    expect(fleetActions(stalled, "owner", NOW)).toEqual(["start-again", "retire"]);
+    expect(fleetActions(stalled, "operator", NOW)).toEqual([]);
+  });
+});
+
+describe("where a deployment stands in its lifecycle", () => {
+  const NOW = new Date("2026-10-12T12:00:00Z");
+  type Row = Parameters<typeof deploymentLifecycleNotes>[0];
+  const row = (over: Partial<Row> = {}): Row => ({
+    code: "acme",
+    origin: "https://acme.cloveerp.com",
+    status: "live",
+    previous_address: null,
+    previous_address_until: null,
+    purge_due_at: null,
+    suspended_reason: null,
+    ...over,
+  });
+
+  test("a live deployment that never moved says nothing", () => {
+    expect(deploymentLifecycleNotes(row(), NOW)).toEqual([]);
+    // A register older than the lifecycle says nothing either.
+    expect(
+      deploymentLifecycleNotes(
+        { code: "acme", origin: "https://acme.cloveerp.com", status: "live" },
+        NOW,
+      ),
+    ).toEqual([]);
+  });
+
+  test("suspended: why, or that its address shows only the suspension", () => {
+    expect(
+      deploymentLifecycleNotes(
+        row({ status: "suspended", suspended_reason: " invoice sixty days overdue " }),
+        NOW,
+      ),
+    ).toEqual([{ key: "suspended", text: "Suspended: invoice sixty days overdue", tone: "warn" }]);
+    expect(deploymentLifecycleNotes(row({ status: "suspended" }), NOW)).toEqual([
+      {
+        key: "suspended",
+        text: "Its address shows only that its service is suspended.",
+        tone: "warn",
+      },
+    ]);
+    // A reason left over from an earlier suspension is not said of a live one.
+    expect(deploymentLifecycleNotes(row({ suspended_reason: "old" }), NOW)).toEqual([]);
+  });
+
+  test("being offboarded: the day its project is due to be purged", () => {
+    expect(
+      deploymentLifecycleNotes(
+        row({ status: "retiring", purge_due_at: "2027-01-30T00:00:00Z" }),
+        NOW,
+      ),
+    ).toEqual([
+      {
+        key: "purge",
+        text: "Being offboarded: its project is due to be purged on 30 January 2027.",
+        tone: "warn",
+      },
+    ]);
+    expect(deploymentLifecycleNotes(row({ status: "retiring" }), NOW)).toEqual([
+      { key: "purge", text: "Being offboarded.", tone: "warn" },
+    ]);
+  });
+
+  test("moved: the old address, while it still sends people on", () => {
+    const moved = row({
+      origin: "https://acme-group.cloveerp.com",
+      previous_address: "acme",
+      previous_address_until: "2027-01-10T12:00:00Z",
+    });
+    expect(deploymentLifecycleNotes(moved, NOW)).toEqual([
+      {
+        key: "moved",
+        text: "Was acme.cloveerp.com, which sends people here until 10 January 2027.",
+        tone: "muted",
+      },
+    ]);
+    // Once the ninety days are over, the old address is nobody's and is not said.
+    expect(deploymentLifecycleNotes(moved, new Date("2027-01-10T12:00:00Z"))).toEqual([]);
+    expect(
+      deploymentLifecycleNotes({ ...moved, previous_address_until: "not a time" }, NOW),
+    ).toEqual([]);
+  });
+
+  test("the notes come in order: standing first, then the move", () => {
+    const keys = deploymentLifecycleNotes(
+      row({
+        status: "suspended",
+        suspended_reason: "unpaid",
+        previous_address: "acme",
+        previous_address_until: "2027-01-10T12:00:00Z",
+      }),
+      NOW,
+    ).map((n) => n.key);
+    expect(keys).toEqual(["suspended", "moved"]);
+  });
+});
+
+describe("the days the lifecycle names", () => {
+  test("a day reads the same wherever the console is opened", () => {
+    expect(dayText("2027-01-09T23:30:00Z")).toBe("9 January 2027");
+    expect(dayText("2026-12-31")).toBe("31 December 2026");
+    expect(dayText("yesterday")).toBeNull();
+    expect(dayText(null)).toBeNull();
+    expect(dayText(undefined)).toBeNull();
+  });
+
+  test("a project is purged thirty days after offboarding begins at the earliest", () => {
+    expect(OFFBOARDING_COOL_OFF_DAYS).toBe(30);
+    expect(earliestPurgeDate(new Date("2026-10-12T09:00:00Z"))).toBe("2026-11-11T09:00:00.000Z");
+  });
+
+  test("the last export, as long ago as it was, or nothing", () => {
+    const now = new Date("2026-10-12T12:00:00Z");
+    expect(lastExportText({ last_export_at: "2026-10-12T09:00:00Z" }, now)).toBe(
+      "exported 3 hours ago",
+    );
+    expect(lastExportText({ last_export_at: null }, now)).toBeNull();
+    expect(lastExportText({}, now)).toBeNull();
+  });
+});
+
+describe("a deployment row as the register lists it", () => {
+  test("every lifecycle key is optional, so an older register still reads", () => {
+    const older: ClientDeployment = {
+      code: "acme",
+      client_name: "Acme Ltd",
+      status: "live",
+      owner_email: null,
+      project_ref: "abcdefghijklmnopqrst",
+      api_url: "https://abcdefghijklmnopqrst.supabase.co",
+      region: "eu-west-2",
+      instance_size: "micro",
+      origin: "https://acme.cloveerp.com",
+      build_run_id: null,
+      built_at: null,
+      last_release_sha: null,
+      last_release_at: null,
+      last_release_outcome: null,
+      last_release_run_id: null,
+      checklist: {},
+      note: null,
+      created_at: "2026-10-08T12:00:00Z",
+      updated_at: "2026-10-08T12:00:00Z",
+      request_status: null,
+      request_run_id: null,
+      last_event: null,
+    };
+    expect(deploymentAddress(older)).toBe("acme.cloveerp.com");
+    expect(deploymentLifecycleNotes(older, new Date("2026-10-12T12:00:00Z"))).toEqual([]);
+    expect(lastExportText(older, new Date("2026-10-12T12:00:00Z"))).toBeNull();
   });
 });

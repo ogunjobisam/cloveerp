@@ -16,7 +16,8 @@ import { goesWithThePage } from "../lib/toast-age";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NotFoundComponent } from "../components/erp/not-found";
 import { APEX_ORIGIN, apexRedirect } from "../lib/backend";
-import { askDirectoryAgain, ensureBackend, type BackendState } from "../lib/erp";
+import { movedHref } from "../lib/deployment-directory";
+import { askDirectoryAgain, deploymentMovedTo, ensureBackend, type BackendState } from "../lib/erp";
 import { hostKindOf, requestPageHost } from "../lib/request-host";
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
@@ -200,6 +201,11 @@ function useToastsGoWithThePage() {
  * directory that cannot answer just now, with no fresh copy kept in this
  * browser, is not that: the page says it could not find out, and Try again
  * asks once more.
+ *
+ * Two more since 20261012020000, and neither boots a project. A client whose
+ * service is suspended shows only that it is suspended. An address a client
+ * has moved from takes the page to the new one, with the same path and query,
+ * so a bookmark still lands where it pointed.
  */
 function BackendBoundary({ children }: { children: ReactNode }) {
   const [state, setState] = useState<"pending" | BackendState>("pending");
@@ -215,6 +221,21 @@ function BackendBoundary({ children }: { children: ReactNode }) {
     };
   }, [attempt]);
 
+  // Where a moved address goes. Only ever known in the browser: the state is
+  // "moved" only after the directory has answered there.
+  const movedTo =
+    state === "moved" && deploymentMovedTo !== null && typeof window !== "undefined"
+      ? movedHref(deploymentMovedTo, {
+          host: window.location.host,
+          pathname: window.location.pathname,
+          search: window.location.search,
+          hash: window.location.hash,
+        })
+      : null;
+  useEffect(() => {
+    if (movedTo !== null) window.location.replace(movedTo);
+  }, [movedTo]);
+
   if (state === "ready") return <>{children}</>;
   const where = typeof window === "undefined" ? "this address" : window.location.host;
   return (
@@ -224,6 +245,34 @@ function BackendBoundary({ children }: { children: ReactNode }) {
           <p role="status" className="text-sm text-muted-foreground">
             Connecting…
           </p>
+        ) : state === "suspended" ? (
+          <>
+            <h1 className="font-display text-xl font-medium tracking-tight text-foreground">
+              Service suspended
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This organisation&apos;s service is suspended. Contact Clove ERP.
+            </p>
+            <a
+              href={`${APEX_ORIGIN}/contact`}
+              className="mt-6 inline-flex items-center justify-center rounded-full border border-input bg-background px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+            >
+              Contact Clove ERP
+            </a>
+          </>
+        ) : state === "moved" && movedTo !== null ? (
+          <>
+            <h1 className="font-display text-xl font-medium tracking-tight text-foreground">
+              This address has moved
+            </h1>
+            <p role="status" className="mt-2 text-sm text-muted-foreground">
+              Taking you to{" "}
+              <a href={movedTo} className="underline underline-offset-2">
+                {new URL(movedTo).host}
+              </a>
+              …
+            </p>
+          </>
         ) : state === "unreachable" ? (
           <>
             <h1 className="font-display text-xl font-medium tracking-tight text-foreground">
