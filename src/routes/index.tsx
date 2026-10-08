@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { ApprovalsWaiting } from "../components/erp/approvals-waiting";
 import { FirstRun } from "../components/erp/first-run";
 import { Gate } from "../components/erp/gate";
+import { isClientHost, pageHost } from "../lib/backend";
 import { hasStoredSession } from "../lib/erp";
 import { Launchpad } from "../components/erp/launchpad";
 import { useErpSession, useScope } from "../components/erp/session-context";
@@ -80,7 +81,11 @@ function Home() {
 }
 
 function Fork() {
-  if (!hasStoredSession()) return <Navigate to="/product" replace />;
+  // A client's own host has no front door but its sign-in: the product page
+  // is the apex's (src/routes/__root.tsx sends it there).
+  if (!hasStoredSession()) {
+    return <Navigate to={isClientHost(pageHost()) ? "/signin" : "/product"} replace />;
+  }
   return (
     <Gate>
       <Overview />

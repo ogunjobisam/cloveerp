@@ -7,7 +7,16 @@ import {
   type Session,
 } from "@supabase/supabase-js";
 
-import { chooseBackend, pageHost } from "./backend";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { chooseBackend, isClientHost, pageHost, type Backend } from "./backend";
+import {
+  cacheKey,
+  cachedEntryJson,
+  readCachedEntry,
+  readDirectoryEntry,
+  type DirectoryEntry,
+} from "./deployment-directory";
 import type {
   InviteRequest,
   InviteResponse,
@@ -64,19 +73,29 @@ import {
  * project, whatever the build was given; anywhere else the environment still
  * wins where it is set, which is how a preview or a local stack is pointed
  * elsewhere without touching the source, and production otherwise.
+ *
+ * Since 7 October there are as many projects as clients, one each, served at
+ * <code>.cloveerp.com. This build does not know them: opened at a client's
+ * host it talks to nothing until the directory on the control plane
+ * (/api/directory/<host>) has said which project, and the root route holds
+ * the screens back until then (ensureBackend below). These are live bindings
+ * for that reason: what the module exports is set the moment the project is
+ * known, at load for every host this build knows and after the directory
+ * answers for a client's, and every reader reads them at the moment it asks.
  */
-const backend = chooseBackend(pageHost(), {
+const env = {
   url: import.meta.env["VITE_SUPABASE_URL"] as string | undefined,
   key: import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined,
-});
-const url = backend.url;
-const key = backend.key;
+};
 
-/** The project this build talks to. Read these rather than the variables. */
-export const supabaseUrl = url;
-export const supabasePublishableKey = key;
+/**
+ * The project this page talks to. Read these rather than the variables. Empty
+ * on a client's host until the directory has answered.
+ */
+export let supabaseUrl = "";
+export let supabasePublishableKey = "";
 
-export const isConfigured = Boolean(url && key);
+export let isConfigured = false;
 
 /**
  * This browser tab's own storage, where it keeps whom it acts as in a
@@ -116,25 +135,113 @@ const actAsFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Respo
   const persona = tabPersona();
   if (!persona) return fetch(input, init);
   const target = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (!isDatabaseRequest(target, url)) return fetch(input, init);
+  if (!isDatabaseRequest(target, supabaseUrl)) return fetch(input, init);
   const headers = init?.headers ?? (input instanceof Request ? input.headers : undefined);
   return fetch(input, { ...init, headers: withActAs(headers, persona) });
 };
 
-export const supabase = isConfigured
-  ? createClient(url, key, {
-      auth: { persistSession: true, autoRefreshToken: true },
-      global: { fetch: actAsFetch as typeof fetch },
-    })
-  : null;
+export let supabase: SupabaseClient | null = null;
 
-// Signing out ends the tab's choice, and so does a sign-in other than the one
-// that chose: whoever signs in next in this tab is themselves.
-if (supabase && typeof window !== "undefined") {
-  supabase.auth.onAuthStateChange((event, session) => {
-    signedInUser = event === "SIGNED_OUT" ? null : (session?.user.id ?? null);
-    keepTabPersonaFor(tabStore(), signedInUser);
+/** The project this page talks to, from here on. Once; a second project is a second page. */
+function bootBackend(backend: Backend): void {
+  if (supabase) return;
+  supabaseUrl = backend.url;
+  supabasePublishableKey = backend.key;
+  isConfigured = Boolean(backend.url && backend.key);
+  if (!isConfigured) return;
+  supabase = createClient(backend.url, backend.key, {
+    auth: { persistSession: true, autoRefreshToken: true },
+    global: { fetch: actAsFetch as typeof fetch },
   });
+  // Signing out ends the tab's choice, and so does a sign-in other than the
+  // one that chose: whoever signs in next in this tab is themselves.
+  if (typeof window !== "undefined") {
+    supabase.auth.onAuthStateChange((event, session) => {
+      signedInUser = event === "SIGNED_OUT" ? null : (session?.user.id ?? null);
+      keepTabPersonaFor(tabStore(), signedInUser);
+    });
+  }
+}
+
+// Every host this build knows is connected at load, as it always was: the
+// demonstration's, the apex, a preview, a local stack, the server. A client's
+// host waits for the directory.
+{
+  const known = chooseBackend(pageHost(), env);
+  if (known) bootBackend(known);
+}
+
+function localStore(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The directory's answer for this host: asked on this page's own origin, so
+ * it needs no cross-origin anything; kept for a day in this browser, so the
+ * control plane being away for a moment does not stop a client's people
+ * signing in; forgotten when the directory says nobody is here.
+ */
+async function lookupDirectory(host: string): Promise<DirectoryEntry | null> {
+  const store = localStore();
+  const kept = cacheKey(host);
+  try {
+    const response = await fetch(`/api/directory/${encodeURIComponent(host)}`, {
+      headers: { accept: "application/json" },
+    });
+    if (response.status === 404) {
+      try {
+        store?.removeItem(kept);
+      } catch {
+        /* nothing kept, or nowhere to keep it */
+      }
+      return null;
+    }
+    if (response.ok) {
+      const entry = readDirectoryEntry(await response.json());
+      if (entry) {
+        try {
+          store?.setItem(kept, cachedEntryJson(entry, Date.now()));
+        } catch {
+          /* a private window, or site data blocked: the answer is still the answer */
+        }
+        return entry;
+      }
+    }
+  } catch {
+    /* the control plane could not be reached: the last answer, if it is fresh */
+  }
+  try {
+    return readCachedEntry(store?.getItem(kept) ?? null, Date.now());
+  } catch {
+    return null;
+  }
+}
+
+let directoryBoot: Promise<Backend | null> | null = null;
+
+/**
+ * The project this page talks to, once it is known: at once for every host
+ * this build knows, after the directory has answered for a client's host, and
+ * null for a client's host nobody holds. Asked once; every later call answers
+ * the same. The root route asks it before it shows any screen on a client's
+ * host, so no screen ever runs against no project.
+ */
+export function ensureBackend(): Promise<Backend | null> {
+  if (supabase) return Promise.resolve({ url: supabaseUrl, key: supabasePublishableKey });
+  const host = pageHost();
+  if (host === null || !isClientHost(host)) return Promise.resolve(null);
+  directoryBoot ??= lookupDirectory(host).then((entry) => {
+    if (!entry) return null;
+    const backend: Backend = { url: entry.url, key: entry.key };
+    bootBackend(backend);
+    return backend;
+  });
+  return directoryBoot;
 }
 
 /**
@@ -153,7 +260,7 @@ if (supabase && typeof window !== "undefined") {
  */
 export function hasStoredSession(): boolean {
   if (typeof window === "undefined") return false;
-  const ref = url.match(/^https?:\/\/([^.]+)\./)?.[1];
+  const ref = supabaseUrl.match(/^https?:\/\/([^.]+)\./)?.[1];
   if (!ref) return false;
   try {
     return Boolean(window.localStorage.getItem(`sb-${ref}-auth-token`));
@@ -375,6 +482,66 @@ export async function inviteFailure(error: unknown): Promise<unknown> {
     );
   }
 
+  return error;
+}
+
+/**
+ * Calling an Edge Function that works on a person's behalf: document output,
+ * a commercial document's link, a supplier's answer. In the project this page
+ * talks to, which since 7 October may be a client's own (src/lib/backend.ts).
+ *
+ * functions.invoke rather than a hand-built fetch, for the reason callInvite
+ * gives. A refusal comes back as the function's JSON — the database's own
+ * message, code and hint — and is thrown as an ErpError, so friendlyError()
+ * reads it exactly as it reads a callErp refusal. A function that could not
+ * be reached, or that is not deployed yet, is an ErpError too, worded for
+ * the person rather than the log.
+ */
+export async function callFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  if (!supabase) {
+    throw new Error(
+      "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.",
+    );
+  }
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (!error) return data as T;
+  throw await functionFailure(error, name);
+}
+
+async function functionFailure(error: unknown, name: string): Promise<unknown> {
+  if (error instanceof FunctionsFetchError || error instanceof FunctionsRelayError) {
+    return new ErpError("Could not reach the server. Check the connection and try again.", {
+      details: error.message,
+    });
+  }
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response;
+    let said: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = await response.json();
+      if (typeof parsed === "object" && parsed !== null) said = parsed as Record<string, unknown>;
+    } catch {
+      /* not JSON: not the function speaking */
+    }
+    const message = said["error"];
+    if (typeof message !== "string" && (response.status === 404 || response.status === 503)) {
+      return new ErpError(
+        `This part of the service (${name}) is not available on this deployment yet.`,
+        { code: "CLOVEERP_FUNCTION_NOT_DEPLOYED" },
+      );
+    }
+    const code = said["code"];
+    const hint = said["hint"];
+    return new ErpError(
+      typeof message === "string" && message !== ""
+        ? message
+        : `The request could not be completed (the service answered ${response.status}).`,
+      {
+        code: typeof code === "string" ? code : undefined,
+        hint: typeof hint === "string" ? hint : undefined,
+      },
+    );
+  }
   return error;
 }
 
