@@ -549,6 +549,9 @@ jobs:
       database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       supabase_access_token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       control_plane_database_url: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      # Optional: the token the control plane wakes fleet_sweep.yml with,
+      # stored in its vault by release.yml ("The sweep can be woken").
+      sweep_token: ${{ secrets.CLOVEERP_SWEEP_TOKEN }}
 
   held:
     # A train that stopped: something before the control plane went red, so
