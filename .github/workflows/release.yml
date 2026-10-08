@@ -140,6 +140,16 @@ jobs:
             echo "::error::${TARGET} is a client, and no control plane connection was given to ask the register whether it may be released. Nothing was released."
             exit 1
           fi
+          # A control plane released before 20261011050000 cannot be asked:
+          # it has no retire door either (the two arrive together), so
+          # nothing can be retired yet and the client is released as before.
+          # This train's control plane step then brings it the routine.
+          has=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regprocedure('erp_meta.begin_deployment_release(text,text)') is not null")
+          if [[ "$has" != t ]]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::the control plane predates 20261011050000, so the register cannot be asked yet; ${TARGET} is released as before."
+            exit 0
+          fi
           # On standard input, not -c: psql substitutes :'code' only there.
           status=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" -v run="${GITHUB_RUN_ID}" <<'SQL'
           select erp_meta.begin_deployment_release(:'code', :'run');
@@ -213,6 +223,33 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: The register still holds the client
+        # Asked again, inside the job that touches the client. "Re-run failed
+        # jobs" re-runs this job and reuses the gate's go without asking the
+        # register again, so a client retired since would be released to;
+        # this asks under the row's lock for this attempt, and records a
+        # fresh start the retire door will not overtake (20261011050000).
+        # A retired client stops here: re-run ALL jobs, or dispatch
+        # targets=control, so the train reads the register afresh.
+        if: env.KIND == 'client' && env.CP_URL != ''
+        run: |
+          set -euo pipefail
+          has=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regprocedure('erp_meta.begin_deployment_release(text,text)') is not null")
+          if [[ "$has" != t ]]; then
+            echo "the control plane predates 20261011050000; nothing to ask"
+            exit 0
+          fi
+          status=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" -v run="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" <<'SQL'
+          select erp_meta.begin_deployment_release(:'code', :'run');
+          SQL
+          )
+          case "$status" in
+            built|live) echo "${TARGET} is ${status}" ;;
+            *)
+              echo "::error::${TARGET} is ${status:-not in the register} since this run read its targets, so nothing was released to it. Re-run ALL jobs, or dispatch the deploy workflow with targets=control, so the train reads the register afresh."
+              exit 1 ;;
+          esac
 
       - name: Resolve the connection
         # A deploy that deployed nothing must not be green.

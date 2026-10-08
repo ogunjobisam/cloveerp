@@ -152,6 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           rows='[]'
+          retired='[]'
           if [[ -n "${CP_URL}" ]]; then
             if [[ "$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "select to_regclass('erp_meta.deployment') is not null")" == "t" ]]; then
               rows=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "
@@ -160,6 +161,12 @@ jobs:
                   from erp_meta.deployment d
                  where d.status in ('built', 'live')
                    and d.project_ref is not null;")
+              # Retired clients, so a train asked for before one was retired
+              # skips it rather than failing (20261011060000).
+              retired=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "
+                select coalesce(jsonb_agg(d.code order by d.code), '[]'::jsonb)
+                  from erp_meta.deployment d
+                 where d.status = 'retired';")
             else
               echo "the control plane has no register of deployments yet; production and the demonstration only"
             fi
@@ -201,6 +208,10 @@ jobs:
                   fi
                   row=$(jq -c --arg c "$t" '.[] | select(.code == $c)' <<< "$rows")
                   if [[ -z "$row" ]]; then
+                    if jq -e --arg c "$t" 'index($c) != null' <<< "$retired" > /dev/null; then
+                      echo "::notice::'${t}' was retired after this train was asked for; nothing is released to it, and the train carries on."
+                      continue
+                    fi
                     echo "::error::'${t}' is not a built client in the register. Nothing was released."
                     exit 1
                   fi
@@ -555,5 +566,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released and the application must not be published. Fix forward (the Fleet view names the client and the step), then dispatch this workflow with targets=control once everything before it is green."
+          echo "::error::the ${{ needs.demonstration.result == 'failure' && 'demonstration' || 'clients' }} job went red, so the control plane was NOT released and the application must not be published. Fix forward (the Fleet view names the client and the step) and release the client again; or, to release the control plane without waiting for it, dispatch this workflow with targets=control."
           exit 1
