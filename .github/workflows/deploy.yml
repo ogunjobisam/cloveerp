@@ -37,7 +37,7 @@ name: deploy
 # A client is released to while its database is up: built, live, suspended
 # (its address is not served, and its project runs on, so it keeps up with
 # every release) or retiring (offboarding, still up until it is purged); not
-# while it is being made, nor once it is retired (20261012020000).
+# while it is being made, nor once it is retired (20261012030000).
 #
 # And the cadence is the owner's too — a sprint's, with ad-hoc releases where
 # needed — so what runs on each event differs:
@@ -132,7 +132,7 @@ jobs:
     # (fleet_rename.yml) keeps its code and is served at its new address,
     # which every release then confirms (release.yml reads it again when it
     # gets there). Read through to_jsonb, so a control plane without the
-    # column (before 20261012020000) gives the code, which was its address.
+    # column (before 20261012030000) gives the code, which was its address.
     name: which deployments
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -172,6 +172,7 @@ jobs:
                          'address', coalesce(to_jsonb(d) ->> 'address', d.code)) order by d.code), '[]'::jsonb)
                   from erp_meta.deployment d
                  where d.status in ('built', 'live', 'suspended', 'retiring')
+                   and (d.status <> 'retiring' or d.built_at is not null)
                    and d.project_ref is not null;")
               # Retired clients, so a train asked for before one was retired
               # skips it rather than failing (20261011060000).

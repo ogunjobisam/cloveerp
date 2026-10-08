@@ -6,13 +6,26 @@ name: fleet backup
 # inside Supabase. So every Sunday at 04:00 UTC, and whenever the owner asks,
 # supabase/ci/fleet_backup.sh dumps the control plane, the demonstration and
 # every client that is built, live, suspended or retiring, one at a time, as
-# the restore drill dumps them and with their sign-ins; seals each copy to
-# the owner's age key; puts it in the owner's bucket at
-# backups/<database>/<date>.dump.age; asks the bucket for it again; and then
-# deletes that database's copies beyond the newest eight. One database that
-# cannot be copied is an error, and the rest are copied all the same; a
-# client's row in the register says it was copied, or why not (rehearsed on
-# every build by fleet_backup_rehearsal.sh).
+# the restore drill dumps them and with their sign-ins (and, for a client, its
+# stored documents); seals each copy to the owner's age key; puts it in the
+# owner's bucket at backups/<database>/<date>.dump.age; asks the bucket for it
+# again; and then deletes that database's copies beyond the newest eight. One
+# database that cannot be copied is an error, and the rest are copied all the
+# same; a client's row in the register says it was copied, or why not
+# (rehearsed on every build by fleet_backup_rehearsal.sh).
+#
+# A dump holds a share lock on every table it copies, and a release replaying
+# into the same database meets it and fails on its own thirty-second lock
+# limit. So before each database, not once at the start, the script asks
+# GitHub whether a release is replaying into that one, and waits it out
+# (supabase/ci/fleet_busy.sh); a release that has not yet reached its replay
+# waits for the copy instead (release.yml, "No copy of this database is being
+# made"). Before each client, too, a change of its database password
+# (fleet_secrets.yml) under way or begun before this run is waited out, since
+# a new password breaks the connection the dumps are made with; one begun
+# after this run waits for it instead. And the register is read again for
+# each client just before it is copied: one retired since the run began is
+# left alone, not missed.
 #
 # The bucket and the key are the owner's to make: the age public key in the
 # repository variable CLOVEERP_BACKUP_AGE_RECIPIENT, and the bucket (Cloudflare
@@ -34,7 +47,8 @@ on:
         default: ''
 
 permissions:
-  # Read: whether a release train is running (below).
+  # Read: whether a release is replaying into a database (the script asks
+  # before each).
   actions: read
   contents: read
 
@@ -46,8 +60,12 @@ jobs:
   backup:
     name: every database, copied off the platform
     runs-on: ubuntu-latest
-    # Minutes a database, one at a time with a pause; the rest is the wait
-    # for a release train to finish (below).
+    # Minutes a database, one at a time with a pause; the rest is the waits
+    # before each, for a change of database passwords (up to an hour, before
+    # a client) and for a release replaying into it (up to ninety minutes),
+    # each rare: a rotation is started by hand, and a release job's own limit
+    # is ninety-five minutes, thirty-five of them its wait for copies before
+    # its replay.
     timeout-minutes: 300
     env:
       # In the environment, never in the script's text: an input is whatever
@@ -112,35 +130,10 @@ jobs:
           age --version
           aws --version
 
-      - name: No release train is running
-        if: steps.configured.outputs.configured == 'yes'
-        # A dump holds a share lock on every table it copies, and a release
-        # replaying into the same database waits behind it until its own
-        # thirty-second lock limit fails it. A train already under way is
-        # waited out, up to two hours; after that this week's copies are not
-        # made, and the run is red so somebody runs it again.
-        run: |
-          set -euo pipefail
-          R="repos/${GH_REPO}"
-          deadline=$(( $(date +%s) + 120 * 60 ))
-          while :; do
-            if ! going=$(gh api "${R}/actions/workflows/deploy.yml/runs?per_page=50" \
-                           --jq '[.workflow_runs[] | select(.status != "completed" and .event != "pull_request") | .id | tostring] | join(" ")'); then
-              going="(GitHub could not be asked)"
-            fi
-            if [[ -z "$going" ]]; then
-              echo "no release train is running"
-              break
-            fi
-            if [[ "$(date +%s)" -ge "$deadline" ]]; then
-              echo "::error::a release train is still running after two hours (run ${going}), so no database was copied this time. Run this workflow again once it has finished."
-              exit 1
-            fi
-            echo "a release train is running (run ${going}); asking again in a minute"
-            sleep 60
-          done
-
       - name: Copy every database
+        # The step release.yml looks for (supabase/ci/fleet_busy.sh copy):
+        # while it runs, a release about to replay waits, up to half an hour.
+        # Renamed, rename it there too.
         if: steps.configured.outputs.configured == 'yes'
         run: |
           set -euo pipefail

@@ -3,17 +3,25 @@ name: fleet rename
 # A client deployment moved to a new address.
 #
 # A client is served at <address>.cloveerp.com. Its code never changes; its
-# address may (20261012020000). The owner asks from the Fleet view, whose door
+# address may (20261012030000). The owner asks from the Fleet view, whose door
 # checks the new address is free across the fleet and queues a request; the
 # sweep (fleet_sweep.yml) starts this with the request's id; and
-# supabase/ci/fleet_rename.sh carries it out: the project's auth settings,
-# its functions' address, its own database (where it is served, and its one
-# organisation's code), then the control plane's register, which keeps the
-# old address for ninety days and sends anyone who uses it to the new one.
-# Each step is an event on the client's row, every step done is undone when
-# a later one fails, and the request is settled with what happened, here when
-# the script could not say (rehearsed on every build by
-# fleet_rename_rehearsal.sh).
+# supabase/ci/fleet_rename.sh carries it out: the project's auth settings
+# (the new address, and every address the client was moved from, which it
+# holds for good), its functions' address, its own database (where it is
+# served, and its one organisation's code), then the control plane's
+# register, which holds the old address for the client and sends anyone who
+# uses it to the new one for ninety days. Each step is an event on the
+# client's row; when a step is known to have failed, every piece is put back
+# at the old address (the database if this run moved it, the auth settings
+# and the functions' address whichever run set them) and read back, and the
+# client is said to be there as before only when each reads back there
+# (otherwise the script says where each is and exits 3); nothing is put back
+# while a step's outcome is not known (a lost answer, read back with patience
+# and still not answered: exit 3), nor when the run carries on a rename that
+# stopped (the client's database already at the new address: exit 3); and the
+# request is settled with what happened, here when the script could not say
+# (rehearsed on every build by fleet_rename_rehearsal.sh).
 #
 # By hand only with a request's id: the console's door is where the new
 # address is checked, so a rename nobody asked for there is refused.
@@ -42,7 +50,7 @@ on:
         required: true
 
 permissions:
-  # Read: whether a release train is running (below).
+  # Read: whether a release train or a change of secrets is running (below).
   actions: read
   contents: read
 
@@ -59,8 +67,11 @@ jobs:
   rename:
     name: move ${{ inputs.code }} from ${{ inputs.from }} to ${{ inputs.to }}
     runs-on: ubuntu-latest
-    # The rename itself takes a minute; the rest is the wait for a release
-    # train to finish (below).
+    # The rename itself takes a minute, or four when an answer is lost and
+    # read back with patience; the rest is the wait for a release train (up
+    # to two hours) and for a change of secrets (twenty minutes) to finish
+    # (below). The console lets a rename still claimed after three hours go
+    # (erp_platform_rename_deployment, 20261012030000), so this stays below.
     timeout-minutes: 150
     env:
       CODE: ${{ inputs.code }}
@@ -128,21 +139,57 @@ jobs:
             sleep 60
           done
 
+      - name: No change of secrets is under way
+        # fleet_secrets.yml sets a client's auth settings and its functions'
+        # address from the address it reads just before each client, and a
+        # new database password breaks the connection this run reads once.
+        # So a change of secrets that is under way, or that began before
+        # this run and is still to make its changes (in either of its steps:
+        # a new password, or anything else), is waited out, up to
+        # twenty minutes, which with the train's two hours above keeps the
+        # run inside its own limit (and the console lets a claimed rename go
+        # only after three hours); one that began after this run waits for
+        # it instead (supabase/ci/fleet_busy.sh, so the two never wait for
+        # each other).
+        run: |
+          set -uo pipefail
+          if ! supabase/ci/fleet_busy.sh wait 20 runs "fleet_secrets.yml=Change them, one client at a time" \
+                 "fleet_secrets.yml=Change the database passwords, one client at a time"; then
+            echo "::error::a change of secrets is still under way after twenty minutes (above), so ${CODE} was not renamed and nothing was changed. Ask for the rename again once it has finished."
+            exit 1
+          fi
+          echo "no change of secrets is under way"
+
       - name: Rename, step by step
+        # fleet_secrets.yml waits while this step runs, by this name
+        # (supabase/ci/fleet_busy.sh runs). Renamed, rename it there too.
+        id: rename
         run: supabase/ci/fleet_rename.sh "${CODE}" "${FROM}" "${TO}" "${REQUEST}"
 
       - name: A run that stopped settles its request
         # The script settles the request whenever it can say what happened.
         # A run that stopped before it, or around it (a step that failed
-        # here, a timeout, a cancel), leaves the request claimed, and the
-        # console then refuses another rename of this client; so it is
-        # settled here, saying what to do. Only the run on main settles: a
-        # branch's run was refused before touching anything. And only this
-        # client's rename request: an id typed by hand that names anything
-        # else is left alone. A register that already has the client at its
-        # new address finished the rename (erp_meta.finish_deployment_rename
-        # recorded it), and the request is settled as done.
+        # here, a timeout, a cancel), or a script that could not learn
+        # whether a step took, stopped a rename it was carrying on, or could
+        # not put every piece back at the old address and read it there
+        # (exit 3, each said on the client's row), leaves the request
+        # claimed, and the console then refuses another rename of this
+        # client; so it is settled here, from what the register says now.
+        # Only the run on main settles: a branch's run was refused before
+        # touching anything. And only this client's rename request: an id
+        # typed by hand that names anything else is left alone.
+        #
+        # A register that has the client at its new address finished the
+        # rename (erp_meta.finish_deployment_rename recorded it), and the
+        # request is settled as done. One that still has it at the old
+        # address is settled as failed; but the client's own project may
+        # already be at the new one (the steps before the register are not
+        # undone unless they are known not to have taken), so the words say
+        # so: every step can be repeated, and asking for the same rename
+        # again finishes it. When the script never began, nothing changed.
         if: ${{ (failure() || cancelled()) && github.ref == 'refs/heads/main' }}
+        env:
+          RENAME_OUTCOME: ${{ steps.rename.outcome }}
         run: |
           set -uo pipefail
           if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]] || ! [[ "${REQUEST}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
@@ -154,38 +201,44 @@ jobs:
           fi
           # On standard input, not -c: psql substitutes :'id' only there.
           # Through to_jsonb, as everywhere: the address column is the
-          # control plane's since 20261012020000.
+          # control plane's since 20261012030000. Under a limit of its own:
+          # the pooler drops PGOPTIONS.
           row=$(psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${REQUEST}" -v code="${CODE}" <<'SQL'
+          set statement_timeout = '30s';
           select coalesce((select r.status from erp_meta.fleet_request r
                             where r.id = :'id'::uuid and r.kind = 'rename' and r.payload ->> 'code' = :'code'), '')
                  || '|' || coalesce((select coalesce(to_jsonb(d) ->> 'address', d.code)
                                        from erp_meta.deployment d where d.code = :'code'), '');
           SQL
-          ) || { echo "::warning::the request ${REQUEST} could not be read; it may stay claimed."; exit 0; }
+          ) || { echo "::warning::the request ${REQUEST} could not be read; it stays claimed, and the next rename of ${CODE} asked for in the console lets it go once it is three hours old."; exit 0; }
           IFS='|' read -r status address <<< "$row"
           if [[ "$status" != claimed ]]; then
             echo "the request is ${status:-not a rename of ${CODE}}: nothing to settle"
             exit 0
           fi
           if [[ "$address" == "${TO}" ]]; then
-            outcome="success: ${CODE} moved from ${FROM} to ${TO}, as the register says; run ${GITHUB_RUN_ID} stopped after the rename finished and before it could settle this request"
+            outcome="success: ${CODE} moved from ${FROM} to ${TO}, as the register says; run ${GITHUB_RUN_ID} stopped after the register took the move and before it could settle this request"
             phase_status=done
             said="the rename had finished (the register has ${CODE} at ${TO}); its request is settled as done"
-          else
-            outcome="failure: run ${GITHUB_RUN_ID} stopped before it could say how the rename of ${CODE} from ${FROM} to ${TO} went; its steps are on the client's row. Ask for the same rename again: every step can be repeated."
+          elif [[ "${RENAME_OUTCOME}" == skipped || -z "${RENAME_OUTCOME}" ]]; then
+            outcome="failure: run ${GITHUB_RUN_ID} stopped before the rename of ${CODE} from ${FROM} to ${TO} began, and nothing was changed. Ask for it again."
             phase_status=failed
-            said="the rename stopped before it finished; the request is settled as failed, and asking again carries on from where it is"
+            said="the run stopped before the rename began, and nothing was changed; the request is settled as failed"
+          else
+            outcome="failure: the register still has ${CODE} at ${FROM}, but run ${GITHUB_RUN_ID} stopped before it could say how far the rename to ${TO} went, and ${CODE} may be at ${TO} in its own project and database (its steps are on its row). Ask for the rename from ${FROM} to ${TO} again: every step can be repeated, and that finishes it."
+            phase_status=failed
+            said="the register still has ${CODE} at ${FROM}, and the client may be at ${TO}; the request is settled as failed, and asking for the same rename again finishes it"
           fi
           if ! psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${REQUEST}" -v outcome="${outcome}" > /dev/null <<'SQL'
+          set statement_timeout = '30s';
           select erp_meta.settle_fleet_request(:'id'::uuid, :'outcome');
           SQL
           then
-            echo "::warning::the request ${REQUEST} could not be settled; it stays claimed."
+            echo "::warning::the request ${REQUEST} could not be settled; it stays claimed, and the next rename of ${CODE} asked for in the console lets it go once it is three hours old."
           fi
           if [[ "$phase_status" == failed ]]; then
             CLOVEERP_LIVE_DATABASE_URL="$CLOVEERP_LIVE_DATABASE_URL" supabase/ci/fleet_register.sh event "${CODE}" rename failed \
-              "the rename from ${FROM} to ${TO} stopped (run ${GITHUB_RUN_ID}); ask for it again, which carries on from where it is" \
-              > /dev/null 2>&1 || true
+              "${outcome#failure: } (fleet_rename.yml)" > /dev/null 2>&1 || true
             echo "::error::${said}."
           else
             echo "::warning::${said}."

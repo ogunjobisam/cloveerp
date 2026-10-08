@@ -116,7 +116,7 @@ jobs:
     # A target is a client whose database is up: built, live, suspended (its
     # address is not served, its project runs on and keeps up with every
     # release) or retiring (offboarding, up until it is purged), since
-    # 20261012020000. A control plane before that never answers suspended or
+    # 20261012030000. A control plane before that never answers suspended or
     # retiring, because nothing there could make a client either.
     #
     # Production and the demonstration are not in the register and always
@@ -185,8 +185,14 @@ jobs:
     # scheduler paused: every deploy behind it queued and the platform's clock
     # stopped, for six hours, with nothing red to say so. An hour is longer
     # than any replay this repository has run and short enough to notice.
-    # Cancelling still runs the resume step, which is always().
-    timeout-minutes: 60
+    # The wait for a copy off the platform ("No copy of this database is
+    # being made") comes before the replay and inside the same limit: thirty
+    # questions a minute apart, and GitHub's answers, up to about thirty-five
+    # minutes, which given up on still leaves the release to carry on. So the
+    # job has the hour for the replay and what follows it, plus that wait:
+    # ninety-five minutes. Cancelling still runs the resume step, which is
+    # always().
+    timeout-minutes: 95
     env:
       # DB_URL is not here: "Resolve the connection" below writes it to the
       # job's environment, from the database_url secret or from the control
@@ -675,6 +681,34 @@ jobs:
           supabase migration list --db-url "$DB_URL" | tail -20
           echo "Recorded. Re-run this workflow without mark_applied to deploy." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: No copy of this database is being made
+        # Before the first migration. A copy off the platform (fleet_backup.yml,
+        # fleet_export.yml) holds a share lock on every table it dumps, and
+        # the replay below meets it and fails on its own thirty-second lock
+        # limit, halfway. So a copy being made now is waited for, up to half
+        # an hour, asked every minute (supabase/ci/fleet_busy.sh copy: a
+        # backup copying any database, since GitHub cannot say which, or an
+        # export of this client). After that the release carries on, and says
+        # so: a train is not held for longer by a copy, and a copy that is
+        # still going when the replay reaches its tables is what the
+        # deadlock-and-lock retry below is for. The copies, for their part,
+        # ask before each database whether a release is past this step and
+        # replaying into it, and wait for that; a release still at this step
+        # is not waited for, so the two never wait for each other. The
+        # repository is public, so the workflow's own token reads the runs.
+        if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if supabase/ci/fleet_busy.sh wait 30 copy "${TARGET}"; then
+            echo "no copy of the ${TARGET} is being made"
+          else
+            echo "::warning::a copy of the ${TARGET} off the platform was still being made after half an hour (above); the release carries on, and its replay may meet the copy's locks."
+            echo "- a copy off the platform was still being made after half an hour; released all the same" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Pause the scheduler for the length of the replay
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
         # The retry below survives a deadlock; not having one is better.
@@ -720,6 +754,10 @@ jobs:
 
       - name: Apply pending migrations by replay
         if: ${{ !(inputs.mark_applied || inputs.repair_gateway_bodies) }}
+        # (The copies off the platform wait while a release is between "No
+        # copy of this database is being made" and the end of this step, by
+        # these names: supabase/ci/fleet_busy.sh. Renamed, rename them there.)
+        #
         # A deadlock is a coincidence, not a verdict on the deploy.
         #
         # Every migration ends by re-running the generators, and
@@ -823,7 +861,7 @@ jobs:
           if [[ "${KIND}" == client && -n "${CP_URL}" && "$origin" =~ ^https://[a-z0-9-]+\.([a-z0-9.-]+(:[0-9]{1,5})?)$ ]]; then
             apex="${BASH_REMATCH[1]}"
             # Through to_jsonb: a control plane without the column (before
-            # 20261012020000) gives the code, which was the address.
+            # 20261012030000) gives the code, which was the address.
             address=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${TARGET}" <<'SQL'
           select coalesce(to_jsonb(d) ->> 'address', d.code) from erp_meta.deployment d where d.code = :'code';
           SQL

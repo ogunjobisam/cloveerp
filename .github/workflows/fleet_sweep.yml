@@ -18,17 +18,26 @@ name: fleet sweep
 #   rename   fleet_rename.yml, with the client's code, the address it is at,
 #            the one it moves to and the request's id: that run settles the
 #            request itself, once it knows how the rename went;
-#   export   fleet_export.yml, with the client's code.
+#   export   fleet_export.yml, with the client's code and the request's id:
+#            that run settles the request too, made or failed, so a retire
+#            that waits for an export never waits on one that failed unseen;
+#   sync     fleet_sync.yml, with the client's code: its staff, and whether
+#            its own organisation is suspended, made to follow the register
+#            at once (a suspension, a reinstatement or an offboarding asks
+#            for it), rather than at the next hourly sync. Settled once the
+#            run is started: the run writes on the client's row what it
+#            changed, and the hourly sync follows the register all the same.
 #
-# Renames and exports are claimed only from a control plane that knows them
-# (20261012020000, whose erp_meta.finish_deployment_rename says so): before
-# it, the claim refuses a kind it does not know, and asking for one would
-# stop every tick.
+# Renames, exports and syncs are claimed only from a control plane that knows
+# them (20261012030000, which holds the addresses a client was moved from in
+# erp_meta.deployment_previous_address): before it, the claim refuses a kind
+# it does not know, and asking for one would stop every tick.
 #
 # A workflow_dispatch created with GITHUB_TOKEN does start a run (it is one of
 # the two event kinds that do), which is the whole trick. Each claimed row is
-# settled with whether the dispatch was accepted; what the run then did is
-# recorded on the deployment's own row by the run itself.
+# settled with whether the dispatch was accepted, or left claimed for the run
+# that settles it; what the run then did is recorded on the deployment's own
+# row by the run itself.
 #
 # When it runs. The control plane wakes it the moment a request is written
 # (20261012010000: a trigger on erp_meta.fleet_request posts this workflow's
@@ -46,7 +55,7 @@ name: fleet sweep
 # still has its build job to finish (the question app.yml asks), and asks the
 # register whether a build was started in the last few minutes (GitHub can
 # take a moment to list a run it has just accepted). While either says so,
-# only releases, renames and exports are claimed, and the waiting build
+# only releases, renames, exports and syncs are claimed, and the waiting build
 # requests are told why on their deployment's row; otherwise at most one
 # build is started in a tick.
 #
@@ -113,10 +122,12 @@ jobs:
           # A control plane released before it has only the claim that takes
           # the oldest request of any kind.
           kinded=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regprocedure('erp_meta.claim_fleet_request(text,text[])') is not null")
-          # Renames and exports (20261012020000), which never wait for a build.
+          # Renames, exports and syncs (20261012030000), which never wait for
+          # a build. Its own table, not only the rename's routine: a claim
+          # from before it would refuse a sync.
           lifecycle=f
           if [[ "$kinded" == t ]]; then
-            lifecycle=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regprocedure('erp_meta.finish_deployment_rename(text,text)') is not null")
+            lifecycle=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tAc "select to_regprocedure('erp_meta.finish_deployment_rename(text,text)') is not null and to_regclass('erp_meta.deployment_previous_address') is not null")
           fi
 
           # Is a deployment being built? hold says why not to start another
@@ -164,7 +175,7 @@ jobs:
           # each dispatch is a run of its own that the next tick can follow.
           for _ in 1 2 3 4 5; do
             if [[ -z "$hold" ]]; then kinds='{build,release}'; else kinds='{release}'; fi
-            if [[ "$lifecycle" == t ]]; then kinds="${kinds%\}},rename,export}"; fi
+            if [[ "$lifecycle" == t ]]; then kinds="${kinds%\}},rename,export,sync}"; fi
             if [[ "$kinded" == t ]]; then
               # On standard input, not -c: psql substitutes :'run' only there.
               claim=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA -v run="${GITHUB_RUN_ID}" -v kinds="${kinds}" <<'SQL'
@@ -248,12 +259,27 @@ jobs:
                 ;;
               export)
                 code=$(jq -r '.payload.code // empty' <<< "$claim")
+                # Left claimed when started: fleet_export.yml settles it,
+                # with whether the export was made (its last step runs
+                # whatever happened before it).
                 if ! [[ "$code" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
                   outcome="failure: '${code}' is not a code"
-                elif gh workflow run fleet_export.yml --ref main -f "code=${code}" 2>&1; then
-                  outcome="success: fleet_export.yml started for ${code}"
+                elif ! [[ "$id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+                  outcome="failure: '${id}' is not a request's id"
+                elif gh workflow run fleet_export.yml --ref main -f "code=${code}" -f "request=${id}" 2>&1; then
+                  settled_by="fleet_export.yml started for ${code}; that run settles this request"
                 else
                   outcome="failure: GitHub refused to start fleet_export.yml for ${code}"
+                fi
+                ;;
+              sync)
+                code=$(jq -r '.payload.code // empty' <<< "$claim")
+                if ! [[ "$code" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
+                  outcome="failure: '${code}' is not a code"
+                elif gh workflow run fleet_sync.yml --ref main -f "code=${code}" 2>&1; then
+                  outcome="success: fleet_sync.yml started for ${code}"
+                else
+                  outcome="failure: GitHub refused to start fleet_sync.yml for ${code}; the hourly sync follows the register all the same"
                 fi
                 ;;
               *)
@@ -261,8 +287,8 @@ jobs:
                 ;;
             esac
             if [[ -n "$settled_by" ]]; then
-              # Left claimed: the run settles it (fleet_rename.yml settles a run
-              # that stopped too).
+              # Left claimed: the run settles it (fleet_rename.yml and
+              # fleet_export.yml settle a run that stopped too).
               echo "request ${id} (${kind}): ${settled_by}"
               echo "- request ${id} (${kind}): ${settled_by}" >> "$GITHUB_STEP_SUMMARY"
               started=$((started + 1))

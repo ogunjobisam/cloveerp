@@ -168,6 +168,7 @@ select coalesce(jsonb_agg(jsonb_build_object('code', d.code, 'ref', d.project_re
                           order by d.code), '[]'::jsonb)
   from erp_meta.deployment d
  where d.status in ('built', 'live', 'suspended', 'retiring')
+   and (d.status <> 'retiring' or d.built_at is not null)
    and d.project_ref is not null
    and (:'only' = '' or d.code = :'only');
 SQL

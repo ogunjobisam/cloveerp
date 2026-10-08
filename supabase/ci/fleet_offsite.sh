@@ -24,8 +24,23 @@
 #                    restored business has nobody who can sign in to it
 #                    (pg_dump cannot put a table of another schema into the
 #                    first dump: --table switches --schema off);
+#   storage/document-output/...
+#                    a client's: every object in its project's Storage bucket
+#                    document-output, the PDFs it has issued (invoices,
+#                    orders, statements), under their own names. The
+#                    database holds only where each is; without these a
+#                    restored business has its records and none of the
+#                    documents it sent. Listed and fetched through the
+#                    project's Storage API with its service key, from the
+#                    control plane's vault. An empty bucket is an empty
+#                    folder; an object that cannot be listed or fetched fails
+#                    the copy, except one deleted between the listing and
+#                    the fetch (the application sweeps expired previews),
+#                    which is named in the manifest as gone. The control
+#                    plane's and the demonstration's
+#                    are not copied: their service keys are not in the vault;
 #   manifest.json    what was dumped, from where, when, and each file's
-#                    sha256.
+#                    sha256 (each stored object's too, under storage).
 #
 # To read one: age -d -i <the private key> <object> | tar -x
 #
@@ -37,6 +52,10 @@
 #   offsite_dump URL DIR NAME REF
 #                            the two dumps and the manifest into DIR; on
 #                            failure OFFSITE_WHY says why, in words
+#   offsite_storage API KEY DIR
+#                            after offsite_dump: the bucket document-output
+#                            of the project at API (https://<ref>.supabase.co)
+#                            into DIR/storage, and into the manifest
 #   offsite_seal DIR OUT     tar and age: OUT is the only thing that leaves,
 #                            and the plaintext in DIR is removed either way
 #   offsite_put FILE KEY     uploaded, then asked for again: the bucket must
@@ -53,18 +72,27 @@
 #   CLOVEERP_BACKUP_S3_KEY_ID      an access key that may write, list and
 #   CLOVEERP_BACKUP_S3_SECRET      delete in it. Repository secrets.
 #   CLOVEERP_BACKUP_S3_REGION      default auto (what R2 asks for)
-#   PG_DUMP, AGE, AWS, TAR         the commands (the rehearsals' stand-ins)
+#   PG_DUMP, AGE, AWS, TAR, CURL   the commands (the rehearsals' stand-ins)
 #   PGCONNECT_TIMEOUT              seconds to reach a database (default 15)
+#   MAPI_ATTEMPTS, MAPI_BACKOFF, MAPI_TIMEOUT, MAPI_SLEEP
+#                                  the Storage API's patience, as
+#                                  management_api.sh's: a 429, a 5xx or no
+#                                  answer asked again, any other refusal not
+#   OFFSITE_PAGE_SIZE              objects Storage is asked to list at a time
+#                                  (default 100)
 #
-# Nothing secret reaches an argument: the access key travels in the
+# Nothing secret reaches an argument but a project's service key, which the
+# Storage API takes only as a header (as provision_project.sh and
+# fleet_staff_sync.sh send it): the bucket's access key travels in the
 # environment of the one command that needs it, and every error any command
-# gives is printed with the settings taken out of it.
+# gives is printed with the settings, and the service key, taken out of it.
 #
 # bash 3.2 and 5: the rehearsals (fleet_export_rehearsal.sh,
 # fleet_backup_rehearsal.sh) run it on a Mac as well as on a runner. No trap
 # (it would replace the caller's), no mapfile.
 
 OFFSITE_SCHEMAS="erp erp_ref erp_meta erp_ai erp_test erp_ingress public supabase_migrations"
+OFFSITE_BUCKET="document-output"
 OFFSITE_WHY=""
 
 # In the shape age writes an X25519 public key: bech32, lower case.
@@ -175,11 +203,153 @@ offsite_dump() {
   fi
 }
 
-# offsite_seal <dir> <out>: the three files tarred and encrypted to the
-# owner's key; the plaintext removed whatever happens.
+# offsite_request <method> <url> <body or empty> <out file> <key>: one call to
+# a project's Storage API, its answer in <out file>; 0 on a 2xx. A 429, a 5xx
+# or no answer is asked again with a doubling pause, as mapi asks; any other
+# answer is a verdict. On failure OFFSITE_HTTP is the status and the answer
+# stays in <out file> for the caller to quote.
+OFFSITE_HTTP=""
+offsite_request() {
+  local method="$1" url="$2" body="$3" out="$4" key="$5" status wait attempt=1
+  local attempts="${MAPI_ATTEMPTS:-5}" backoff="${MAPI_BACKOFF:-5}"
+  local -a headers
+  # A secret key in the new format (sb_secret_...) is not a JWT and goes as
+  # apikey only; a legacy service_role key goes as a bearer too.
+  if [[ "$key" == sb_* ]]; then
+    headers=(-H "apikey: ${key}")
+  else
+    headers=(-H "apikey: ${key}" -H "Authorization: Bearer ${key}")
+  fi
+  while :; do
+    if [[ -n "$body" ]]; then
+      status=$(${CURL:-curl} -sS -X "$method" -o "$out" -w '\n%{http_code}' --max-time "${MAPI_TIMEOUT:-60}" \
+                 "${headers[@]}" -H "Content-Type: application/json" --data "$body" "$url" 2> /dev/null) || true
+    else
+      status=$(${CURL:-curl} -sS -X "$method" -o "$out" -w '\n%{http_code}' --max-time "${MAPI_TIMEOUT:-60}" \
+                 "${headers[@]}" "$url" 2> /dev/null) || true
+    fi
+    status=$(printf '%s' "$status" | tail -n 1)
+    [[ "$status" =~ ^[0-9][0-9][0-9]$ ]] || status=000
+    case "$status" in
+      2??) return 0 ;;
+      429|5??|000) : ;;
+      *) OFFSITE_HTTP="$status"; return 1 ;;
+    esac
+    if [[ "$attempt" -ge "$attempts" ]]; then
+      OFFSITE_HTTP="$status"
+      return 1
+    fi
+    wait=$(( backoff * (1 << (attempt - 1)) ))
+    ${MAPI_SLEEP:-sleep} "$wait"
+    attempt=$((attempt + 1))
+  done
+}
+
+# offsite_storage <api> <service key> <dir>: the project's bucket
+# document-output into <dir>/storage/document-output, folder by folder, and
+# into <dir>/manifest.json (written by offsite_dump first). Each object's
+# size is the one Storage listed. On failure OFFSITE_WHY says why.
+offsite_storage() {
+  local api="${1%/}" key="$2" dir="$3" root queue prefix offset n i entry name kind size path got gone
+  local listed=0 bytes=0 page_size="${OFFSITE_PAGE_SIZE:-100}"
+  [[ "$page_size" =~ ^[1-9][0-9]*$ ]] || { OFFSITE_WHY="OFFSITE_PAGE_SIZE ('${page_size}') is not a number of objects"; return 1; }
+  root="${dir}/storage/${OFFSITE_BUCKET}"
+  mkdir -p "$root"
+  : > "${dir}/storage.files"
+  : > "${dir}/storage.gone"
+  # Folders still to list, one a line; the bucket's top first.
+  queue="${dir}/storage.queue"
+  printf '\n' > "$queue"
+  while [[ -s "$queue" ]]; do
+    prefix=$(head -n 1 "$queue")
+    sed '1d' "$queue" > "${queue}.next" && mv "${queue}.next" "$queue"
+    offset=0
+    while :; do
+      if ! offsite_request POST "${api}/storage/v1/object/list/${OFFSITE_BUCKET}" \
+             "$(jq -cn --arg p "$prefix" --argjson l "$page_size" --argjson o "$offset" \
+                  '{prefix: $p, limit: $l, offset: $o, sortBy: {column: "name", order: "asc"}}')" \
+             "${dir}/storage.page" "$key"; then
+        OFFSITE_WHY="its stored documents (${OFFSITE_BUCKET}) could not be listed${prefix:+ in ${prefix}} (Storage answered ${OFFSITE_HTTP}: $(offsite_redact "$(head -c 300 "${dir}/storage.page" 2> /dev/null)" "$key"))"
+        return 1
+      fi
+      if ! n=$(jq 'if type == "array" then length else error("not a list") end' "${dir}/storage.page" 2> /dev/null); then
+        OFFSITE_WHY="Storage's list of ${OFFSITE_BUCKET}${prefix:+/${prefix}} could not be read"
+        return 1
+      fi
+      i=0
+      while [[ "$i" -lt "$n" ]]; do
+        entry=$(jq -c ".[$i]" "${dir}/storage.page")
+        name="${prefix}$(jq -r '.name // ""' <<< "$entry")"
+        if [[ "$(jq -r 'if .id == null then "folder" else "object" end' <<< "$entry")" == folder ]]; then
+          kind=folder
+        else
+          kind=object
+        fi
+        # A name is kept under its own path inside the copy, so none may
+        # climb out of it.
+        if [[ -z "$name" || "$name" == /* || "/${name}/" == *"/../"* || "/${name}/" == *"/./"* || "$name" == *$'\n'* ]]; then
+          OFFSITE_WHY="Storage listed an object in ${OFFSITE_BUCKET} named '$(offsite_redact "$name")', which cannot be kept under its own name"
+          return 1
+        fi
+        if [[ "$kind" == folder ]]; then
+          printf '%s/\n' "$name" >> "$queue"
+        else
+          size=$(jq -r '.metadata.size // empty' <<< "$entry")
+          path=$(jq -rn --arg p "$name" '$p | split("/") | map(@uri) | join("/")')
+          mkdir -p "$(dirname "${root}/${name}")"
+          if ! offsite_request GET "${api}/storage/v1/object/${OFFSITE_BUCKET}/${path}" "" "${root}/${name}" "$key"; then
+            # Deleted since it was listed (the application sweeps expired
+            # previews): not in the copy, and named in the manifest as gone.
+            # Anything else is a fetch that failed, and fails the copy.
+            if [[ "$OFFSITE_HTTP" == 400 || "$OFFSITE_HTTP" == 404 ]] &&
+               grep -qE '"(statusCode|status)": *"?404"?|"error": *"not_found"|Object not found' "${root}/${name}" 2> /dev/null; then
+              rm -f "${root}/${name}"
+              printf '%s\n' "$name" >> "${dir}/storage.gone"
+              i=$((i + 1))
+              continue
+            fi
+            OFFSITE_WHY="the stored document ${name} could not be fetched from ${OFFSITE_BUCKET} (Storage answered ${OFFSITE_HTTP}: $(offsite_redact "$(head -c 300 "${root}/${name}" 2> /dev/null)" "$key"))"
+            return 1
+          fi
+          got=$(offsite_bytes "${root}/${name}")
+          if [[ -n "$size" && "$size" != "$got" ]]; then
+            OFFSITE_WHY="the stored document ${name} came as ${got} bytes, and Storage listed it as ${size}"
+            return 1
+          fi
+          printf '%s\t%s\t%s\n' "$name" "$got" "$(offsite_sha256 "${root}/${name}")" >> "${dir}/storage.files"
+          listed=$((listed + 1))
+          bytes=$((bytes + got))
+        fi
+        i=$((i + 1))
+      done
+      [[ "$n" -ge "$page_size" ]] || break
+      offset=$((offset + n))
+    done
+  done
+  if ! jq -R -s --arg b "$OFFSITE_BUCKET" --argjson n "$listed" --argjson t "$bytes" --slurpfile m "${dir}/manifest.json" \
+         --arg gone "$(cat "${dir}/storage.gone")" '
+         ($m[0]) + {storage: {bucket: $b, objects: $n, bytes: $t, folder: ("storage/" + $b),
+                    files: [split("\n")[] | select(length > 0) | split("\t") | {name: .[0], bytes: (.[1] | tonumber), sha256: .[2]}],
+                    gone_since_listed: [$gone | split("\n")[] | select(length > 0)]}}' \
+         "${dir}/storage.files" > "${dir}/manifest.next" || ! mv "${dir}/manifest.next" "${dir}/manifest.json"; then
+    OFFSITE_WHY="the manifest could not say what was copied from ${OFFSITE_BUCKET}"
+    return 1
+  fi
+  gone=$(grep -c . "${dir}/storage.gone" || true)
+  rm -f "${dir}/storage.files" "${dir}/storage.queue" "${dir}/storage.page" "${dir}/storage.gone"
+  OFFSITE_STORED="${listed} stored document(s), ${bytes} bytes"
+  if [[ "$gone" -gt 0 ]]; then OFFSITE_STORED="${OFFSITE_STORED} (${gone} deleted between listing and fetching, named in the manifest)"; fi
+}
+
+# offsite_seal <dir> <out>: the dumps, the manifest and any stored documents
+# tarred and encrypted to the owner's key; the plaintext removed whatever
+# happens.
 offsite_seal() {
   local dir="$1" out="$2" err rc=0
-  if ! err=$(${TAR:-tar} -C "$dir" -cf "${dir}/copy.tar" manifest.json product.dump auth_users.dump 2>&1); then
+  local -a members
+  members=(manifest.json product.dump auth_users.dump)
+  if [[ -d "${dir}/storage" ]]; then members+=(storage); fi
+  if ! err=$(${TAR:-tar} -C "$dir" -cf "${dir}/copy.tar" "${members[@]}" 2>&1); then
     OFFSITE_WHY="the dumps could not be put together ($(offsite_redact "$err"))"
     rc=1
   elif ! err=$(${AGE:-age} -r "${CLOVEERP_BACKUP_AGE_RECIPIENT:-}" -o "$out" "${dir}/copy.tar" 2>&1); then
@@ -189,7 +359,8 @@ offsite_seal() {
     OFFSITE_WHY="the encrypted copy is empty"
     rc=1
   fi
-  rm -f "${dir}/copy.tar" "${dir}/product.dump" "${dir}/auth_users.dump" "${dir}/manifest.json"
+  rm -rf "${dir}/copy.tar" "${dir}/product.dump" "${dir}/auth_users.dump" "${dir}/manifest.json" "${dir}/storage" \
+         "${dir}/storage.files" "${dir}/storage.queue" "${dir}/storage.page" "${dir}/storage.gone" "${dir}/manifest.next"
   return "$rc"
 }
 

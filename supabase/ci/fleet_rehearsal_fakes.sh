@@ -2,10 +2,11 @@
 #
 # Stand-ins for the commands the lifecycle scripts run, for their rehearsals
 # (fleet_rename_rehearsal.sh, fleet_export_rehearsal.sh,
-# fleet_backup_rehearsal.sh). Sourced, never run:
+# fleet_backup_rehearsal.sh, fleet_status_sync_rehearsal.sh,
+# fleet_busy_rehearsal.sh). Sourced, never run:
 #
 #   . supabase/ci/fleet_rehearsal_fakes.sh
-#   fleet_fakes "$work"      # writes psql, curl, pg_dump, age, aws, sleep
+#   fleet_fakes "$work"      # writes psql, curl, pg_dump, age, aws, sleep, gh
 #
 # Each writes what it was asked, in order, to $FAKE_DIR/order.log, and
 # answers from files and the environment:
@@ -14,7 +15,8 @@
 #             $FAKE_DEMO_URL is demo, a pooler user postgres.<ref> is <ref>),
 #             the statement from its "-- fleet: <tag>" line (vault reads and
 #             events from fleet_register.sh by what they say). The answer is
-#             $FAKE_DIR/answers/<database>/<tag>#<nth call> or <tag>; a line
+#             $FAKE_DIR/answers/<database>/<tag>@<code> for a statement given
+#             that code (-v code=...), else <tag>#<nth call> or <tag>; a line
 #             starting ERROR: goes to stderr and, with ON_ERROR_STOP, stops
 #             there (exit 3); a file CONNECT in the database's directory is a
 #             database that cannot be reached (exit 2). Vault entries are
@@ -22,10 +24,26 @@
 #             $FAKE_DIR/events as code|phase|status|detail. -c is refused:
 #             psql substitutes :'name' only on standard input.
 #   curl      The Management API as mapi asks it: auth settings kept as
-#             patched, PostgREST, secrets. FAKE_HTTP_STATUSES is a status per
-#             call; FAKE_AUTH_PATCH_STATUSES and FAKE_SECRETS_STATUSES per
-#             call to that endpoint alone; FAKE_AUTH answers the auth GET.
-#   pg_dump   Writes a small file naming what it dumped, from where.
+#             patched, PostgREST, secrets kept as set ($FAKE_DIR/secrets.held,
+#             a JSON object of name to value) and listed as the API lists
+#             them, each with the SHA-256 of its value. FAKE_HTTP_STATUSES is
+#             a status per call; FAKE_AUTH_PATCH_STATUSES,
+#             FAKE_SECRETS_STATUSES and FAKE_SECRETS_LIST_STATUSES per call
+#             to that endpoint alone; FAKE_AUTH answers the auth GET, and
+#             FAKE_SECRETS_LIST the secrets' GET.
+#             And a project's Storage API (https://<ref>.supabase.co): a
+#             bucket is $FAKE_DIR/storage/<ref>/<bucket>/, listed a folder at
+#             a time as Storage lists it and fetched into -o; a bucket with
+#             no directory answers 400, Bucket not found.
+#             FAKE_STORAGE_LIST_STATUSES and FAKE_STORAGE_FETCH_STATUSES are
+#             a status per call to each; FAKE_STORAGE_GONE is an object
+#             listed and then not found. Each call's headers are kept in
+#             $FAKE_DIR/headers.<n>.
+#   gh        gh api, as fleet_busy.sh asks it: the answer to a path is
+#             $FAKE_DIR/gh/<path after actions/, / as _>.json (gh_run,
+#             gh_job), filtered by --jq; none is no runs and no jobs.
+#             FAKE_GH_FAIL makes it fail.
+#   pg_dump  Writes a small file naming what it dumped, from where.
 #             FAKE_PG_DUMP_FAIL="<database> <schemas|auth.users>" fails it,
 #             with an error that carries the connection string.
 #   age       Writes the archive behind a header naming the recipient, and
@@ -37,6 +55,10 @@
 #             FAKE_EXPECT_SECRET. FAKE_AWS_CP_FAIL, FAKE_AWS_LIST_FAIL,
 #             FAKE_AWS_RM_FAIL and FAKE_HEAD_BYTES make it misbehave.
 #   sleep     Says how long it would have slept.
+#
+# And workflow_step <workflow file> <step name>, which prints the run: block
+# of that step as the runner would be given it, for a rehearsal to run a
+# workflow's own words against these stand-ins.
 #
 # bash 3.2 and 5.
 
@@ -108,8 +130,9 @@ esac
 echo "psql $target $tag" >> "$FAKE_DIR/order.log"
 k=$(( $(cat "$FAKE_DIR/count.$target.$tag" 2> /dev/null || echo 0) + 1 ))
 echo "$k" > "$FAKE_DIR/count.$target.$tag"
+code=$(var code)
 file=""
-for f in "$dir/$tag#$k" "$dir/$tag"; do
+for f in ${code:+"$dir/$tag@$code"} "$dir/$tag#$k" "$dir/$tag"; do
   if [[ -f "$f" ]]; then file="$f"; break; fi
 done
 [[ -n "$file" ]] || exit 0
@@ -126,14 +149,16 @@ FAKE
 
   cat > "$dir/curl" <<'FAKE'
 #!/usr/bin/env bash
-method=GET; url=""; body=""; want_status=no; dump=""
+method=GET; url=""; body=""; want_status=no; dump=""; outfile=""; headers=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -X) method="$2"; shift 2 ;;
     --data|-d) body="$2"; shift 2 ;;
     -w) want_status=yes; shift 2 ;;
     -D|--dump-header) dump="$2"; shift 2 ;;
-    -H|-o|--max-time) shift 2 ;;
+    -o|--output) outfile="$2"; shift 2 ;;
+    -H) headers="${headers}${2}"$'\n'; shift 2 ;;
+    --max-time) shift 2 ;;
     http*) url="$1"; shift ;;
     *) shift ;;
   esac
@@ -141,8 +166,10 @@ done
 n=$(( $(cat "$FAKE_DIR/curl.calls" 2> /dev/null || echo 0) + 1 ))
 echo "$n" > "$FAKE_DIR/curl.calls"
 path="${url#*//*/}"
+host="${url#*//}"; host="${host%%/*}"
 echo "$method /$path" >> "$FAKE_DIR/order.log"
 [[ -z "$body" ]] || printf '%s' "$body" > "$FAKE_DIR/body.$n"
+printf '%s' "$headers" > "$FAKE_DIR/headers.$n"
 # pick <list> <counter file>: the next of a comma list, the last repeated.
 pick() {
   local list="$1" counter="$2" k i
@@ -167,12 +194,69 @@ case "$method $path" in
   "GET v1/projects/"*"/postgrest") answer='{"db_schema":"public, graphql_public"}' ;;
   "POST v1/projects/"*"/secrets")
     if [[ -n "${FAKE_SECRETS_STATUSES:-}" ]]; then status=$(pick "$FAKE_SECRETS_STATUSES" "$FAKE_DIR/secrets.count"); fi
+    if [[ "$status" =~ ^2 ]]; then
+      held=$(cat "$FAKE_DIR/secrets.held" 2> /dev/null || echo '{}')
+      jq -c --argjson add "$body" '. + ($add | map({(.name): .value}) | add // {})' <<< "$held" > "$FAKE_DIR/secrets.held"
+    fi
     answer='{}' ;;
+  "GET v1/projects/"*"/secrets")
+    # As the API lists them: each name with the SHA-256 of its value, never
+    # the value.
+    if [[ -n "${FAKE_SECRETS_LIST_STATUSES:-}" ]]; then status=$(pick "$FAKE_SECRETS_LIST_STATUSES" "$FAKE_DIR/secretslist.count"); fi
+    if [[ -n "${FAKE_SECRETS_LIST:-}" ]]; then
+      answer="$FAKE_SECRETS_LIST"
+    else
+      answer=$(jq -c 'to_entries[]' "$FAKE_DIR/secrets.held" 2> /dev/null | while IFS= read -r e; do
+                 v=$(jq -r .value <<< "$e")
+                 if command -v sha256sum > /dev/null 2>&1; then d=$(printf '%s' "$v" | sha256sum | cut -d ' ' -f 1)
+                 else d=$(printf '%s' "$v" | shasum -a 256 | cut -d ' ' -f 1); fi
+                 jq -cn --arg n "$(jq -r .key <<< "$e")" --arg d "$d" '{name: $n, value: $d}'
+               done | jq -cs '.')
+    fi ;;
+  "POST storage/v1/object/list/"*)
+    # One folder of a bucket, as Storage lists it: folders by name with no
+    # id, objects with their size; sorted by name, from offset, up to limit.
+    bucket="${path#storage/v1/object/list/}"
+    store="$FAKE_DIR/storage/${host%%.*}/${bucket}"
+    if [[ -n "${FAKE_STORAGE_LIST_STATUSES:-}" ]]; then status=$(pick "$FAKE_STORAGE_LIST_STATUSES" "$FAKE_DIR/storagelist.count"); fi
+    prefix=$(jq -r '.prefix // ""' <<< "$body"); limit=$(jq -r '.limit // 100' <<< "$body"); offset=$(jq -r '.offset // 0' <<< "$body")
+    echo "${host%%.*}|${bucket}|${prefix}|${limit}|${offset}" >> "$FAKE_DIR/storage.lists"
+    if [[ ! -d "$store" ]]; then
+      status=400
+      answer='{"statusCode":"404","error":"Bucket not found","message":"Bucket not found"}'
+    elif [[ "$status" =~ ^2 ]]; then
+      answer=$(
+        if [[ -d "$store/$prefix" ]]; then
+          ( cd "$store/$prefix" && ls -1A ) | LC_ALL=C sort | while IFS= read -r e; do
+            if [[ -d "$store/$prefix/$e" ]]; then
+              jq -cn --arg n "$e" '{name: $n, id: null, metadata: null}'
+            else
+              jq -cn --arg n "$e" --argjson b "$(wc -c < "$store/$prefix/$e" | tr -d ' ')" \
+                '{name: $n, id: "00000000-0000-4000-8000-000000000000", metadata: {size: $b, mimetype: "application/pdf"}}'
+            fi
+          done
+        fi | jq -cs --argjson o "$offset" --argjson l "$limit" '.[$o:$o + $l]')
+    fi ;;
+  "GET storage/v1/object/"*)
+    rest="${path#storage/v1/object/}"; bucket="${rest%%/*}"; key="${rest#*/}"
+    key=$(printf '%s' "$key" | sed 's/%20/ /g')
+    file="$FAKE_DIR/storage/${host%%.*}/${bucket}/${key}"
+    if [[ -n "${FAKE_STORAGE_FETCH_STATUSES:-}" ]]; then status=$(pick "$FAKE_STORAGE_FETCH_STATUSES" "$FAKE_DIR/storagefetch.count"); fi
+    if [[ ! -f "$file" || "$key" == "${FAKE_STORAGE_GONE:-/}" ]]; then
+      status=400
+      answer='{"statusCode":"404","error":"not_found","message":"Object not found"}'
+    elif [[ "$status" =~ ^2 ]]; then
+      if [[ -n "$outfile" ]]; then cp "$file" "$outfile"; else cat "$file"; fi
+      [[ "$want_status" == yes ]] && printf '\n%s' "$status"
+      exit 0
+    fi ;;
   *) answer='{}' ;;
 esac
-if [[ ! "$status" =~ ^2 ]]; then answer='{"message":"refused by the rehearsal"}'; fi
+if [[ ! "$status" =~ ^2 && "$path" != storage/* ]] || [[ ! "$status" =~ ^2 && -z "${answer:-}" ]]; then
+  answer='{"message":"refused by the rehearsal"}'
+fi
 if [[ -n "$dump" ]]; then printf 'HTTP/2 %s\r\n\r\n' "$status" > "$dump"; fi
-printf '%s' "$answer"
+if [[ -n "$outfile" ]]; then printf '%s' "$answer" > "$outfile"; else printf '%s' "$answer"; fi
 [[ "$want_status" == yes ]] && printf '\n%s' "$status"
 exit 0
 FAKE
@@ -292,7 +376,79 @@ FAKE
 echo "sleep $1" >> "$FAKE_DIR/order.log"
 FAKE
 
-  chmod +x "$dir/psql" "$dir/curl" "$dir/pg_dump" "$dir/age" "$dir/aws" "$dir/sleep"
+  cat > "$dir/gh" <<'FAKE'
+#!/usr/bin/env bash
+[[ "${1:-}" == api ]] || { echo "the rehearsal's gh knows only gh api" >&2; exit 2; }
+shift
+path=""; jqx="."
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --jq|-q) jqx="$2"; shift 2 ;;
+    --paginate) shift ;;
+    -*) shift ;;
+    *) [[ -n "$path" ]] || path="$1"; shift ;;
+  esac
+done
+[[ "$path" =~ ^repos/[^/]+/[^/]+/actions/ ]] || { echo "the rehearsal's gh was asked ${path}, which is not a repository's actions" >&2; exit 2; }
+p="${path%%\?*}"; p="${p#repos/*/*/actions/}"
+echo "gh $p" >> "$FAKE_DIR/order.log"
+echo "$path" >> "$FAKE_DIR/gh.log"
+if [[ -n "${FAKE_GH_FAIL:-}" ]]; then echo "HTTP 502: Bad Gateway (https://api.github.com/${path})" >&2; exit 1; fi
+file="$FAKE_DIR/gh/${p//\//_}.json"
+if [[ -f "$file" ]]; then
+  answer=$(cat "$file")
+else
+  case "$p" in */jobs) answer='{"jobs":[]}' ;; *) answer='{"workflow_runs":[]}' ;; esac
+fi
+printf '%s' "$answer" | jq -r "$jqx"
+FAKE
+
+  chmod +x "$dir/psql" "$dir/curl" "$dir/pg_dump" "$dir/age" "$dir/aws" "$dir/sleep" "$dir/gh"
+}
+
+# gh_run <workflow file> <run id> [status] [event] [title]: one run of it,
+# added to what the fake gh says the workflow has (status default
+# in_progress, event default workflow_dispatch; its display_title, as a
+# run-name makes it, only when one is given).
+gh_run() {
+  local f="$FAKE_DIR/gh/workflows_${1}_runs.json" have
+  mkdir -p "$FAKE_DIR/gh"
+  have=$(cat "$f" 2> /dev/null || echo '{"workflow_runs":[]}')
+  jq -c --argjson id "$2" --arg s "${3:-in_progress}" --arg e "${4:-workflow_dispatch}" --arg t "${5:-}" \
+    '.workflow_runs += [{id: $id, status: $s, event: $e} + (if $t == "" then {} else {display_title: $t} end)]' <<< "$have" > "$f"
+}
+
+# gh_job <run id> <job name> <job status> [<step name>=<step status> ...]:
+# one job of that run, with its steps.
+gh_job() {
+  local run="$1" name="$2" status="$3" f have steps='[]' kv
+  shift 3
+  f="$FAKE_DIR/gh/runs_${run}_jobs.json"
+  mkdir -p "$FAKE_DIR/gh"
+  for kv in "$@"; do
+    steps=$(jq -c --arg n "${kv%=*}" --arg s "${kv##*=}" '. + [{name: $n, status: $s}]' <<< "$steps")
+  done
+  have=$(cat "$f" 2> /dev/null || echo '{"jobs":[]}')
+  jq -c --arg n "$name" --arg s "$status" --argjson st "$steps" '.jobs += [{name: $n, status: $s, steps: $st}]' <<< "$have" > "$f"
+}
+
+# workflow_step <workflow file> <step name>: the step's run: block (| or one
+# line), its indentation taken off; nothing when the workflow has no such
+# step.
+workflow_step() {
+  awk -v want="$2" '
+    function lead(s) { match(s, /^ */); return RLENGTH }
+    state == 0 && index($0, "- name: ") && substr($0, index($0, "- name: ") + 8) == want { state = 1; base = lead($0); next }
+    state >= 1 && index($0, "- name: ") && lead($0) <= base { exit }
+    state == 1 && $0 ~ /^ *run: [|]/ { state = 2; next }
+    state == 1 && $0 ~ /^ *run: / { sub(/^ *run: /, ""); print; exit }
+    state == 2 {
+      if ($0 ~ /^ *$/) { print ""; next }
+      if (!at) at = lead($0)
+      if (lead($0) < at) exit
+      print substr($0, at + 1)
+    }
+  ' "$1"
 }
 
 # answer <database> <tag> <text...>: what the fake psql says to that statement
