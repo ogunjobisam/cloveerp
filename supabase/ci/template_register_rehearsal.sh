@@ -175,7 +175,9 @@ check() {
     echo "$out" | sed 's/^/       | /' | head -n 20
   fi
 }
-no_secret='[[ "$out" != *"s3cret-pass"* && "$out" != *"$SECRET"* ]]'
+# What a reader of the run sees: under Actions the ::add-mask:: lines carry the
+# values masked, and are never shown, so they are left out of the look.
+no_secret='[[ "$(printf "%s\n" "$out" | grep -v "^::add-mask::")" != *"s3cret-pass"* && "$(printf "%s\n" "$out" | grep -v "^::add-mask::")" != *"$SECRET"* ]]'
 
 # 1. Whether the control plane has the register
 run "a control plane without the register" ready -- FAKE_READY="false false false"
