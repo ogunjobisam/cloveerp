@@ -268,6 +268,16 @@ jobs:
         # no database.
         run: supabase/ci/fleet_commercial_sync_rehearsal.sh
 
+      - name: The database image is pulled from either registry, rehearsed
+        # supabase/ci/postgres_image.sh pulls the PostgreSQL image every build,
+        # release and drill runs, from Amazon's registry or Docker Hub, in
+        # rounds that wait longer each time, since each refuses an
+        # unauthenticated runner now and then. Here first, against a docker
+        # that answers from a script: which registry is asked when, the waits,
+        # what it says when neither gives the image, and that no workflow names
+        # the image itself. Seconds, no docker.
+        run: supabase/ci/postgres_image_rehearsal.sh
+
       - name: Every incident and maintenance window is carried to the clients it reaches, rehearsed
         # supabase/ci/fleet_incident_sync.sh (fleet_sweep.yml, a job of its
         # own) carries every incident and maintenance window that reaches a
@@ -426,16 +436,16 @@ jobs:
         # not installable from apt. Pinned, and pinned to the major version the
         # live project runs (17.6): an implicit upgrade of the database the
         # product is verified against is not something to discover from a red
-        # build. From Supabase's copy on Amazon's public registry, not Docker
-        # Hub: Hub refuses a runner that has pulled too often unauthenticated
-        # ("toomanyrequests"), which turned compat red three times in a row on
-        # 9 October before any check ran. The same image, the same tag.
+        # build. Pulled by supabase/ci/postgres_image.sh, which asks Amazon's
+        # registry and Docker Hub in turn and again, because each refuses an
+        # unauthenticated runner now and then.
         run: |
           set -euo pipefail
+          image=$(supabase/ci/postgres_image.sh)
           docker run -d --name clove-erp-pg \
             -e POSTGRES_PASSWORD=postgres \
             -p 5432:5432 \
-            public.ecr.aws/supabase/postgres:17.6.1.167
+            "$image"
 
           # Readiness is this step's job now that the runner is not doing it.
           # Fail loudly on timeout rather than letting the next step present a
@@ -2036,10 +2046,11 @@ jobs:
         # side the cache cannot answer for is still replayed here, as before.
         run: |
           set -euo pipefail
+          image=$(supabase/ci/postgres_image.sh)
           docker run -d --name clove-erp-compat \
             -e POSTGRES_PASSWORD=postgres \
             -p 5432:5432 \
-            public.ecr.aws/supabase/postgres:17.6.1.167
+            "$image"
           for i in $(seq 1 60); do
             if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then exit 0; fi
             sleep 1

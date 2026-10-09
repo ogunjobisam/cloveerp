@@ -214,8 +214,9 @@ jobs:
         if: steps.wanted.outputs.make == 'yes'
         run: |
           set -euo pipefail
-          docker run -d --name clove-erp-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 public.ecr.aws/supabase/postgres:17.6.1.167
-          docker run -d --name clove-erp-template -e POSTGRES_PASSWORD=postgres -p 5433:5432 public.ecr.aws/supabase/postgres:17.6.1.167
+          image=$(supabase/ci/postgres_image.sh)
+          docker run -d --name clove-erp-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 "$image"
+          docker run -d --name clove-erp-template -e POSTGRES_PASSWORD=postgres -p 5433:5432 "$image"
           for port in 5432 5433; do
             ready=no
             for i in $(seq 1 60); do
