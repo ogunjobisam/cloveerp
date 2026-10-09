@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   agoText,
+  buildMethodText,
   buildRecovery,
   buildRequestIsStale,
   CHECKLIST_ITEMS,
@@ -34,6 +35,7 @@ import {
   POSITION_PENDING_NOTE_HOURS,
   positionPendingTooLong,
   purgeDateHasCome,
+  readBuildMethod,
   readDeploymentCommercial,
   renameAddressHint,
   renameDescription,
@@ -1442,6 +1444,7 @@ describe("a deployment row as the register lists it", () => {
     expect(deploymentAddress(older)).toBe("acme.cloveerp.com");
     expect(deploymentLifecycleNotes(older, new Date("2026-10-12T12:00:00Z"))).toEqual([]);
     expect(lastExportText(older, new Date("2026-10-12T12:00:00Z"))).toBeNull();
+    expect(buildMethodText({ ...older, built_at: "2026-06-01T09:00:00Z" })).toBeNull();
     // Without the times a copy is judged by, none counts.
     const exportedBefore: ClientDeployment = {
       ...older,
@@ -1830,6 +1833,56 @@ describe("the client deployments on a plan", () => {
     expect(planDeploymentsText({ deployments: null })).toBeNull();
     expect(planDeploymentsText({ deployments: -1 })).toBeNull();
     expect(planDeploymentsText({ deployments: 1.5 })).toBeNull();
+  });
+});
+
+describe("how a client was built", () => {
+  const BUILT = "2026-10-09T09:00:00Z";
+
+  test("the register's word, read without trusting its shape", () => {
+    expect(readBuildMethod("from_empty")).toBe("from_empty");
+    expect(readBuildMethod("template")).toBe("template");
+    expect(readBuildMethod(" template ")).toBe("template");
+    // An older register, a build that did not record it, or a word not known here.
+    expect(readBuildMethod(undefined)).toBeNull();
+    expect(readBuildMethod(null)).toBeNull();
+    expect(readBuildMethod("")).toBeNull();
+    expect(readBuildMethod("snapshot")).toBeNull();
+    expect(readBuildMethod("Template")).toBeNull();
+    expect(readBuildMethod(1)).toBeNull();
+    expect(readBuildMethod({ method: "template" })).toBeNull();
+    expect(readBuildMethod(["template"])).toBeNull();
+  });
+
+  test("once built, the row says which way, in plain words", () => {
+    expect(buildMethodText({ built_at: BUILT, build_method: "template" })).toBe(
+      "built from a template",
+    );
+    expect(buildMethodText({ built_at: BUILT, build_method: "from_empty" })).toBe(
+      "built from every migration",
+    );
+  });
+
+  test("nothing before it is built: a build in flight or stopped may hold an earlier attempt's way", () => {
+    expect(buildMethodText({ built_at: null, build_method: "template" })).toBeNull();
+    expect(buildMethodText({ built_at: null, build_method: "from_empty" })).toBeNull();
+  });
+
+  test("nothing when the register does not say", () => {
+    expect(buildMethodText({ built_at: BUILT })).toBeNull();
+    expect(buildMethodText({ built_at: BUILT, build_method: null })).toBeNull();
+    expect(buildMethodText({ built_at: BUILT, build_method: "snapshot" })).toBeNull();
+    expect(buildMethodText({ built_at: BUILT, build_method: 2 })).toBeNull();
+  });
+
+  test("a register row carrying it reads through the row's own type", () => {
+    const row: Pick<ClientDeployment, "built_at" | "build_method" | "status"> = {
+      status: "retired",
+      built_at: BUILT,
+      build_method: "template",
+    };
+    // Retired, it was still built that way.
+    expect(buildMethodText(row)).toBe("built from a template");
   });
 });
 

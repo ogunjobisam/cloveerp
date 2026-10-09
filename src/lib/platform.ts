@@ -283,6 +283,14 @@ export type ClientDeployment = {
    * register older than it.
    */
   commercial?: DeploymentCommercial | null;
+  /**
+   * How its database was built (20261012070000): from_empty, every migration
+   * replayed onto its empty project; template, restored from the template the
+   * schema build made from the migrations. Null on a row whose build did not
+   * record it, and absent from a register older than it. Read only through
+   * readBuildMethod, which takes nothing on trust.
+   */
+  build_method?: string | null;
 };
 
 /**
@@ -1527,6 +1535,46 @@ export function planDeploymentsText(p: { deployments?: unknown }): string | null
   const n = countOf(p.deployments);
   if (n === null || n === 0) return null;
   return `${n} client ${n === 1 ? "deployment" : "deployments"}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* How a client was built (20261012070000).                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The two ways a client's database is built: every migration replayed onto
+ * its empty project, or restored from the template the schema build made
+ * from the migrations.
+ */
+export type BuildMethod = "from_empty" | "template";
+
+const BUILD_METHODS: ReadonlySet<string> = new Set<BuildMethod>(["from_empty", "template"]);
+
+/**
+ * The register's build_method, read without trusting its shape: one of the
+ * two ways, or null for anything else — absent from an older register, null
+ * on a row whose build did not record it, or a word this console does not
+ * know.
+ */
+export function readBuildMethod(raw: unknown): BuildMethod | null {
+  const method = textOf(raw);
+  return method !== null && BUILD_METHODS.has(method) ? (method as BuildMethod) : null;
+}
+
+/**
+ * How the Fleet view says a client was built, under its project: "built from
+ * a template" or "built from every migration". Said only once it has been
+ * built: a build in flight, or one that stopped, may still hold the way an
+ * earlier attempt was built, which would read as its own. Null too when the
+ * register does not say.
+ */
+export function buildMethodText(
+  d: Pick<ClientDeployment, "built_at"> & { build_method?: unknown },
+): string | null {
+  if (typeof d.built_at !== "string") return null;
+  const method = readBuildMethod(d.build_method);
+  if (method === null) return null;
+  return method === "template" ? "built from a template" : "built from every migration";
 }
 
 /**

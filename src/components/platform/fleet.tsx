@@ -8,6 +8,7 @@ import { APEX_HOST } from "../../lib/backend";
 import { callErp } from "../../lib/erp";
 import {
   atLeast,
+  buildMethodText,
   buildRequestIsStale,
   CHECKLIST_ITEMS,
   checklistStep,
@@ -94,6 +95,11 @@ import { Card, Fail, INPUT, LINK_BUTTON } from "./kit";
  * the position has waited over a day to be applied, or a notice was refused.
  * None of it is a release check: a client's fault never holds up the
  * control plane.
+ *
+ * And a client can be built from a template (20261012070000): the schema
+ * build makes one from the migrations, and a client's project is restored
+ * from it rather than replaying every migration. Once a client is built, its
+ * row says which way it was, under its project (buildMethodText).
  */
 
 /** Where a run's log is: the repository the workflows run in. */
@@ -275,6 +281,9 @@ function DeploymentRow({
   // from then on.
   const exportOwed = exportOwedText(d, now);
   const origin = deploymentOrigin(d);
+  // How its database was built, once it has been: from a template, or from
+  // every migration.
+  const builtFrom = buildMethodText(d);
 
   return (
     <>
@@ -322,6 +331,7 @@ function DeploymentRow({
           ) : (
             <span className="text-muted-foreground">Not made yet</span>
           )}
+          {builtFrom ? <div className="text-muted-foreground">{builtFrom}</div> : null}
           {exported ? (
             <div className="mt-1 text-[11px] text-muted-foreground">
               {exported}

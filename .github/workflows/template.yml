@@ -1,0 +1,478 @@
+name: template
+
+# The template a new client's database is restored from.
+#
+# A client's database was built by replaying every migration into its empty
+# project (deployment_from_empty.yml): 3 h 25 for the demonstration on a Micro
+# instance, and longer with every migration. The owner's decision of 9
+# October: restore a ready-made dump of the product's schemas instead, made
+# here, in CI, from the migrations, and never from the demonstration or any
+# live database (supabase/ci/template_make.sh says why).
+#
+# After the schema build passes on main, this:
+#
+#   - asks the control plane's register (erp_meta.provisioning_template,
+#     20261012070000) whether a template for these exact migrations is
+#     recorded already, and stops there if so (or if the control plane has no
+#     register yet);
+#   - restores the database the schema build made from these migrations, from
+#     the cache that build keeps under main (the same key, the same three
+#     files), or replays every migration when the cache no longer holds it;
+#   - makes the template from it (supabase/ci/template_make.sh), before any
+#     demonstration goes in;
+#   - restores the template into a fresh PostgreSQL as a client's build would
+#     (supabase/ci/template_restore.sh: one transaction, the host's default
+#     privileges switched off while the dump runs and put back as they were,
+#     the owner on the staff list, the fingerprint proved), and proves what
+#     came back: the fingerprint equal to the build's (and, when it is not,
+#     the objects that differ named), platform_assurance() green, the CLI
+#     finding every migration applied, and the whole catalogue walked;
+#   - keeps it: in the owner's bucket when CLOVEERP_BACKUP_S3_* is configured,
+#     otherwise as an artifact of this run for ninety days; and records it on
+#     the control plane with this run as its proof.
+#
+# The template holds what the public migrations build and nothing else: no
+# organisation, no staff, no release, no connection string, key or password.
+# What makes it safe to restore into a client is that its dump's sha256 is
+# the one the register holds, which template_restore.sh refuses to do
+# without. Nothing here prints a secret; the control plane's connection string
+# and the bucket's settings are repository secrets, masked.
+#
+# On demand too (Run workflow), and with force to make one even when these
+# migrations already have a template recorded.
+
+on:
+  workflow_run:
+    workflows: [schema]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Make, prove and record a template even when the register already holds one for these migrations.'
+        type: boolean
+        default: false
+
+# One at a time. A second run waits, and finds what the first recorded.
+concurrency:
+  group: template
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  make:
+    name: make, prove and record the template
+    # Only a schema build of main's own commits that passed: a push, the
+    # weekly build or a dispatch, never a pull request's.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event != 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    # A replay when the cache is gone is about an hour; the catalogue another
+    # twenty minutes.
+    timeout-minutes: 240
+    env:
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      EVENT: ${{ github.event_name }}
+      FORCE: ${{ inputs.force && 'yes' || 'no' }}
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      # The database the schema build makes, and the one the template is
+      # restored into to prove it: two containers on this runner, nothing
+      # secret about either.
+      SOURCE_URL: postgresql://postgres:postgres@localhost:5432/clove_erp
+      PROOF_URL: postgresql://postgres:postgres@localhost:5433/clove_template
+      # The owner the proof restores with: an address that is nobody's.
+      PROOF_OWNER: template-proof@cloveerp.invalid
+      # Above this many locks held by the one transaction, say so: a Micro
+      # instance's lock table is max_locks_per_transaction (64) times its
+      # connections and workers, shared by every session.
+      LOCK_WARN: '3000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # The commits other templates were made from, to compare
+          # migrations with; and main, to be sure this commit is on it.
+          fetch-depth: 0
+      # The CLI a client's build asks whether every migration is applied
+      # (deployment_from_empty.yml pins the same version).
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Only main's own commits
+        run: |
+          set -euo pipefail
+          if [[ "${EVENT}" == workflow_dispatch && "${GITHUB_REF}" != refs/heads/main ]]; then
+            echo "::error::run this from main: a template is made only from migrations that have been reviewed and merged; this run is on ${GITHUB_REF}."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${HEAD_SHA}" origin/main; then
+            echo "::error::${HEAD_SHA:0:12} is not on main. Nothing was made."
+            exit 1
+          fi
+          echo "making the template for ${HEAD_SHA:0:12}"
+
+      - name: Install the client tools of the live major version
+        # pg_dump, pg_restore and psql 17: pg_dump must be at least the
+        # server's version, pg_restore must read what it wrote, and psql must
+        # understand the \restrict lines a 17.6 restore script carries. The
+        # apt client is 16 (restore_drill.yml installs these the same way).
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
+
+      - name: Whether these migrations need a template
+        id: wanted
+        # The register first: a control plane that does not have it yet
+        # (20261012070000 not released) cannot record one, and an unrecorded
+        # template is never restored, so nothing is made. Then whether one is
+        # recorded for exactly these migrations already.
+        run: |
+          set -euo pipefail
+          reg=supabase/ci/template_register.sh
+          if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so a template could be made and never recorded, and an unrecorded template is never restored. Nothing was made."
+            exit 1
+          fi
+          set +e
+          said=$($reg ready 2>&1)
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 3 ]]; then
+            echo "::notice::${said} Nothing was made; run this workflow again once the train has released it."
+            echo "make=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$rc" -eq 0 ]] || { echo "::error::${said}"; exit 1; }
+          set +e
+          found=$($reg match 2> "$RUNNER_TEMP/match.err")
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 0 ]]; then
+            made_from=$(sed -n 's/^git_sha=//p' <<< "$found")
+            if [[ "${FORCE}" != yes ]]; then
+              echo "::notice::a template for these migrations is recorded already, made from ${made_from:0:12}. Nothing to make; run with force to make one anyway."
+              echo "make=no" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "a template made from ${made_from:0:12} is recorded for these migrations; making another, as asked"
+          elif [[ "$rc" -eq 3 ]]; then
+            echo "$(cat "$RUNNER_TEMP/match.err"): making one"
+          else
+            cat "$RUNNER_TEMP/match.err"
+            exit 1
+          fi
+          echo "make=yes" >> "$GITHUB_OUTPUT"
+
+      - name: The schema build's key
+        id: keys
+        if: steps.wanted.outputs.make == 'yes'
+        # Exactly as schema.yml's "What this branch adds" computes its exact
+        # key, so the database that build cached under main is the one found.
+        run: |
+          set -euo pipefail
+          replay_inputs="supabase/ci/replay_superseded_calls.txt supabase/ci/replay_migrations.sh"
+          # shellcheck disable=SC2086
+          exact=$(git ls-tree -r HEAD -- supabase/migrations supabase/ci/00_host_bootstrap.sql $replay_inputs \
+                    | awk '{print $3, $4}' | sort | sha256sum | cut -c1-40)
+          echo "exact=${exact}" >> "$GITHUB_OUTPUT"
+          echo "exact key: ${exact}"
+
+      - name: The database the schema build made from these migrations, if it is cached
+        id: schema_cache
+        if: steps.wanted.outputs.make == 'yes'
+        uses: actions/cache/restore@v4
+        with:
+          # The same three paths as schema.yml's: the path list is part of a
+          # cache entry's identity.
+          path: |
+            ${{ runner.temp }}/clove_erp.dump
+            ${{ runner.temp }}/clove_erp.roles.sql
+            ${{ runner.temp }}/clove_erp.roles.tsv
+          key: clove-erp-schema-v4-pg17.6.1.167-${{ steps.keys.outputs.exact }}
+
+      - name: Start PostgreSQL, twice
+        # The image the schema build runs, pinned the same: one container for
+        # the build the template is made from, one for the proof it restores.
+        if: steps.wanted.outputs.make == 'yes'
+        run: |
+          set -euo pipefail
+          docker run -d --name clove-erp-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 supabase/postgres:17.6.1.167
+          docker run -d --name clove-erp-template -e POSTGRES_PASSWORD=postgres -p 5433:5432 supabase/postgres:17.6.1.167
+          for port in 5432 5433; do
+            ready=no
+            for i in $(seq 1 60); do
+              if pg_isready -h localhost -p "$port" -U postgres > /dev/null 2>&1; then ready=yes; break; fi
+              sleep 1
+            done
+            if [[ "$ready" != yes ]]; then
+              echo "::error::PostgreSQL on ${port} did not become ready within 60s"
+              exit 1
+            fi
+          done
+
+      - name: The database these migrations build
+        # The schema build's cached database, restored as that build restores
+        # it (its roles first, made settable, and compared afterwards); or,
+        # when the cache no longer holds it, every migration replayed as that
+        # build replays them. Either way, before any demonstration goes in.
+        if: steps.wanted.outputs.make == 'yes'
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: clove_erp
+          PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
+          PGOPTIONS: -c client_min_messages=warning
+          HIT: ${{ steps.schema_cache.outputs.cache-hit || 'false' }}
+        run: |
+          set -uo pipefail
+          dump="$RUNNER_TEMP/clove_erp.dump"
+          roles="$RUNNER_TEMP/clove_erp.roles.sql"
+          roles_expected="$RUNNER_TEMP/clove_erp.roles.tsv"
+          role_shape() {
+            psql -tAF$'\t' -d postgres -c \
+              "select rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin, rolbypassrls
+                 from pg_catalog.pg_roles order by rolname"
+          }
+          settable() {
+            sed -E '/^ALTER ROLE /s/ (NO)?(SUPERUSER|REPLICATION|BYPASSRLS)\b//g' "$roles"
+          }
+          built=""
+          if [[ "${HIT}" == true && -s "$dump" && -s "$roles" && -s "$roles_expected" ]]; then
+            log="$RUNNER_TEMP/restore.log"
+            if psql -v ON_ERROR_STOP=1 -d postgres -c 'drop database if exists clove_erp with (force)' \
+                 -c 'create database clove_erp template template0' > "$log" 2>&1 &&
+               settable | psql -d postgres >> "$log" 2>&1 &&
+               docker exec -i -e PGPASSWORD=postgres clove-erp-pg \
+                 pg_restore --exit-on-error --username=postgres --dbname=clove_erp >> "$log" 2>&1 < "$dump" &&
+               role_shape | diff -u "$roles_expected" - >> "$log" 2>&1; then
+              built="restored the database the schema build cached for these migrations"
+            else
+              echo "::warning::the cached database did not restore; replaying every migration instead"
+              head -40 "$log"
+            fi
+          else
+            echo "the schema build's cache does not hold these migrations' database; replaying every migration (about an hour)"
+          fi
+          if [[ -z "$built" ]]; then
+            set -e
+            psql -v ON_ERROR_STOP=1 -d postgres -c 'drop database if exists clove_erp with (force)' -c 'create database clove_erp'
+            $PSQL -f supabase/ci/00_host_bootstrap.sql
+            supabase/ci/replay_migrations.sh "$RUNNER_TEMP/replay_migrations"
+            for f in "$RUNNER_TEMP/replay_migrations"/*.sql; do
+              echo "── $(basename "$f")"
+              $PSQL --single-transaction -f "$f"
+            done
+            built="replayed every migration (the cache did not hold them)"
+          fi
+          set -e
+          $PSQL -c 'analyze'
+          echo "SOURCE=${built}" >> "$GITHUB_ENV"
+          echo "${built}"
+
+      - name: Make the template
+        id: make
+        if: steps.wanted.outputs.make == 'yes'
+        run: |
+          set -euo pipefail
+          GIT_SHA="${HEAD_SHA}" supabase/ci/template_make.sh "${SOURCE_URL}" "$RUNNER_TEMP/template" | tee "$RUNNER_TEMP/make.out"
+          for k in newest_version migration_count dump_sha256 fingerprint_sha256; do
+            v=$(sed -n "s/^${k}=//p" "$RUNNER_TEMP/make.out" | tail -n 1)
+            [[ -n "$v" ]] || { echo "::error::template_make.sh did not say ${k}."; exit 1; }
+            echo "${k}=${v}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Restore it into a fresh database, as a client is built
+        # An empty database with the host's stand-in (the bootstrap, whose
+        # default privileges grant every function created in public to anon,
+        # authenticated and service_role, as Supabase's do) and one confirmed
+        # sign-in, the proof's owner, exactly as deployment_from_empty.yml
+        # finds a client's project; then template_restore.sh, which refuses
+        # unless the fingerprint it reproduces is the one the template was
+        # made with, naming the objects that differ when it is not.
+        id: restore
+        if: steps.wanted.outputs.make == 'yes'
+        env:
+          PGHOST: localhost
+          PGPORT: '5433'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          DUMP_SHA256: ${{ steps.make.outputs.dump_sha256 }}
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 -d postgres -c 'create database clove_template'
+          psql -v ON_ERROR_STOP=1 --quiet -d clove_template -f supabase/ci/00_host_bootstrap.sql
+          psql -v ON_ERROR_STOP=1 -X -q -d clove_template -v owner="${PROOF_OWNER}" <<'SQL'
+          insert into auth.users (id, email, email_confirmed_at) values (gen_random_uuid(), :'owner', now());
+          SQL
+          TEMPLATE_SHA256="${DUMP_SHA256}" supabase/ci/template_restore.sh "${PROOF_URL}" "$RUNNER_TEMP/template" "${PROOF_OWNER}" \
+            | tee "$RUNNER_TEMP/restore.out"
+          locks=$(sed -n 's/^template_locks=//p' "$RUNNER_TEMP/restore.out" | tail -n 1)
+          echo "locks=${locks}" >> "$GITHUB_OUTPUT"
+          if [[ "$locks" =~ ^[0-9]+$ && "$locks" -gt "${LOCK_WARN}" ]]; then
+            echo "::warning::the restore's one transaction held ${locks} locks as it committed. A Micro instance's lock table is max_locks_per_transaction (64) times its connections and workers, shared by every session: a client's restore may run out of it, which only the live rehearsal can say."
+          fi
+
+      - name: It is what the migrations build
+        # The fingerprint of what came back equal to the build's; the
+        # platform's assurance green; the CLI finding every migration applied,
+        # so a client's next release applies only what is new; and the whole
+        # catalogue walked over it, with a demonstration seeded for the
+        # reconciliation to read, as the schema build walks it on a push.
+        if: steps.wanted.outputs.make == 'yes'
+        env:
+          PGHOST: localhost
+          PGPORT: '5433'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: clove_template
+          PSQL: psql -v ON_ERROR_STOP=1 --quiet --no-psqlrc
+          PGOPTIONS: -c client_min_messages=warning
+          CATALOGUE_CADENCE: push
+        run: |
+          set -euo pipefail
+          built=$(psql "${SOURCE_URL}" -X -q -tAc "select erp_meta.schema_fingerprint()::text" | jq -cS .)
+          restored=$(psql "${PROOF_URL}" -X -q -tAc "select erp_meta.schema_fingerprint()::text" | jq -cS .)
+          if [[ "$built" != "$restored" ]]; then
+            parts=$(jq -rn --argjson a "$built" --argjson b "$restored" \
+                      'if ($a | type) == "object" and ($b | type) == "object"
+                       then [($a | keys[]), ($b | keys[])] | unique | map(select($a[.] != $b[.])) | join(",")
+                       else "" end')
+            # The objects in those parts, by name only: each database's
+            # erp_meta.schema_fingerprint_detail(), one line an object, its
+            # part, its name and an md5 of what it is, compared.
+            for side in SOURCE PROOF; do
+              url="${SOURCE_URL}"; [[ "$side" == SOURCE ]] || url="${PROOF_URL}"
+              psql "$url" -X -q -tA -v parts="$parts" > "$RUNNER_TEMP/detail_${side}.tsv" <<'SQL'
+          select l.line
+            from (select d.part || E'\t' || translate(d.object, E'\t\n\r', '   ') || E'\t' || md5(coalesce(d.detail, '')) as line
+                    from erp_meta.schema_fingerprint_detail() d
+                   where d.part = any (string_to_array(:'parts', ','))) l
+           order by l.line collate "C";
+          SQL
+            done
+            awk -F '\t' '
+              FNR == NR { built[$1 "\t" $2] = $3; next }
+              { k = $1 "\t" $2
+                if (!(k in built)) print "  " $1 "  " $2 "  (only in the restore)"
+                else if (built[k] != $3) print "  " $1 "  " $2 "  (not as built)"
+                delete built[k] }
+              END { for (k in built) { split(k, p, "\t"); print "  " p[1] "  " p[2] "  (missing from the restore)" } }' \
+              "$RUNNER_TEMP/detail_SOURCE.tsv" "$RUNNER_TEMP/detail_PROOF.tsv" | LC_ALL=C sort > "$RUNNER_TEMP/detail_differ.txt"
+            echo "::error::the restored template's fingerprint is not the build's: ${parts:-the whole fingerprint} differ$( [[ -n "$parts" ]] && echo " ($(grep -c . "$RUNNER_TEMP/detail_differ.txt" || true) object(s))" ). Nothing is recorded."
+            head -n 50 "$RUNNER_TEMP/detail_differ.txt"
+            exit 1
+          fi
+          echo "fingerprint: the restored template's is the build's"
+
+          assurance="$RUNNER_TEMP/assurance.json"
+          psql "${PROOF_URL}" -X -q -tAc "select erp.platform_assurance();" > "$assurance"
+          bad=$(jq -r '.[] | select(.ok == false) | "\(.code): \((.detail // "")[0:200])"' "$assurance")
+          if [[ -n "$bad" ]]; then
+            echo "::error::platform_assurance() is not green on the restored template:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "platform_assurance: $(jq '[.[] | select(.ok == true)] | length' "$assurance") check(s) green"
+
+          out=$(supabase db push --dry-run --include-all --db-url "${PROOF_URL}?sslmode=disable" 2>&1) || {
+            echo "$out"
+            echo "::error::supabase db push --dry-run failed against the restored template."
+            exit 1
+          }
+          echo "$out"
+          if ! grep -qi "up to date" <<< "$out"; then
+            echo "::error::after the restore, supabase db push would still apply something: the history the template carries does not match the repository."
+            exit 1
+          fi
+
+          $PSQL -f supabase/ci/seed_demo.sql
+          $PSQL -c 'analyze'
+          supabase/ci/run_checks.sh
+
+      - name: Keep it
+        id: keep
+        # In the owner's bucket when it is configured (fleet_offsite.sh's
+        # settings and checks: uploaded, then the bytes asked for again);
+        # otherwise as an artifact of this run, below.
+        if: steps.wanted.outputs.make == 'yes'
+        env:
+          NEWEST: ${{ steps.make.outputs.newest_version }}
+          CLOVEERP_BACKUP_S3_ENDPOINT: ${{ secrets.CLOVEERP_BACKUP_S3_ENDPOINT }}
+          CLOVEERP_BACKUP_S3_BUCKET: ${{ secrets.CLOVEERP_BACKUP_S3_BUCKET }}
+          CLOVEERP_BACKUP_S3_KEY_ID: ${{ secrets.CLOVEERP_BACKUP_S3_KEY_ID }}
+          CLOVEERP_BACKUP_S3_SECRET: ${{ secrets.CLOVEERP_BACKUP_S3_SECRET }}
+          CLOVEERP_BACKUP_S3_REGION: ${{ vars.CLOVEERP_BACKUP_S3_REGION || 'auto' }}
+        run: |
+          set -euo pipefail
+          tar -C "$RUNNER_TEMP/template" -cf "$RUNNER_TEMP/template.tar" fingerprint.tsv manifest.json template.dump migrations.tsv
+          name="cloveerp-template-${NEWEST}-${HEAD_SHA:0:12}"
+          if [[ -n "${CLOVEERP_BACKUP_S3_ENDPOINT}" && -n "${CLOVEERP_BACKUP_S3_BUCKET}" &&
+                -n "${CLOVEERP_BACKUP_S3_KEY_ID}" && -n "${CLOVEERP_BACKUP_S3_SECRET}" ]]; then
+            # shellcheck source=supabase/ci/fleet_offsite.sh
+            . supabase/ci/fleet_offsite.sh
+            offsite_mask
+            key="templates/${NEWEST}/${HEAD_SHA}/template.tar"
+            if ! offsite_put "$RUNNER_TEMP/template.tar" "$key"; then
+              echo "::error::${OFFSITE_WHY}"
+              exit 1
+            fi
+            echo "storage_key=s3:${key}" >> "$GITHUB_OUTPUT"
+            echo "artifact=no" >> "$GITHUB_OUTPUT"
+            echo "kept in the bucket as ${key}"
+          else
+            echo "::notice::the bucket (CLOVEERP_BACKUP_S3_*) is not configured, so the template is kept as an artifact of this run for ninety days."
+            echo "storage_key=artifact:${GITHUB_RUN_ID}:${name}" >> "$GITHUB_OUTPUT"
+            echo "artifact=yes" >> "$GITHUB_OUTPUT"
+          fi
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Keep it as an artifact
+        if: steps.wanted.outputs.make == 'yes' && steps.keep.outputs.artifact == 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.keep.outputs.name }}
+          path: ${{ runner.temp }}/template.tar
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Record it on the control plane
+        if: steps.wanted.outputs.make == 'yes'
+        env:
+          KEY: ${{ steps.keep.outputs.storage_key }}
+        run: |
+          set -euo pipefail
+          supabase/ci/template_register.sh record "$RUNNER_TEMP/template" "${KEY}"
+
+      - name: Say what was made
+        if: always() && steps.wanted.outputs.make == 'yes'
+        env:
+          NEWEST: ${{ steps.make.outputs.newest_version }}
+          COUNT: ${{ steps.make.outputs.migration_count }}
+          DUMP: ${{ steps.make.outputs.dump_sha256 }}
+          FINGERPRINT: ${{ steps.make.outputs.fingerprint_sha256 }}
+          LOCKS: ${{ steps.restore.outputs.locks }}
+          KEY: ${{ steps.keep.outputs.storage_key }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          {
+            echo "## Template for ${HEAD_SHA:0:12}: ${OUTCOME}"
+            echo "- source: ${SOURCE:-not built}"
+            echo "- ${COUNT:-?} migrations, the newest ${NEWEST:-?}"
+            echo "- dump sha256 ${DUMP:-none}; fingerprint sha256 ${FINGERPRINT:-none}"
+            echo "- the restore's transaction held ${LOCKS:-an unknown number of} locks as it committed"
+            echo "- kept as ${KEY:-nothing}"
+          } >> "$GITHUB_STEP_SUMMARY"

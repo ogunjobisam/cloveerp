@@ -348,6 +348,57 @@ jobs:
         # nothing secret printed. Seconds.
         run: supabase/ci/fleet_backup_rehearsal.sh
 
+      - name: A client's template is made as rehearsed
+        # supabase/ci/template_make.sh (template.yml) dumps the database this
+        # build makes from the migrations into the template every client
+        # built from one is restored from. Here first, against a psql that
+        # answers from the environment and a pg_dump that keeps what it is
+        # given: what it refuses before anything is dumped (an organisation,
+        # a staff row, a release, a deployment.* setting, a register row; a
+        # history, schema, extension or role that is not what the migrations
+        # build; no fingerprint), what it asks pg_dump for, the manifest and
+        # history it writes, and no password printed. Seconds, no database.
+        run: supabase/ci/template_make_rehearsal.sh
+
+      - name: A client is restored from its template as rehearsed
+        # supabase/ci/template_restore.sh (deployment_from_empty.yml with
+        # method template, and template.yml's proof) runs as postgres into a
+        # client's empty database. Here first: what it refuses before
+        # anything is sent (a dump that is not the registered one, a
+        # fingerprint that is not the register's, a history that is not this
+        # checkout's, a database that is not empty, any sign-in but the
+        # owner's), that the restore is one transaction holding the host's
+        # extensions and roles, the host's default privileges switched off
+        # while the dump runs and put back exactly as they were, the dump,
+        # anon taken back and the generators, the fingerprint proved before
+        # the history and the owner are written (the objects that differ
+        # named when it is not), and analyze and the platform's schedule
+        # after it, never after a failed one. Seconds.
+        run: supabase/ci/template_restore_rehearsal.sh
+
+      - name: Which template a client is restored from is rehearsed
+        # supabase/ci/template_register.sh decides it, through the register's
+        # own lookup, and records each template template.yml proves;
+        # fleet_register.sh build-method says on the client's row how it was
+        # built. Here, against a small git repository and stand-ins for psql,
+        # gh and aws: a template matches only when its commit's migrations are
+        # exactly this checkout's, a fetched one is unpacked only when it is
+        # its four files, the bucket's secret never reaches an argument, and a
+        # control plane without the register says so and stops nothing.
+        # Seconds.
+        run: supabase/ci/template_register_rehearsal.sh
+
+      - name: A template that fails before it commits carries the build on from empty, as rehearsed
+        # supabase/ci/template_build.sh is deployment_from_empty.yml's
+        # method template: match, fetch, restore, or the reason none was
+        # restored. Here, against stand-ins for template_register.sh,
+        # template_restore.sh and psql: every failure before anything is
+        # committed carries the build on from_empty in the same run and says
+        # why on one line, whether anything was committed is the database's
+        # answer and never an exit code's, and anything committed (or a
+        # database that cannot say) stops the run. Seconds.
+        run: supabase/ci/template_build_rehearsal.sh
+
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the
         # whole schema, which catches an ungoverned door eventually. This closes

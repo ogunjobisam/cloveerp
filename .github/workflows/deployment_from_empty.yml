@@ -56,6 +56,32 @@ name: deployment from empty
 # About three and a half hours of replay, paced for a 1 GB instance. The job
 # allows five, because a replay that is cancelled by its timeout leaves the
 # migration it was on rolled back and is carried on with `resume`.
+#
+# Or from a template (method: template; the default stays from_empty until a
+# live rehearsal has proved it). template.yml makes one from the migrations
+# after each schema build on main, proves it and records it in the control
+# plane's register (erp_meta.provisioning_template). A template is used only
+# when one is recorded for exactly this checkout's migrations
+# (erp_meta.provisioning_template_for, and git for its commit's migrations),
+# and only for a database with nothing recorded in it. It is restored by
+# supabase/ci/template_restore.sh in one transaction — the host's default
+# privileges switched off and put back as they were, the dump, the
+# generators, the fingerprint proved against the register's, the history the
+# CLI reads and the owner on the staff list — so a restore that fails leaves
+# the database as empty as it found it.
+#
+# And then the build carries on from_empty IN THE SAME RUN (supabase/ci/
+# template_build.sh): no template registered, one that cannot be fetched, a
+# dump that is not the registered one, a restore whose one transaction rolled
+# back — each is said in the run and on the client's row, and every
+# migration is replayed instead, because nothing was committed. Whether
+# anything was is asked of the database, not taken from an exit code. Only a
+# failure after something was committed stops the run. There is no paid
+# rehearsal (the owner, 9 October): the first client built with method
+# template is the template's live proof, and this is what keeps that client's
+# build from depending on it. The way the database was actually built is
+# recorded on the client's row (erp_meta.record_deployment_build_method), and
+# every step before and after the build is the same either way.
 
 on:
   workflow_dispatch:
@@ -72,6 +98,11 @@ on:
         description: 'Carry on a build that stopped part-way (no organisation may exist yet).'
         type: boolean
         default: false
+      method:
+        description: 'from_empty replays every migration. template restores the template recorded for exactly these migrations, and carries on from_empty in the same run when it cannot (none recorded, not fetched, refused, or rolled back) or when carrying on a build.'
+        type: choice
+        options: [from_empty, template]
+        default: from_empty
 
 # The same group as a release to this deployment (deploy.yml), so a release
 # never runs into the project while it is being built, and the build never
@@ -85,6 +116,11 @@ jobs:
     name: build ${{ inputs.code }} from empty
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    # actions: read so a template kept as an artifact of the template.yml run
+    # that made it can be fetched; nothing here writes to the repository.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       project_ref: ${{ steps.project.outputs.ref }}
       origin: ${{ steps.project.outputs.origin }}
@@ -96,6 +132,9 @@ jobs:
       KIND: ${{ inputs.code == 'demo' && 'demonstration' || 'client' }}
       CONFIRM: ${{ inputs.confirm_project_ref }}
       RESUME: ${{ inputs.resume && 'yes' || 'no' }}
+      # A dispatch that names no method (the sweep's, before it passed one)
+      # replays, as every build did before templates.
+      METHOD: ${{ inputs.method || 'from_empty' }}
       CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       DEMO_URL: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
       DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
@@ -140,6 +179,10 @@ jobs:
           fi
           if ! [[ "${CODE}" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
             echo "::error::'${CODE}' is not a code: demo, or a client's code as the register holds it."
+            exit 1
+          fi
+          if [[ "${METHOD}" != from_empty && "${METHOD}" != template ]]; then
+            echo "::error::'${METHOD}' is not a way to build: from_empty or template."
             exit 1
           fi
           if ! [[ "${OWNER_EMAIL}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
@@ -195,7 +238,10 @@ jobs:
               exit 1
             fi
           fi
-          echo "building ${CODE} (${KIND}) from empty; platform owner ${OWNER_EMAIL}; resume: ${RESUME}"
+          # The owner's address never whole: the logs of a public repository
+          # are public.
+          owner_shown="${OWNER_EMAIL:0:1}…@${OWNER_EMAIL##*@}"
+          echo "building ${CODE} (${KIND}) from empty; platform owner ${owner_shown}; resume: ${RESUME}; method asked for: ${METHOD}"
 
       - name: Install the psql client
         run: |
@@ -234,8 +280,13 @@ jobs:
             fi
             ref="${CONFIRM}"
           fi
+          # How an earlier attempt built it, if one said (20261012070000): a
+          # build carried on keeps it.
+          built_by=$(sed -n 's/^build_method=//p' <<< "$row")
+          case "$built_by" in from_empty|template) : ;; *) built_by="" ;; esac
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
           echo "status=${status}" >> "$GITHUB_OUTPUT"
+          echo "build_method=${built_by}" >> "$GITHUB_OUTPUT"
           supabase/ci/fleet_register.sh event "${CODE}" dispatch done "run ${GITHUB_RUN_ID} started (${status}${ref:+, project ${ref}}; resume ${RESUME})"
           echo "${CODE}: ${status}${ref:+, project ${ref}}"
 
@@ -381,6 +432,51 @@ jobs:
           echo "BUILD_RESUME=${resume}" >> "$GITHUB_ENV"
           CHECK_ONLY=yes RESUME="${resume}" supabase/ci/build_from_empty.sh "$DB_URL" "$OWNER_EMAIL"
 
+      - name: Which way it is built
+        # from_empty replays every migration, as always. template is tried
+        # (supabase/ci/template_build.sh, below, after the host is provided)
+        # only into a database with nothing recorded yet: a build carried on
+        # part-way is carried on by replay (the Fleet view's Retry carries on
+        # from_empty), and keeps the way the register says an earlier attempt
+        # built it. BUILD_METHOD, not METHOD, carries the answer to the build
+        # steps; the template step changes it to from_empty when it carries
+        # on that way.
+        env:
+          BUILT_BY: ${{ steps.register.outputs.build_method }}
+        run: |
+          set -euo pipefail
+          method="${METHOD}"
+          if [[ "$method" == template && "${BUILD_RESUME}" == yes ]]; then
+            echo "::notice::method template was asked for, and this carries on a build that stopped part-way: the migrations already recorded stay, and the rest are replayed."
+            method=from_empty
+          fi
+          if [[ "${BUILD_RESUME}" == yes && -n "${BUILT_BY:-}" ]]; then
+            # An earlier attempt said how it built the database; carrying on
+            # does not change that.
+            echo "METHOD_RECORDED=yes" >> "$GITHUB_ENV"
+            echo "carrying on a build the register says was built ${BUILT_BY}; that stays recorded"
+          fi
+          echo "BUILD_METHOD=${method}" >> "$GITHUB_ENV"
+          echo "to be built by: ${method}"
+
+      - name: The client tools a template needs
+        # pg_restore 17 reads the dump template.yml's pg_dump 17 wrote, and
+        # psql 17 understands the \restrict lines its script carries; the apt
+        # client is 16 (restore_drill.yml installs these the same way). An
+        # install that fails does not stop the build: template_restore.sh then
+        # refuses the dump before anything is sent, and the build carries on
+        # from_empty.
+        if: env.BUILD_METHOD == 'template'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_restore --version
+
       - name: The erp schema is not exposed
         # As release.yml checks before every release, and for the same reason:
         # every table the doors read is writable by any signed-in person if
@@ -434,13 +530,109 @@ jobs:
             select 'extensions: ' || string_agg(extname, ', ' order by extname)
               from pg_catalog.pg_extension where extname in ('pg_cron', 'pg_net', 'supabase_vault', 'pgcrypto');"
 
+      - name: Restore the template into it, or carry on from empty
+        # supabase/ci/template_build.sh: the template the register holds for
+        # exactly this checkout's migrations, fetched, and restored by
+        # supabase/ci/template_restore.sh in one transaction (the host's
+        # default privileges switched off and put back as they were, the
+        # dump, the generators, the fingerprint proved against the
+        # register's, the history the CLI reads and the owner on the staff
+        # list, bound to their sign-in). template.yml restored this very
+        # template into a fresh database before it was recorded, and
+        # supabase/ci/template_build_rehearsal.sh and
+        # template_restore_rehearsal.sh run both scripts on every build.
+        #
+        # When the template path fails before anything is committed — none
+        # registered, a fetch that fails, a dump that is not the registered
+        # one, a transaction rolled back — the database is as this build
+        # found it (the script asks it), so this says why, here and on the
+        # client's row, and the build carries on from_empty below, in this
+        # run. Only a failure after something was committed stops the run.
+        if: env.BUILD_METHOD == 'template'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CLOVEERP_BACKUP_S3_ENDPOINT: ${{ secrets.CLOVEERP_BACKUP_S3_ENDPOINT }}
+          CLOVEERP_BACKUP_S3_BUCKET: ${{ secrets.CLOVEERP_BACKUP_S3_BUCKET }}
+          CLOVEERP_BACKUP_S3_KEY_ID: ${{ secrets.CLOVEERP_BACKUP_S3_KEY_ID }}
+          CLOVEERP_BACKUP_S3_SECRET: ${{ secrets.CLOVEERP_BACKUP_S3_SECRET }}
+          CLOVEERP_BACKUP_S3_REGION: ${{ vars.CLOVEERP_BACKUP_S3_REGION || 'auto' }}
+        run: |
+          set -euo pipefail
+          echo "PHASE=build" >> "$GITHUB_ENV"
+          event() { [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" build "$1" "$2" || true; }
+          event started "restoring the template registered for these migrations, in one transaction"
+          # The point-in-time-recovery target, as a release records it.
+          echo "DEPLOY_STARTED_AT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc 'select now()')" >> "$GITHUB_ENV"
+          log="$RUNNER_TEMP/template.log"
+          set +e
+          supabase/ci/template_build.sh "$DB_URL" "$OWNER_EMAIL" "$RUNNER_TEMP/template" 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          set -e
+          said() { sed -n "s/^$1=//p" "$log" | tail -n 1 | tr -d '\r'; }
+          method=$(said method); committed=$(said committed); fell_back=$(said fell_back)
+          sha=$(said template_sha256); made_at=$(said template_git_sha)
+          [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || sha=""
+          [[ "$made_at" =~ ^[0-9a-f]{40}$ ]] || made_at=""
+          .github/summarise.sh "$log" "## Built from a template, or carried on from empty"
+          if [[ "$committed" == yes && -n "$sha" ]]; then
+            # Restored (and perhaps failed after it): that is how it was built,
+            # said on the row now, so a Retry carrying on keeps it.
+            { echo "TEMPLATE_SHA256=${sha}"; echo "TEMPLATE_GIT_SHA=${made_at}"; } >> "$GITHUB_ENV"
+            if [[ "${KIND}" == client ]]; then
+              if supabase/ci/fleet_register.sh build-method "${CODE}" template "$sha"; then
+                echo "METHOD_RECORDED=yes" >> "$GITHUB_ENV"
+              else
+                echo "::warning::the register could not be told that ${CODE} was built from the template whose dump is ${sha:0:12}; the build carries on."
+              fi
+            fi
+          fi
+          if [[ "$status" -ne 0 ]]; then
+            echo "::error::the template was restored and then something after it failed, or the database cannot say whether anything of it was committed (the lines above say which). The database is not shown to be as this build found it, so the run stops here rather than replay over it: Retry from the Fleet view carries on (resume) from what is recorded."
+            exit 1
+          fi
+          if [[ "$method" == from_empty ]]; then
+            # Nothing of the template was committed: the replay below builds
+            # the database, in this run.
+            echo "::warning::method template was asked for, and no template was restored: ${fell_back:-the template path failed}. Nothing of it was committed, so this run carries on from_empty and replays every migration."
+            event note "no template restored (${fell_back:-the template path failed}); nothing of it was committed, so the build carries on from empty in this run"
+            {
+              echo "BUILD_METHOD=from_empty"
+              echo "TEMPLATE_SHA256="
+              echo "TEMPLATE_GIT_SHA="
+              echo "FELL_BACK=${fell_back:-the template path failed}"
+            } >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [[ "$method" != template || "$committed" != yes ]]; then
+            echo "::error::template_build.sh did not say how the database was built (method '${method}', committed '${committed}'). Nothing more is done."
+            exit 1
+          fi
+          echo "built from the template made at ${made_at:0:12} (dump ${sha:0:12})"
+
+      - name: Say how it is built
+        # On the client's row in the control plane's register
+        # (erp_meta.record_deployment_build_method, 20261012070000), before
+        # the replay starts and before it is marked built: the Fleet view shows
+        # which way each client was built. A template restored said so in the
+        # step above; a build carried on keeps what an earlier attempt said. A
+        # control plane that cannot hold it yet says so; it is never the
+        # reason a build stops.
+        if: env.KIND == 'client' && env.BUILD_METHOD != 'template' && env.METHOD_RECORDED != 'yes'
+        run: |
+          supabase/ci/fleet_register.sh build-method "${CODE}" from_empty ||
+            echo "::warning::the register could not be told that ${CODE} is built from empty; the build carries on."
+
       - name: Replay every migration into it
         # supabase/ci/build_from_empty.sh: each migration one transaction with
         # the statement timeout off, the owner on the staff list from the
         # migration that creates it, each recorded in
         # supabase_migrations.schema_migrations. supabase/ci/
         # build_from_empty_rehearsal.sh runs it against a scripted psql on
-        # every build.
+        # every build. Not when the database was restored from a template;
+        # in the same run when a template was asked for and none was
+        # restored, with nothing of it committed (the step above).
+        if: env.BUILD_METHOD != 'template'
         run: |
           set -euo pipefail
           echo "PHASE=build" >> "$GITHUB_ENV"
@@ -489,7 +681,9 @@ jobs:
           set -euo pipefail
           echo "PHASE=identity" >> "$GITHUB_ENV"
           [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" identity note "naming the platform's owner on its staff list" || true
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="$OWNER_EMAIL" <<'SQL'
+          # What the routine answers names the owner; the repository is public,
+          # so the address is shown as o…@domain.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="$OWNER_EMAIL" <<'SQL' | sed -E 's/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@/\1…@/g'
           select erp_meta.register_platform_owner(:'owner');
           SQL
 
@@ -748,8 +942,9 @@ jobs:
             echo "## ${CODE}"
             echo '```'
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'deployment: ' || erp.deployment_kind();"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'platform owner: ' || string_agg(email, ', ') from erp_meta.platform_staff where staff_role = 'owner' and revoked_at is null;"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'platform owner: ' || string_agg(left(email, 1) || '…@' || split_part(email, '@', 2), ', ') from erp_meta.platform_staff where staff_role = 'owner' and revoked_at is null;"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select 'migrations recorded: ' || count(*) from supabase_migrations.schema_migrations;"
+            echo "built by: ${BUILD_METHOD:-from_empty}${TEMPLATE_GIT_SHA:+, from the template made at ${TEMPLATE_GIT_SHA:0:12}}${FELL_BACK:+ (method template was asked for, and no template was restored: ${FELL_BACK})}"
             echo '```'
             echo
             if [[ "${KIND}" == client ]]; then

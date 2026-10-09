@@ -425,6 +425,8 @@ jobs:
           OWNER_EMAIL: ${{ inputs.owner_email }}
         run: |
           set -euo pipefail
+          # The owner as this public log may show them: o…@domain.
+          OWNER_SHOWN="${OWNER_EMAIL:0:1}…@${OWNER_EMAIL#*@}"
           if ! [[ "${OWNER_EMAIL}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
             echo "::error::CLOVEERP_PLATFORM_OWNER_EMAIL is not set to an email address, so nothing says who may run the ${TARGET}'s console. Nothing was applied."
             exit 1
@@ -442,10 +444,10 @@ jobs:
           SQL
             )
             if [[ "$staff" != "1 1" ]]; then
-              echo "::error::the demonstration's platform staff list is not exactly ${OWNER_EMAIL}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound and confirmed: ${staff##* }). Somebody else may reach its console. Nothing was applied, and production is not released."
+              echo "::error::the demonstration's platform staff list is not exactly ${OWNER_SHOWN}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound and confirmed: ${staff##* }). Somebody else may reach its console. Nothing was applied, and production is not released."
               exit 1
             fi
-            echo "staff: ${OWNER_EMAIL}, bound to a confirmed sign-in, and nobody else"
+            echo "staff: ${OWNER_SHOWN}, bound to a confirmed sign-in, and nobody else"
           else
             staff=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -tA -v owner="${OWNER_EMAIL}" <<'SQL'
           select count(*) filter (
@@ -463,10 +465,10 @@ jobs:
           SQL
             )
             if [[ "$staff" != "0 1" ]]; then
-              echo "::error::the ${TARGET}'s platform staff list is not safe to release into: active rows not bound to a confirmed sign-in: ${staff%% *}; the owner's row (${OWNER_EMAIL}), bound and confirmed: ${staff##* }. An unbound row is one anybody who confirms that address would be matched to. Nothing was applied, and the control plane is not released."
+              echo "::error::the ${TARGET}'s platform staff list is not safe to release into: active rows not bound to a confirmed sign-in: ${staff%% *}; the owner's row (${OWNER_SHOWN}), bound and confirmed: ${staff##* }. An unbound row is one anybody who confirms that address would be matched to. Nothing was applied, and the control plane is not released."
               exit 1
             fi
-            echo "staff: ${OWNER_EMAIL} bound to a confirmed sign-in, and every active row bound"
+            echo "staff: ${OWNER_SHOWN} bound to a confirmed sign-in, and every active row bound"
           fi
 
       - name: This database is the ${{ inputs.target }}
