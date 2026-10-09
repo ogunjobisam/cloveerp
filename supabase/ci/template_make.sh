@@ -255,7 +255,15 @@ roles=$(ask "with schemas as (
          order by r.rolname), '[]')
     from pg_catalog.pg_roles r
     join (select distinct g from grantees where g <> 0) a on a.g = r.oid
-    left join pg_catalog.pg_auth_members m on m.roleid = r.oid and m.member = (select oid from pg_catalog.pg_roles where rolname = current_user)
+    -- One row a role, however many grantors made the builder its member: on
+    -- the build's container the builder holds clove_enquiry from two, and a
+    -- role listed twice was made twice by the restore ('role "clove_enquiry"
+    -- already exists', template.yml, 9 October).
+    left join lateral (
+      select true as roleid, bool_or(x.set_option) as set_option, bool_or(x.inherit_option) as inherit_option
+        from pg_catalog.pg_auth_members x
+       where x.roleid = r.oid and x.member = (select oid from pg_catalog.pg_roles where rolname = current_user)
+      having count(*) > 0) m on true
    where r.rolname not in ('postgres', 'anon', 'authenticated', 'service_role', 'authenticator', 'dashboard_user', 'pgbouncer')
      and r.rolname !~ '^(pg_|supabase_)'")
 bad_roles=$(jq -r '[.[] | select(.login or .bypassrls or .superuser) | .name] | join(", ")' <<< "$roles")

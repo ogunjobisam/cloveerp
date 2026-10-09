@@ -351,6 +351,11 @@ check "$no_secret"' && '"$no_address" "no password printed, and the owner's addr
 run "a role the host already has" FAKE_PRESENT_ROLES="clove_enquiry"
 check '[[ $status -eq 0 ]] && ! grep -q "^create role" "$work/fake/restore.sql" && grep -qx "grant clove_enquiry to current_user with set true, inherit false;" "$work/fake/restore.sql"' \
       "not made again, and the restorer still able to become it"
+make_manifest '.roles += [.roles[0] + {builder_set: false}]'
+run "a role the manifest lists twice"
+check '[[ $status -eq 0 && $(grep -c "^create role clove_enquiry " "$work/fake/restore.sql") -eq 1 && $(grep -c "^grant clove_enquiry to current_user" "$work/fake/restore.sql") -eq 1 ]] && grep -qx "grant clove_enquiry to current_user with set true, inherit false;" "$work/fake/restore.sql"' \
+      "made once and granted once, with what either entry gave"
+make_manifest
 
 # 5. A restore that does not hold
 run "a transaction that is refused" FAKE_RESTORE_FAIL="CLOVEERP_TEMPLATE_DEFAULTS: the host's default privileges were not put back as they were (gained public r authenticated=SELECT)"
