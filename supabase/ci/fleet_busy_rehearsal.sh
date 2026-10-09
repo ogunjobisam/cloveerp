@@ -291,6 +291,35 @@ gh_job 399 "patch_auth for acme" in_progress "$ROT=completed" "Change them, one 
 gh_run fleet_secrets.yml 400 queued workflow_dispatch "fleet secrets: set_function_secrets for all"
 run -- wait 60 runs "fleet_secrets.yml=$ROT"
 check '[[ $status -eq 0 && "$(sleeps)" == 0 ]]' "neither waited for by an export: no password changes"
+fresh "the email provider's webhooks being made, or one deleted, queued"
+gh_run fleet_secrets.yml 399 queued workflow_dispatch "fleet secrets: resend_webhook for all"
+gh_run fleet_secrets.yml 400 queued workflow_dispatch "fleet secrets: resend_webhook_delete for omega"
+run -- wait 60 runs "fleet_secrets.yml=$ROT"
+check '[[ $status -eq 0 && "$(sleeps)" == 0 && "$(grep -cE "runs/(399|400)/jobs" "$FAKE_DIR/gh.log")" == 0 ]]' \
+      "neither waited for by an export or a backup, nor even asked about: no password changes"
+# A rename waits for "Change them" because set_function_secrets and
+# patch_auth set the address it changes; the webhooks set neither, and take
+# minutes a client.
+fresh "the email provider's webhooks being made for the fleet, in the step a rename waits for"
+gh_run fleet_secrets.yml 399 in_progress workflow_dispatch "fleet secrets: resend_webhook for all"
+gh_job 399 "resend_webhook for all" in_progress "$ROT=completed" "Change them, one client at a time=in_progress"
+gh_run fleet_secrets.yml 400 queued workflow_dispatch "fleet secrets: resend_webhook_delete for omega"
+run GITHUB_RUN_ID=401 -- wait 20 runs "fleet_secrets.yml=Change them, one client at a time" "fleet_secrets.yml=$ROT"
+check '[[ $status -eq 0 && "$(sleeps)" == 0 && "$(grep -cE "runs/(399|400)/jobs" "$FAKE_DIR/gh.log")" == 0 ]]' \
+      "not waited for by a rename, nor even asked about: they set no address and no auth setting"
+fresh "a change of auth settings in the step a rename waits for, beside the webhooks"
+gh_run fleet_secrets.yml 398 in_progress workflow_dispatch "fleet secrets: patch_auth for acme"
+gh_job 398 "patch_auth for acme" in_progress "$ROT=completed" "Change them, one client at a time=in_progress"
+gh_run fleet_secrets.yml 399 in_progress workflow_dispatch "fleet secrets: resend_webhook for all"
+gh_job 399 "resend_webhook for all" in_progress "$ROT=completed" "Change them, one client at a time=in_progress"
+run GITHUB_RUN_ID=401 -- runs "fleet_secrets.yml=Change them, one client at a time" "fleet_secrets.yml=$ROT"
+check '[[ $status -eq 1 && "$out" == "fleet_secrets.yml run 398: in \"Change them, one client at a time\"" && "$(grep -c "runs/399/jobs" "$FAKE_DIR/gh.log")" == 0 ]]' \
+      "the auth settings still waited for, the webhooks not"
+fresh "a run from before titles named the action, in the step a rename waits for"
+gh_run fleet_secrets.yml 399 in_progress workflow_dispatch "fleet secrets"
+gh_job 399 "fleet secrets" in_progress "$ROT=completed" "Change them, one client at a time=in_progress"
+run GITHUB_RUN_ID=401 -- runs "fleet_secrets.yml=Change them, one client at a time"
+check '[[ $status -eq 1 ]]' "still waited for: not knowing what it changes is not a clear road"
 fresh "a rotation queued, titled so"
 gh_run fleet_secrets.yml 400 queued workflow_dispatch "fleet secrets: rotate_db_password for all"
 run -- runs "fleet_secrets.yml=$ROT"
@@ -360,7 +389,7 @@ for asker in .github/workflows/fleet_export.yml supabase/ci/fleet_backup.sh .git
   check 'grep -qF "\"fleet_secrets.yml=$ROT\"" "$ROOT/$asker"' "${asker##*/} asks about a new database password by that step's name"
 done
 for pair in "release.yml RELEASE_WAIT_STEP" "release.yml RELEASE_REPLAY_STEP" "fleet_backup.yml BACKUP_STEP" "fleet_export.yml EXPORT_STEP" \
-            "fleet_secrets.yml ROTATION_STEP"; do
+            "fleet_secrets.yml ROTATION_STEP" "fleet_secrets.yml CHANGES_STEP"; do
   wf="${pair% *}"; var="${pair#* }"
   step_name=$(sed -n "s/^${var}=\"\(.*\)\"\$/\1/p" "$SCRIPT")
   check '[[ -n "$step_name" ]] && has_step "$wf" "$step_name"' "${var} (\"${step_name}\") is a step of ${wf}"
@@ -372,8 +401,10 @@ SECRETS_WF="$ROOT/.github/workflows/fleet_secrets.yml"
 check 'grep -qxF "run-name: \"fleet secrets: \${{ inputs.action }} for \${{ inputs.code }}\"" "$SECRETS_WF"' \
       "fleet_secrets.yml titles each run with its action"
 actions=$(awk '/^      action:/ { a = 1 } a && /^      code:/ { exit } a && /^          - / { sub(/^ *- /, ""); print }' "$SECRETS_WF" | tr '\n' ' ')
-check '[[ "$actions" == "rotate_db_password set_function_secrets patch_auth " ]] && grep -qF "test(\"rotate_db_password\")" "$SCRIPT" && grep -qF "test(\"set_function_secrets|patch_auth\")" "$SCRIPT"' \
-      "and its actions are the three the title rule tells apart"
+check '[[ "$actions" == "rotate_db_password set_function_secrets patch_auth resend_webhook resend_webhook_delete " ]] && grep -qF "test(\"rotate_db_password\")" "$SCRIPT" && grep -qF "test(\"set_function_secrets|patch_auth|resend_webhook\")" "$SCRIPT" && grep -qF "test(\"resend_webhook\") | not" "$SCRIPT"' \
+      "and its actions are the five the title rules tell apart"
+check 'grep -qF "fleet_busy.sh wait 20 runs \"fleet_secrets.yml=Change them, one client at a time\"" "$ROOT/.github/workflows/fleet_rename.yml"' \
+      "a rename asks about the step the webhooks are left out of, by its name"
 check 'grep -qF "fleet_busy.sh\" wait \"\$ROTATION_WAIT\" runs-in \"\$ROTATION_SPEC\"" "$ROOT/supabase/ci/fleet_backup.sh"' \
       "fleet_backup.sh, asking from inside its copying, asks only whether a rotation is in its step"
 check 'grep -qF "name: release to the \${{ inputs.target }}" "$ROOT/.github/workflows/release.yml" && grep -qF "name: export \${{ inputs.code }}" "$ROOT/.github/workflows/fleet_export.yml"' \

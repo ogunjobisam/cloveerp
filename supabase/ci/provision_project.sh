@@ -79,16 +79,41 @@
 #                                  digest= when it has none. Changes nothing
 #                                  (fleet_rename.sh reads CLOVEERP_APP_URL
 #                                  back with it).
+#   resend-webhook <ref> create|verify|delete|prove
+#                                  the project's own endpoint at Resend, the
+#                                  email provider, which tells it what became
+#                                  of the mail it sent
+#                                  (supabase/functions/resend_webhook). Below,
+#                                  at the subcommand. Prints
+#                                  resend-webhook=<what was done> and id=<the
+#                                  endpoint's id>; never the admin key, the
+#                                  signing secret, or an email address. Exit
+#                                  2 refused, nothing changed; 3 stopped
+#                                  after changing something, leaving no
+#                                  endpoint the project's function takes the
+#                                  events of; 4 its database recorded the
+#                                  proof; 6 its database has not been
+#                                  released 20261012050000.
 #
 # Environment: SUPABASE_ACCESS_TOKEN (required; org-scoped, with the
 # projects permissions), CURL (the curl command, default curl), API (default
 # https://api.supabase.com), and the MAPI_* settings of
 # supabase/ci/management_api.sh, through which every Management API call
 # here is made: a 429 or a 5xx is asked again with backoff, never refused at
-# the first answer.
+# the first answer. resend-webhook also reads RESEND_ADMIN_API_KEY (a
+# full-access Resend key, a repository secret only the workflows use; the
+# projects' own RESEND_API_KEY only sends), RESEND_API (default
+# https://api.resend.com), asked with the same patience,
+# CLOVEERP_LIVE_DATABASE_URL, the control plane, whose vault keeps each
+# endpoint (supabase/ci/fleet_register.sh, PSQL), and
+# CLOVEERP_DEMO_DATABASE_URL, the demonstration's database, which
+# resend-webhook create asks before it makes the demonstration's endpoint.
 #
-# Nothing here touches a database: that is build_from_empty.sh, over a
-# connection the workflow composes from `pooler` and the vault.
+# Nothing here changes a client's database: that is build_from_empty.sh,
+# over a connection the workflow composes from `pooler` and the vault. Only
+# resend-webhook reaches a database: the control plane's vault, and, before
+# it makes an endpoint, the project's own database, asked one question and
+# changed in nothing.
 set -euo pipefail
 
 CURL_CMD="${CURL:-curl}"
@@ -119,6 +144,42 @@ api() {
   local out
   out=$(mapi "$method" "$path" "$body") || refuse "${method} ${path} failed."
   printf '%s' "$out"
+}
+
+# digest_of_secret <ref> <NAME>: the SHA-256 of the project's Edge Function
+# secret NAME, in lower case, as the Management API lists it (never the
+# value); empty when the project has none. Refuses what is not a list of
+# secrets, and a listing that is not a digest, without printing it. Called
+# as $(digest_of_secret ...) || exit 2: a command substitution does not
+# inherit set -e, so every failure here exits by hand.
+digest_of_secret() {
+  local ref="$1" name="$2" got digest
+  got=$(api GET "/v1/projects/${ref}/secrets") || exit 2
+  digest=$(jq -r --arg n "$name" 'if type == "array" then ([.[] | select(.name == $n) | .value][0] // "") else error("not a list") end' <<< "$got" 2> /dev/null) ||
+    refuse "${ref}'s secrets answered something that is not a list of them."
+  # A digest is 64 hexadecimal characters; anything else is not one, and
+  # is not printed.
+  [[ -z "$digest" || "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || refuse "${ref} lists ${name} with something that is not a SHA-256 digest."
+  printf '%s' "$digest" | tr 'A-F' 'a-f'
+}
+
+# sha256_of <value>: its SHA-256 in lower-case hexadecimal. The value goes
+# through a pipe, never on a command line.
+sha256_of() {
+  if command -v sha256sum > /dev/null 2>&1; then
+    printf '%s' "$1" | sha256sum | cut -d ' ' -f 1
+  else
+    printf '%s' "$1" | shasum -a 256 | cut -d ' ' -f 1
+  fi
+}
+
+# mask <value>: hidden from a GitHub Actions log from here on. On standard
+# error, because the callers capture standard output, and the runner reads
+# its commands from both. Elsewhere nothing secret is printed at all.
+mask() {
+  if [[ "${GITHUB_ACTIONS:-}" == true && -n "${1:-}" ]]; then
+    echo "::add-mask::$1" >&2
+  fi
 }
 
 cmd="${1:-}"
@@ -396,16 +457,522 @@ case "$cmd" in
     name="${2:?usage: provision_project.sh secret-digest <ref> <NAME>}"
     is_ref "$ref" || refuse "'$ref' is not a project ref."
     [[ "$name" =~ ^[A-Z][A-Z0-9_]*$ ]] || refuse "'${name}' is not a secret name (A-Z, 0-9, _)."
-    got=$(api GET "/v1/projects/${ref}/secrets")
-    digest=$(jq -r --arg n "$name" 'if type == "array" then ([.[] | select(.name == $n) | .value][0] // "") else error("not a list") end' <<< "$got" 2> /dev/null) ||
-      refuse "${ref}'s secrets answered something that is not a list of them."
-    # A digest is 64 hexadecimal characters; anything else is not one, and
-    # is not printed.
-    [[ -z "$digest" || "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || refuse "${ref} lists ${name} with something that is not a SHA-256 digest."
-    echo "digest=$(printf '%s' "$digest" | tr 'A-F' 'a-f')"
+    digest=$(digest_of_secret "$ref" "$name") || exit 2
+    echo "digest=${digest}"
+    ;;
+
+  resend-webhook)
+    # Resend tells a project what became of the mail it sent (delivered,
+    # delayed, bounced, complained of) by posting to its function
+    # supabase/functions/resend_webhook, which checks Resend's signature
+    # (src/lib/email/resend-webhook.ts) and hands the event to
+    # erp.record_email_delivery_event(). Until 9 October that endpoint was a
+    # step of the checklist, made by hand in Resend's dashboard. Now every
+    # project has an endpoint of its own (the owner's decision of 9 October,
+    # batch 6), made here: https://<ref>.supabase.co/functions/v1/resend_webhook,
+    # sent the six kinds of event the function reads (OF_TYPE in
+    # src/lib/email/resend-webhook.ts; the rehearsal checks the two agree).
+    # A Resend webhook hears every event of the whole account, and the
+    # database records only what matches mail it sent itself
+    # (20261012050000), so one client's endpoint never stores another's
+    # recipients.
+    #
+    # The endpoint's id and signing secret are kept in the control plane's
+    # vault as cloveerp:deployment:<ref>:resend_webhook, a JSON {id, secret},
+    # before the project is given the secret (CLOVEERP_RESEND_WEBHOOK_SECRET,
+    # which the function reads before its own vault), so the secret a project
+    # holds is never held only by this run. The demonstration and the control
+    # plane are kept the same way, under their own refs.
+    #
+    #   create  first, the project's own database is asked whether it has
+    #           been released 20261012050000, which records only events that
+    #           match mail it sent: it has when it has
+    #           erp_meta.deployment_checklist_by_build(text,text,boolean),
+    #           which that migration gives every database. One that has not
+    #           would keep every event of the account, other projects'
+    #           recipients among them, so nothing is asked of Resend and this
+    #           exits 6: release to it first. The database is the control
+    #           plane's (CLOVEERP_LIVE_DATABASE_URL) when <ref> is its
+    #           project, the demonstration's (CLOVEERP_DEMO_DATABASE_URL)
+    #           when <ref> is that, and otherwise the one the control plane's
+    #           vault keeps as cloveerp:deployment:<ref>:db_url.
+    #           Then reuse, mend or make, so it may be run any number of
+    #           times: the endpoint the vault holds is reused when Resend
+    #           still has it at this project's address, sent the six events
+    #           and enabled, and signing with the secret the vault keeps (as
+    #           GET /webhooks/<id> gives it: a secret rotated in Resend's
+    #           dashboard would have every real event refused while a proof
+    #           signed with the vault's passed); the project is then given
+    #           that secret again only if its digest differs. Anything else
+    #           at this address is deleted and made again: an endpoint that
+    #           hears other events or is disabled; one whose secret the vault
+    #           does not hold, or Resend signs with another or will not say
+    #           (Resend gives the secret when an endpoint is made, so one
+    #           made again is known); and any endpoint at this project's
+    #           address that the vault does not hold, which is what a run
+    #           that stopped between making one and keeping it leaves. One
+    #           the vault holds that points at another address may be
+    #           another project's: it is never deleted, only forgotten (its
+    #           entry removed from the vault). Deleted first, made after, so
+    #           a project never has two; a deletion Resend answers 404 to is
+    #           done (a retry after an answer that was lost). Made through
+    #           POST /webhooks, asked again only after a 429 (a 5xx or no
+    #           answer may come after it was made: then whatever appeared at
+    #           this address is deleted, or, when Resend cannot be asked,
+    #           said to be perhaps left for the next run to delete). If
+    #           Resend gives no signing secret when it makes one, it is asked
+    #           for it once (GET /webhooks/<id>); if it still gives none, the
+    #           endpoint is deleted (an endpoint whose events cannot be
+    #           verified is refused at every event) and this refuses: kept by
+    #           deletion, never by an endpoint nobody can check. Then the
+    #           project's secret is read back by its digest. Stopped after it
+    #           began to change anything, it exits 3: the project may have
+    #           no endpoint whose events its function takes, and a caller
+    #           that ticked the checklist unticks it.
+    #   verify  changes nothing: the vault holds an endpoint and its secret,
+    #           Resend has it at this address with the six events, enabled
+    #           and signing with that secret, no other endpoint is at this
+    #           address, and the project's CLOVEERP_RESEND_WEBHOOK_SECRET has
+    #           the digest of the vault's.
+    #   delete  for a client going, or an endpoint that did not prove: every
+    #           endpoint at its address deleted at Resend (a 404 is one
+    #           deleted already), then the vault's entry (kept until then, so
+    #           a run that stops is carried on by another). One the vault
+    #           holds that points elsewhere is left there and forgotten. The
+    #           project's function secret is left: nothing signs with it.
+    #   prove   one signed event posted to the function, signed with the
+    #           vault's secret as Resend signs (Svix's scheme: HMAC-SHA256
+    #           over id.timestamp.body, keyed by the secret's base64 after
+    #           whsec_, padded to a whole number of quartets first, as atob
+    #           reads one that is not): an email.delivered for a message id
+    #           that is nobody's and no address at all, which the function
+    #           must take (200) and the database must answer {"recorded":
+    #           false}. A 401 is asked again (WEBHOOK_PROVE_ATTEMPTS, default
+    #           6, WEBHOOK_PROVE_WAIT seconds apart, default 10): a secret
+    #           just set may not have reached the function yet. Needs no admin
+    #           key. Exit 4 when the database recorded it: one that keeps
+    #           events not its own. On any failure the caller deletes the
+    #           endpoint again with its vault entry, and unticks the
+    #           checklist (fleet_secrets.sh, the build's step): an endpoint
+    #           not proved is not left to run against a database that may
+    #           keep what is not its own.
+    #
+    # Resend's webhook API as this was written (POST, GET, DELETE /webhooks,
+    # GET /webhooks/<id>; {endpoint, events}; signing_secret given when one
+    # is made and by GET /webhooks/<id>; a listing paged by limit and after)
+    # is to be confirmed by the first live run; every answer is read
+    # defensively, and every way this can stop says what it left. Should GET
+    # /webhooks/<id> never give the secret, every create makes the endpoint
+    # again (deleted first, so never two) and says why.
+    ref="${1:?usage: provision_project.sh resend-webhook <ref> create|verify|delete|prove}"
+    what="${2:?usage: provision_project.sh resend-webhook <ref> create|verify|delete|prove}"
+    is_ref "$ref" || refuse "'$ref' is not a project ref."
+    case "$what" in
+      create|verify|delete|prove) ;;
+      *) refuse "'${what}' is not create, verify, delete or prove; nothing was asked." ;;
+    esac
+    if [[ "$what" != prove && -z "${RESEND_ADMIN_API_KEY:-}" ]]; then
+      refuse "RESEND_ADMIN_API_KEY is not set (a full-access Resend key, a repository secret only the workflows use), so no endpoint can be made, read or deleted; nothing was asked."
+    fi
+    [[ -n "${CLOVEERP_LIVE_DATABASE_URL:-}" ]] ||
+      refuse "CLOVEERP_LIVE_DATABASE_URL is not set, so the control plane's vault, which keeps each endpoint and its signing secret, cannot be reached; nothing was asked."
+
+    RESEND_API="${RESEND_API:-https://api.resend.com}"
+    REG="$HERE/fleet_register.sh"
+    endpoint="https://${ref}.supabase.co/functions/v1/resend_webhook"
+    vault_name="cloveerp:deployment:${ref}:resend_webhook"
+    secret_name="CLOVEERP_RESEND_WEBHOOK_SECRET"
+    # OF_TYPE in src/lib/email/resend-webhook.ts, in its order.
+    events='["email.sent","email.delivery_delayed","email.delivered","email.opened","email.complained","email.bounced"]'
+    want_events=$(jq -c 'sort' <<< "$events")
+
+    # resend <method> <path> [body]: Resend's API with the admin key, as
+    # mapi asks the Management API (a 429 or a 5xx again, with backoff,
+    # never sooner than Retry-After). The body on a 2xx; otherwise a
+    # failure, the status and Resend's own words said on standard error.
+    resend() {
+      patient_request "Resend ${1} ${2%%\?*}" "$1" "${RESEND_API}${2}" "${3:-}" \
+        -H "Authorization: Bearer ${RESEND_ADMIN_API_KEY}"
+    }
+    # every_endpoint: each endpoint Resend has, one JSON line each, {id,
+    # endpoint, events, status}, through every page of the listing.
+    every_endpoint() {
+      local page after="" pages=0
+      while :; do
+        page=$(resend GET "/webhooks?limit=100${after:+&after=${after}}") || return 1
+        jq -c '(.data // error("no data"))[] | {id: (.id // ""), endpoint: (.endpoint // .url // ""), events: (.events // []), status: (.status // "")}' <<< "$page" 2> /dev/null || {
+          echo "x Resend listed its endpoints as something that is not a list of them" >&2
+          return 1
+        }
+        [[ "$(jq -r '.has_more // false' <<< "$page")" == true ]] || return 0
+        after=$(jq -r '(.data // []) | last | .id // empty' <<< "$page")
+        pages=$((pages + 1))
+        if [[ -z "$after" || "$pages" -ge 20 ]]; then
+          echo "x Resend's listing of endpoints did not end after ${pages} page(s)" >&2
+          return 1
+        fi
+      done
+    }
+    is_id() { [[ "$1" =~ ^[A-Za-z0-9_-]{1,100}$ ]]; }
+    # remove <id> <why>: deleted at Resend, or a failure said. A 404 is an
+    # endpoint deleted already: a DELETE whose answer was lost (a 5xx after
+    # it was done) is asked again, and the second answer is a 404.
+    remove() {
+      local said rc=0 st
+      said=$(mktemp "${TMPDIR:-/tmp}/resend-delete.XXXXXX") || return 1
+      MAPI_STATUS_FILE="$said.status" resend DELETE "/webhooks/$1" > /dev/null 2> "$said" || rc=$?
+      st=$(cat "$said.status" 2> /dev/null || true)
+      if [[ "$rc" -eq 0 ]]; then
+        cat "$said" >&2
+        echo "deleted the endpoint $1 at Resend: $2" >&2
+      elif [[ "$st" == 404 ]]; then
+        grep -v '^x ' "$said" >&2 || true
+        echo "the endpoint $1 is not at Resend (404), so it is deleted already: $2" >&2
+        rc=0
+      else
+        cat "$said" >&2
+        rc=1
+      fi
+      rm -f "$said" "$said.status"
+      return "$rc"
+    }
+    # sign <secret> <content>: the signature Resend sends (v1), as
+    # src/lib/email/resend-webhook.ts computes it. The content through a
+    # pipe; the key to openssl as hex. The base64 is padded to a whole number
+    # of quartets first: atob reads an unpadded key, and openssl reads none
+    # of a group that is not whole.
+    sign() {
+      local hex key="${1#whsec_}"
+      while (( ${#key} % 4 )); do key="${key}="; done
+      hex=$(printf '%s' "$key" | openssl base64 -d -A 2> /dev/null | od -An -vtx1 | tr -d ' \n')
+      [[ -n "$hex" ]] || return 1
+      printf '%s' "$2" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:${hex}" -binary | openssl base64 -A
+    }
+    # left: how this stops from here on. 2 while nothing has been changed;
+    # 3 once anything has been deleted, made, forgotten or given, when the
+    # project may be left with no endpoint whose events its function takes,
+    # and a caller that ticked the checklist unticks it.
+    left=2
+    stop() {
+      echo "x $*" >&2
+      exit "$left"
+    }
+
+    # keeps_its_own_mail: whether the project's own database has been
+    # released 20261012050000, asked before anything of Resend (create).
+    # Exit 6 when it has not; a refusal when it cannot be asked.
+    keeps_its_own_mail() {
+      local url got
+      if [[ "${CLOVEERP_LIVE_DATABASE_URL}" == *"$ref"* ]]; then
+        url="$CLOVEERP_LIVE_DATABASE_URL"
+      elif [[ -n "${CLOVEERP_DEMO_DATABASE_URL:-}" && "${CLOVEERP_DEMO_DATABASE_URL}" == *"$ref"* ]]; then
+        url="$CLOVEERP_DEMO_DATABASE_URL"
+      else
+        url=$("$REG" vault-get "cloveerp:deployment:${ref}:db_url") ||
+          refuse "the control plane's vault could not be read for ${ref}'s database, so whether it keeps only its own mail (20261012050000) is not known; nothing was asked of Resend."
+        mask "$url"
+        [[ -n "$url" ]] ||
+          refuse "${ref}'s database cannot be reached: it is neither the control plane's nor the demonstration's (CLOVEERP_DEMO_DATABASE_URL), and the control plane's vault has no cloveerp:deployment:${ref}:db_url. Whether it keeps only its own mail (20261012050000) is not known, so nothing was asked of Resend."
+        [[ "$url" == *"$ref"* ]] ||
+          refuse "cloveerp:deployment:${ref}:db_url in the control plane's vault does not name ${ref}; nothing was asked of Resend."
+      fi
+      got=$(${PSQL:-psql} "$url" -v ON_ERROR_STOP=1 -v VERBOSITY=terse -X -q -tA <<'SQL'
+-- fleet: target-keeps-its-own-mail
+set statement_timeout = '30s';
+select (to_regprocedure('erp_meta.deployment_checklist_by_build(text,text,boolean)') is not null)::text;
+SQL
+) || refuse "${ref}'s database could not be asked whether it keeps only its own mail (20261012050000) (the line above says why); nothing was asked of Resend."
+      if [[ "$got" != true ]]; then
+        echo "x ${ref}'s database has not been released 20261012050000, so it would keep every event of the account, other projects' recipients among them: no endpoint is made for it. Release to it first (deploy.yml), then run this again; nothing was asked of Resend." >&2
+        exit 6
+      fi
+    }
+    if [[ "$what" == create ]]; then
+      keeps_its_own_mail
+    fi
+
+    # What the vault keeps for it, masked before anything else is printed.
+    held=$("$REG" vault-get "$vault_name") ||
+      refuse "the control plane's vault could not be read for ${vault_name}; nothing was asked of Resend."
+    held_id=""; held_secret=""
+    if [[ -n "$held" ]]; then
+      mask "$held"
+      held_secret=$(jq -r 'if type == "object" then (.secret // "") else "" end' <<< "$held" 2> /dev/null || true)
+      mask "$held_secret"
+      held_id=$(jq -r 'if type == "object" then (.id // "") else "" end' <<< "$held" 2> /dev/null || true)
+      if [[ -n "$held_id" ]] && ! is_id "$held_id"; then
+        refuse "the control plane's vault keeps something under ${vault_name} that does not name an endpoint; nothing was asked of Resend."
+      fi
+    fi
+
+    case "$what" in
+      create)
+        all=$(every_endpoint) || refuse "Resend's endpoints could not be listed (the line above says what it answered); nothing was changed."
+        reuse=no
+        forget=no
+        # What is deleted before anything is made: one "<id>=<why>" a line.
+        doomed=""
+        if [[ -n "$held_id" ]]; then
+          if [[ -z "$(jq -r --arg i "$held_id" 'select(.id == $i) | .id' <<< "$all")" ]]; then
+            echo "the endpoint the vault keeps for ${ref} (${held_id}) is no longer at Resend; one is made" >&2
+          else
+            one=$(resend GET "/webhooks/${held_id}") ||
+              refuse "Resend lists the endpoint ${held_id} but would not give it (the line above says what it answered); nothing was changed."
+            at=$(jq -r '.endpoint // .url // ""' <<< "$one" 2> /dev/null || true)
+            hears=$(jq -c '(.events // []) | sort' <<< "$one" 2> /dev/null || true)
+            state=$(jq -r '.status // ""' <<< "$one" 2> /dev/null || true)
+            # The secret Resend signs this endpoint's events with, masked
+            # before anything else is printed, and compared, never printed.
+            signs=$(jq -r 'if type == "object" then (.signing_secret // "") else "" end' <<< "$one" 2> /dev/null || true)
+            mask "$signs"
+            why=""
+            if [[ "$at" != "$endpoint" ]]; then
+              # Not this project's address, so perhaps another project's
+              # endpoint: never deleted from here.
+              forget=yes
+            elif [[ -z "$held_secret" ]]; then
+              why="the vault keeps no signing secret for it"
+            elif [[ -z "$signs" ]]; then
+              why="Resend would not say which secret it signs with, so the vault's cannot be confirmed"
+            elif [[ "$signs" != "$held_secret" ]]; then
+              why="Resend signs its events with another secret than the vault keeps"
+            elif [[ "$hears" != "$want_events" ]]; then
+              why="it hears other events than the function reads"
+            elif [[ -n "$state" && "$state" != enabled ]]; then
+              why="Resend has it ${state}"
+            fi
+            if [[ "$forget" == yes ]]; then
+              :
+            elif [[ -z "$why" ]]; then
+              reuse=yes
+            else
+              doomed="${held_id}=${why}"$'\n'
+            fi
+          fi
+        fi
+        if [[ "$forget" == yes ]]; then
+          left=3
+          "$REG" vault-del "$vault_name" > /dev/null ||
+            stop "the endpoint ${held_id} the vault keeps for ${ref} points at ${at:-nothing}, not ${endpoint}, and ${vault_name} could not be removed from the control plane's vault; nothing was deleted at Resend. Run this again."
+          echo "the endpoint ${held_id} the vault kept for ${ref} points at ${at:-nothing}, not ${endpoint}: it may be another project's, so it was left at Resend and forgotten (${vault_name} removed from the vault)" >&2
+          held=""; held_id=""; held_secret=""
+        fi
+        # Every endpoint at this address the vault does not keep: its
+        # secret is nobody's, so its every event would be refused.
+        while IFS= read -r other; do
+          [[ -n "$other" && "$other" != "$held_id" ]] || continue
+          is_id "$other" || stop "Resend lists an endpoint at ${endpoint} with an id that is not one; nothing more was changed."
+          doomed="${doomed}${other}=it is at this project's address and the vault does not keep it"$'\n'
+        done <<< "$(jq -r --arg e "$endpoint" 'select(.endpoint == $e) | .id' <<< "$all")"
+        if [[ "$reuse" == yes ]]; then
+          verdict=reused
+        elif [[ -n "$held_id" || -n "$doomed" || "$forget" == yes ]]; then
+          verdict=recreated
+        else
+          verdict=created
+        fi
+
+        # Deleted first, so a project never has two.
+        while IFS= read -r item; do
+          [[ -n "$item" ]] || continue
+          left=3
+          remove "${item%%=*}" "${item#*=}" ||
+            stop "the endpoint ${item%%=*} could not be deleted at Resend (the line above says what it answered), so no new one was made; run this again."
+        done <<< "$doomed"
+
+        if [[ "$reuse" != yes ]]; then
+          body=$(jq -cn --arg e "$endpoint" --argjson ev "$events" '{endpoint: $e, events: $ev}')
+          left=3
+          if ! made=$(MAPI_RETRY_ONLY_429=yes resend POST /webhooks "$body"); then
+            # A 5xx or no answer may come after Resend made it: whatever is
+            # at this address now is nobody's, and is deleted. When Resend
+            # cannot even be asked what it has, that is said, not hidden:
+            # an endpoint it made may be there, and the next create, which
+            # deletes every endpoint at this address the vault does not
+            # keep, deletes it.
+            if ! again=$(every_endpoint); then
+              stop "Resend did not say it made the endpoint for ${ref} (the line above says what it answered), and its endpoints could not be listed again, so one it made may still be at ${endpoint}, kept by nobody. The next create deletes every endpoint at that address the vault does not keep; the project's secret is as it was. Run this again."
+            fi
+            remain=""
+            while IFS= read -r stray; do
+              [[ -n "$stray" ]] && is_id "$stray" || continue
+              remove "$stray" "made by this run, whose answer was lost" || remain="${remain} ${stray}"
+            done <<< "$(jq -r --arg e "$endpoint" 'select(.endpoint == $e) | .id' <<< "$again")"
+            if [[ -n "$remain" ]]; then
+              stop "Resend did not say it made the endpoint for ${ref} (the line above says what it answered), and${remain} at ${endpoint}, kept by nobody, could not be deleted (the lines above say why). The next create deletes it; the project's secret is as it was. Run this again."
+            fi
+            stop "Resend did not say it made the endpoint for ${ref} (the line above says what it answered). Nothing is at ${endpoint} now: anything it made there has been deleted. The project's secret is as it was. Run this again."
+          fi
+          new_id=$(jq -r '.id // empty' <<< "$made" 2> /dev/null || true)
+          is_id "$new_id" || stop "Resend made an endpoint for ${ref} and answered no id that is one; the next run deletes whatever is at ${endpoint} and makes it again."
+          new_secret=$(jq -r '.signing_secret // empty' <<< "$made" 2> /dev/null || true)
+          mask "$new_secret"
+          if [[ -z "$new_secret" ]]; then
+            # Not given when it was made: asked for once.
+            if got=$(resend GET "/webhooks/${new_id}"); then
+              new_secret=$(jq -r '.signing_secret // empty' <<< "$got" 2> /dev/null || true)
+              mask "$new_secret"
+            fi
+          fi
+          if ! [[ "$new_secret" =~ ^whsec_[A-Za-z0-9+/]+=*$ ]]; then
+            remove "$new_id" "Resend gave no signing secret for it" ||
+              stop "Resend made the endpoint ${new_id} for ${ref} and gave no signing secret, when it was made or when asked again, and it could not be deleted (the line above says why): the next run deletes it. Confirm how Resend gives an endpoint's signing secret before running this again."
+            stop "Resend made the endpoint ${new_id} for ${ref} and gave no signing secret, when it was made or when asked again, so no event it sent could be verified. It was deleted; the project's secret is as it was. Confirm how Resend gives an endpoint's signing secret before running this again."
+          fi
+          kept=$(jq -cn --arg i "$new_id" --arg s "$new_secret" '{id: $i, secret: $s}')
+          mask "$kept"
+          # The vault first: the secret the project is given is never held
+          # only by this run.
+          if ! printf '%s' "$kept" | "$REG" vault-put "$vault_name" > /dev/null; then
+            remove "$new_id" "its signing secret could not be kept" ||
+              stop "the endpoint ${new_id} made for ${ref} could not be kept in the control plane's vault as ${vault_name}, nor deleted (the line above says why): the next run deletes it. Run this again."
+            stop "the endpoint made for ${ref} could not be kept in the control plane's vault as ${vault_name}, so it was deleted; the project's secret is as it was. Run this again."
+          fi
+          held_id="$new_id"; held_secret="$new_secret"
+        fi
+
+        # The project's secret: given only when its digest differs, then
+        # read back.
+        want_digest=$(sha256_of "$held_secret")
+        have_digest=$(digest_of_secret "$ref" "$secret_name") || exit "$left"
+        if [[ "$have_digest" != "$want_digest" ]]; then
+          given=$(jq -cn --arg n "$secret_name" --arg v "$held_secret" '[{name: $n, value: $v}]')
+          mask "$given"
+          left=3
+          if ! mapi POST "/v1/projects/${ref}/secrets" "$given" > /dev/null; then
+            stop "the endpoint ${held_id} is kept in the vault as ${vault_name}, and the project ${ref} did not take its ${secret_name} (the line above says what the Management API answered), so its function refuses that endpoint's events. Run this again: it gives the project the vault's secret."
+          fi
+          have_digest=$(digest_of_secret "$ref" "$secret_name") || exit "$left"
+          [[ "$have_digest" == "$want_digest" ]] ||
+            stop "${ref}'s ${secret_name} does not read back as the secret the vault keeps for the endpoint ${held_id}; run this again."
+          [[ "$verdict" != reused ]] || verdict=mended
+        fi
+        echo "${ref}: the endpoint ${held_id} at Resend (${verdict}) posts the six kinds of event to ${endpoint}; its signing secret is kept as ${vault_name}, Resend signs with it, and it is the project's ${secret_name}" >&2
+        echo "resend-webhook=${verdict}"
+        echo "id=${held_id}"
+        ;;
+
+      verify)
+        [[ -n "$held_id" && -n "$held_secret" ]] ||
+          refuse "the control plane's vault keeps no endpoint and secret for ${ref} (${vault_name}); make it with create."
+        all=$(every_endpoint) || refuse "Resend's endpoints could not be listed (the line above says what it answered)."
+        [[ -n "$(jq -r --arg i "$held_id" 'select(.id == $i) | .id' <<< "$all")" ]] ||
+          refuse "Resend has no endpoint ${held_id}, which the vault keeps for ${ref}; create makes one."
+        one=$(resend GET "/webhooks/${held_id}") || refuse "Resend would not give the endpoint ${held_id} (the line above says what it answered)."
+        at=$(jq -r '.endpoint // .url // ""' <<< "$one" 2> /dev/null || true)
+        [[ "$at" == "$endpoint" ]] || refuse "the endpoint ${held_id} points at ${at:-nothing}, not ${endpoint}; create forgets it and makes one at this project's address."
+        signs=$(jq -r 'if type == "object" then (.signing_secret // "") else "" end' <<< "$one" 2> /dev/null || true)
+        mask "$signs"
+        [[ -n "$signs" ]] ||
+          refuse "Resend would not say which secret the endpoint ${held_id} signs with, so it cannot be confirmed to be the one the vault keeps; create makes it again."
+        [[ "$signs" == "$held_secret" ]] ||
+          refuse "Resend signs the endpoint ${held_id}'s events with another secret than the vault keeps (rotated in its dashboard?), so the function refuses every one of them; create makes it again."
+        [[ "$(jq -c '(.events // []) | sort' <<< "$one" 2> /dev/null || true)" == "$want_events" ]] ||
+          refuse "the endpoint ${held_id} hears other events than the six the function reads; create makes it again."
+        state=$(jq -r '.status // ""' <<< "$one" 2> /dev/null || true)
+        [[ -z "$state" || "$state" == enabled ]] || refuse "Resend has the endpoint ${held_id} ${state}; create makes it again."
+        others=$(jq -r --arg e "$endpoint" --arg i "$held_id" 'select(.endpoint == $e and .id != $i) | .id' <<< "$all" | tr '\n' ' ')
+        [[ -z "${others// /}" ]] ||
+          refuse "Resend also has ${others% } at ${endpoint}, which the vault does not keep, and whose events the function refuses; create deletes it."
+        have_digest=$(digest_of_secret "$ref" "$secret_name") || exit 2
+        [[ "$have_digest" == "$(sha256_of "$held_secret")" ]] ||
+          refuse "${ref}'s ${secret_name} is not the signing secret the vault keeps for the endpoint ${held_id}, so its function refuses that endpoint's events; create gives it the vault's."
+        echo "${ref}: the endpoint ${held_id} at Resend posts the six kinds of event to ${endpoint}, signed with the secret the vault keeps, and the project holds it" >&2
+        echo "resend-webhook=verified"
+        echo "id=${held_id}"
+        ;;
+
+      delete)
+        all=$(every_endpoint) || refuse "Resend's endpoints could not be listed (the line above says what it answered); nothing was deleted."
+        # The one the vault keeps, if it points at another address, may be
+        # another project's: left at Resend, and only forgotten below.
+        if [[ -n "$held_id" ]]; then
+          held_at=$(jq -r --arg i "$held_id" 'select(.id == $i) | .endpoint' <<< "$all" | head -n 1)
+          if [[ -n "$held_at" && "$held_at" != "$endpoint" ]]; then
+            echo "the endpoint ${held_id} the vault keeps for ${ref} points at ${held_at}, not ${endpoint}: it may be another project's, so it is left at Resend and only forgotten" >&2
+          fi
+        fi
+        gone=0
+        while IFS= read -r one_id; do
+          [[ -n "$one_id" ]] || continue
+          is_id "$one_id" || refuse "Resend lists an endpoint for ${ref} with an id that is not one; nothing more was deleted."
+          remove "$one_id" "${ref}'s endpoint, asked to be deleted" ||
+            refuse "the endpoint ${one_id} could not be deleted at Resend (the line above says what it answered); the vault keeps ${vault_name} until it is, so run this again."
+          gone=$((gone + 1))
+        done <<< "$(jq -r --arg e "$endpoint" 'select(.endpoint == $e) | .id' <<< "$all" | awk '!seen[$0]++')"
+        if [[ -n "$held" ]]; then
+          "$REG" vault-del "$vault_name" > /dev/null ||
+            refuse "${gone} endpoint(s) deleted at Resend for ${ref}, and ${vault_name} could not be removed from the control plane's vault; run this again."
+        fi
+        echo "${ref}: ${gone} endpoint(s) deleted at Resend${held:+, and ${vault_name} removed from the vault}" >&2
+        echo "resend-webhook=deleted"
+        echo "deleted=${gone}"
+        ;;
+
+      prove)
+        [[ -n "$held_secret" ]] ||
+          refuse "the control plane's vault keeps no signing secret for ${ref} (${vault_name}), so nothing can be signed; make the endpoint with create."
+        url="${PROJECT_API_URL:-https://${ref}.supabase.co}/functions/v1/resend_webhook"
+        attempts="${WEBHOOK_PROVE_ATTEMPTS:-6}"
+        pause="${WEBHOOK_PROVE_WAIT:-10}"
+        [[ "$attempts" =~ ^[1-9][0-9]*$ && "$pause" =~ ^[0-9]+$ ]] ||
+          refuse "WEBHOOK_PROVE_ATTEMPTS and WEBHOOK_PROVE_WAIT must be whole numbers, the first at least 1; nothing was sent."
+        attempt=1
+        while :; do
+          # Signed now (the function refuses a signature five minutes old),
+          # with an id of its own each time. WEBHOOK_PROVE_TIME and
+          # WEBHOOK_PROVE_ID fix them for the rehearsal, which checks the
+          # signature against one src/lib/email/resend-webhook.ts made.
+          ts="${WEBHOOK_PROVE_TIME:-$(date +%s)}"
+          eid="${WEBHOOK_PROVE_ID:-msg_cloveerp_proof_${ts}_$(head -c 6 /dev/urandom | od -An -vtx1 | tr -d ' \n')}"
+          at=$(jq -rn --argjson t "$ts" '$t | todate')
+          event=$(jq -cn --arg at "$at" --arg m "cloveerp-proof-${eid}" '{type: "email.delivered", created_at: $at, data: {email_id: $m}}')
+          sig=$(sign "$held_secret" "${eid}.${ts}.${event}") && [[ -n "$sig" ]] ||
+            refuse "the signing secret the vault keeps for ${ref} is not one a signature can be made with; create makes the endpoint again."
+          out=$($CURL_CMD -sS -X POST -w '\n%{http_code}' --max-time 30 -H "Content-Type: application/json" \
+                  -H "svix-id: ${eid}" -H "svix-timestamp: ${ts}" -H "svix-signature: v1,${sig}" \
+                  --data "$event" "$url" 2> /dev/null) || true
+          if [[ "$out" == *$'\n'* ]]; then status="${out##*$'\n'}"; answer="${out%$'\n'*}"; else status="$out"; answer=""; fi
+          [[ "$status" =~ ^[0-9][0-9][0-9]$ ]] || status=000
+          said=$(printf '%s' "$answer" | tr '\n' ' ' | head -c 200)
+          case "$status" in
+            2??)
+              recorded=$(jq -r 'if type == "object" and has("recorded") then (.recorded | tostring) else "" end' <<< "$answer" 2> /dev/null || true)
+              case "$recorded" in
+                false)
+                  echo "${ref}: a signed event reached its function, which took it (${status}), and its database recorded nothing: the event matches no mail it sent" >&2
+                  echo "resend-webhook=proved"
+                  exit 0 ;;
+                true)
+                  # Exit 4, apart from every other refusal: the caller
+                  # deletes the endpoint again, since every event of the
+                  # account would be kept there, other projects' recipients
+                  # among them.
+                  echo "x ${ref}'s function took the signed event and its database recorded it, though it matches no mail the project sent: that database keeps other projects' events (it has not been released 20261012050000)." >&2
+                  exit 4 ;;
+                *)
+                  refuse "${ref}'s function answered ${status} with something that is not its database's verdict on the event." ;;
+              esac ;;
+            401)
+              case "$answer" in
+                *[Aa]uthorization*|*JWT*)
+                  refuse "the gateway in front of ${ref}'s resend_webhook asked for a signed-in caller (${said}): verify_jwt must be false for it (supabase/config.toml), as Resend sends no Authorization header." ;;
+              esac ;;
+            404|408|429|5??|000) : ;;
+            *) refuse "${ref}'s resend_webhook answered ${status} to the signed event: ${said}" ;;
+          esac
+          if [[ "$attempt" -ge "$attempts" ]]; then
+            refuse "${ref}'s resend_webhook did not take the signed event in ${attempts} attempt(s); it answered ${status}${said:+: ${said}}. A 401 is a function whose ${secret_name} is not the secret the vault keeps for the endpoint ${held_id}: create gives it the vault's."
+          fi
+          echo "! ${ref}'s resend_webhook answered ${status} on attempt ${attempt} of ${attempts}; asking again in ${pause} s" >&2
+          ${MAPI_SLEEP:-sleep} "$pause"
+          attempt=$((attempt + 1))
+        done
+        ;;
+    esac
     ;;
 
   *)
-    refuse "usage: provision_project.sh create|wait|configure|keys|owner|pooler|sign-in-link|password|secrets|site|secret-digest ..."
+    refuse "usage: provision_project.sh create|wait|configure|keys|owner|pooler|sign-in-link|password|secrets|site|secret-digest|resend-webhook ..."
     ;;
 esac

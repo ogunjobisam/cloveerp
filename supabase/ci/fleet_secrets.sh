@@ -43,6 +43,39 @@
 #                         https://<address>.<APEX>, redirects to it and to
 #                         every address the client was moved from (each held
 #                         for it for good), custom SMTP through Resend.
+#   resend_webhook        the project's own endpoint at Resend, which tells it
+#                         what became of the mail it sent: made, or reused
+#                         when it is right, or mended, or made again
+#                         (provision_project.sh resend-webhook create, only
+#                         for a database released 20261012050000, which
+#                         records only its own mail, and asked so first; its
+#                         id and signing secret kept in the control plane's
+#                         vault before the project is given the secret), then
+#                         proved by one signed event its function must take
+#                         and record nothing of (resend-webhook prove). An
+#                         endpoint that does not prove, however it fails, is
+#                         deleted again at once with its vault entry, red: it
+#                         is not left to run against a database that may keep
+#                         the whole account's events. A client's checklist
+#                         step is then ticked by the build (fleet_register.sh
+#                         checklist-by-build), once the control plane has the
+#                         routine, and unticked whenever its endpoint is
+#                         deleted or none is left that its function takes.
+#                         For a client built, live or suspended, or all of
+#                         them (a client retiring is left out: its endpoint is
+#                         deleted, not made); and for demonstration and
+#                         control, the demonstration's project (DEMO_REF,
+#                         its database CLOVEERP_DEMO_DATABASE_URL) and the
+#                         control plane's (PRODUCTION_REF), which are in no
+#                         register and have no checklist.
+#   resend_webhook_delete a retiring or retired client's endpoint deleted at
+#                         Resend, and its entry in the vault (resend-webhook
+#                         delete), and its checklist step unticked. One
+#                         client at a time, never all.
+#
+#   Both need RESEND_ADMIN_API_KEY, a full-access Resend key the workflows
+#   alone hold. Without it they leave a notice, change nothing, and are not
+#   red: the checklist keeps the step for the owner.
 #
 #   A client's address is the register's: its code until a rename moves it
 #   (fleet_rename.sh, 20261012030000), and the code never changes. Set from the
@@ -53,13 +86,22 @@
 #   for this workflow as this one waits for it) would otherwise be undone.
 #
 #   code    a client's code, which must be built, live, suspended or retiring
-#           in the register; or all, every client that is.
+#           in the register (not retiring for resend_webhook; retiring or
+#           retired for resend_webhook_delete); or all, every client that is
+#           built, live, suspended or retiring (not retiring for
+#           resend_webhook); or, for resend_webhook, demonstration or control.
 #   reason  why, in words; it goes on each client's row.
 #
 # Environment:
 #   CLOVEERP_LIVE_DATABASE_URL  the control plane: the register and its vault
 #   SUPABASE_ACCESS_TOKEN       the Management API (provision_project.sh)
 #   RESEND_API_KEY              set_function_secrets and patch_auth
+#   RESEND_ADMIN_API_KEY        resend_webhook and resend_webhook_delete
+#   DEMO_REF, PRODUCTION_REF    the projects resend_webhook demonstration and
+#                               control are for
+#   CLOVEERP_DEMO_DATABASE_URL  the demonstration's database, asked whether it
+#                               keeps only its own mail before its endpoint is
+#                               made (provision_project.sh resend-webhook)
 #   APEX                        default cloveerp.com
 #   MAIL_FROM                   patch_auth: the sender of sign-in links
 #   INVITE_FROM                 set_function_secrets; default "Clove ERP <MAIL_FROM>"
@@ -91,16 +133,21 @@ in_actions() { [[ "${GITHUB_ACTIONS:-}" == true ]]; }
 mask() { if in_actions; then echo "::add-mask::$1"; fi; }
 # say_error <words>: what was not done, as an annotation on a runner.
 say_error() { if in_actions; then echo "::error::$*"; else echo "x $*" >&2; fi; }
+# say_notice <words>: what was not done, and is not a failure.
+say_notice() { if in_actions; then echo "::notice::$*"; else echo "! $*" >&2; fi; }
 refuse() { say_error "$*"; exit 2; }
 summary() { if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then echo "$*" >> "$GITHUB_STEP_SUMMARY"; fi; }
 
 action="${1:-}"; code="${2:-}"; reason="${3:-}"
 case "$action" in
-  rotate_db_password|set_function_secrets|patch_auth) ;;
-  *) refuse "usage: fleet_secrets.sh rotate_db_password|set_function_secrets|patch_auth <code|all> <reason>; '${action}' is not one of them, and nothing was changed." ;;
+  rotate_db_password|set_function_secrets|patch_auth|resend_webhook|resend_webhook_delete) ;;
+  *) refuse "usage: fleet_secrets.sh rotate_db_password|set_function_secrets|patch_auth|resend_webhook|resend_webhook_delete <code|all> <reason>; '${action}' is not one of them, and nothing was changed." ;;
 esac
 if [[ "$code" != all ]] && ! [[ "$code" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
   refuse "'${code}' is neither a client's code nor all; nothing was changed."
+fi
+if [[ "$action" == resend_webhook_delete && ( "$code" == all || "$code" == demonstration || "$code" == control ) ]]; then
+  refuse "resend_webhook_delete is for one retiring or retired client at a time, named by its code, not ${code}; nothing was changed."
 fi
 reason="$(printf '%s' "$reason" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')"
 [[ ${#reason} -ge 10 ]] || refuse "say why, in ten characters or more (it goes on each client's row); nothing was changed."
@@ -121,11 +168,105 @@ case "$action" in
   patch_auth)
     [[ -n "${RESEND_API_KEY:-}" ]] || refuse "RESEND_API_KEY is not set, so the projects' SMTP cannot be set; nothing was changed."
     [[ "${MAIL_FROM:-}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || refuse "MAIL_FROM is not an email address, so sign-in links would have no sender; nothing was changed." ;;
+  resend_webhook|resend_webhook_delete)
+    # Not red: the endpoint is a step of the checklist until the key exists.
+    if [[ -z "${RESEND_ADMIN_API_KEY:-}" ]]; then
+      say_notice "RESEND_ADMIN_API_KEY is not set, so no endpoint at Resend can be made or deleted, and nothing was changed: each client's checklist keeps the step for the owner. Add it as a repository secret (a full-access Resend key, used only by the workflows) and run this again."
+      summary "- ${action} for ${code}: RESEND_ADMIN_API_KEY is not set, so nothing was changed"
+      exit 0
+    fi ;;
 esac
 for n in "$PAUSE_SECONDS" "$PROVE_ATTEMPTS" "$PROVE_WAIT"; do
   [[ "$n" =~ ^[0-9]+$ ]] || refuse "PAUSE_SECONDS, PROVE_ATTEMPTS and PROVE_WAIT must be whole numbers; nothing was changed."
 done
 [[ "$PROVE_ATTEMPTS" -ge 1 ]] || refuse "PROVE_ATTEMPTS must be 1 or more; nothing was changed."
+
+# untick <code>: a client's checklist step for the webhook unticked by the
+# build, because its endpoint was deleted or none is left that its function
+# takes the events of: the Fleet view never says "set by the build" of an
+# endpoint that is not there. Never fails the run; UNTICKED says what came
+# of it, to be added to what is said.
+untick() {
+  local rc
+  if "$REG" checklist-by-build "$1" resend_webhook false > /dev/null; then rc=0; else rc=$?; fi
+  case "$rc" in
+    0) UNTICKED="the checklist's step unticked" ;;
+    5) UNTICKED="the checklist's step left as it was: the control plane has no erp_meta.deployment_checklist_by_build yet" ;;
+    *) UNTICKED="the checklist's step could not be unticked (the line above says why)" ;;
+  esac
+}
+
+# make_webhook <name> <ref> [code]: the project's endpoint at Resend made,
+# reused, mended or made again, and proved by a signed event its function
+# must take and record nothing of (provision_project.sh resend-webhook
+# create, then prove). DONE_WHAT says what was done; FAILED_WHY what was
+# not. Create asks the project's database first and makes nothing for one
+# that has not been released 20261012050000, which would keep every event of
+# the account, other projects' recipients among them. An endpoint that then
+# does not prove, whatever the reason (a database that records the proof,
+# a function that refuses it, or one that cannot be reached), is deleted
+# again at once with its vault entry: it is never left running unproved.
+# With a client's code, its checklist step is unticked whenever an endpoint
+# is deleted or none is left that its function takes.
+make_webhook() {
+  local name="$1" ref="$2" client="${3:-}" out verdict id rc gone
+  UNTICKED=""
+  if out=$("$PROV" resend-webhook "$ref" create); then rc=0; else rc=$?; fi
+  case "$rc" in
+    0) ;;
+    6)
+      FAILED_WHY="${name}'s database has not been released 20261012050000, so it would keep other projects' recipients: no endpoint was made for it, and nothing was asked of Resend. Release to it first (deploy.yml), then run this again for ${name}"
+      return 1 ;;
+    3)
+      if [[ -n "$client" ]]; then untick "$client"; fi
+      FAILED_WHY="${name}'s endpoint at Resend was left part-way, with none its function takes the events of (the line above says why)${UNTICKED:+; ${UNTICKED}}; run this again for ${name}: it keeps what is right and makes again what is not"
+      return 1 ;;
+    *)
+      FAILED_WHY="${name}'s endpoint at Resend was not made or found right, and nothing was changed (the line above says why); run this again for ${name}: it keeps what is right and makes again what is not"
+      return 1 ;;
+  esac
+  verdict=$(sed -n 's/^resend-webhook=//p' <<< "$out")
+  id=$(sed -n 's/^id=//p' <<< "$out")
+  if "$PROV" resend-webhook "$ref" prove > /dev/null; then rc=0; else rc=$?; fi
+  if [[ "$rc" -ne 0 ]]; then
+    if "$PROV" resend-webhook "$ref" delete > /dev/null; then
+      gone="so its endpoint ${id} was deleted again at Resend, with its entry in the vault"
+    else
+      gone="and its endpoint ${id} could not be deleted again at Resend (the line above says why): run this again, or delete it in Resend's dashboard"
+    fi
+    if [[ -n "$client" ]]; then untick "$client"; fi
+    if [[ "$rc" -eq 4 ]]; then
+      FAILED_WHY="${name}'s database recorded the signed event, which matches no mail it sent, so it would keep other projects' recipients, ${gone}${UNTICKED:+; ${UNTICKED}}. Release to it first (deploy.yml), then run this again for ${name}"
+    else
+      FAILED_WHY="${name}'s endpoint at Resend was ${verdict} (${id}), and its function did not take a signed event as it should (what it answered is said above), ${gone}${UNTICKED:+; ${UNTICKED}}. Run this again for ${name}"
+    fi
+    return 1
+  fi
+  DONE_WHAT="the email provider's webhook ${verdict} (${id}) and proved: a signed event reached its function, which recorded nothing"
+}
+
+# The demonstration and the control plane, which are in no register: each
+# by the ref the workflow gives it, and nothing written on a row.
+if [[ "$action" == resend_webhook && ( "$code" == demonstration || "$code" == control ) ]]; then
+  if [[ "$code" == demonstration ]]; then
+    target="${DEMO_REF:-}"; known_as="CLOVEERP_DEMO_PROJECT_REF"
+  else
+    target="${PRODUCTION_REF:-}"; known_as="CLOVEERP_PROJECT_REF"
+  fi
+  [[ "$target" =~ ^[a-z0-9]{20}$ ]] || refuse "the ${code}'s project ref (${known_as}, '${target}') is not one; nothing was changed."
+  summary "## ${action}"
+  summary "Why: ${reason}"
+  echo "${code} (${target}): ${action}"
+  FAILED_WHY=""; DONE_WHAT=""
+  if make_webhook "$code" "$target"; then
+    echo "${code}: ${DONE_WHAT}"
+    summary "- ${code}: ${DONE_WHAT}"
+    exit 0
+  fi
+  say_error "${code}: ${FAILED_WHY}."
+  summary "- ${code}: FAILED: ${FAILED_WHY}"
+  exit 1
+fi
 
 # Which clients: those whose project is up, with a project, where each is
 # served, and the addresses each was moved from and holds. On standard input,
@@ -133,6 +274,7 @@ done
 # a control plane before 20261012030000 has no such column, and every client
 # was served at its code; nor does it hold any address, and is not asked.
 if ! held_known=$($PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA <<'SQL'
+-- fleet: cp-held-known
 select (to_regclass('erp_meta.deployment_previous_address') is not null)::text;
 SQL
 ); then
@@ -142,6 +284,7 @@ fi
 register_rows() {
   if [[ "$held_known" == true ]]; then
     $PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -v code="$1" <<'SQL'
+-- fleet: cp-rows
 select d.code, case when d.status = 'retiring' and d.built_at is null then 'retiring, never built' else d.status end, coalesce(d.project_ref, ''), coalesce(to_jsonb(d) ->> 'address', d.code),
        coalesce((select string_agg(p.address, ' ' order by p.moved_at, p.address)
                    from erp_meta.deployment_previous_address p where p.code = d.code), '')
@@ -153,6 +296,7 @@ select d.code, case when d.status = 'retiring' and d.built_at is null then 'reti
 SQL
   else
     $PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -v code="$1" <<'SQL'
+-- fleet: cp-rows
 select d.code, case when d.status = 'retiring' and d.built_at is null then 'retiring, never built' else d.status end, coalesce(d.project_ref, ''), coalesce(to_jsonb(d) ->> 'address', d.code), ''
   from erp_meta.deployment d
  where (:'code' = 'all' and d.status in ('built', 'live', 'suspended', 'retiring') and d.project_ref is not null
@@ -163,15 +307,37 @@ SQL
   fi
 }
 is_up() { case "$1" in built|live|suspended|retiring) return 0 ;; *) return 1 ;; esac; }
+# eligible <status>: whether this action is for a client in it. A webhook is
+# deleted only for a client that is going: retiring (built or not) or
+# retired, whose project may already be gone while its endpoint is not; and
+# made only for one that is staying (built, live or suspended): a retiring
+# client's checklist is not ticked, and its endpoint would only be deleted.
+eligible() {
+  case "$action" in
+    resend_webhook_delete) case "$1" in retiring*|retired) return 0 ;; *) return 1 ;; esac ;;
+    resend_webhook) case "$1" in built|live|suspended) return 0 ;; *) return 1 ;; esac ;;
+  esac
+  is_up "$1"
+}
 is_address() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; }
 if ! rows=$(register_rows "$code"); then
   refuse "the register could not be read, so nothing was changed."
 fi
-codes=(); refs=()
+codes=(); refs=(); left_out=""
 while IFS='|' read -r c s r a h; do
   [[ -n "$c" ]] || continue
   a="${a:-$c}"
-  if ! is_up "$s"; then
+  if [[ "$action" == resend_webhook_delete ]] && ! eligible "$s"; then
+    refuse "${c} is ${s}, so its webhook is not deleted: resend_webhook_delete is for a client retiring or retired; nothing was changed."
+  fi
+  if [[ "$action" == resend_webhook && "$s" == retiring* ]]; then
+    if [[ "$code" == all ]]; then
+      left_out="${left_out} ${c}"
+      continue
+    fi
+    refuse "${c} is ${s}, so no endpoint is made for it: a client going has its endpoint deleted (resend_webhook_delete), not made; nothing was changed."
+  fi
+  if ! eligible "$s"; then
     refuse "${c} is ${s}, not built, live, suspended or retiring, so it has no project for this workflow to change; nothing was changed."
   fi
   [[ "$r" =~ ^[a-z0-9]{20}$ ]] || refuse "${c} has no project ref in the register ('${r}'); nothing was changed."
@@ -182,10 +348,13 @@ while IFS='|' read -r c s r a h; do
   codes+=("$c"); refs+=("$r")
 done <<< "$rows"
 count=${#codes[@]}
+if [[ -n "$left_out" ]]; then
+  echo "left out, because they are retiring (resend_webhook_delete deletes their endpoints):${left_out}"
+fi
 if [[ "$count" -eq 0 ]]; then
   if [[ "$code" == all ]]; then
-    echo "no client is built, live, suspended or retiring; nothing to do"
-    summary "- ${action}: no client is built, live, suspended or retiring; nothing to do"
+    echo "no client is built, live, suspended or retiring${left_out:+ but those retiring}; nothing to do"
+    summary "- ${action}: no client is built, live, suspended or retiring${left_out:+ but those retiring (${left_out# })}; nothing to do"
     exit 0
   fi
   refuse "${code} is not in the register, so it has no secrets here; nothing was changed."
@@ -193,6 +362,9 @@ fi
 
 summary "## ${action}"
 summary "Why: ${reason}"
+if [[ -n "$left_out" ]]; then
+  summary "- left out, because they are retiring:${left_out}"
+fi
 
 # note <code> <status> <detail>: one line on the client's row; never fails
 # the run (the change itself is what matters, and is said either way).
@@ -297,6 +469,32 @@ patch_auth() {
   DONE_WHAT="auth settings applied again: sign-up closed, addresses confirmed, site https://${addr}.${APEX}, ${redirects}, SMTP through Resend; PostgREST exposes public and graphql_public only"
 }
 
+resend_webhook() {
+  local c="$1" ref="$2" rc
+  make_webhook "$c" "$ref" "$c" || return 1
+  # The checklist's step, ticked as the build ticks it. Not ticked is not a
+  # failure: the endpoint is made and proved either way, and the step stays
+  # on the checklist for the owner.
+  if "$REG" checklist-by-build "$c" resend_webhook > /dev/null; then rc=0; else rc=$?; fi
+  case "$rc" in
+    0) DONE_WHAT="${DONE_WHAT}; the checklist's step ticked by the build" ;;
+    5) DONE_WHAT="${DONE_WHAT}; the checklist keeps the step for the owner until the control plane has erp_meta.deployment_checklist_by_build" ;;
+    *) DONE_WHAT="${DONE_WHAT}; the checklist's step could not be ticked (the line above says why), so it stays for the owner" ;;
+  esac
+}
+
+resend_webhook_delete() {
+  local c="$1" ref="$2" out
+  UNTICKED=""
+  if ! out=$("$PROV" resend-webhook "$ref" delete); then
+    untick "$c"
+    FAILED_WHY="${c}'s endpoint at Resend was not all deleted (the line above says what was left); the vault keeps it until it is, so run this again for ${c}; ${UNTICKED}"
+    return 1
+  fi
+  untick "$c"
+  DONE_WHAT="the email provider's webhook deleted ($(sed -n 's/^deleted=//p' <<< "$out") endpoint(s) at Resend), and its entry in the control plane's vault; ${UNTICKED}"
+}
+
 skipped=0
 i=0
 while [[ "$i" -lt "$count" ]]; do
@@ -315,7 +513,7 @@ while [[ "$i" -lt "$count" ]]; do
   else
     IFS='|' read -r _ s r addr held <<< "$(printf '%s\n' "$now" | head -n 1)"
     addr="${addr:-$c}"
-    if [[ -z "$s" ]] || ! is_up "$s"; then
+    if [[ -z "$s" ]] || ! eligible "$s"; then
       echo "${c} is ${s:-no longer in the register} now, so it was left alone"
       summary "- ${c}: ${s:-no longer in the register} by the time its turn came; left alone"
       skipped=$((skipped + 1))

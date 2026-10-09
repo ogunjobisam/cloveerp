@@ -45,6 +45,15 @@
  * { sent: false } as for any other reason. The per-isolate gap below stays as a
  * first filter in front of the database.
  *
+ * What the provider called it. Every project's webhook hears the whole Resend
+ * account's mail, and each database keeps only events about mail it sent
+ * (20261012050000). So once Resend has taken an email, its id is kept beside
+ * the row the claim wrote (erp.record_invitation_email_sent), and a bounce or
+ * a complaint about it is this database's to act on. That record is never a
+ * reason to say the email did not go, because it did: one not written is a log
+ * line naming no address. An event Resend sends in the moment before it is
+ * written finds nothing, and is not kept; that is accepted.
+ *
  * A password nobody holds. A sign-in link lands in whatever account Supabase
  * Auth has for the address, password and all. An 'invite' link is made for an
  * account nobody has confirmed, which may be one somebody registered with a
@@ -268,6 +277,47 @@ async function identityIsBound(sql: Sql, authUserId: string): Promise<boolean> {
     throw new Error("erp.auth_identity_is_bound gave no answer");
   }
   return bound;
+}
+
+/**
+ * What the provider called the email it just took, kept beside the row the
+ * claim wrote for it (erp.record_invitation_email_sent, 20261012050000). The
+ * provider tells every project of the account about every message, and each
+ * database keeps only events about its own mail, so without this an
+ * invitation's bounce or complaint would be dropped as another database's.
+ * The email has gone either way, so this is never a reason to say otherwise:
+ * a record not written is a log line, and the line names no address, no
+ * person and no link.
+ */
+async function recordSent(
+  sql: Sql,
+  appUserId: string,
+  kind: "invite" | "resend",
+  providerId: string,
+): Promise<void> {
+  try {
+    const rows = (await declaring(
+      sql,
+      (tx) =>
+        tx`
+      select erp.record_invitation_email_sent(${appUserId}::uuid, ${kind}::text, ${providerId}::text) as answer
+    `,
+    )) as unknown as { answer: unknown }[];
+    const answer = rows[0]?.answer;
+    if (fieldOf(answer, "recorded") !== true) {
+      console.error(
+        `invite: the ${kind} email the provider took was not recorded: ${
+          textOf(fieldOf(answer, "reason")) ?? "no answer"
+        }`,
+      );
+    }
+  } catch (err) {
+    console.error(
+      `invite: the ${kind} email the provider took could not be recorded: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
 }
 
 /** Closing the connection is tidying up, and must not turn an answer into a 500. */
@@ -711,6 +761,9 @@ async function invite(req: Request, body: Record<string, unknown>): Promise<Resp
     } catch (err) {
       return notEmailed(`The email service did not take the message (${providerRefusal(err)})`);
     }
+    // Taken: the database keeps what the provider called it, so the
+    // provider's word on it later is this database's. Never fails the reply.
+    await recordSent(db, invited.appUserId, "invite", providerId);
 
     return reply(req, 200, {
       app_user_id: invited.appUserId,
@@ -820,7 +873,7 @@ async function resend(req: Request, token: unknown): Promise<Response> {
       expiresAt: row.expires_at,
       resent: true,
     });
-    await sendViaResend(apiKey, {
+    const providerId = await sendViaResend(apiKey, {
       id: "resend",
       to_address: row.email,
       subject: message.subject,
@@ -829,6 +882,8 @@ async function resend(req: Request, token: unknown): Promise<Response> {
       from_address: from,
       reply_to: null,
     });
+    // As for an invitation: kept beside the claim's row, never a failure.
+    await recordSent(db, String(row.app_user_id), "resend", providerId);
     return reply(req, 200, { sent: true });
   } catch (err) {
     console.error(
