@@ -525,8 +525,8 @@ holds "$ACME" "$UNPADDED"
 prov RESEND_ADMIN_API_KEY= WEBHOOK_PROVE_TIME=1760000000 WEBHOOK_PROVE_ID=msg_cloveerp_proof_rehearsal -- resend-webhook "$ACME" prove
 check '[[ $status -eq 0 && "$(cat "$FAKE_DIR/webhook.posts")" == "msg_cloveerp_proof_rehearsal|1760000000|v1,${UNPADDED_SIGNED}|taken" ]]' \
       "padded before it is read, so it signs as webhookSignature() signs with atob, and is taken"
-check '[[ $(( (${#UNPADDED} - 6) % 4 )) -ne 0 && -z "$(printf "%s" "${UNPADDED#whsec_}" | openssl base64 -d -A 2> /dev/null)" ]]' \
-      "a key openssl alone reads nothing of"
+check '[[ $(( (${#UNPADDED} - 6) % 4 )) -ne 0 ]]' \
+      "a key whose base64 is not padded (some openssl builds read nothing of one; padding first makes every build read it alike)"
 fresh "proved now"
 kept "$ACME" "{\"id\":\"wh_old_1\",\"secret\":\"${SECRET}\"}"
 holds "$ACME" "$SECRET"
