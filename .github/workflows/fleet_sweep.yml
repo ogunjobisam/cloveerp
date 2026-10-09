@@ -48,9 +48,11 @@ name: fleet sweep
 # (20261012010000: a trigger on erp_meta.fleet_request posts this workflow's
 # workflow_dispatch through pg_net, with the token release.yml keeps in its
 # vault from CLOVEERP_SWEEP_TOKEN), so a press of the button starts a run
-# within a minute. The ten-minute schedule stays as the fallback: without the
-# token, with GitHub refusing it, or with the wake lost, the request waits at
-# most one tick.
+# within a minute. It wakes it too the moment an incident or maintenance
+# window that reaches a client changes (20261012060000: a trigger on the
+# incident tables, below). The ten-minute schedule stays as the fallback:
+# without the token, with GitHub refusing it, or with the wake lost, the
+# request waits at most one tick.
 #
 # One build at a time, across the whole fleet. A build from empty replays
 # every migration into a Micro project for hours, and two of them at once
@@ -64,8 +66,40 @@ name: fleet sweep
 # requests are told why on their deployment's row; otherwise at most one
 # build is started in a tick.
 #
-# Nothing here touches a client's database: it reads and writes the control
+# The sweep touches no client's database: it reads and writes the control
 # plane's register over CLOVEERP_LIVE_DATABASE_URL, and asks GitHub.
+#
+# Incidents and maintenance, a job of its own (20261012060000). An incident or
+# a maintenance window declared on the control plane reaches the clients it
+# names, or every client, only once a copy is in each client's own database,
+# where its banner, its continuity screen and its drain tell its people. So
+# every tick, and every wake, the second job runs
+# supabase/ci/fleet_incident_sync.sh: for every client whose database is up,
+# what the control plane says it is owed (erp_meta.incident_pushes_due), given
+# whole to the client (erp_meta.apply_pushed_incidents), and the client's
+# answer given back as it came (erp_meta.settle_incident_pushes), with when
+# the client told its people and which copies it holds. A client owed nothing
+# is not connected to, but once a day, when the control plane asks it which
+# copies it holds (check_held), so that a client restored to an earlier point
+# is carried again what it lost. What is carried, however long an incident,
+# reaches psql through a file only the script can read, never a command line.
+#
+# The wake for an incident is not in its doors: it is a trigger on the tables
+# they write (erp_meta.incident_change_wakes_the_sweep on erp_meta.incident,
+# incident_update, incident_disclosure, incident_review, maintenance_window,
+# and a client deployment named on incident_deployment or
+# maintenance_window_deployment), so every writer is covered, a provider's
+# feed as well as the console. It runs as its owner, so no session role
+# reaches the vault's token; it wakes only for what reaches a client
+# deployment that is up, once a transaction, through erp_meta.wake_the_sweep(),
+# the same wake a console request gives, and no request is written for it. A
+# settle writes only rows reached as every client, and updates, which wake
+# nothing, so a push never wakes the next. Incident bodies are never printed:
+# the logs of this repository are public. News reaches a client within ten
+# minutes on the schedule alone (GitHub runs a schedule late at times), within
+# a minute or two of the wake once CLOVEERP_SWEEP_TOKEN is set; and when
+# GitHub or the control plane itself is what is down, the status page is the
+# channel to clients, not this.
 
 on:
   schedule:
@@ -78,21 +112,23 @@ permissions:
   actions: write
   contents: read
 
-# One sweep at a time: two sweeps could not claim the same row (the claim is
-# a single UPDATE with SKIP LOCKED), but two would race GitHub's rate limit,
-# and both could start a build. A wake that arrives while a sweep runs waits
-# behind it; GitHub keeps one waiting run per group and cancels an older
-# waiting one, which is harmless here, because the one that runs claims
-# everything that is open.
-concurrency:
-  group: fleet-sweep
-  cancel-in-progress: false
-
+# Each job its own group, not the workflow: a push of incidents that is slow
+# (a client that takes its time to answer) never holds up the claim of what
+# the console asked for, and the other way round.
 jobs:
   sweep:
     name: start what the console asked for
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One sweep at a time: two sweeps could not claim the same row (the claim
+    # is a single UPDATE with SKIP LOCKED), but two would race GitHub's rate
+    # limit, and both could start a build. A wake that arrives while a sweep
+    # runs waits behind it; GitHub keeps one waiting job per group and cancels
+    # an older waiting one, which is harmless here, because the one that runs
+    # claims everything that is open.
+    concurrency:
+      group: fleet-sweep
+      cancel-in-progress: false
     env:
       CP_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
       GH_TOKEN: ${{ github.token }}
@@ -335,3 +371,46 @@ jobs:
           else
             echo "- ${started} request(s) claimed and settled" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  incidents:
+    name: carry incidents and maintenance to the clients they reach
+    runs-on: ubuntu-latest
+    # Its own group: one push at a time, so two never apply the same item to
+    # a client at once, and a wake that arrives while one runs waits behind
+    # it (GitHub keeps one waiting job per group and cancels an older waiting
+    # one, which is harmless: the push that runs reads everything owed then).
+    # Never the sweep's group, so neither holds up the other.
+    concurrency:
+      group: fleet-incidents
+      cancel-in-progress: false
+    # A few statements per client owed something, one client at a time with a
+    # pause, each under a 30-second limit (60 on the control plane): seconds
+    # on a quiet day, minutes for a fleet of twenty all reached by one
+    # incident. The limit is for a push stuck on something none of those
+    # limits covers; the next tick carries what it did not.
+    timeout-minutes: 15
+    # Reads and writes databases only; asks GitHub nothing.
+    permissions:
+      contents: read
+    env:
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Carry every incident and maintenance window to the clients it reaches
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so what the control plane owes its clients of its incidents and maintenance cannot be read. Nothing was applied."
+            exit 1
+          fi
+          # Every client whose database is up: the run serves them all, so a
+          # waiting run cancelled by the next loses nothing.
+          supabase/ci/fleet_incident_sync.sh
