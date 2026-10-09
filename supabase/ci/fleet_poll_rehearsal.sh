@@ -157,18 +157,25 @@ TOKEN="sbp_rehearsal_access_token"
 SHA=6f0bd917534e7b56da32d121907892086fa7fb06
 STAFF='["new@clove.example:support","ops@clove.example:operator","owner@clove.example:owner"]'
 T="$(printf '\t')"
+# Its usage as the client's database sums it: three meters over three months,
+# and active_users with no row, because nothing measures it. The figures are
+# a named client's business: none may be printed.
+USAGE_ROWS='[{"meter_code":"documents_posted","period_start":"2026-08-01","period_end":"2026-08-31","quantity":987651,"measured_at":"2026-08-31T22:10:00+00:00"},{"meter_code":"documents_posted","period_start":"2026-09-01","period_end":"2026-09-30","quantity":987652,"measured_at":"2026-09-30T21:00:00+00:00"},{"meter_code":"documents_posted","period_start":"2026-10-01","period_end":"2026-10-31","quantity":987653,"measured_at":"2026-10-08T11:59:00+00:00"},{"meter_code":"messages_sent","period_start":"2026-10-01","period_end":"2026-10-31","quantity":987654,"measured_at":"2026-10-08T11:00:00+00:00"},{"meter_code":"movements_recorded","period_start":"2026-10-01","period_end":"2026-10-31","quantity":987655.5,"measured_at":"2026-10-08T10:00:00+00:00"}]'
+KINDS='["active_users","documents_posted","messages_sent","movements_recorded"]'
+USAGE="{\"kinds\":${KINDS},\"rows\":${USAGE_ROWS}}"
 HEALTH_A="kind${T}client
 release_sha${T}${SHA}
 database_bytes${T}123456789
 last_drain_pass_at${T}2026-10-08T12:00:00Z
 open_support_windows${T}1
-staff${T}${STAFF}"
+staff${T}${STAFF}
+usage${T}${USAGE}"
 
 answer() { mkdir -p "$work/fake/answers/$1"; printf '%s\n' "$3" > "$work/fake/answers/$1/$2"; }
 vault() { mkdir -p "$work/fake/vault"; printf '%s' "$2" > "$work/fake/vault/${1//:/_}"; }
 fresh() {
   rm -rf "$work/fake"; mkdir -p "$work/fake"
-  answer cp cp-ready "true true"
+  answer cp cp-ready "true true true"
   answer cp cp-staff '["owner@clove.example:owner","ops@clove.example:operator","new@clove.example:support"]'
   answer cp cp-clients "[{\"code\":\"acme\",\"ref\":\"${A}\",\"health\":{\"release_sha\":\"old\",\"assurance_failures\":2,\"assurance_at\":\"2026-10-08T03:07:40Z\"}}]"
   answer cp cp-refs "${A},${B}"
@@ -265,8 +272,20 @@ check '[[ "$(requests)" == "GET https://api.example/v1/projects/${A}/database/ba
       "the backups asked of the Management API, once"
 check '[[ "$out" == *"::add-mask::${URL_A}"* && "$(shown)" != *"$URL_A"* && "$(shown)" != *"pw-acme-rehearsal-secret"* && "$out" != *"$TOKEN"* ]]' \
       "the connection string masked and never printed; the token never printed"
-check '[[ "$(cat "$work/fake/summary")" == *"| acme | 6f0bd91 | 2 not green | 117 MB | 2026-10-08T12:00:00Z | 1 | in step | 2, newest 2026-10-08T02:00:09.000Z |  |"* ]]' \
+check '[[ "$(cat "$work/fake/summary")" == *"| acme | 6f0bd91 | 2 not green | 117 MB | 2026-10-08T12:00:00Z | 1 | in step | 2, newest 2026-10-08T02:00:09.000Z | 5 row(s); not measured: active_users |  |"* ]]' \
       "the run's summary has a row for it"
+n=$(calls cp cp-record-usage | tr -d " ")
+check '[[ -n "$n" && "$(var "$n" code)" == acme && "$(jq -cS . <<< "$(var "$n" usage)")" == "$(jq -cS . <<< "$USAGE_ROWS")" ]]' \
+      "its usage written on the control plane: every row as read, the current month and the two before it"
+check '[[ "$(var "$n" usage | jq -r "map(select(.meter_code == \"active_users\")) | length")" == 0 && "$out" == *"acme: usage, 5 row(s); not measured: active_users"* ]]' \
+      "active_users, which nothing measures, sent as no row (never nought) and said to be not measured"
+check '[[ "$(health acme | jq -r "has(\"usage\")")" == false ]]' "and kept out of its health, whose keys the control plane checks"
+check 'grep -q "^\\\\set VERBOSITY terse" "$work/fake/sql.$n" && grep -q "erp_meta.record_deployment_usage(:'"'"'code'"'"', :'"'"'usage'"'"'::jsonb)" "$work/fake/sql.$n"' \
+      "written terse, the rows as a variable"
+n=$(calls "$A" client-health | tr -d " ")
+check 'grep -q "from erp_meta.usage_meter m" "$work/fake/sql.$n" && grep -q "interval '"'"'2 months'"'"'" "$work/fake/sql.$n" && grep -q "group by m.meter_code, m.period_start, m.period_end" "$work/fake/sql.$n" && grep -q "exists (select 1 from erp.tenant t where t.id = m.tenant_id)" "$work/fake/sql.$n" && grep -q "a.action = '"'"'platform.tenant_purged'"'"'" "$work/fake/sql.$n" && ! grep -q "tenant_code" "$work/fake/sql.$n"' \
+      "read from its meters, summed by meter and period over every organisation its database holds or held and purged, and only those"
+check '[[ "$out" != *"98765"* && "$(cat "$work/fake/summary")" != *"98765"* ]]' "and no figure printed, in the log or the summary"
 
 # 3. The daily poll
 fresh
@@ -361,6 +380,40 @@ answer cp cp-record-health 'ERROR:  CLOVEERP_DEPLOYMENT_UNKNOWN: no deployment a
 run "a control plane that will not keep it" -- light
 check '[[ $status -eq 1 && "$out" == *"::error::acme: its health could not be written on the control plane"* && "$(calls "$B" client-health)" != "" ]]' \
       "the run ends red, and every client is read all the same"
+
+# 6b. Its usage
+fresh
+answer "$A" client-health "$(printf '%s\n' "$HEALTH_A" | sed '$d')
+ERROR:  permission denied for table usage_meter"
+run "a usage that cannot be read" -- light
+check '[[ $status -eq 0 && "$(h acme ".errors[0]")" == "usage could not be read (ERROR: permission denied for table usage_meter)" && "$(h acme .release_sha)" == "$SHA" ]]' \
+      "said in errors, every other reading kept"
+check '[[ -z "$(calls cp cp-record-usage)" && -n "$(calls cp cp-record-health)" ]]' "no usage written, the health written"
+fresh
+answer "$A" client-health "$(printf '%s\n' "$HEALTH_A" | sed '$d')
+usage${T}{\"kinds\":${KINDS},\"rows\":[]}"
+run "a client with no usage yet" -- light
+check '[[ $status -eq 0 && -z "$(calls cp cp-record-usage)" && "$(h acme ".errors | length")" == 0 ]]' "nothing written (none sent is none deleted), nothing missed"
+check '[[ "$out" == *"acme: usage, 0 row(s); not measured: active_users, documents_posted, messages_sent, movements_recorded"* ]]' "every meter said to be not measured, none nought"
+fresh
+answer "$A" client-health "$(printf '%s\n' "$HEALTH_A" | sed '$d')
+usage${T}{\"kinds\":${KINDS},\"rows\":[{\"meter_code\":\"documents_posted\",\"period_start\":\"2026-10-01\",\"period_end\":\"2026-10-31\",\"quantity\":\"lots\"}]}"
+run "a usage in a shape that could not be read" -- light
+check '[[ $status -eq 0 && "$(h acme ".errors[0]")" == "its usage came back in a shape that could not be read" && -z "$(calls cp cp-record-usage)" ]]' \
+      "said in errors, nothing written"
+fresh
+answer cp cp-ready "true true false"
+run "a control plane a release behind on usage" -- light
+check '[[ $status -eq 0 && "$out" == *"::notice::the control plane has no erp_meta.record_deployment_usage yet (20261012040000"* && -z "$(calls cp cp-record-usage)" && -n "$(calls cp cp-record-health)" ]]' \
+      "noted, the usage counted and written nowhere, the health written"
+check '[[ "$out" == *"acme: usage, 5 row(s)"* && "$out" != *"98765"* ]]' "and still no figure printed"
+fresh
+two_clients
+answer cp cp-record-usage "ERROR:  CLOVEERP_USAGE_MALFORMED: row {\"quantity\": 987651} is not a reading" "DETAIL:  987652"
+run "a control plane that will not keep the usage" -- light
+check '[[ $status -eq 1 && "$out" == *"::error::acme: its usage could not be written on the control plane (CLOVEERP_USAGE_MALFORMED)."* && -n "$(calls "$B" client-health)" ]]' \
+      "red, the code alone said, and every client read all the same"
+check '[[ "$out" != *"98765"* && "$out" == *"the health or usage of 2 of 2 client(s) could not be written"* ]]' "and no figure printed"
 
 # 7. One client, by code
 fresh

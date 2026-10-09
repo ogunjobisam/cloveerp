@@ -231,6 +231,23 @@ jobs:
         # reason printed. Seconds, no database.
         run: supabase/ci/fleet_status_sync_rehearsal.sh
 
+      - name: Every client's contract is carried as the control plane holds it, rehearsed
+        # supabase/ci/fleet_commercial_sync.sh (fleet_sync.yml) carries what
+        # each client is owed from its contract into its own database every
+        # hour and whenever a contract changes: the position its enforcement
+        # reads, and the notices its event stream is told. Wrong one way, a
+        # client trades beyond what it bought or below it; wrong the other, a
+        # notice is told twice, out of order or never; and what is owed is the
+        # owner's business with a client, in public logs. Here first, against
+        # the shared stand-ins: what it refuses before touching anything,
+        # every client served whatever code the run was started for, both on
+        # one connection and every answer in one settle, the notices in order
+        # and stopped at the first that waits, a client unreachable or a
+        # release behind settling nothing, a timeout on every statement, and
+        # nothing owed, no DETAIL and no connection string printed. Seconds,
+        # no database.
+        run: supabase/ci/fleet_commercial_sync_rehearsal.sh
+
       - name: The fleet's waits for each other are rehearsed
         # supabase/ci/fleet_busy.sh is how a copy asks whether a release is
         # replaying into its database, a release whether a copy is being

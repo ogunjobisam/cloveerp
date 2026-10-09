@@ -24,9 +24,14 @@ name: fleet sweep
 #   sync     fleet_sync.yml, with the client's code: its staff, and whether
 #            its own organisation is suspended, made to follow the register
 #            at once (a suspension, a reinstatement or an offboarding asks
-#            for it), rather than at the next hourly sync. Settled once the
-#            run is started: the run writes on the client's row what it
-#            changed, and the hourly sync follows the register all the same.
+#            for it), rather than at the next hourly sync; and what every
+#            client is owed from its contract carried across (a contract
+#            routine that queues a position or a notice for a client whose
+#            database is up asks for it, 20261012040000), which that run
+#            does for every client whatever the code. Settled once the run
+#            is started: the run writes on the client's row what it changed,
+#            settles what each client answered, and the hourly sync does the
+#            same all the same.
 #
 # Renames, exports and syncs are claimed only from a control plane that knows
 # them (20261012030000, which holds the addresses a client was moved from in

@@ -688,11 +688,13 @@ jobs:
         run: gh workflow run app.yml --ref main
 
   staff:
-    # Last: the new client is given the control plane's staff
-    # (fleet_sync.yml, for this code alone), so whoever supports it has a
-    # confirmed sign-in and their rank there before anyone asks, rather than
-    # at the next hour. Once it is built, whatever its first release did: a
-    # built client is kept as a live one is.
+    # Last: the new client is given the control plane's staff, and the
+    # contract the control plane holds for it (fleet_sync.yml; the staff for
+    # this code alone, the contract step serves every client), so whoever
+    # supports it has a confirmed sign-in and their rank there, and its plan
+    # is in force before its organisation is onboarded, rather than at the
+    # next hour. Once it is built, whatever its first release did: a built
+    # client is kept as a live one is.
     needs: [build, release]
     if: ${{ always() && inputs.code != 'demo' && needs.build.result == 'success' }}
     name: its staff follow
@@ -701,7 +703,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Ask fleet_sync.yml to give it the control plane's staff
+      - name: Ask fleet_sync.yml to give it the control plane's staff and its contract
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
