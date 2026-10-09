@@ -10,6 +10,7 @@ import {
   atLeast,
   buildRequestIsStale,
   CHECKLIST_ITEMS,
+  checklistStep,
   dayText,
   deploymentAddress,
   deploymentCommercialLine,
@@ -26,6 +27,7 @@ import {
   OFFBOARDING_COOL_OFF_DAYS,
   renameAddressHint,
   renameDescription,
+  retiredWebhookText,
   serviceSuspended,
   STALE_BUILD_REQUEST_MINUTES,
   SWEEP_STARTS,
@@ -369,19 +371,26 @@ function DeploymentRow({
         <td className="py-3 pr-4">
           <ul className="flex flex-col gap-1">
             {CHECKLIST_ITEMS.map((item) => {
-              const state = d.checklist[item.key];
+              // A step the build did itself says so (20261012050000). A
+              // person can still untick it, but the next run of the build or
+              // of the fleet secrets workflow's resend_webhook that finds the
+              // webhook ticks it again as the build's.
+              const step = checklistStep(d.checklist, item.key);
               return (
                 <li key={item.key}>
                   <label className="flex items-center gap-2 text-xs">
                     <input
                       type="checkbox"
-                      checked={state?.done ?? false}
+                      checked={step.done}
                       disabled={!mayOperate || tick.isPending || d.status === "retired"}
                       onChange={(e) => tick.mutate({ item: item.key, done: e.target.checked })}
                     />
-                    <span className={state?.done ? "text-muted-foreground line-through" : ""}>
+                    <span className={step.done ? "text-muted-foreground line-through" : ""}>
                       {item.label}
                     </span>
+                    {step.note ? (
+                      <span className="text-[11px] text-muted-foreground">{step.note}</span>
+                    ) : null}
                   </label>
                 </li>
               );
@@ -750,6 +759,10 @@ function RequestRelease({
 function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => void }) {
   const [reason, setReason] = useState("");
   const offboarding = d.status === "retiring";
+  // Retiring deletes no Resend webhook, and its checklist cannot say whether
+  // it has one, so what to do about it is said as of the state it is retired
+  // into, whatever the step says.
+  const webhook = retiredWebhookText({ code: d.code, status: "retired" });
   const ending =
     d.built_at === null
       ? "Its purge date has come and its build never finished, so there is nothing to export and its offboarding ends here."
@@ -790,6 +803,7 @@ function RetireDeployment({ d, onDone }: { d: ClientDeployment; onDone: () => vo
                 Supabase dashboard.
               </li>
             ) : null}
+            {webhook ? <li>{webhook}</li> : null}
           </ul>
         </div>
       )}

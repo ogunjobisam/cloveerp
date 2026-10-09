@@ -73,6 +73,11 @@ export type ClientDeploymentStatus =
  * Since 8 October the application is a Cloudflare Worker serving every subdomain through one
  * wildcard route, so a client needs no domain or DNS record of its own; the register still
  * accepts those two items for a row ticked before then.
+ *
+ * Since 20261012050000 the build makes the client's Resend webhook itself when it holds the
+ * key to, proves it, and ticks the step (erp_meta.deployment_checklist_by_build); the row then
+ * says the build set it (checklistStep). Without the key the step is left for a person, as
+ * before.
  */
 export const CHECKLIST_ITEMS = [
   { key: "google_sign_in", label: "Google sign-in (if wanted)" },
@@ -80,6 +85,67 @@ export const CHECKLIST_ITEMS = [
 ] as const;
 
 export type ChecklistItem = (typeof CHECKLIST_ITEMS)[number]["key"];
+
+/** What the Fleet view says beside a step the build did itself. */
+export const SET_BY_THE_BUILD = "set by the build";
+
+/** One step of a client's checklist, as the Fleet view shows it. */
+export type ChecklistStep = {
+  done: boolean;
+  /** Ticked by the build rather than by a person. */
+  byBuild: boolean;
+  /** What the row says beside the step: that the build set it, or nothing. */
+  note: string | null;
+};
+
+/**
+ * Whether a step's "by" names the build rather than a person. A person's
+ * tick is signed with their address; the build signs with words that say
+ * "build" ("the build", "the build, run 123", build_from_empty). An address
+ * is a person's whatever it says ("build@…" among them), so the words are
+ * read with every address taken out; and "rebuild" is not the build.
+ */
+export function namesTheBuild(by: unknown): boolean {
+  const t = textOf(by);
+  if (t === null) return false;
+  return t
+    .replace(/\S*@\S*/g, " ")
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .includes("build");
+}
+
+/**
+ * One step of the register's checklist, read without trusting its shape
+ * (erp_platform_deployments returns what was written: { done, at, by }).
+ * Done only when it says so, as true or "true". Set by the build when its
+ * "by" names the build, or it says so outright (by_build: true). Anything
+ * missing or of another shape is a step not done, by nobody.
+ */
+export function checklistStep(checklist: unknown, key: ChecklistItem): ChecklistStep {
+  const entry = objectOf(objectOf(checklist)?.[key]);
+  if (entry === null) return { done: false, byBuild: false, note: null };
+  const done = entry["done"] === true || entry["done"] === "true";
+  const byBuild = namesTheBuild(entry["by"]) || entry["by_build"] === true;
+  return { done, byBuild, note: done && byBuild ? SET_BY_THE_BUILD : null };
+}
+
+/**
+ * What retiring a client leaves a person to do about its Resend webhook:
+ * retiring deletes nothing, and the endpoint would go on being sent every
+ * event of the account. Said for every client being offboarded or retired,
+ * whatever its checklist says, because the step does not say whether an
+ * endpoint exists: one can be made and then fail its proof, or be proved and
+ * never ticked, or be unticked by a person. Deleting one that does not exist
+ * changes nothing, so it says "if it has one". Null for a client in any other
+ * state, which resend_webhook_delete refuses. The fleet secrets workflow's
+ * resend_webhook_delete deletes the endpoint and its stored secret
+ * (20261012050000).
+ */
+export function retiredWebhookText(d: Pick<ClientDeployment, "code" | "status">): string | null {
+  if (d.status !== "retiring" && d.status !== "retired") return null;
+  return `Delete its Resend webhook if it has one: run the fleet secrets workflow with the action resend_webhook_delete for ${d.code}.`;
+}
 
 /**
  * What the fleet poll last read from one client's own database

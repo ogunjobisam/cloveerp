@@ -4,6 +4,8 @@ import {
   agoText,
   buildRecovery,
   buildRequestIsStale,
+  CHECKLIST_ITEMS,
+  checklistStep,
   customerChoices,
   customerChoiceText,
   databaseSizeText,
@@ -24,6 +26,7 @@ import {
   isPlatformOperator,
   LAST_COPY_RULE,
   lastExportText,
+  namesTheBuild,
   OFFBOARDING_COOL_OFF_DAYS,
   offboardingStepsLeft,
   organisationWhere,
@@ -34,7 +37,9 @@ import {
   readDeploymentCommercial,
   renameAddressHint,
   renameDescription,
+  retiredWebhookText,
   serviceSuspended,
+  SET_BY_THE_BUILD,
   STALE_BUILD_REQUEST_MINUTES,
   SWEEP_STARTS,
   takesReleases,
@@ -1825,5 +1830,141 @@ describe("the client deployments on a plan", () => {
     expect(planDeploymentsText({ deployments: null })).toBeNull();
     expect(planDeploymentsText({ deployments: -1 })).toBeNull();
     expect(planDeploymentsText({ deployments: 1.5 })).toBeNull();
+  });
+});
+
+describe("a step of the checklist the build did itself", () => {
+  test("the build's own words name it; a person's address never does", () => {
+    expect(namesTheBuild("the build")).toBe(true);
+    expect(namesTheBuild("The Build")).toBe(true);
+    expect(namesTheBuild("  build ")).toBe(true);
+    expect(namesTheBuild("the build, run 18234567890")).toBe(true);
+    expect(namesTheBuild("the build (deployment_from_empty.yml)")).toBe(true);
+    expect(namesTheBuild("build_from_empty")).toBe(true);
+    expect(namesTheBuild("owner@cloveerp.com")).toBe(false);
+    expect(namesTheBuild("build@cloveerp.com")).toBe(false);
+    expect(namesTheBuild("ops@build.cloveerp.com")).toBe(false);
+    expect(namesTheBuild("the build <ops@cloveerp.com>")).toBe(true);
+    expect(namesTheBuild("rebuild")).toBe(false);
+    expect(namesTheBuild("builder")).toBe(false);
+    expect(namesTheBuild("")).toBe(false);
+    expect(namesTheBuild("   ")).toBe(false);
+    expect(namesTheBuild(null)).toBe(false);
+    expect(namesTheBuild(undefined)).toBe(false);
+    expect(namesTheBuild(42)).toBe(false);
+    expect(namesTheBuild({ by: "the build" })).toBe(false);
+  });
+
+  test("ticked by the build, the Resend webhook says the build set it", () => {
+    const checklist = {
+      resend_webhook: { done: true, at: "2026-10-09T10:00:00Z", by: "the build" },
+    };
+    expect(checklistStep(checklist, "resend_webhook")).toEqual({
+      done: true,
+      byBuild: true,
+      note: SET_BY_THE_BUILD,
+    });
+    expect(SET_BY_THE_BUILD).toBe("set by the build");
+    // A step that says so outright is the build's too.
+    expect(
+      checklistStep({ resend_webhook: { done: true, by_build: true } }, "resend_webhook").note,
+    ).toBe(SET_BY_THE_BUILD);
+  });
+
+  test("ticked by a person, it is done and says nothing more", () => {
+    const checklist = {
+      resend_webhook: { done: true, at: "2026-10-09T10:00:00Z", by: "owner@cloveerp.com" },
+      google_sign_in: { done: true, at: "2026-10-09T10:00:00Z", by: "owner@cloveerp.com" },
+    };
+    for (const item of CHECKLIST_ITEMS) {
+      expect(checklistStep(checklist, item.key)).toEqual({
+        done: true,
+        byBuild: false,
+        note: null,
+      });
+    }
+  });
+
+  test("not done says nothing, whoever wrote it last", () => {
+    // A person unticked what the build had set: their tick stands.
+    expect(
+      checklistStep(
+        { resend_webhook: { done: false, at: "2026-10-09T11:00:00Z", by: "owner@cloveerp.com" } },
+        "resend_webhook",
+      ),
+    ).toEqual({ done: false, byBuild: false, note: null });
+    // The build's name on a step not done is not a step the build set.
+    expect(
+      checklistStep({ resend_webhook: { done: false, by: "the build" } }, "resend_webhook"),
+    ).toEqual({ done: false, byBuild: true, note: null });
+  });
+
+  test("a step missing, or of another shape, is not done, by nobody", () => {
+    const nothing = { done: false, byBuild: false, note: null };
+    expect(checklistStep({}, "resend_webhook")).toEqual(nothing);
+    expect(checklistStep(null, "resend_webhook")).toEqual(nothing);
+    expect(checklistStep(undefined, "resend_webhook")).toEqual(nothing);
+    expect(checklistStep([], "resend_webhook")).toEqual(nothing);
+    expect(checklistStep("resend_webhook", "resend_webhook")).toEqual(nothing);
+    expect(checklistStep({ resend_webhook: true }, "resend_webhook")).toEqual(nothing);
+    expect(checklistStep({ resend_webhook: [true] }, "resend_webhook")).toEqual(nothing);
+    expect(
+      checklistStep({ google_sign_in: { done: true, by: "the build" } }, "resend_webhook"),
+    ).toEqual(nothing);
+    // Done only when it says so: true, or "true" as text.
+    expect(
+      checklistStep({ resend_webhook: { done: "true", by: "the build" } }, "resend_webhook").note,
+    ).toBe(SET_BY_THE_BUILD);
+    expect(
+      checklistStep({ resend_webhook: { done: 1, by: "the build" } }, "resend_webhook").done,
+    ).toBe(false);
+    expect(
+      checklistStep({ resend_webhook: { done: "yes", by: "the build" } }, "resend_webhook").done,
+    ).toBe(false);
+  });
+});
+
+describe("what retiring a client leaves to do about its Resend webhook", () => {
+  const SAID =
+    "Delete its Resend webhook if it has one: run the fleet secrets workflow with the action resend_webhook_delete for acme.";
+
+  test("a client being offboarded or retired is told to delete it, if it has one", () => {
+    expect(retiredWebhookText({ code: "acme", status: "retired" })).toBe(SAID);
+    expect(retiredWebhookText({ code: "acme", status: "retiring" })).toBe(SAID);
+  });
+
+  test("whatever its checklist says: a webhook can exist that the step does not show", () => {
+    // Made and not proved, proved and never ticked, or unticked by a person:
+    // the step says nothing about whether an endpoint is there to delete.
+    const checklists: ClientDeployment["checklist"][] = [
+      {},
+      { resend_webhook: { done: false, at: "2026-10-09T10:00:00Z", by: "owner@cloveerp.com" } },
+      { resend_webhook: { done: false, at: "2026-10-09T10:00:00Z", by: "the build" } },
+      { resend_webhook: { done: true, at: "2026-10-09T10:00:00Z", by: "the build" } },
+      { resend_webhook: { done: true, at: "2026-10-09T10:00:00Z", by: "owner@cloveerp.com" } },
+    ];
+    for (const checklist of checklists) {
+      const d: Pick<ClientDeployment, "code" | "status" | "checklist"> = {
+        code: "acme",
+        status: "retired",
+        checklist,
+      };
+      expect(retiredWebhookText(d)).toBe(SAID);
+    }
+  });
+
+  test("nothing for a client in any other state, which the delete action refuses", () => {
+    const others: ClientDeploymentStatus[] = [
+      "requested",
+      "creating",
+      "building",
+      "built",
+      "live",
+      "suspended",
+      "failed",
+    ];
+    for (const status of others) {
+      expect(retiredWebhookText({ code: "acme", status })).toBeNull();
+    }
   });
 });
