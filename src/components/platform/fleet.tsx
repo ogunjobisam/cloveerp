@@ -12,6 +12,7 @@ import {
   CHECKLIST_ITEMS,
   dayText,
   deploymentAddress,
+  deploymentCommercialLine,
   deploymentHealthLine,
   deploymentLifecycleNotes,
   deploymentOrigin,
@@ -32,6 +33,7 @@ import {
   type ChecklistItem,
   type ClientDeployment,
   type ClientDeploymentStatus,
+  type CommercialLine,
   type DeploymentEvent,
   type FleetAction,
   type HealthLine,
@@ -79,6 +81,17 @@ import { Card, Fail, INPUT, LINK_BUTTON } from "./kit";
  * any more; its row names the steps left. What a row offers is decided by
  * fleetActions in src/lib/platform.ts, by its state and the viewer's rank;
  * the doors decide regardless.
+ *
+ * And a client holds its contract (20261012040000): the control plane sends
+ * its own database the newest position of the contract naming it — the plan,
+ * the term, the dated limits and add-ons — and the notices of that
+ * contract's events, and the fleet poll reads back what it used. A row says
+ * the plan in force, whether its database has applied the position, the
+ * notices waiting, and its latest month of usage, a meter never measured
+ * said so rather than 0 (deploymentCommercialLine); and makes a note when
+ * the position has waited over a day to be applied, or a notice was refused.
+ * None of it is a release check: a client's fault never holds up the
+ * control plane.
  */
 
 /** Where a run's log is: the repository the workflows run in. */
@@ -247,6 +260,9 @@ function DeploymentRow({
   // Its project is up and the register says something of it: a line of its
   // own under the row, so the row and its health read as one.
   const health = deploymentHealthLine(d, now);
+  // Its contract, as its own database holds it, under its health.
+  const commercial = deploymentCommercialLine(d, now);
+  const below = health !== null || commercial !== null;
   const notes = deploymentLifecycleNotes(d, now);
   const moved = notes.filter((n) => n.key === "moved");
   const standing = notes.filter((n) => n.key !== "moved");
@@ -260,7 +276,7 @@ function DeploymentRow({
 
   return (
     <>
-      <tr className={health ? "align-top" : "border-b border-border/60 align-top last:border-0"}>
+      <tr className={below ? "align-top" : "border-b border-border/60 align-top last:border-0"}>
         <td className="py-3 pr-4">
           <div className="text-sm font-medium">{d.client_name}</div>
           <div className="font-mono text-[11px] text-muted-foreground">{d.code}</div>
@@ -428,10 +444,13 @@ function DeploymentRow({
           </DialogOpenContext.Provider>
         </td>
       </tr>
-      {health ? (
+      {below ? (
         <tr className="border-b border-border/60 last:border-0">
           <td colSpan={7} className="pb-3 pr-0 pt-0">
-            <DeploymentHealthSummary line={health} />
+            <div className="flex flex-col gap-1">
+              {health ? <DeploymentHealthSummary line={health} /> : null}
+              {commercial ? <DeploymentCommercialSummary line={commercial} /> : null}
+            </div>
           </td>
         </tr>
       ) : null}
@@ -486,6 +505,39 @@ function DeploymentHealthSummary({ line }: { line: HealthLine }) {
           Poll error: {error}
         </p>
       ))}
+    </div>
+  );
+}
+
+/**
+ * What a client's own database holds of its contract, in one line: the plan
+ * in force and the contract's state, whether the newest position has been
+ * applied, the notices waiting; then its latest month of usage. A position
+ * waiting over a day comes first, and notices its database refused last.
+ */
+function DeploymentCommercialSummary({ line }: { line: CommercialLine }) {
+  return (
+    <div className="flex flex-col gap-0.5 text-[11px]">
+      {line.waiting ? <p className="text-amber-700 dark:text-amber-400">{line.waiting}</p> : null}
+      {line.parts.length > 0 ? (
+        <p className="text-muted-foreground">
+          <span className="font-medium uppercase tracking-wide">Contract</span>
+          {line.parts.map((part) => (
+            <span key={part.key}>
+              {" · "}
+              <span className={TONE_TEXT[part.tone]}>{part.text}</span>
+            </span>
+          ))}
+        </p>
+      ) : null}
+      {line.usage ? (
+        <p className="text-muted-foreground">
+          <span className="font-medium uppercase tracking-wide">Usage</span>
+          {" · "}
+          {line.usage}
+        </p>
+      ) : null}
+      {line.failed ? <p className="text-destructive">{line.failed}</p> : null}
     </div>
   );
 }

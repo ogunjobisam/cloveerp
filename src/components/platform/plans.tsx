@@ -3,6 +3,7 @@ import { CreditCard } from "lucide-react";
 
 import { Pill, Table } from "../erp/panel";
 import { callErp } from "../../lib/erp";
+import { planDeploymentsText } from "../../lib/platform";
 import { Card, Fail } from "./kit";
 
 /**
@@ -14,6 +15,11 @@ import { Card, Fail } from "./kit";
  * written by the platform's own operations, both with their reasoning in the
  * diff. The findings are erp.entitlement_enforcement_report(): an entitlement
  * kind that no function counts, a subscription on a plan that is gone.
+ *
+ * A client deployment holds no subscription here: its contract names it, and
+ * its own database holds the position the contract sends it. So each plan
+ * also says how many client deployments hold a contract in force on it
+ * (20261012040000), beside the organisations subscribed to it.
  */
 
 export type PlatformPlans = {
@@ -31,6 +37,11 @@ export type PlatformPlans = {
     }[];
     capabilities: string[];
     subscribers: number;
+    /**
+     * Client deployments named by a contract in force on the plan
+     * (20261012040000). Absent from a register older than it.
+     */
+    deployments?: number | null;
   }[];
   subscriptions: {
     tenant_code: string;
@@ -66,7 +77,7 @@ export function Plans() {
     <Card
       title="Plans and subscriptions"
       icon={<CreditCard className="size-4 text-primary" />}
-      description="Every plan the platform offers, what each one limits and allows, and which organisation is on which."
+      description="Every plan the platform offers, what each one limits and allows, which organisation is on which, and how many client deployments hold a contract on each."
     >
       {q.isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -96,6 +107,7 @@ export function Plans() {
                     <Pill tone={p.subscribers > 0 ? "ok" : "muted"}>
                       {p.subscribers === 1 ? "1 subscriber" : `${p.subscribers} subscribers`}
                     </Pill>
+                    <PlanDeployments plan={p} />
                   </div>
                   {p.description ? (
                     <p className="mt-1 text-sm text-muted-foreground">{p.description}</p>
@@ -192,4 +204,10 @@ export function Plans() {
       )}
     </Card>
   );
+}
+
+/** How many client deployments a plan's contracts in force name, when any do. */
+function PlanDeployments({ plan }: { plan: { deployments?: number | null } }) {
+  const text = planDeploymentsText(plan);
+  return text === null ? null : <Pill tone="ok">{text}</Pill>;
 }
