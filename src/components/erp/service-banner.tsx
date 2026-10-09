@@ -3,8 +3,10 @@ import { Link } from "@tanstack/react-router";
 import { Siren, Wrench, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { isClientHost, pageHost } from "../../lib/backend";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { noticeReach } from "../../lib/incident-reach";
 import { TOUCH } from "./page";
 
 /**
@@ -19,6 +21,11 @@ import { TOUCH } from "./page";
  *
  * A dismissal is per update, in this browser only. The next update — even
  * "no change" — brings the banner back, which is the point of a timer.
+ *
+ * On a client's own service an incident the control plane sent reaches the
+ * one organisation there, so the banner says it affects this service rather
+ * than every organisation, which would claim others it does not have
+ * (20261012060000).
  */
 
 type Notices = {
@@ -36,6 +43,8 @@ type Notices = {
     severity_code: string;
     state: string;
     affects_all_tenants: boolean;
+    /** A copy the control plane sent (20261012060000); absent from an older database. */
+    received_at?: unknown;
     next_update_due_at: string | null;
     origin: string | null;
     components: { code: string; name: string }[];
@@ -83,6 +92,7 @@ export function ServiceBanner() {
   if (!n) return null;
 
   const soon = Date.now() + 24 * 60 * 60 * 1000;
+  const onClient = isClientHost(pageHost());
 
   // `?? []` on both, because this banner renders inside the shell and a throw
   // here does not cost the banner — it costs every screen in the product. The
@@ -92,7 +102,11 @@ export function ServiceBanner() {
   // banner is the right failure; a missing application is not.
   const incidents = (n.incidents ?? [])
     .filter((i) => i.state !== "resolved")
-    .map((i) => ({ ...i, key: `${i.code}:${i.updates[0]?.id ?? "declared"}` }))
+    .map((i) => ({
+      ...i,
+      key: `${i.code}:${i.updates[0]?.id ?? "declared"}`,
+      reach: noticeReach(i, onClient),
+    }))
     .filter((i) => !dismissed.includes(i.key));
   const windows = (n.maintenance ?? [])
     .filter(
@@ -127,7 +141,11 @@ export function ServiceBanner() {
                 <span className="font-mono text-xs text-muted-foreground">{i.severity_code}</span>
                 <span className="text-xs text-muted-foreground">
                   {i.state === "contained" ? ui("Contained") : ui("Live")}
-                  {i.affects_all_tenants ? ` · ${ui("Every organisation")}` : ""}
+                  {i.reach === "service"
+                    ? ` · ${ui("This service")}`
+                    : i.reach === "everyone"
+                      ? ` · ${ui("Every organisation")}`
+                      : ""}
                 </span>
               </div>
               {i.components.length > 0 || i.origin ? (

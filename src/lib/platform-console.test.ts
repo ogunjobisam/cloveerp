@@ -139,16 +139,18 @@ describe("what a console reaches on each kind of deployment", () => {
       addressChangeHere: true,
       selfServiceMayOpen: true,
       register: true,
+      incidentsDeclaredHere: true,
     });
   });
 
-  test("a client's own project refuses the control plane's business, staff and addresses", () => {
+  test("a client's own project refuses the control plane's business, staff, addresses and declaring", () => {
     expect(consoleReach("client")).toEqual({
       controlPlaneBusiness: false,
       staffManagedHere: false,
       addressChangeHere: false,
       selfServiceMayOpen: false,
       register: false,
+      incidentsDeclaredHere: false,
     });
   });
 
@@ -160,6 +162,7 @@ describe("what a console reaches on each kind of deployment", () => {
         addressChangeHere: true,
         selfServiceMayOpen: true,
         register: false,
+        incidentsDeclaredHere: true,
       });
     }
   });

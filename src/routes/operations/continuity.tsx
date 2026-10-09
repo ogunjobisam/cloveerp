@@ -5,8 +5,10 @@ import { ErrorNote } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { isClientHost, pageHost } from "../../lib/backend";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { noticeReach } from "../../lib/incident-reach";
 
 export const Route = createFileRoute("/operations/continuity")({
   head: () => ({
@@ -83,6 +85,8 @@ type Notices = {
     is_data_integrity: boolean;
     is_security: boolean;
     affects_all_tenants: boolean;
+    /** A copy the control plane sent (20261012060000); absent from an older database. */
+    received_at?: unknown;
     next_update_due_at: string | null;
     origin: string | null;
     components: { code: string; name: string }[];
@@ -114,6 +118,9 @@ function ServiceNotices() {
 
   if (q.error) return <ErrorNote error={q.error} />;
   const n = q.data;
+  // On a client's own service, "every organisation" is the one organisation
+  // there: an incident that reached it affects this service.
+  const onClient = isClientHost(pageHost());
 
   return (
     <section className="flex flex-col gap-4">
@@ -184,7 +191,11 @@ function ServiceNotices() {
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {when(i.declared_at)}
                   {i.scope ? ` · ${i.scope}` : ""}
-                  {i.affects_all_tenants ? ` · ${ui("Every organisation")}` : ""}
+                  {noticeReach(i, onClient) === "service"
+                    ? ` · ${ui("This service")}`
+                    : noticeReach(i, onClient) === "everyone"
+                      ? ` · ${ui("Every organisation")}`
+                      : ""}
                 </div>
                 {i.components.length > 0 || i.origin ? (
                   <div className="mt-0.5 text-xs text-muted-foreground">

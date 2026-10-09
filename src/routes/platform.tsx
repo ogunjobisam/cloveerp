@@ -141,7 +141,7 @@ const PANELS: Record<ViewKey, (ctx: ViewContext) => ReactNode> = {
   diagnostics: () => <Diagnostics />,
   queue: ({ role }) => <Queue role={role} />,
   deployment: () => <Deployment />,
-  incidents: () => <Incidents />,
+  incidents: ({ me }) => <Incidents deployment={me.deployment} />,
   staff: ({ role, me }) => <Staff role={role} deployment={me.deployment} />,
   activity: () => <Activity />,
   decisions: () => <Decisions />,
