@@ -268,6 +268,28 @@ jobs:
         # no database.
         run: supabase/ci/fleet_commercial_sync_rehearsal.sh
 
+      - name: Every incident and maintenance window is carried to the clients it reaches, rehearsed
+        # supabase/ci/fleet_incident_sync.sh (fleet_sweep.yml, a job of its
+        # own) carries every incident and maintenance window that reaches a
+        # client into its own database every ten minutes and on the sweep's
+        # wake, where its banner and its drain tell its people. Wrong one
+        # way, a client is never told of an outage, or of a security incident
+        # whose report it owes; wrong the other, an item is settled as held
+        # when it never arrived, or carried every run because it was
+        # rewritten on the way; and what is carried is incident bodies, in
+        # public logs. Here first, against the shared stand-ins answering as
+        # 20261012060000's routines answer: what it refuses before touching
+        # anything, a client owed nothing never connected to and one owed
+        # only its telling still applied and settled, what the control plane
+        # owes given to the client whole and the client's answer (applied,
+        # replay, waiting, refused, and when it told its people) given back
+        # as it came, a push refused whole settling nothing, what one run
+        # carries, a client unreachable or a release behind settling nothing,
+        # a timeout on every statement, nothing carried, no detail answered,
+        # no DETAIL or CONTEXT and no connection string printed, and the
+        # job's own concurrency group. Seconds, no database.
+        run: supabase/ci/fleet_incident_sync_rehearsal.sh
+
       - name: The fleet's waits for each other are rehearsed
         # supabase/ci/fleet_busy.sh is how a copy asks whether a release is
         # replaying into its database, a release whether a copy is being

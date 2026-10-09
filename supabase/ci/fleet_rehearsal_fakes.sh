@@ -4,7 +4,8 @@
 # (fleet_rename_rehearsal.sh, fleet_export_rehearsal.sh,
 # fleet_backup_rehearsal.sh, fleet_status_sync_rehearsal.sh,
 # fleet_busy_rehearsal.sh, fleet_commercial_sync_rehearsal.sh,
-# resend_webhook_rehearsal.sh). Sourced, never run:
+# resend_webhook_rehearsal.sh, fleet_incident_sync_rehearsal.sh). Sourced,
+# never run:
 #
 #   . supabase/ci/fleet_rehearsal_fakes.sh
 #   fleet_fakes "$work"      # writes psql, curl, pg_dump, age, aws, sleep, gh
@@ -29,7 +30,16 @@
 #             (FAKE_VAULT_PUT_FAIL, a part of a name, refuses keeping it);
 #             events are appended to
 #             $FAKE_DIR/events as code|phase|status|detail. -c is refused:
-#             psql substitutes :'name' only on standard input.
+#             psql substitutes :'name' only on standard input. A line
+#             \set <name> `<command>` is what psql does with it: :'var' in
+#             the command is that variable quoted for the shell, sh runs it,
+#             and <name> is what it printed less one trailing newline; each
+#             file a :'var' names is noted with its mode in
+#             $FAKE_DIR/files.<n>. The length of the arguments psql was
+#             given is $FAKE_DIR/argv.<n>; with FAKE_WATCH_DIR set, the names
+#             of the files in it and in its directories at that call are
+#             $FAKE_DIR/files_at.<n>. An answer line SIGNAL: <name> sends that
+#             signal to whatever ran psql.
 #   curl      The Management API as mapi asks it: auth settings kept as
 #             patched, PostgREST, secrets kept as set ($FAKE_DIR/secrets.held,
 #             a JSON object of name to value) and listed as the API lists
@@ -97,6 +107,8 @@ fleet_fakes() {
   cat > "$dir/psql" <<'FAKE'
 #!/usr/bin/env bash
 conn=""; vars=""; stop=0
+argv_bytes=0
+for a in "$@"; do argv_bytes=$((argv_bytes + ${#a} + 1)); done
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -v)
@@ -133,6 +145,33 @@ if [[ -z "$tag" ]]; then
     *"record_deployment_event"*) tag=event ;;
     *) tag=untagged ;;
   esac
+fi
+# \set name `command`, as psql runs it: :'var' in the command is that
+# variable quoted for the shell, sh runs the command, and name is set to what
+# it printed, less one trailing newline (only one, as psql takes).
+bt_re='^\\set ([A-Za-z_][A-Za-z0-9_]*) `(.*)`$'
+qv_re=":'([A-Za-z_][A-Za-z0-9_]*)'"
+while IFS= read -r line; do
+  [[ "$line" =~ $bt_re ]] || continue
+  bname="${BASH_REMATCH[1]}"; cmd="${BASH_REMATCH[2]}"; run=""
+  while [[ "$cmd" =~ $qv_re ]]; do
+    vn="${BASH_REMATCH[1]}"; vv=$(var "$vn")
+    run="${run}${cmd%%":'${vn}'"*}'$(printf '%s' "$vv" | sed "s/'/'\\\\''/g")'"
+    cmd="${cmd#*":'${vn}'"}"
+    printf '%s %s %s\n' "$bname" "$(ls -ld "$vv" 2> /dev/null | cut -c 1-10)" "$vv" >> "$FAKE_DIR/files.$n"
+  done
+  val=$(sh -c "${run}${cmd}"; printf x)
+  val="${val%x}"; val="${val%$'\n'}"
+  vars="${vars}${bname}=${val}"$'\n'
+done <<< "$sql"
+printf '%s\n' "$argv_bytes" > "$FAKE_DIR/argv.$n"
+if [[ -n "${FAKE_WATCH_DIR:-}" ]]; then
+  # Two levels: a script's own directory under it, and the files in that.
+  seen=""
+  for f in "$FAKE_WATCH_DIR"/* "$FAKE_WATCH_DIR"/*/*; do
+    if [[ -f "$f" ]]; then seen="${seen}${f##*/} "; fi
+  done
+  printf '%s' "$seen" > "$FAKE_DIR/files_at.$n"
 fi
 printf '%s\n' "$sql" > "$FAKE_DIR/sql.$n"
 printf '%s' "$vars" > "$FAKE_DIR/vars.$n"
@@ -196,6 +235,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       if [[ "$terse" != yes ]]; then echo "$line" >&2; fi ;;
     NOTICE:*|WARNING:*)
       echo "psql:<stdin>:3: $line" >&2 ;;
+    "SIGNAL: "*)
+      kill -s "${line#SIGNAL: }" "$PPID" ;;
     *)
       printf '%s\n' "$line" ;;
   esac

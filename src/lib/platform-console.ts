@@ -208,6 +208,15 @@ export type ConsoleReach = {
   selfServiceMayOpen: boolean;
   /** The register of client deployments, which only the control plane keeps. */
   register: boolean;
+  /**
+   * Declaring an incident, naming who it reached, flagging it as a security
+   * incident and announcing maintenance. A client's own project refuses all
+   * four (erp.require_not_client, 20261012060000): the control plane declares,
+   * and what reaches a client arrives there as a received copy. Updating,
+   * containing and resolving an incident the client's project declared itself
+   * before then stay open.
+   */
+  incidentsDeclaredHere: boolean;
 };
 
 /**
@@ -227,6 +236,7 @@ export function consoleReach(deployment: ConsoleDeployment): ConsoleReach {
     addressChangeHere: !client,
     selfServiceMayOpen: !client,
     register: deployment === "production",
+    incidentsDeclaredHere: !client,
   };
 }
 
