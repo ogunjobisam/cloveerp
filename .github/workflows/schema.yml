@@ -193,6 +193,26 @@ jobs:
         # and that nothing secret is printed. Seconds, no database, no API.
         run: supabase/ci/fleet_secrets_rehearsal.sh
 
+      - name: Each project's webhook at the email provider is rehearsed
+        # supabase/ci/provision_project.sh resend-webhook gives every project
+        # its own endpoint at Resend (a build's step in
+        # deployment_from_empty.yml, and fleet_secrets.yml's resend_webhook
+        # for the fleet, the demonstration and the control plane), and runs
+        # for real only against Resend's account and a paying client's
+        # project. So it runs here first, against the shared stand-ins (a
+        # Resend that keeps its endpoints in files, a function that checks
+        # the signature as the real one does): what it refuses before asking
+        # anything, nothing made for a database not released 20261012050000,
+        # an endpoint at the project's own address for the six events the
+        # function reads, its secret in the vault before the project has it,
+        # one that is right (and signed with the vault's secret) kept and any
+        # other here deleted before one is made, one elsewhere only
+        # forgotten, a lost answer never leaving two, the proof signed as
+        # src/lib/email/resend-webhook.ts signs, an endpoint that does not
+        # prove deleted and the checklist unticked, the build's step never
+        # red, and no key or signing secret printed. Seconds.
+        run: supabase/ci/resend_webhook_rehearsal.sh
+
       - name: Which Edge Functions a release deploys is rehearsed
         # supabase/ci/functions_to_deploy.sh decides, for release.yml, which
         # functions changed since a target's last release. Wrong one way, a

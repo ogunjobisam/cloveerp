@@ -44,6 +44,10 @@
 #                  as making a project, where a 5xx or no answer may come after
 #                  the work was done; the caller then finds out for itself.
 #   MAPI_SLEEP     the sleep command (default sleep); the rehearsals' stand-in
+#   MAPI_STATUS_FILE  when set, the last status the request was answered (000
+#                  for none) is written there, for a caller that reads one
+#                  refusal as a verdict of its own (provision_project.sh
+#                  resend-webhook: a DELETE answered 404 was done before)
 #
 # bash 3.2 and later: supabase/ci/provision_project_rehearsal.sh runs it on a
 # Mac as well as on a runner. No trap (it would replace the caller's), no
@@ -85,6 +89,7 @@ patient_request() {
       answer=""
     fi
     [[ "$status" =~ ^[0-9][0-9][0-9]$ ]] || status=000
+    if [[ -n "${MAPI_STATUS_FILE:-}" ]]; then printf '%s' "$status" > "$MAPI_STATUS_FILE" 2> /dev/null || true; fi
 
     case "$status" in
       2??)

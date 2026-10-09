@@ -26,7 +26,9 @@ name: deployment from empty
 # addresses, sets the site URL and custom SMTP through Resend, exposes public
 # and graphql_public only, makes the owner's confirmed sign-in, and keeps the
 # connection string and the secret key in the control plane's vault under
-# the project's ref — never in this log, never in a GitHub secret. Every step
+# the project's ref — never in this log, never in a GitHub secret — and gives
+# the project its own endpoint at Resend, so it hears what became of the mail
+# it sends, proved by a signed event and ticked on its checklist. Every step
 # is written on the client's row in the register, so the Fleet view follows
 # the build without a run log, and a build that stops is carried on with
 # `resume` from where it stopped.
@@ -571,6 +573,131 @@ jobs:
             "CLOVEERP_APP_URL=${ORIGIN}" \
             "CLOVEERP_INVITE_FROM=${INVITE_FROM}"
           supabase/ci/fleet_register.sh event "${CODE}" functions done "functions deployed; RESEND_API_KEY, CLOVEERP_APP_URL and CLOVEERP_INVITE_FROM set"
+
+      - name: The email provider's webhook
+        # Resend tells a project what became of each email it sent
+        # (delivered, delayed, bounced, complained of) by posting to its
+        # function resend_webhook, which records only what matches mail the
+        # project sent itself (20261012050000). Each project has an endpoint
+        # of its own at Resend, made here with RESEND_ADMIN_API_KEY (a
+        # full-access key only the workflows hold): only once the project's
+        # database is asked and found released 20261012050000, then its id
+        # and signing secret kept in the control plane's vault before the
+        # project is given the secret as CLOVEERP_RESEND_WEBHOOK_SECRET
+        # (provision_project.sh resend-webhook create, which keeps an
+        # endpoint that is right and makes again one that is not). Then
+        # proved: one event signed with the vault's secret, as Resend signs,
+        # posted to the function, which must take it, and whose database must
+        # record nothing of it, since it matches no mail the project sent
+        # (resend-webhook prove). An endpoint that does not prove, however it
+        # fails, is deleted again at once with its vault entry: it is never
+        # left running against a database that may keep every event of the
+        # account. Then the checklist's step is ticked by the build
+        # (erp_meta.deployment_checklist_by_build, once the control plane has
+        # it), and unticked whenever an endpoint is deleted or none is left
+        # that the function takes. A client the owner has begun to retire
+        # meanwhile gets none. Rehearsed on every build:
+        # supabase/ci/resend_webhook_rehearsal.sh.
+        #
+        # Never the reason a build stops. Without the key the step leaves a
+        # notice and the checklist keeps the step for the owner; anything else
+        # that goes wrong is a warning and a line on the client's row, the
+        # step stays on the checklist, and fleet_secrets.yml's resend_webhook
+        # for the client mends it.
+        if: env.KIND == 'client'
+        env:
+          RESEND_ADMIN_API_KEY: ${{ secrets.RESEND_ADMIN_API_KEY }}
+        run: |
+          set -uo pipefail
+          echo "PHASE=functions" >> "$GITHUB_ENV"
+          reg=supabase/ci/fleet_register.sh
+          prov=supabase/ci/provision_project.sh
+          mend="fleet_secrets.yml with resend_webhook for ${CODE} makes it once that is mended"
+          if [[ -z "${RESEND_ADMIN_API_KEY:-}" ]]; then
+            echo "::notice::RESEND_ADMIN_API_KEY is not set, so ${CODE}'s webhook at the email provider was not made, and the Fleet view's checklist keeps the step for the owner. Add the key as a repository secret (a full-access Resend key, used only by the workflows); then fleet_secrets.yml with resend_webhook for ${CODE} makes it."
+            $reg event "${CODE}" functions note "the email provider's webhook was not made: RESEND_ADMIN_API_KEY is not set, so the step stays on the checklist" || true
+            echo "- the email provider's webhook: not made (RESEND_ADMIN_API_KEY is not set); the step stays on the checklist" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # A client the owner has begun to retire while it was built gets
+          # no endpoint: its checklist is not ticked, and the endpoint would
+          # only be deleted again (fleet_secrets.yml resend_webhook_delete).
+          now=$($reg row "${CODE}" | sed -n 's/^status=//p')
+          case "$now" in
+            retiring|retired)
+              echo "::notice::${CODE} is ${now}, so no webhook at the email provider was made for it."
+              $reg event "${CODE}" functions note "the email provider's webhook was not made: ${CODE} is ${now}" || true
+              echo "- the email provider's webhook: not made (${CODE} is ${now})" >> "$GITHUB_STEP_SUMMARY"
+              exit 0 ;;
+            '')
+              echo "::warning::the register could not say what ${CODE} is now (the line above says why), so its webhook at the email provider was not made; the step stays on the checklist, and ${mend}."
+              $reg event "${CODE}" functions note "the email provider's webhook was not made: the register could not be read; the step stays on the checklist" || true
+              echo "- the email provider's webhook: NOT made (the register could not be read); the step stays on the checklist" >> "$GITHUB_STEP_SUMMARY"
+              exit 0 ;;
+          esac
+          # untick: the checklist's step unticked by the build, whenever an
+          # endpoint was deleted or none is left whose events the function
+          # takes, so the Fleet view never says "set by the build" of one
+          # that is not there.
+          untick() {
+            if $reg checklist-by-build "${CODE}" resend_webhook false > /dev/null; then
+              unticked="; the checklist's step unticked"
+            else
+              unticked="; the checklist's step could not be unticked (the line above says why)"
+            fi
+          }
+          unticked=""
+          $reg event "${CODE}" functions note "making the email provider's webhook for project ${PROJECT_REF}" || true
+          if out=$($prov resend-webhook "${PROJECT_REF}" create); then made=0; else made=$?; fi
+          if [[ "$made" -ne 0 ]]; then
+            case "$made" in
+              6) why="its database has not been released 20261012050000, so it would keep other projects' recipients; nothing was asked of the email provider" ;;
+              3) why="it was left part-way, with no endpoint the function takes the events of (the line above says why)"; untick ;;
+              *) why="nothing was changed (the line above says why)" ;;
+            esac
+            echo "::warning::${CODE}'s webhook at the email provider was not made: ${why}${unticked}. Its deliveries and bounces are not recorded yet; the step stays on the checklist, and ${mend}."
+            $reg event "${CODE}" functions note "the email provider's webhook was not made: ${why}${unticked}; the step stays on the checklist" || true
+            echo "- the email provider's webhook: NOT made (${why})${unticked}; the step stays on the checklist" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          verdict=$(sed -n 's/^resend-webhook=//p' <<< "$out")
+          id=$(sed -n 's/^id=//p' <<< "$out")
+          if $prov resend-webhook "${PROJECT_REF}" prove > /dev/null; then proved=0; else proved=$?; fi
+          if [[ "$proved" -ne 0 ]]; then
+            # However it failed, the endpoint is not left running unproved:
+            # 4 is a database that recorded the proof, and would keep every
+            # event of the account, other projects' recipients among them;
+            # anything else may be one that would.
+            if [[ "$proved" -eq 4 ]]; then
+              what="its database recorded a signed event that matches no mail it sent, so it would keep other projects' recipients"
+            else
+              what="its function did not take a signed event as it should (the line above says what it answered)"
+            fi
+            if $prov resend-webhook "${PROJECT_REF}" delete > /dev/null; then
+              gone="so it was deleted again, with its entry in the vault"
+            else
+              gone="and it could not be deleted again (the line above says why): delete ${id} in Resend's dashboard, or run fleet_secrets.yml with resend_webhook for ${CODE}, which deletes it again if it still does not prove"
+            fi
+            untick
+            echo "::warning::${CODE}'s webhook at the email provider was ${verdict} (${id}), and ${what}, ${gone}${unticked}; the step stays on the checklist, and ${mend}."
+            $reg event "${CODE}" functions note "the email provider's webhook was ${verdict} (${id}) and did not prove: ${what}, ${gone}${unticked}; the step stays on the checklist" || true
+            echo "- the email provider's webhook: ${verdict} (${id}), NOT proved, ${gone}${unticked}; the step stays on the checklist" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if $reg checklist-by-build "${CODE}" resend_webhook true; then
+            ticked="ticked on the checklist by the build"
+          else
+            rc=$?
+            if [[ "$rc" -eq 5 ]]; then
+              ticked="left on the checklist for the owner: the control plane has no erp_meta.deployment_checklist_by_build yet"
+              echo "::notice::${CODE}'s webhook is made and proved; the control plane cannot tick the checklist for the build yet, so the owner ticks it."
+            else
+              ticked="left on the checklist: the control plane did not tick it (the line above says why)"
+              echo "::warning::${CODE}'s webhook is made and proved, and the checklist could not be ticked (the line above says why); the owner ticks it."
+            fi
+          fi
+          $reg event "${CODE}" functions note "the email provider's webhook ${verdict} (${id}) and proved by a signed event its function took and recorded nothing of; ${ticked}" || true
+          echo "- the email provider's webhook: ${verdict} (${id}), proved by a signed event; ${ticked}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prove it
         # As every release proves (release.yml): recorded first, so the

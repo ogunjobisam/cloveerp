@@ -31,10 +31,24 @@
 #                                      THE CALLER MASKS IT (::add-mask::)
 #                                      before anything else is printed
 #   vault-del <name>
+#   checklist-by-build <code> <item> [true|false]
+#                                      a step of the client's checklist ticked
+#                                      (true, the default) or unticked (false)
+#                                      by the build itself, as the console
+#                                      shows it ("set by the build"), through
+#                                      erp_meta.deployment_checklist_by_build
+#                                      (20261012050000). Exit 5, changing
+#                                      nothing, when the control plane has no
+#                                      such routine yet (the step stays the
+#                                      owner's); 1 when it could not be asked
+#                                      or refused
 #
 # Names in the vault: cloveerp:deployment:<ref>:db_url,
-# cloveerp:deployment:<ref>:service_key, and cloveerp:provision:<code>:db_pass
-# while a project is being made and its ref is not yet known.
+# cloveerp:deployment:<ref>:service_key,
+# cloveerp:deployment:<ref>:resend_webhook (the project's endpoint at Resend,
+# {id, secret}: provision_project.sh resend-webhook), and
+# cloveerp:provision:<code>:db_pass while a project is being made and its ref
+# is not yet known.
 set -euo pipefail
 
 CP_URL="${CLOVEERP_LIVE_DATABASE_URL:-}"
@@ -46,7 +60,7 @@ PSQL_CMD="${PSQL:-psql}"
 q() { $PSQL_CMD "$CP_URL" -v ON_ERROR_STOP=1 -X -q -tA "$@"; }
 
 is_code() { [[ "$1" =~ ^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$ ]]; }
-is_name() { [[ "$1" =~ ^cloveerp:(deployment:[a-z0-9]{20}:(db_url|service_key)|provision:[a-z0-9-]{3,63}:db_pass)$ ]]; }
+is_name() { [[ "$1" =~ ^cloveerp:(deployment:[a-z0-9]{20}:(db_url|service_key|resend_webhook)|provision:[a-z0-9-]{3,63}:db_pass)$ ]]; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -54,6 +68,7 @@ case "$cmd" in
     code="${1:?usage: fleet_register.sh row <code>}"
     is_code "$code" || { echo "x '$code' is not a code" >&2; exit 2; }
     q -v code="$code" <<'SQL'
+-- fleet: cp-row
 select 'status=' || d.status || E'\nref=' || coalesce(d.project_ref, '') || E'\napi_url=' || coalesce(d.api_url, '')
   from erp_meta.deployment d where d.code = :'code';
 SQL
@@ -92,7 +107,9 @@ SQL
     # no unique name, so the entry is updated where it exists and created
     # where it does not. Plain statements rather than a DO block, because
     # psql does not substitute a variable inside a dollar-quoted body.
-    q -v name="$name" -v value="$value" <<'SQL' > /dev/null
+    # VERBOSITY terse: an error that points into the statement would
+    # otherwise print the LINE it points at, the value substituted in it.
+    q -v VERBOSITY=terse -v name="$name" -v value="$value" <<'SQL' > /dev/null
 begin;
 select vault.update_secret(s.id, :'value')
   from vault.secrets s where s.name = :'name';
@@ -119,8 +136,39 @@ delete from vault.secrets s where s.name = :'name';
 SQL
     echo "vault: ${name} removed"
     ;;
+  checklist-by-build)
+    code="${1:?usage: fleet_register.sh checklist-by-build <code> <item> [true|false]}"
+    item="${2:?usage: fleet_register.sh checklist-by-build <code> <item> [true|false]}"
+    done_="${3:-true}"
+    is_code "$code" || { echo "x '$code' is not a code" >&2; exit 2; }
+    [[ "$item" =~ ^[a-z_]{1,40}$ ]] || { echo "x '$item' is not a step of the checklist" >&2; exit 2; }
+    [[ "$done_" == true || "$done_" == false ]] || { echo "x '$done_' is neither true (ticked) nor false (unticked)" >&2; exit 2; }
+    # Asked first, because a control plane is released after the clients
+    # (demonstration, clients, control plane): a build can run before the
+    # control plane has the routine, and then the step stays the owner's.
+    has=$(q -v VERBOSITY=terse <<'SQL'
+-- fleet: cp-has-checklist-by-build
+set statement_timeout = '30s';
+select (to_regprocedure('erp_meta.deployment_checklist_by_build(text,text,boolean)') is not null)::text;
+SQL
+) || exit 1
+    if [[ "$has" != true ]]; then
+      echo "register: the control plane has no erp_meta.deployment_checklist_by_build yet, so ${item} on ${code}'s checklist stays as the owner set it"
+      exit 5
+    fi
+    q -v VERBOSITY=terse -v code="$code" -v item="$item" -v done="$done_" <<'SQL' > /dev/null || exit 1
+-- fleet: cp-checklist-by-build
+set statement_timeout = '30s';
+select erp_meta.deployment_checklist_by_build(:'code', :'item', (:'done')::boolean);
+SQL
+    if [[ "$done_" == true ]]; then
+      echo "register: ${code} ${item} ticked by the build"
+    else
+      echo "register: ${code} ${item} unticked by the build"
+    fi
+    ;;
   *)
-    echo "usage: fleet_register.sh row|event|project|built|vault-put|vault-get|vault-del ..." >&2
+    echo "usage: fleet_register.sh row|event|project|built|vault-put|vault-get|vault-del|checklist-by-build ..." >&2
     exit 2
     ;;
 esac

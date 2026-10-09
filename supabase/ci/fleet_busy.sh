@@ -62,6 +62,12 @@
 #   rotate_db_password, or names no action at all (a run from before titles
 #   said). One that names another action skips that step, but GitHub cannot
 #   say so until the run reaches it, after its own wait of up to an hour.
+#   And for its step "Change them, one client at a time" only when its title
+#   does not name resend_webhook (or resend_webhook_delete): those make or
+#   delete a project's endpoint at the email provider, at the project's ref,
+#   and set no address and no auth setting, which is what a rename waits for
+#   that step over; they take minutes a client, and a rename would wait out
+#   the whole fleet's for nothing.
 #
 #   fleet_busy.sh wait <minutes> <one of the four above>
 #       Asked every POLL_SECONDS (default 60) until nothing is busy (exit 0),
@@ -102,6 +108,7 @@ BACKUP_STEP="Copy every database"
 EXPORT_STEP="Export"
 SECRETS_WORKFLOW="fleet_secrets.yml"
 ROTATION_STEP="Change the database passwords, one client at a time"
+CHANGES_STEP="Change them, one client at a time"
 
 usage() {
   echo "x usage: fleet_busy.sh release <target> | copy <target> | runs <workflow>=<step> ... | runs-in <workflow>=<step> ... | wait <minutes> <one of them>" >&2
@@ -110,14 +117,17 @@ usage() {
 
 is_target() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; }
 
-# open_runs <workflow file> [rotations]: the id of each run of it that has
-# not finished and was not started by a pull request (a pull request's runs
-# only read); with rotations, only those whose title does not name an action
-# other than rotate_db_password (see the header).
+# open_runs <workflow file> [rotations|changes]: the id of each run of it
+# that has not finished and was not started by a pull request (a pull
+# request's runs only read); with rotations, only those whose title does not
+# name an action other than rotate_db_password; with changes, only those
+# whose title does not name resend_webhook (see the header).
 open_runs() {
   local only='.'
   if [[ "${2:-}" == rotations ]]; then
-    only='select(((.display_title // "") | test("rotate_db_password")) or ((.display_title // "") | test("set_function_secrets|patch_auth") | not))'
+    only='select(((.display_title // "") | test("rotate_db_password")) or ((.display_title // "") | test("set_function_secrets|patch_auth|resend_webhook") | not))'
+  elif [[ "${2:-}" == changes ]]; then
+    only='select((.display_title // "") | test("resend_webhook") | not)'
   fi
   $GH_CMD api "repos/${GH_REPO}/actions/workflows/$1/runs?per_page=50" \
     --jq ".workflow_runs[] | select(.status != \"completed\" and .event != \"pull_request\") | ${only} | .id"
@@ -198,6 +208,7 @@ ask() {
         [[ "$wf" =~ ^[a-z0-9_.-]+\.yml$ && -n "$step" && "$step" != "$spec" ]] || usage
         which=""
         if [[ "$wf" == "$SECRETS_WORKFLOW" && "$step" == "$ROTATION_STEP" ]]; then which=rotations; fi
+        if [[ "$wf" == "$SECRETS_WORKFLOW" && "$step" == "$CHANGES_STEP" ]]; then which=changes; fi
         ids=$(open_runs "$wf" "$which" 2>&1) || { echo "GitHub could not be asked which ${wf} runs are going: $(printf '%s' "$ids" | head -n 1)"; return 2; }
         for id in $ids; do
           [[ "$id" != "$SELF" ]] || continue

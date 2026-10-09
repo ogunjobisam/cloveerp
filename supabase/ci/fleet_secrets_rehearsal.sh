@@ -353,5 +353,21 @@ check '[[ $status -eq 2 && "$out" == *"acme'"'"'s address in the register ('"'"'
 run "auth settings that do not take" 'FAKE_AUTH={"disable_signup":false,"mailer_autoconfirm":false,"site_url":"https://acme.cloveerp.com","smtp_host":"smtp.resend.com"}' -- patch_auth acme "$REASON"
 check '[[ $status -eq 1 && "$out" == *"sign-up is still open"* && "$out" == *"auth settings were not all applied"* && "$(events)" == "acme|note|failed|"* ]]' "red, saying which did not take"
 
+# 7. The email provider's webhook: what is refused or left before anything
+# is touched. What it does with Resend, the vault and the projects is
+# resend_webhook_rehearsal.sh's, against the shared stand-ins.
+run "the webhooks without the admin key" GITHUB_ACTIONS=true RESEND_ADMIN_API_KEY= -- resend_webhook all "$REASON"
+check '[[ $status -eq 0 && "$out" == *"::notice::RESEND_ADMIN_API_KEY is not set"* && "$out" != *"::error::"* ]] && untouched' "a notice, green, nothing touched"
+run "deleting every client's webhook" RESEND_ADMIN_API_KEY=re_admin -- resend_webhook_delete all "$REASON"
+check '[[ $status -eq 2 && "$out" == *"one retiring or retired client at a time"* ]] && untouched' "refused"
+run "deleting the control plane's webhook" RESEND_ADMIN_API_KEY=re_admin -- resend_webhook_delete control "$REASON"
+check '[[ $status -eq 2 && "$out" == *"one retiring or retired client at a time"* ]] && untouched' "refused"
+run "deleting a live client's webhook" RESEND_ADMIN_API_KEY=re_admin -- resend_webhook_delete acme "$REASON"
+check '[[ $status -eq 2 && "$out" == *"acme is live, so its webhook is not deleted"* ]] && untouched' "refused, nothing touched"
+run "the demonstration's webhook with no ref for it" RESEND_ADMIN_API_KEY=re_admin DEMO_REF= -- resend_webhook demonstration "$REASON"
+check '[[ $status -eq 2 && "$out" == *"CLOVEERP_DEMO_PROJECT_REF"* ]] && untouched' "refused, nothing touched"
+run "another action for the demonstration" -- patch_auth demonstration "$REASON"
+check '[[ $status -eq 2 && "$out" == *"demonstration is not in the register"* ]] && untouched' "refused: only the webhook is made for it here"
+
 echo "$CASES checks over the fleet's secrets, $FAILED failed"
 [[ "$FAILED" -eq 0 ]]

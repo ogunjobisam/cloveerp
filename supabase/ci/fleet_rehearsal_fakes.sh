@@ -3,8 +3,8 @@
 # Stand-ins for the commands the lifecycle scripts run, for their rehearsals
 # (fleet_rename_rehearsal.sh, fleet_export_rehearsal.sh,
 # fleet_backup_rehearsal.sh, fleet_status_sync_rehearsal.sh,
-# fleet_busy_rehearsal.sh, fleet_commercial_sync_rehearsal.sh). Sourced,
-# never run:
+# fleet_busy_rehearsal.sh, fleet_commercial_sync_rehearsal.sh,
+# resend_webhook_rehearsal.sh). Sourced, never run:
 #
 #   . supabase/ci/fleet_rehearsal_fakes.sh
 #   fleet_fakes "$work"      # writes psql, curl, pg_dump, age, aws, sleep, gh
@@ -24,7 +24,10 @@
 #             terse (-v or \set), as psql prints them; a file CONNECT in the
 #             database's directory is a database that cannot be reached
 #             (exit 2). Vault entries are
-#             $FAKE_DIR/vault/<name, : as _>; events are appended to
+#             $FAKE_DIR/vault/<name, : as _>, read, kept and removed as
+#             fleet_register.sh's vault-get, vault-put and vault-del ask
+#             (FAKE_VAULT_PUT_FAIL, a part of a name, refuses keeping it);
+#             events are appended to
 #             $FAKE_DIR/events as code|phase|status|detail. -c is refused:
 #             psql substitutes :'name' only on standard input.
 #   curl      The Management API as mapi asks it: auth settings kept as
@@ -43,6 +46,28 @@
 #             a status per call to each; FAKE_STORAGE_GONE is an object
 #             listed and then not found. Each call's headers are kept in
 #             $FAKE_DIR/headers.<n>.
+#             And Resend's webhooks API (any host, paths /webhooks...): an
+#             endpoint is $FAKE_DIR/resend/<id>, a JSON {id, endpoint, events,
+#             status, signing_secret}; POST /webhooks makes wh_fake_<n> with a
+#             secret of its own, GET lists them (without their secrets, a page
+#             of FAKE_RESEND_PAGE, default 100, with has_more and after) or
+#             gives one, DELETE removes one; an id it does not have answers
+#             404. FAKE_RESEND_STATUSES is a status per call to Resend;
+#             FAKE_RESEND_CREATE_LOST makes the endpoint and answers 502,
+#             and FAKE_RESEND_DELETE_LOST deletes the first one asked and
+#             answers 502;
+#             FAKE_RESEND_NO_SECRET gives no secret when one is made, and
+#             FAKE_RESEND_SECRET_UNREADABLE none when one is asked for;
+#             FAKE_RESEND_KEY, when set, is the only key it answers.
+#             And a project's resend_webhook function
+#             (https://<ref>.supabase.co/functions/v1/resend_webhook): it
+#             checks the svix signature against the project's
+#             CLOVEERP_RESEND_WEBHOOK_SECRET in secrets.held, as the function
+#             does, and answers {"recorded": false} (FAKE_WEBHOOK_ANSWER), or
+#             401; FAKE_WEBHOOK_STATUSES is a status per call before it
+#             checks, answered with FAKE_WEBHOOK_REFUSAL. Each post is kept in
+#             $FAKE_DIR/webhook.posts as id|timestamp|signature|verdict, and
+#             its body in body.<n>.
 #   gh        gh api, as fleet_busy.sh asks it: the answer to a path is
 #             $FAKE_DIR/gh/<path after actions/, / as _>.json (gh_run,
 #             gh_job), filtered by --jq; none is no runs and no jobs.
@@ -103,6 +128,8 @@ tag=$(printf '%s\n' "$sql" | sed -n 's/^-- fleet: //p' | head -n 1)
 if [[ -z "$tag" ]]; then
   case "$sql" in
     *"vault.decrypted_secrets"*) tag=vault-get ;;
+    *"vault.create_secret"*) tag=vault-put ;;
+    *"delete from vault.secrets"*) tag=vault-del ;;
     *"record_deployment_event"*) tag=event ;;
     *) tag=untagged ;;
   esac
@@ -121,6 +148,21 @@ case "$tag" in
     name=$(var name)
     echo "psql $target vault-get $name" >> "$FAKE_DIR/order.log"
     if [[ -f "$FAKE_DIR/vault/${name//:/_}" ]]; then cat "$FAKE_DIR/vault/${name//:/_}"; fi
+    exit 0 ;;
+  vault-put)
+    name=$(var name)
+    echo "psql $target vault-put $name" >> "$FAKE_DIR/order.log"
+    if [[ -n "${FAKE_VAULT_PUT_FAIL:-}" && "$name" == *"${FAKE_VAULT_PUT_FAIL}"* ]]; then
+      echo "psql:<stdin>:2: ERROR:  the rehearsal refuses to keep this" >&2
+      exit 3
+    fi
+    mkdir -p "$FAKE_DIR/vault"
+    printf '%s' "$(var value)" > "$FAKE_DIR/vault/${name//:/_}"
+    exit 0 ;;
+  vault-del)
+    name=$(var name)
+    echo "psql $target vault-del $name" >> "$FAKE_DIR/order.log"
+    rm -f "$FAKE_DIR/vault/${name//:/_}"
     exit 0 ;;
   event)
     if [[ -f "$dir/event" ]] && grep -q '^ERROR:' "$dir/event"; then
@@ -197,6 +239,76 @@ pick() {
 }
 status=200
 if [[ -n "${FAKE_HTTP_STATUSES:-}" ]]; then status=$(pick "$FAKE_HTTP_STATUSES" "$FAKE_DIR/http.count"); fi
+# header <name>: what the caller sent as that header.
+header() { printf '%s' "$headers" | sed -n "s/^$1: //p" | head -n 1; }
+# webhook_sign <secret> <content>: as Resend (Svix) signs, and as
+# src/lib/email/resend-webhook.ts checks: its atob reads base64 that is not
+# padded, so it is padded here before openssl reads it.
+webhook_sign() {
+  local hex key="${1#whsec_}"
+  while (( ${#key} % 4 )); do key="${key}="; done
+  hex=$(printf '%s' "$key" | openssl base64 -d -A 2> /dev/null | od -An -vtx1 | tr -d ' \n')
+  [[ -n "$hex" ]] || return 1
+  printf '%s' "$2" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:${hex}" -binary | openssl base64 -A
+}
+if [[ "$path" == webhooks || "$path" == webhooks/* || "$path" == "webhooks?"* ]]; then
+  # Resend's webhooks API.
+  mkdir -p "$FAKE_DIR/resend"
+  if [[ -n "${FAKE_RESEND_STATUSES:-}" ]]; then status=$(pick "$FAKE_RESEND_STATUSES" "$FAKE_DIR/resend.count"); fi
+  if [[ -n "${FAKE_RESEND_KEY:-}" && "$(header Authorization)" != "Bearer ${FAKE_RESEND_KEY}" ]]; then status=401; fi
+  answer=""
+  if [[ "$status" =~ ^2 ]]; then
+    case "$method $path" in
+      "POST webhooks")
+        k=$(( $(cat "$FAKE_DIR/resend.made" 2> /dev/null || echo 0) + 1 ))
+        echo "$k" > "$FAKE_DIR/resend.made"
+        id="wh_fake_${k}"
+        secret="whsec_$(printf 'rehearsal-signing-key-%02d!!!' "$k" | openssl base64 -A)"
+        jq -c --arg i "$id" --arg s "$secret" '{id: $i, endpoint: .endpoint, events: .events, status: "enabled", signing_secret: $s}' <<< "$body" > "$FAKE_DIR/resend/$id"
+        if [[ -n "${FAKE_RESEND_CREATE_LOST:-}" ]]; then
+          status=502; answer='{"message":"bad gateway"}'
+        elif [[ -n "${FAKE_RESEND_NO_SECRET:-}" ]]; then
+          answer=$(jq -cn --arg i "$id" '{object: "webhook", id: $i}')
+        else
+          answer=$(jq -cn --arg i "$id" --arg s "$secret" '{object: "webhook", id: $i, signing_secret: $s}')
+        fi ;;
+      "GET webhooks"|"GET webhooks?"*)
+        echo "$path" >> "$FAKE_DIR/resend.lists"
+        after=$(printf '%s' "${path#webhooks}" | tr '?&' '\n\n' | sed -n 's/^after=//p')
+        all=$(for f in "$FAKE_DIR/resend/"*; do if [[ -f "$f" ]]; then jq -c 'del(.signing_secret)' "$f"; fi; done | jq -cs 'sort_by(.id)')
+        answer=$(jq -c --arg a "$after" --argjson l "${FAKE_RESEND_PAGE:-100}" '
+          (if $a == "" then . else ((map(.id) | index($a)) // -1) as $i | .[($i + 1):] end) as $rest
+          | {object: "list", has_more: (($rest | length) > $l), data: $rest[0:$l]}' <<< "$all") ;;
+      "GET webhooks/"*)
+        id="${path#webhooks/}"
+        if [[ ! -f "$FAKE_DIR/resend/$id" ]]; then
+          status=404; answer='{"statusCode":404,"name":"not_found","message":"Webhook not found"}'
+        elif [[ -n "${FAKE_RESEND_SECRET_UNREADABLE:-}" ]]; then
+          answer=$(jq -c 'del(.signing_secret) + {object: "webhook"}' "$FAKE_DIR/resend/$id")
+        else
+          answer=$(jq -c '. + {object: "webhook"}' "$FAKE_DIR/resend/$id")
+        fi ;;
+      "DELETE webhooks/"*)
+        id="${path#webhooks/}"
+        if [[ -f "$FAKE_DIR/resend/$id" ]]; then
+          rm -f "$FAKE_DIR/resend/$id"
+          answer=$(jq -cn --arg i "$id" '{object: "webhook", id: $i, deleted: true}')
+          if [[ -n "${FAKE_RESEND_DELETE_LOST:-}" && ! -e "$FAKE_DIR/resend.delete-lost" ]]; then
+            : > "$FAKE_DIR/resend.delete-lost"
+            status=502; answer='{"message":"bad gateway"}'
+          fi
+        else
+          status=404; answer='{"statusCode":404,"name":"not_found","message":"Webhook not found"}'
+        fi ;;
+      *) status=405; answer='{"message":"not a call the rehearsal knows"}' ;;
+    esac
+  fi
+  [[ -n "$answer" ]] || answer="{\"statusCode\":${status},\"message\":\"refused by the rehearsal\"}"
+  if [[ -n "$dump" ]]; then printf 'HTTP/2 %s\r\n\r\n' "$status" > "$dump"; fi
+  printf '%s' "$answer"
+  [[ "$want_status" == yes ]] && printf '\n%s' "$status"
+  exit 0
+fi
 case "$method $path" in
   "PATCH v1/projects/"*"/config/auth")
     if [[ -n "${FAKE_AUTH_PATCH_STATUSES:-}" ]]; then status=$(pick "$FAKE_AUTH_PATCH_STATUSES" "$FAKE_DIR/authpatch.count"); fi
@@ -264,9 +376,31 @@ case "$method $path" in
       [[ "$want_status" == yes ]] && printf '\n%s' "$status"
       exit 0
     fi ;;
+  "POST functions/v1/resend_webhook")
+    # A project's resend_webhook: the signature checked against the secret
+    # the project holds, as the function checks it.
+    if [[ -n "${FAKE_WEBHOOK_STATUSES:-}" ]]; then status=$(pick "$FAKE_WEBHOOK_STATUSES" "$FAKE_DIR/webhook.count"); fi
+    held=$(jq -r '.CLOVEERP_RESEND_WEBHOOK_SECRET // empty' "$FAKE_DIR/secrets.held" 2> /dev/null)
+    wid=$(header svix-id); wts=$(header svix-timestamp); wsig=$(header svix-signature)
+    refusal='{"error":"unauthorised"}'
+    taken='{"recorded":false,"reason":"no message of ours"}'
+    if [[ ! "$status" =~ ^2 ]]; then
+      verdict="answered ${status}"
+      answer="${FAKE_WEBHOOK_REFUSAL:-$refusal}"
+    elif [[ -z "$held" ]]; then
+      status=401; verdict="no secret"
+      answer='{"error":"no webhook signing secret exists: add it to the vault as cloveerp_resend_webhook_secret (Resend shows it when the endpoint is created); until then every event is refused"}'
+    elif [[ -z "$wid" || -z "$wts" || "$wsig" != "v1,$(webhook_sign "$held" "${wid}.${wts}.${body}")" ]]; then
+      status=401; verdict="refused"
+      answer='{"error":"unauthorised"}'
+    else
+      verdict="taken"
+      answer="${FAKE_WEBHOOK_ANSWER:-$taken}"
+    fi
+    printf '%s|%s|%s|%s\n' "$wid" "$wts" "$wsig" "$verdict" >> "$FAKE_DIR/webhook.posts" ;;
   *) answer='{}' ;;
 esac
-if [[ ! "$status" =~ ^2 && "$path" != storage/* ]] || [[ ! "$status" =~ ^2 && -z "${answer:-}" ]]; then
+if [[ ! "$status" =~ ^2 && "$path" != storage/* && "$path" != functions/* ]] || [[ ! "$status" =~ ^2 && -z "${answer:-}" ]]; then
   answer='{"message":"refused by the rehearsal"}'
 fi
 if [[ -n "$dump" ]]; then printf 'HTTP/2 %s\r\n\r\n' "$status" > "$dump"; fi

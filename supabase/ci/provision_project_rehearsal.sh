@@ -388,5 +388,20 @@ check '[[ $status -eq 2 && "$out" == *"SMTP Settings"* && "$out" == *"smtp.resen
 run "no such sign-in" PUBLISHABLE_KEY=sb_publishable_rehearsal PROJECT_API_URL=https://api.example FAKE_HTTP_STATUSES=422 -- "${LINK[@]}"
 check '[[ $status -eq 2 && "$(calls)" -eq 1 && "$out" == *"answered 422"* ]]' "refused at once: a 422 is not a busy minute"
 
+# 15. resend-webhook: what it refuses before anything is asked. What it does
+# with Resend, the vault and the project is resend_webhook_rehearsal.sh's,
+# against the shared stand-ins, which keep a Resend and a vault.
+WEBHOOK=(RESEND_ADMIN_API_KEY=re_admin_rehearsal_key CLOVEERP_LIVE_DATABASE_URL=postgresql://postgres.cpcpcpcpcpcpcpcpcpcp:pw@pooler.example:5432/postgres PSQL=/nonexistent/psql)
+run "a webhook without the admin key" "${WEBHOOK[@]}" RESEND_ADMIN_API_KEY= -- resend-webhook abcdefghijklmnopqrst create
+check '[[ $status -eq 2 && "$out" == *"RESEND_ADMIN_API_KEY is not set"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
+run "a webhook for something that is not a project" "${WEBHOOK[@]}" -- resend-webhook "Acme!" create
+check '[[ $status -eq 2 && "$out" == *"not a project ref"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
+run "a webhook action it does not have" "${WEBHOOK[@]}" -- resend-webhook abcdefghijklmnopqrst rotate
+check '[[ $status -eq 2 && "$out" == *"is not create, verify, delete or prove"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
+run "a webhook with no control plane" "${WEBHOOK[@]}" CLOVEERP_LIVE_DATABASE_URL= -- resend-webhook abcdefghijklmnopqrst delete
+check '[[ $status -eq 2 && "$out" == *"CLOVEERP_LIVE_DATABASE_URL is not set"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked: the vault keeps every endpoint"
+run "a webhook's secret digest read through the shared reader" 'FAKE_SECRETS_LIST=[{"name":"CLOVEERP_RESEND_WEBHOOK_SECRET","value":"not a digest"}]' -- secret-digest abcdefghijklmnopqrst CLOVEERP_RESEND_WEBHOOK_SECRET
+check '[[ $status -eq 2 && "$out" == *"is not a SHA-256 digest"* && "$out" != *"not a digest\""* ]]' "a listing that is not a digest refused, and not printed"
+
 echo "$CASES checks over the project provisioning, $FAILED failed"
 [[ "$FAILED" -eq 0 ]]
