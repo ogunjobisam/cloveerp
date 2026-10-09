@@ -130,7 +130,13 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-17
-          pg_dump --version
+          # Ubuntu's pg_wrapper answers pg_dump with the runner's own 16
+          # cluster's tools even once 17 is installed (template.yml's first
+          # run, 9 Oct: "server version: 17.6; pg_dump version: 16.15"), so
+          # the 17 tools go first on the path for every later step.
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep -q ' 17\.' \
+            || { echo "::error::pg_dump 17 is not where it was installed, so nothing was dumped."; exit 1; }
 
       - name: Whether these migrations need a template
         id: wanted
@@ -208,8 +214,8 @@ jobs:
         if: steps.wanted.outputs.make == 'yes'
         run: |
           set -euo pipefail
-          docker run -d --name clove-erp-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 supabase/postgres:17.6.1.167
-          docker run -d --name clove-erp-template -e POSTGRES_PASSWORD=postgres -p 5433:5432 supabase/postgres:17.6.1.167
+          docker run -d --name clove-erp-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 public.ecr.aws/supabase/postgres:17.6.1.167
+          docker run -d --name clove-erp-template -e POSTGRES_PASSWORD=postgres -p 5433:5432 public.ecr.aws/supabase/postgres:17.6.1.167
           for port in 5432 5433; do
             ready=no
             for i in $(seq 1 60); do
