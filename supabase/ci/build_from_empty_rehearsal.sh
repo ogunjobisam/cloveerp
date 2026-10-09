@@ -169,8 +169,8 @@ check 'grep -q "insert into erp_meta.platform_staff (email, auth_user_id, displa
       "the owner is written inside the migration's transaction, once the staff list exists, bound to their confirmed sign-in"
 check 'grep -q "insert into supabase_migrations.schema_migrations (version, name, statements)" "$work/fake/apply.0001.sql" && grep -qx "name=ad905a9f-fe00-4810-961e-441bae0f46a0" "$work/fake/vars.20260830091046" && grep -qx "owner=owner@example.com" "$work/fake/vars.0001"' \
       "each migration is recorded the way the CLI records it, under its version and name"
-check '[[ "$out" == *"built: 3 migration(s) applied"* && "$out" == *"owner@example.com is the platform'"'"'s owner"* ]]' \
-      "it says what it built, and who owns it"
+check '[[ "$out" == *"built: 3 migration(s) applied"* && "$out" == *"o…@example.com is the platform'"'"'s owner"* && "$out" != *"owner@example.com"* ]]' \
+      "it says what it built, and who owns it, never printing the owner's whole address"
 check 'grep -q "from erp_meta.platform_staff s where s.revoked_at is null" "$work/fake/log"' \
       "the staff list it counts at the end is the active rows, so a row revoked since does not refuse a build"
 
@@ -191,7 +191,7 @@ check '[[ $status -eq 1 && "$out" == *"20260830091046_ad905a9f-fe00-4810-961e-44
 
 # 10. A console that is not exactly the owner's
 run "no owner bound at the end" FAKE_STAFF="1 0"
-check '[[ $status -eq 1 && "$out" == *"is not exactly owner@example.com"* ]]' \
+check '[[ $status -eq 1 && "$out" == *"is not exactly o…@example.com"* && "$out" != *"owner@example.com"* ]]' \
       "a build whose owner is not bound to their confirmed sign-in is not finished"
 run "a second staff row at the end" FAKE_STAFF="2 1"
 check '[[ $status -eq 1 && "$out" == *"rows: 2"* ]]' \

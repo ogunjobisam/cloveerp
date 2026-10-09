@@ -117,6 +117,9 @@ progress() {
 # The owner as a SQL literal, for the few checks below that are not run
 # through a psql variable.
 OWNER_SQL="'$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]' | sed "s/'/''/g")'"
+# The owner as the run's log may show them: the repository is public, so a
+# person's whole address is never printed (o…@example.com).
+OWNER_SHOWN="${OWNER:0:1}…@${OWNER#*@}"
 
 # ── Nobody can be there first ────────────────────────────────────────────────
 [[ -n "${SUPABASE_ACCESS_TOKEN:-}" && "${PROJECT_REF:-}" =~ ^[a-z0-9]{20}$ ]] ||
@@ -130,7 +133,7 @@ auth=$(mapi GET "/v1/projects/${PROJECT_REF}/config/auth") ||
 
 users=$(q -c "select count(*) || ' ' || count(*) filter (where lower(email) = ${OWNER_SQL} and email_confirmed_at is not null) from auth.users")
 if [[ "$users" != "1 1" ]]; then
-  refuse "auth.users must hold exactly one sign-in, the owner's (${OWNER}), with its address confirmed; it holds ${users%% *}, of which ${users##* } is the owner's confirmed. Create it in the dashboard (Authentication, Users, Add user, with Auto Confirm User) and delete any other before the build."
+  refuse "auth.users must hold exactly one sign-in, the owner's (${OWNER_SHOWN}), with its address confirmed; it holds ${users%% *}, of which ${users##* } is the owner's confirmed. Create it in the dashboard (Authentication, Users, Add user, with Auto Confirm User) and delete any other before the build."
 fi
 
 # ── What is there already ────────────────────────────────────────────────────
@@ -304,8 +307,8 @@ staff=$(q -c "
                                     limit 1))
     from erp_meta.platform_staff s where s.revoked_at is null")
 [[ "$staff" == "1 1" ]] || {
-  echo "x every migration applied, and the platform's staff list is not exactly ${OWNER}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound: ${staff##* }). The console is not safe to open; nothing else is wrong." >&2
+  echo "x every migration applied, and the platform's staff list is not exactly ${OWNER_SHOWN}, bound to their confirmed sign-in (active rows: ${staff%% *}; the owner's, bound: ${staff##* }). The console is not safe to open; nothing else is wrong." >&2
   exit 1
 }
 
-echo "built: $done_now migration(s) applied, $skipped already recorded, $total in all, in $(( $(date +%s) - started )) s; $OWNER is the platform's owner"
+echo "built: $done_now migration(s) applied, $skipped already recorded, $total in all, in $(( $(date +%s) - started )) s; $OWNER_SHOWN is the platform's owner"

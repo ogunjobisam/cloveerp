@@ -12,7 +12,9 @@ name: fleet sweep
 # they ask for:
 #
 #   build    deployment_from_empty.yml, with the client's code, carrying on
-#            where a build stopped when the request says so;
+#            where a build stopped when the request says so, and the way it
+#            is built (method) when the request or CLOVEERP_BUILD_METHOD
+#            names one;
 #   release  deploy.yml, with the targets the owner named (all, control,
 #            demonstration, or clients by code);
 #   rename   fleet_rename.yml, with the client's code, the address it is at,
@@ -137,6 +139,11 @@ jobs:
       # repository", 8 October); named still, so nothing depends on the
       # checkout for it.
       GH_REPO: ${{ github.repository }}
+      # The way a new client is built when its request names none
+      # (template.yml, 20261012070000): from_empty when unset, which is every
+      # build until a live rehearsal has proved the template. A Retry
+      # (resume) is always carried on from_empty.
+      BUILD_METHOD_DEFAULT: ${{ vars.CLOVEERP_BUILD_METHOD }}
     steps:
       # For supabase/ci/fleet_register.sh: a waiting build is told why on
       # its deployment's row.
@@ -258,12 +265,21 @@ jobs:
                   # back, so it is started, as every build was before.
                   echo "::warning::a build for ${code} was claimed while ${hold}; it is started anyway, because this control plane cannot hand a claim back (20261012010000 not released)."
                 fi
+                # The way it is built: the request's, else the repository's
+                # default, else none (from_empty). Only the two there are,
+                # and never for a Retry, which carries on from_empty.
+                method=$(jq -r '.payload.method // empty' <<< "$claim")
+                [[ -n "$method" ]] || method="${BUILD_METHOD_DEFAULT:-}"
+                case "$method" in from_empty|template) : ;; *) method="" ;; esac
+                [[ "$resume" != true ]] || method=""
+                method_args=()
+                [[ -z "$method" ]] || method_args=(-f "method=${method}")
                 # The code reaches a workflow input, so its shape is checked
                 # here as the register checks it.
                 if ! [[ "$code" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
                   outcome="failure: '${code}' is not a code"
-                elif gh workflow run deployment_from_empty.yml --ref main -f "code=${code}" -f "resume=${resume}" 2>&1; then
-                  outcome="success: deployment_from_empty.yml started for ${code}${resume:+ (resume ${resume})}"
+                elif gh workflow run deployment_from_empty.yml --ref main -f "code=${code}" -f "resume=${resume}" ${method_args[@]+"${method_args[@]}"} 2>&1; then
+                  outcome="success: deployment_from_empty.yml started for ${code}${resume:+ (resume ${resume})}${method:+ (method ${method})}"
                 else
                   outcome="failure: GitHub refused to start deployment_from_empty.yml for ${code}"
                 fi

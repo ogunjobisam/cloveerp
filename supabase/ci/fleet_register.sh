@@ -19,11 +19,25 @@
 # Usage: fleet_register.sh <command> ...   with CLOVEERP_LIVE_DATABASE_URL set
 #
 #   row <code>                         prints status=… ref=… api_url=…
+#                                      build_method=… (empty until the
+#                                      build says, or on a control plane
+#                                      released before 20261012070000)
 #   event <code> <phase> <status> [detail]
 #                                      one step recorded; the run id from
 #                                      GITHUB_RUN_ID
 #   project <code> <ref> <api_url> <publishable_key> [region] [size]
 #   built <code>
+#   build-method <code> <from_empty|template> [template dump sha256]
+#                                      how its database is built, through
+#                                      erp_meta.record_deployment_build_method
+#                                      (20261012070000), while the client is
+#                                      requested, being made or built, or
+#                                      failed, and before `built`: the
+#                                      register refuses a template it does
+#                                      not hold, and a dump named for a build
+#                                      from empty. Clients only. Said and
+#                                      nothing more on a control plane
+#                                      released before it can hold it
 #   vault-put <name>                   the value from stdin, never from an
 #                                      argument (an argument is in ps)
 #   vault-get <name>                   prints the value and nothing else, so a
@@ -70,6 +84,7 @@ case "$cmd" in
     q -v code="$code" <<'SQL'
 -- fleet: cp-row
 select 'status=' || d.status || E'\nref=' || coalesce(d.project_ref, '') || E'\napi_url=' || coalesce(d.api_url, '')
+       || E'\nbuild_method=' || coalesce(to_jsonb(d) ->> 'build_method', '')
   from erp_meta.deployment d where d.code = :'code';
 SQL
     ;;
@@ -97,6 +112,30 @@ SQL
     q -v code="$code" <<'SQL'
 select erp_meta.deployment_built(:'code');
 SQL
+    ;;
+  build-method)
+    code="${1:?usage: fleet_register.sh build-method <code> <from_empty|template> [template dump sha256]}"
+    method="${2:?method}"; template="${3:-}"
+    is_code "$code" || { echo "x '$code' is not a code" >&2; exit 2; }
+    [[ "$method" == from_empty || "$method" == template ]] || { echo "x '$method' is not a build method (from_empty or template)" >&2; exit 2; }
+    [[ -z "$template" || "$template" =~ ^[0-9a-f]{64}$ ]] || { echo "x '$template' is not a template's sha256" >&2; exit 2; }
+    # As the register refuses them, said before it is asked.
+    [[ "$method" != template || -n "$template" ]] || { echo "x a build from a template names the sha256 of the dump it restored" >&2; exit 2; }
+    [[ "$method" != from_empty || -z "$template" ]] || { echo "x a build from empty restores no template, so none is named" >&2; exit 2; }
+    # The control plane's recorder, once it has one (20261012070000).
+    have=$(q <<'SQL'
+select (to_regprocedure('erp_meta.record_deployment_build_method(text,text,text)') is not null)::text;
+SQL
+)
+    if [[ "$have" != true ]]; then
+      echo "register: this control plane cannot record how a deployment was built yet (20261012070000 not released); ${code} was built ${method}"
+      exit 0
+    fi
+    said=$(q -v code="$code" -v method="$method" -v template="$template" <<'SQL'
+select erp_meta.record_deployment_build_method(:'code', :'method', nullif(:'template', ''));
+SQL
+)
+    echo "register: ${said:-${code} built ${method}}"
     ;;
   vault-put)
     name="${1:?usage: fleet_register.sh vault-put <name> < value}"
@@ -168,7 +207,7 @@ SQL
     fi
     ;;
   *)
-    echo "usage: fleet_register.sh row|event|project|built|vault-put|vault-get|vault-del|checklist-by-build ..." >&2
+    echo "usage: fleet_register.sh row|event|project|built|build-method|vault-put|vault-get|vault-del|checklist-by-build ..." >&2
     exit 2
     ;;
 esac
