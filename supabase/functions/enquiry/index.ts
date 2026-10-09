@@ -21,7 +21,13 @@
  *      then records either the provider's id for the message or the reason it
  *      did not go. A form that stores a lead and tells nobody is worse than no
  *      form, because the sender has already been told they were heard — so
- *      "notified" is never written unless Resend named the message.
+ *      "notified" is never written unless Resend named the message. A send
+ *      that failed part-way records the reason with the ids of the messages
+ *      that were taken (20261012050000): every project's webhook hears the
+ *      whole Resend account's mail and each database keeps only events about
+ *      its own, so a message whose id is not kept here is another's. The ids
+ *      are written a moment after Resend took the messages; an event it sends
+ *      in that moment finds nothing and is not kept, which is accepted.
  *
  * Storing and sending are deliberately not one transaction. If the send fails
  * the enquiry is still kept and still visible on the platform console: losing
@@ -31,6 +37,8 @@
  * Deploy the migration first. 20260905000000 creates the clove_enquiry role and
  * the erp_ingress schema this file calls; a deploy that lands ahead of it makes
  * every submission a 500, because the role it switches to does not exist yet.
+ * The third argument of erp_ingress.fail_enquiry_notice is 20261012050000's;
+ * a release (release.yml) applies the migrations before it deploys functions.
  *
  * Deploy:
  *   supabase functions deploy enquiry
@@ -469,10 +477,14 @@ Deno.serve(async (req: Request) => {
       return reply(req, 200, { id, stored: true, notified: true });
     }
 
+    // The messages that were taken before the failure are still this
+    // database's mail, so their ids are kept with the failure, and what the
+    // provider says of them later is matched to this enquiry (20261012050000).
+    const taken = ids.length > 0 ? ids.join(",") : null;
     await asRole(
       sql,
       INGRESS_ROLE,
-      (tx) => tx`select erp_ingress.fail_enquiry_notice(${id}::uuid, ${failure})`,
+      (tx) => tx`select erp_ingress.fail_enquiry_notice(${id}::uuid, ${failure}, ${taken}::text)`,
     );
     await followUp();
     return reply(req, 200, { id, stored: true, notified: false });
