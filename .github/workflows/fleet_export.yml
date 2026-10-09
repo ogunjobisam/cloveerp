@@ -1,0 +1,283 @@
+name: fleet export
+
+# One client's database, exported off the platform.
+#
+# When a client leaves, the owner begins offboarding from the Fleet view
+# (20261012030000), which asks for an export; and an operator may ask for one
+# at any other time (Export now). The sweep (fleet_sweep.yml) starts this with
+# the client's code and the request's id, and leaves the request claimed for
+# this run to settle: the last step here settles it, with what happened,
+# whether the export was made, failed, or the run never finished (a timeout,
+# a cancel, a step before it that failed), and writes a failed step on the
+# client's row whenever the export was not made and the script could not say
+# so itself, but only on the row of a client that is up (built, live,
+# suspended or retiring): a failed step on the row of one being built would
+# mark its build failed. Retiring a client that had a database waits for a
+# copy taken after its service was stopped, so a failure here is never
+# silent: when the register has the client suspended, the script suspends
+# its organisation on its own database first (the status sync's routine,
+# which may still be waiting its turn in fleet_sync.yml), and records the
+# copy as taken after it stopped only when that is so, with the moment its
+# dump began by the control plane's clock.
+#
+# supabase/ci/fleet_export.sh dumps the client's database as the restore
+# drill dumps it, with its sign-ins and its stored documents, seals the copy
+# to the owner's age key, puts it in the owner's bucket at
+# exports/<code>/<UTC time>.dump.age, asks the bucket for it again, and only
+# then writes it on the client's row in the register, where the Fleet view
+# shows it (rehearsed on every build by fleet_export_rehearsal.sh).
+#
+# The bucket and the key are the owner's to make: the age public key in the
+# repository variable CLOVEERP_BACKUP_AGE_RECIPIENT, and the bucket (Cloudflare
+# R2 works) in the repository secrets CLOVEERP_BACKUP_S3_ENDPOINT,
+# CLOVEERP_BACKUP_S3_BUCKET, CLOVEERP_BACKUP_S3_KEY_ID and
+# CLOVEERP_BACKUP_S3_SECRET. Until they exist, this fails at once, naming
+# what is missing on the run and on the client's row, and nothing is dumped,
+# uploaded or recorded.
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "The client's code, as the register holds it (built, live, suspended or retiring)."
+        type: string
+        required: true
+      request:
+        description: "The console's request (its id), which this run settles. Empty for an export asked for by hand."
+        type: string
+        default: ''
+
+permissions:
+  # Read: whether a release is replaying into the client (below).
+  actions: read
+  contents: read
+
+# A request's run has a group of its own: a run waiting in a shared group can
+# be displaced by a later arrival before it starts, and one that never
+# starts never settles its request. The console keeps one export of a client
+# open at a time, so two of a client's requests never run at once; a hand
+# run (no request) queues behind the client's other hand runs.
+concurrency:
+  group: fleet-export-${{ inputs.code }}-${{ inputs.request || 'by-hand' }}
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: export ${{ inputs.code }}
+    runs-on: ubuntu-latest
+    # A dump of a 1 GB instance takes minutes; the rest is the waits below,
+    # for a change of database passwords (up to an hour) and then for a
+    # release replaying into the client (up to ninety minutes). The console
+    # lets an export still claimed after four hours go (20261012030000), so
+    # this stays below.
+    timeout-minutes: 180
+    env:
+      CODE: ${{ inputs.code }}
+      REQUEST: ${{ inputs.request }}
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      CLOVEERP_BACKUP_AGE_RECIPIENT: ${{ vars.CLOVEERP_BACKUP_AGE_RECIPIENT }}
+      CLOVEERP_BACKUP_S3_REGION: ${{ vars.CLOVEERP_BACKUP_S3_REGION || 'auto' }}
+      CLOVEERP_BACKUP_S3_ENDPOINT: ${{ secrets.CLOVEERP_BACKUP_S3_ENDPOINT }}
+      CLOVEERP_BACKUP_S3_BUCKET: ${{ secrets.CLOVEERP_BACKUP_S3_BUCKET }}
+      CLOVEERP_BACKUP_S3_KEY_ID: ${{ secrets.CLOVEERP_BACKUP_S3_KEY_ID }}
+      CLOVEERP_BACKUP_S3_SECRET: ${{ secrets.CLOVEERP_BACKUP_S3_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Masked, and only from main
+        run: |
+          set -euo pipefail
+          for value in "${CLOVEERP_LIVE_DATABASE_URL}" "${CLOVEERP_BACKUP_S3_ENDPOINT}" "${CLOVEERP_BACKUP_S3_BUCKET}" \
+                       "${CLOVEERP_BACKUP_S3_KEY_ID}" "${CLOVEERP_BACKUP_S3_SECRET}"; do
+            if [[ -n "$value" ]]; then
+              echo "::add-mask::${value}"
+            fi
+          done
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::run this from main, where supabase/ci/fleet_export.sh has been reviewed and merged; this run is on ${GITHUB_REF}, and nothing was exported."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Somewhere to put it
+        # Before anything is installed or waited for: a client that is not up
+        # to be exported (one being built, say) is said and left, with
+        # nothing written on its row; and without the bucket and the key
+        # there is nothing to do, and the error says what to make, here and
+        # on the client's row. What the script says happened goes to
+        # OUTCOME_FILE (fleet_export.sh), for the last step to settle the
+        # request with.
+        env:
+          OUTCOME_FILE: ${{ runner.temp }}/fleet_export.outcome
+        run: CHECK_ONLY=yes supabase/ci/fleet_export.sh "${CODE}"
+
+      - name: Install the client tools of the live major version, and age
+        # pg_dump must be at least the server's version (restore_drill.yml);
+        # age seals the copy.
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17 age
+          pg_dump --version
+          age --version
+          aws --version
+
+      - name: No database password is being changed
+        # A new database password (fleet_secrets.yml, rotate_db_password)
+        # breaks the connection the export reads from the vault once and
+        # opens again for each dump. So a rotation in its step, or one that
+        # began before this run and has its passwords still to change, is
+        # waited out, up to an hour; one that began after this run waits for
+        # it instead (supabase/ci/fleet_busy.sh runs, so the two never both
+        # wait). Before the wait for a release, which must be the last thing
+        # before the dump; a rotation that begins in between waits for this
+        # export, which began first.
+        env:
+          OUTCOME_FILE: ${{ runner.temp }}/fleet_export.outcome
+        run: |
+          set -uo pipefail
+          if ! supabase/ci/fleet_busy.sh wait 60 runs "fleet_secrets.yml=Change the database passwords, one client at a time"; then
+            echo "failure: a change of database passwords was still under way after an hour, so ${CODE} was not exported; ask for the export again once it has finished" > "${OUTCOME_FILE}"
+            echo "::error::a change of database passwords is still under way after an hour (above), so ${CODE} was not exported. Ask for the export again once it has finished."
+            exit 1
+          fi
+          echo "no database password is being changed"
+
+      - name: No release is replaying into it
+        # Just before the dump, and about this client alone: a dump holds a
+        # share lock on every table it copies, and a release replaying into
+        # the same database meets it and fails on its own thirty-second lock
+        # limit. A release past its own wait for copies is waited out, up to
+        # ninety minutes (a release job's limit is ninety-five, of which up to
+        # thirty-five go on that wait, so one past it has an hour at most);
+        # one that has not yet reached its replay waits for this export
+        # instead (release.yml, "No copy of this database is being made";
+        # supabase/ci/fleet_busy.sh).
+        env:
+          OUTCOME_FILE: ${{ runner.temp }}/fleet_export.outcome
+        run: |
+          set -uo pipefail
+          if ! supabase/ci/fleet_busy.sh wait 90 release "${CODE}"; then
+            echo "failure: a release to ${CODE} was still replaying after ninety minutes, so it was not exported; ask for the export again once the release has finished" > "${OUTCOME_FILE}"
+            echo "::error::a release to ${CODE} is still replaying after ninety minutes (above), so ${CODE} was not exported. Ask for the export again once it has finished."
+            exit 1
+          fi
+          echo "no release is replaying into ${CODE}"
+
+      - name: Export
+        # The step release.yml looks for (supabase/ci/fleet_busy.sh copy):
+        # while it runs, a release about to replay into this client waits, up
+        # to half an hour. Renamed, rename it there too.
+        env:
+          OUTCOME_FILE: ${{ runner.temp }}/fleet_export.outcome
+        run: supabase/ci/fleet_export.sh "${CODE}"
+
+      - name: The request settled, and the row told
+        # Always, on main: whatever happened above. The script writes what
+        # happened to OUTCOME_FILE on every way out, and whether it told the
+        # client's row; a run that stopped before it, or was cancelled or
+        # timed out in it, wrote nothing, and is said here. The row is told
+        # only when the register has the client up (built, live, suspended
+        # or retiring): erp_meta.record_deployment_event marks a client
+        # requested, being created or being built as failed on any failed
+        # step, so a hand run naming one would break its build. The request
+        # is settled only when it is this client's export request and still
+        # claimed: an id typed by hand that names anything else is left
+        # alone. A hand run (no request) settles nothing, and its row is told
+        # the same.
+        if: ${{ always() && github.ref == 'refs/heads/main' }}
+        env:
+          JOB_STATUS: ${{ job.status }}
+          OUTCOME_FILE: ${{ runner.temp }}/fleet_export.outcome
+        run: |
+          set -uo pipefail
+          outcome=""
+          told=no
+          if [[ -s "${OUTCOME_FILE}" ]]; then
+            outcome=$(sed -n 1p "${OUTCOME_FILE}")
+            if [[ "$(sed -n 2p "${OUTCOME_FILE}")" == told ]]; then told=yes; fi
+          fi
+          case "$outcome" in
+            success:*|failure:*) : ;;
+            *)
+              case "${JOB_STATUS}" in
+                cancelled) outcome="failure: run ${GITHUB_RUN_ID} was cancelled or timed out before the export of ${CODE} finished; nothing was recorded. Ask for the export again." ;;
+                *) outcome="failure: run ${GITHUB_RUN_ID} stopped before the export of ${CODE} finished (${JOB_STATUS}); nothing was recorded, and the run's log says where. Ask for the export again." ;;
+              esac ;;
+          esac
+          # A CHECK_ONLY success is not an export: a run whose last word is
+          # that the bucket is set stopped after it.
+          if [[ "$outcome" == "success: the bucket and the key are set" ]]; then
+            outcome="failure: run ${GITHUB_RUN_ID} stopped after finding the bucket and the key, before the export of ${CODE} finished (${JOB_STATUS}); nothing was recorded. Ask for the export again."
+            told=no
+          fi
+          echo "the export of ${CODE}: ${outcome}"
+          if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+            echo "::warning::no control plane connection, so the request and the client's row cannot be told."
+            exit 0
+          fi
+          if ! command -v psql > /dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
+          fi
+          if [[ "$outcome" == failure:* && "$told" != yes ]]; then
+            # On standard input, not -c: psql substitutes :'code' only there.
+            if ! up=$(psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v code="${CODE}" <<'SQL'
+          -- fleet: wf-status
+          set statement_timeout = '30s';
+          select coalesce((select d.status from erp_meta.deployment d where d.code = :'code'), '');
+          SQL
+            ); then
+              echo "::warning::${CODE}'s status could not be read, so its row is not told that its export was not made (a failed step would mark a client being built as failed)."
+            else
+              case "$up" in
+                built|live|suspended|retiring)
+                  if CLOVEERP_LIVE_DATABASE_URL="$CLOVEERP_LIVE_DATABASE_URL" supabase/ci/fleet_register.sh event "${CODE}" export failed \
+                       "export not made: ${outcome#failure: } (fleet_export.yml)" > /dev/null 2>&1; then
+                    echo "${CODE}'s row says the export was not made"
+                  else
+                    echo "::warning::${CODE}'s row could not be told that its export was not made."
+                  fi ;;
+                *)
+                  echo "${CODE} is ${up:-not in the register}: its row is not told, since only a client that is up is exported (a failed step would mark a client being built as failed)." ;;
+              esac
+            fi
+          fi
+          if [[ -z "${REQUEST}" ]]; then
+            echo "asked for by hand: no request to settle"
+            exit 0
+          fi
+          if ! [[ "${REQUEST}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "::warning::'${REQUEST}' is not a request's id, so nothing was settled."
+            exit 0
+          fi
+          # On standard input, not -c: psql substitutes :'id' only there.
+          if ! status=$(psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${REQUEST}" -v code="${CODE}" <<'SQL'
+          -- fleet: wf-request
+          set statement_timeout = '30s';
+          select coalesce((select r.status from erp_meta.fleet_request r
+                            where r.id = :'id'::uuid and r.kind = 'export' and r.payload ->> 'code' = :'code'), '');
+          SQL
+          ); then
+            echo "::warning::the request ${REQUEST} could not be read; it stays claimed."
+            exit 0
+          fi
+          if [[ "$status" != claimed ]]; then
+            echo "the request is ${status:-not an export of ${CODE}}: nothing to settle"
+            exit 0
+          fi
+          if psql "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -v id="${REQUEST}" -v outcome="${outcome}" > /dev/null <<'SQL'
+          -- fleet: wf-settle
+          set statement_timeout = '30s';
+          select erp_meta.settle_fleet_request(:'id'::uuid, :'outcome');
+          SQL
+          then
+            echo "the request ${REQUEST} is settled: ${outcome%%:*}"
+          else
+            echo "::warning::the request ${REQUEST} could not be settled; it stays claimed."
+          fi

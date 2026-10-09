@@ -217,6 +217,31 @@ jobs:
         # connection string, key or password is printed. Seconds, no database.
         run: supabase/ci/fleet_staff_sync_rehearsal.sh
 
+      - name: Every client's organisation follows the register's suspension, rehearsed
+        # supabase/ci/fleet_status_sync.sh (fleet_sync.yml) suspends a paying
+        # client's organisation on its own database, or lifts the
+        # suspension, every hour and whenever the owner suspends, reinstates
+        # or offboards one: wrong one way, a suspended client trades on;
+        # wrong the other, a paying one is shut out. Here first, against the
+        # shared stand-ins: what it refuses before touching anything, each
+        # client told the register's word and its reason, a change written on
+        # the row and nothing when in step, a suspension made on the client's
+        # own console left alone, one client's trouble never stopping the
+        # next, a timeout on every statement, and no connection string and no
+        # reason printed. Seconds, no database.
+        run: supabase/ci/fleet_status_sync_rehearsal.sh
+
+      - name: The fleet's waits for each other are rehearsed
+        # supabase/ci/fleet_busy.sh is how a copy asks whether a release is
+        # replaying into its database, a release whether a copy is being
+        # made, and a rename and a change of secrets whether the other is
+        # under way. Wrong one way, two meet in a client's database and one
+        # fails halfway; wrong the other, two wait for each other until both
+        # give up. Here first, against a gh that answers from files: which
+        # runs and steps count, that two runs asking about each other never
+        # both wait, and that a wait gives up when it said it would. Seconds.
+        run: supabase/ci/fleet_busy_rehearsal.sh
+
       - name: The fleet's poll is rehearsed
         # supabase/ci/fleet_poll.sh (fleet_poll.yml) reads every client's
         # database every hour and writes its health where the Fleet view
@@ -226,6 +251,43 @@ jobs:
         # stopping the next client, a connection that is not the client's
         # never used, and nothing secret printed. Seconds, no database.
         run: supabase/ci/fleet_poll_rehearsal.sh
+
+      - name: A client's rename is rehearsed
+        # supabase/ci/fleet_rename.sh (fleet_rename.yml) moves a paying
+        # client to a new address in four places that must agree: its
+        # project's auth settings, its functions' address, its own database
+        # and the control plane's register. Here first, against the shared
+        # stand-ins (fleet_rehearsal_fakes.sh): what it refuses before
+        # touching anything, the four in order with an event for each, every
+        # address held for it still allowed, every step undone when a later
+        # one is known to have failed, a lost answer read back with patience
+        # and nothing undone while it is not known, a stopped rename carried
+        # on, and nothing secret printed. Seconds.
+        run: supabase/ci/fleet_rename_rehearsal.sh
+
+      - name: A client's export is rehearsed
+        # supabase/ci/fleet_export.sh (fleet_export.yml) is what a client
+        # leaving takes with it. Here first, with a pg_dump, an age and an
+        # aws that keep what they are given and a project's Storage API:
+        # refused, naming what to make, until the bucket and the key exist;
+        # the client's own database, its sign-ins and its stored documents
+        # copied, sealed to the owner's key, uploaded and asked for again
+        # before the register is told; the outcome its request is settled
+        # with written on every way out; and nothing secret printed.
+        # Seconds, no database, no bucket.
+        run: supabase/ci/fleet_export_rehearsal.sh
+
+      - name: The fleet's weekly off-platform copies are rehearsed
+        # supabase/ci/fleet_backup.sh (fleet_backup.yml) copies the control
+        # plane, the demonstration and every client whose database is up
+        # off the platform each Sunday and keeps the newest eight of each.
+        # Here first: a notice and green until the bucket exists, one at a
+        # time with a pause, GitHub asked before each whether a release is
+        # replaying into it, each client's stored documents with it, one
+        # database's trouble never stopping the next, only that database's
+        # old copies deleted and only after this week's is found, and
+        # nothing secret printed. Seconds.
+        run: supabase/ci/fleet_backup_rehearsal.sh
 
       - name: An ungoverned entry point cannot survive its own transaction
         # §16.2. The build already runs erp.assert_public_api_safe() over the

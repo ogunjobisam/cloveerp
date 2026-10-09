@@ -1,13 +1,15 @@
-name: fleet staff
+name: fleet staff and status
 
-# Every client's platform staff, kept as the control plane's list says.
+# Every client's platform staff, kept as the control plane's list says; and
+# every client's own organisation, suspended or not as the register says.
 #
 # One Supabase project per client (the owner's decision of 7 October), and
 # staff kept on the control plane only (20261011100000): the owner adds,
 # re-ranks and removes staff on the control plane's console, and on a
-# client's own console those doors refuse. This workflow makes every built or
-# live client's list match the control plane's, through
-# supabase/ci/fleet_staff_sync.sh: a confirmed sign-in made on the client for
+# client's own console those doors refuse. This workflow makes the list of
+# every client whose database is up (built, live, suspended or retiring)
+# match the control plane's, through supabase/ci/fleet_staff_sync.sh: a
+# confirmed sign-in made on the client for
 # anyone who has none there (its own admin API, a password nobody knows; they
 # sign in with an emailed link), a staff row at the control plane's rank,
 # bound to that sign-in, for everyone on the list, and anyone the list no
@@ -15,18 +17,32 @@ name: fleet staff
 # what changed is written on each client's row in the register, which the
 # Fleet view shows.
 #
+# Then, through supabase/ci/fleet_status_sync.sh, each of those clients' one
+# organisation is made to follow the register (20261012030000): suspended
+# while the register holds a reason for its suspension (a suspended client,
+# or one offboarded while suspended), active again when it no longer does,
+# through erp_meta.follow_deployment_status() on its own database, which
+# lifts only a suspension it made. The register's suspension stops the
+# client's address; this stops its database, so a session or a key held from
+# before cannot carry on. A client not yet released the routine is noted and
+# followed after the next train. What changed is a note on its row.
+#
 # It runs every hour, so a change on the control plane reaches every client
 # within the hour; after every release train (deploy.yml), so a client that
 # has just been released the routines is kept at once; after a client's build
 # from empty (deployment_from_empty.yml, with its code), so a new client has
-# the staff before anyone needs to support it; and by hand, for every client
-# or one.
+# the staff before anyone needs to support it; whenever a client is
+# suspended, reinstated or offboarded (the console's door asks for a sync of
+# that client, and the sweep, fleet_sweep.yml, starts this with its code);
+# and by hand, for every client or one. GitHub keeps one waiting run in the
+# group below and cancels an older waiting one, so of several clients asked
+# for while a sync runs, one may wait for the next hour's.
 #
 # Every connection string and key comes from the control plane's vault, read
 # over CLOVEERP_LIVE_DATABASE_URL and masked before anything else is printed.
 # Nothing here touches the control plane's own staff list, the
 # demonstration's (which is its owner and only its owner, release.yml), or a
-# client that is not built or live.
+# client whose database is not up.
 
 on:
   schedule:
@@ -34,7 +50,7 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: "One client's code, as the register holds it; empty for every built or live client."
+        description: "One client's code, as the register holds it; empty for every client whose database is up (built, live, suspended or retiring)."
         type: string
         default: ''
 
@@ -49,7 +65,7 @@ concurrency:
 
 jobs:
   sync:
-    name: every client's staff as the control plane's
+    name: every client's staff and status as the control plane's
     runs-on: ubuntu-latest
     # A few statements per member per client, one client at a time with a
     # pause, each statement under a 30-second limit: minutes for a fleet of
@@ -85,4 +101,20 @@ jobs:
             supabase/ci/fleet_staff_sync.sh "${CODE}"
           else
             supabase/ci/fleet_staff_sync.sh
+          fi
+
+      - name: Keep every client's organisation suspended as the register says
+        # Whatever happened to the staff above: a suspension is not held up
+        # by a member of staff who could not be added somewhere.
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so the control plane's register cannot be read. No client's organisation was changed."
+            exit 1
+          fi
+          if [[ -n "${CODE}" ]]; then
+            supabase/ci/fleet_status_sync.sh "${CODE}"
+          else
+            supabase/ci/fleet_status_sync.sh
           fi

@@ -10,7 +10,10 @@
 # renamed, a password that may have been seen), and every one of them, done by
 # hand in a dashboard, is one client among twenty done slightly differently,
 # or a password pasted somewhere. So each is a subcommand here, run for one
-# client or for every built and live one, with a pause between clients so
+# client or for every one whose project is up (built, live, suspended or
+# retiring: a suspended client's project runs on, and a retiring one's until
+# it is purged, and each still needs a key revoked at Resend replaced or a
+# password that may have been seen changed), with a pause between clients so
 # that the Management API's sixty calls a minute stay with the rest of the
 # fleet, stopping at the first client that fails so that one mistake is not
 # made twenty times. Each client's row in the register says what was done
@@ -32,15 +35,25 @@
 #                         mended by running it again: setting a password needs
 #                         only the access token, never the old password.
 #   set_function_secrets  RESEND_API_KEY, CLOVEERP_APP_URL (the deployment's
-#                         origin, https://<code>.<APEX>) and CLOVEERP_INVITE_FROM,
-#                         as a build sets them.
+#                         origin, https://<address>.<APEX>) and
+#                         CLOVEERP_INVITE_FROM, as a build sets them.
 #   patch_auth            the auth and PostgREST settings a build applies
 #                         (provision_project.sh configure): sign-up closed,
-#                         addresses confirmed, the site URL and redirects of
-#                         https://<code>.<APEX>, custom SMTP through Resend.
+#                         addresses confirmed, the site URL of
+#                         https://<address>.<APEX>, redirects to it and to
+#                         every address the client was moved from (each held
+#                         for it for good), custom SMTP through Resend.
 #
-#   code    a client's code, which must be built or live in the register; or
-#           all, every client that is.
+#   A client's address is the register's: its code until a rename moves it
+#   (fleet_rename.sh, 20261012030000), and the code never changes. Set from the
+#   code after a rename, these would send its sign-in links and its emails'
+#   links back to an address that only redirects. And it is read again from
+#   the register just before each client is changed, not once when the run
+#   began: a rename that finished in between (fleet_rename.yml, which waits
+#   for this workflow as this one waits for it) would otherwise be undone.
+#
+#   code    a client's code, which must be built, live, suspended or retiring
+#           in the register; or all, every client that is.
 #   reason  why, in words; it goes on each client's row.
 #
 # Environment:
@@ -114,32 +127,65 @@ for n in "$PAUSE_SECONDS" "$PROVE_ATTEMPTS" "$PROVE_WAIT"; do
 done
 [[ "$PROVE_ATTEMPTS" -ge 1 ]] || refuse "PROVE_ATTEMPTS must be 1 or more; nothing was changed."
 
-# Which clients: built or live, with a project. On standard input, not -c:
-# psql substitutes :'code' only there.
-if ! rows=$($PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -v code="$code" <<'SQL'
-select d.code, d.status, coalesce(d.project_ref, '')
-  from erp_meta.deployment d
- where (:'code' = 'all' and d.status in ('built', 'live') and d.project_ref is not null)
-    or d.code = :'code'
- order by d.code;
+# Which clients: those whose project is up, with a project, where each is
+# served, and the addresses each was moved from and holds. On standard input,
+# not -c: psql substitutes :'code' only there. The address through to_jsonb:
+# a control plane before 20261012030000 has no such column, and every client
+# was served at its code; nor does it hold any address, and is not asked.
+if ! held_known=$($PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA <<'SQL'
+select (to_regclass('erp_meta.deployment_previous_address') is not null)::text;
 SQL
 ); then
   refuse "the register could not be read, so nothing was changed."
 fi
+# register_rows <code|all>: code|status|ref|address|held addresses (spaced).
+register_rows() {
+  if [[ "$held_known" == true ]]; then
+    $PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -v code="$1" <<'SQL'
+select d.code, case when d.status = 'retiring' and d.built_at is null then 'retiring, never built' else d.status end, coalesce(d.project_ref, ''), coalesce(to_jsonb(d) ->> 'address', d.code),
+       coalesce((select string_agg(p.address, ' ' order by p.moved_at, p.address)
+                   from erp_meta.deployment_previous_address p where p.code = d.code), '')
+  from erp_meta.deployment d
+ where (:'code' = 'all' and d.status in ('built', 'live', 'suspended', 'retiring') and d.project_ref is not null
+        and (d.status <> 'retiring' or d.built_at is not null))
+    or d.code = :'code'
+ order by d.code;
+SQL
+  else
+    $PSQL_CMD "$CLOVEERP_LIVE_DATABASE_URL" -v ON_ERROR_STOP=1 -X -q -tA -F '|' -v code="$1" <<'SQL'
+select d.code, case when d.status = 'retiring' and d.built_at is null then 'retiring, never built' else d.status end, coalesce(d.project_ref, ''), coalesce(to_jsonb(d) ->> 'address', d.code), ''
+  from erp_meta.deployment d
+ where (:'code' = 'all' and d.status in ('built', 'live', 'suspended', 'retiring') and d.project_ref is not null
+        and (d.status <> 'retiring' or d.built_at is not null))
+    or d.code = :'code'
+ order by d.code;
+SQL
+  fi
+}
+is_up() { case "$1" in built|live|suspended|retiring) return 0 ;; *) return 1 ;; esac; }
+is_address() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; }
+if ! rows=$(register_rows "$code"); then
+  refuse "the register could not be read, so nothing was changed."
+fi
 codes=(); refs=()
-while IFS='|' read -r c s r; do
+while IFS='|' read -r c s r a h; do
   [[ -n "$c" ]] || continue
-  if [[ "$s" != built && "$s" != live ]]; then
-    refuse "${c} is ${s}, not built or live, so its secrets are not this workflow's to change; nothing was changed."
+  a="${a:-$c}"
+  if ! is_up "$s"; then
+    refuse "${c} is ${s}, not built, live, suspended or retiring, so it has no project for this workflow to change; nothing was changed."
   fi
   [[ "$r" =~ ^[a-z0-9]{20}$ ]] || refuse "${c} has no project ref in the register ('${r}'); nothing was changed."
+  is_address "$a" || refuse "${c}'s address in the register ('${a}') is not one; nothing was changed."
+  for x in $h; do
+    is_address "$x" || refuse "the register holds '${x}' for ${c}, which is not an address; nothing was changed."
+  done
   codes+=("$c"); refs+=("$r")
 done <<< "$rows"
 count=${#codes[@]}
 if [[ "$count" -eq 0 ]]; then
   if [[ "$code" == all ]]; then
-    echo "no client is built or live; nothing to do"
-    summary "- ${action}: no client is built or live; nothing to do"
+    echo "no client is built, live, suspended or retiring; nothing to do"
+    summary "- ${action}: no client is built, live, suspended or retiring; nothing to do"
     exit 0
   fi
   refuse "${code} is not in the register, so it has no secrets here; nothing was changed."
@@ -231,8 +277,8 @@ rotate_db_password() {
 }
 
 set_function_secrets() {
-  local c="$1" ref="$2" origin
-  origin="https://${c}.${APEX}"
+  local c="$1" ref="$2" addr="$3" origin
+  origin="https://${addr}.${APEX}"
   if ! "$PROV" secrets "$ref" "RESEND_API_KEY=${RESEND_API_KEY}" "CLOVEERP_APP_URL=${origin}" "CLOVEERP_INVITE_FROM=${INVITE_FROM}" > /dev/null; then
     FAILED_WHY="the Management API did not take ${c}'s function secrets, so they are as they were"
     return 1
@@ -241,14 +287,17 @@ set_function_secrets() {
 }
 
 patch_auth() {
-  local c="$1" ref="$2"
-  if ! "$PROV" configure "$ref" "$c" > /dev/null; then
+  local c="$1" ref="$2" addr="$3" held="$4" redirects
+  if ! ALSO_ALLOW="$held" "$PROV" configure "$ref" "$addr" > /dev/null; then
     FAILED_WHY="${c}'s auth settings were not all applied (the line above says which did not take); run this again for ${c} once that is mended"
     return 1
   fi
-  DONE_WHAT="auth settings applied again: sign-up closed, addresses confirmed, site https://${c}.${APEX}, SMTP through Resend; PostgREST exposes public and graphql_public only"
+  redirects="redirects to it"
+  if [[ -n "$held" ]]; then redirects="redirects to it and to the addresses held for it ($(printf '%s' "$held" | sed 's/ /, /g'))"; fi
+  DONE_WHAT="auth settings applied again: sign-up closed, addresses confirmed, site https://${addr}.${APEX}, ${redirects}, SMTP through Resend; PostgREST exposes public and graphql_public only"
 }
 
+skipped=0
 i=0
 while [[ "$i" -lt "$count" ]]; do
   c="${codes[$i]}"; ref="${refs[$i]}"
@@ -258,7 +307,31 @@ while [[ "$i" -lt "$count" ]]; do
   fi
   echo "${c} (${ref}): ${action}"
   FAILED_WHY=""; DONE_WHAT=""
-  if "$action" "$c" "$ref"; then
+  # Where it is served now, and what it holds, read just before it is
+  # changed: not what the register said when this run began.
+  now=""
+  if ! now=$(register_rows "$c"); then
+    FAILED_WHY="the register could not be read again just before ${c} was changed, so nothing was changed on ${c}"
+  else
+    IFS='|' read -r _ s r addr held <<< "$(printf '%s\n' "$now" | head -n 1)"
+    addr="${addr:-$c}"
+    if [[ -z "$s" ]] || ! is_up "$s"; then
+      echo "${c} is ${s:-no longer in the register} now, so it was left alone"
+      summary "- ${c}: ${s:-no longer in the register} by the time its turn came; left alone"
+      skipped=$((skipped + 1))
+      i=$((i + 1))
+      continue
+    elif [[ "$r" != "$ref" ]]; then
+      FAILED_WHY="the register now gives ${c} the project '${r}', not ${ref} as when this run began, so nothing was changed on ${c}"
+    elif ! is_address "$addr"; then
+      FAILED_WHY="${c}'s address in the register ('${addr}') is not one, so nothing was changed on ${c}"
+    else
+      for x in $held; do
+        if ! is_address "$x"; then FAILED_WHY="the register holds '${x}' for ${c}, which is not an address, so nothing was changed on ${c}"; fi
+      done
+    fi
+  fi
+  if [[ -z "$FAILED_WHY" ]] && "$action" "$c" "$ref" "$addr" "$held"; then
     note "$c" done "${DONE_WHAT} (fleet_secrets.yml: ${reason})"
     echo "${c}: ${DONE_WHAT}"
     summary "- ${c}: ${DONE_WHAT}"
@@ -274,4 +347,8 @@ while [[ "$i" -lt "$count" ]]; do
   fi
   i=$((i + 1))
 done
-echo "${action}: ${count} client(s) done"
+if [[ "$skipped" -gt 0 ]]; then
+  echo "${action}: $((count - skipped)) client(s) done, ${skipped} left alone because the register no longer has them up"
+else
+  echo "${action}: ${count} client(s) done"
+fi

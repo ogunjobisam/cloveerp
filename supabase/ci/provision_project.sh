@@ -30,7 +30,9 @@
 #   configure <ref> <code>         PATCH the auth settings a build refuses
 #                                  without (build_from_empty.sh): sign-up
 #                                  closed, addresses confirmed, the site URL
-#                                  and redirect list of https://<code>.<APEX>,
+#                                  and redirect list of https://<code>.<APEX>
+#                                  (and of each address in ALSO_ALLOW, the
+#                                  ones a renamed client holds),
 #                                  a twelve-character password, and custom
 #                                  SMTP through Resend (RESEND_API_KEY,
 #                                  MAIL_FROM) — Supabase's own sender delivers
@@ -67,6 +69,16 @@
 #   secrets <ref> NAME=VALUE ...   the Edge Functions' secrets (POST /secrets).
 #                                  Values are read from the arguments and never
 #                                  printed.
+#   site <ref>                     GET the auth settings: prints site=<the site
+#                                  URL>, where the project's sign-in links
+#                                  go. Changes nothing (fleet_rename.sh reads
+#                                  it back).
+#   secret-digest <ref> <NAME>     GET the Edge Functions' secrets: prints
+#                                  digest=<the SHA-256 of NAME's value>, as
+#                                  the API lists it (never the value), or
+#                                  digest= when it has none. Changes nothing
+#                                  (fleet_rename.sh reads CLOVEERP_APP_URL
+#                                  back with it).
 #
 # Environment: SUPABASE_ACCESS_TOKEN (required; org-scoped, with the
 # projects permissions), CURL (the curl command, default curl), API (default
@@ -190,7 +202,17 @@ case "$cmd" in
     [[ -n "${RESEND_API_KEY:-}" ]] || refuse "RESEND_API_KEY is not set, so the project's sign-in links and password resets would go through Supabase's own sender, which delivers only to the project's team. Add it as a repository secret."
     [[ "${MAIL_FROM:-}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || refuse "MAIL_FROM is not an email address; it is the sender of the project's sign-in links."
     origin="https://${code}.${APEX}"
-    auth=$(jq -cn --arg site "$origin" --arg allow "${origin}/**" --arg host "${SMTP_HOST:-smtp.resend.com}" \
+    # The redirects allowed: the site's own, and the addresses in ALSO_ALLOW
+    # (space-separated), which are the ones a renamed client was moved from
+    # and holds for good (fleet_rename.sh, fleet_secrets.sh): a sign-in link
+    # asked for at one of them comes back there, and it is the client's.
+    allow="${origin}/**"
+    for a in ${ALSO_ALLOW:-}; do
+      is_code "$a" || refuse "'${a}' in ALSO_ALLOW is not an address-shaped code."
+      [[ "$a" != "$code" && ",${allow}," != *",https://${a}.${APEX}/**,"* ]] || continue
+      allow="${allow},https://${a}.${APEX}/**"
+    done
+    auth=$(jq -cn --arg site "$origin" --arg allow "$allow" --arg host "${SMTP_HOST:-smtp.resend.com}" \
                   --arg user "${SMTP_USER:-resend}" --arg pass "$RESEND_API_KEY" --arg from "$MAIL_FROM" \
                   --arg sender "${MAIL_SENDER_NAME:-Clove ERP}" \
              '{disable_signup: true, mailer_autoconfirm: false,
@@ -207,6 +229,15 @@ case "$cmd" in
     [[ "$(jq -r '.mailer_autoconfirm' <<< "$got")" == "false" ]] || refuse "${ref} still confirms addresses without asking after the PATCH."
     [[ "$(jq -r '.site_url' <<< "$got")" == "$origin" ]] || refuse "${ref}'s site URL is '$(jq -r '.site_url' <<< "$got")', not ${origin}."
     [[ "$(jq -r '.smtp_host // empty' <<< "$got")" == "${SMTP_HOST:-smtp.resend.com}" ]] || refuse "${ref} has no custom SMTP host after the PATCH; its sign-in links would reach only the project's team."
+    # With addresses held beside its own, each redirect asked for is among
+    # those it allows now (in any order): that is the point of asking.
+    if [[ -n "${ALSO_ALLOW:-}" ]]; then
+      have=",$(jq -r '.uri_allow_list // ""' <<< "$got" | tr -d ' '),"
+      IFS=',' read -r -a wanted_redirects <<< "$allow"
+      for w in "${wanted_redirects[@]}"; do
+        [[ "$have" == *",${w},"* ]] || refuse "${ref} does not allow the redirect ${w} after the PATCH, so a sign-in link asked for there would not come back."
+      done
+    fi
     api PATCH "/v1/projects/${ref}/postgrest" '{"db_schema":"public, graphql_public"}' > /dev/null
     schemas=$(api GET "/v1/projects/${ref}/postgrest" | jq -r '.db_schema // empty')
     exposed=$(printf '%s' "$schemas" | tr ',' '\n' | tr -d ' ' | grep -Ex 'erp|erp_ref|erp_meta|erp_test' || true)
@@ -352,7 +383,29 @@ case "$cmd" in
     echo "secrets=${names# }"
     ;;
 
+  site)
+    ref="${1:?usage: provision_project.sh site <ref>}"
+    is_ref "$ref" || refuse "'$ref' is not a project ref."
+    got=$(api GET "/v1/projects/${ref}/config/auth")
+    site=$(jq -r '.site_url // empty' <<< "$got" 2> /dev/null) || refuse "${ref}'s auth settings answered something that is not JSON."
+    echo "site=${site}"
+    ;;
+
+  secret-digest)
+    ref="${1:?usage: provision_project.sh secret-digest <ref> <NAME>}"
+    name="${2:?usage: provision_project.sh secret-digest <ref> <NAME>}"
+    is_ref "$ref" || refuse "'$ref' is not a project ref."
+    [[ "$name" =~ ^[A-Z][A-Z0-9_]*$ ]] || refuse "'${name}' is not a secret name (A-Z, 0-9, _)."
+    got=$(api GET "/v1/projects/${ref}/secrets")
+    digest=$(jq -r --arg n "$name" 'if type == "array" then ([.[] | select(.name == $n) | .value][0] // "") else error("not a list") end' <<< "$got" 2> /dev/null) ||
+      refuse "${ref}'s secrets answered something that is not a list of them."
+    # A digest is 64 hexadecimal characters; anything else is not one, and
+    # is not printed.
+    [[ -z "$digest" || "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || refuse "${ref} lists ${name} with something that is not a SHA-256 digest."
+    echo "digest=$(printf '%s' "$digest" | tr 'A-F' 'a-f')"
+    ;;
+
   *)
-    refuse "usage: provision_project.sh create|wait|configure|keys|owner|pooler|sign-in-link|password|secrets ..."
+    refuse "usage: provision_project.sh create|wait|configure|keys|owner|pooler|sign-in-link|password|secrets|site|secret-digest ..."
     ;;
 esac

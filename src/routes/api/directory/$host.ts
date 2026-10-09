@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { directoryHost, readDirectoryEntry } from "../../../lib/deployment-directory";
+import { directoryHost, directoryReply } from "../../../lib/deployment-directory";
 
 /**
  * GET /api/directory/<host>: which Supabase project a host belongs to.
@@ -25,6 +25,13 @@ import { directoryHost, readDirectoryEntry } from "../../../lib/deployment-direc
  * retired client's project once more to every browser that had seen it,
  * while the directory already said nothing was there. Nothing is answered
  * to a host the register does not hold, and nothing about why.
+ *
+ * Since 20261012030000 a held host may also answer that its client's service
+ * is suspended, or that the client has moved to another address; both name
+ * the client and neither carries a URL or a key (readDirectoryEntry passes
+ * on only what the shape it reads allows). What each answer is, status,
+ * body and caching, is decided by directoryReply in
+ * src/lib/deployment-directory.ts, where it is tested.
  */
 const CORS = { "access-control-allow-origin": "*" };
 
@@ -33,41 +40,21 @@ export const Route = createFileRoute("/api/directory/$host")({
     handlers: {
       GET: async ({ params }) => {
         const host = directoryHost(params.host);
-        if (host === null) {
-          return Response.json(
-            { error: "not a host" },
-            { status: 400, headers: { ...CORS, "cache-control": "no-store" } },
-          );
+        let register: { data: unknown; error: unknown } | null = null;
+        if (host !== null) {
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          const rpc = (
+            supabaseAdmin.rpc as unknown as (
+              n: string,
+              a?: Record<string, unknown>,
+            ) => Promise<{ data: unknown; error: { message: string } | null }>
+          ).bind(supabaseAdmin);
+          register = await rpc("erp_deployment_for_host", { p_host: host });
         }
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const rpc = (
-          supabaseAdmin.rpc as unknown as (
-            n: string,
-            a?: Record<string, unknown>,
-          ) => Promise<{ data: unknown; error: { message: string } | null }>
-        ).bind(supabaseAdmin);
-        const { data, error } = await rpc("erp_deployment_for_host", { p_host: host });
-        if (error) {
-          // The register could not be read, which is not "nobody is here".
-          return Response.json(
-            { error: "the directory cannot answer just now" },
-            { status: 503, headers: { ...CORS, "cache-control": "no-store" } },
-          );
-        }
-        const entry = readDirectoryEntry(data);
-        if (entry === null) {
-          return Response.json(
-            { error: "no deployment at this address" },
-            // Briefly: a client whose build finished a minute ago should not
-            // wait on a stale "nothing" for long.
-            { status: 404, headers: { ...CORS, "cache-control": "public, max-age=60" } },
-          );
-        }
-        return Response.json(entry, {
-          headers: {
-            ...CORS,
-            "cache-control": "public, max-age=300, stale-if-error=86400",
-          },
+        const reply = directoryReply(register);
+        return Response.json(reply.body, {
+          status: reply.status,
+          headers: { ...CORS, "cache-control": reply.cacheControl },
         });
       },
       OPTIONS: async () =>

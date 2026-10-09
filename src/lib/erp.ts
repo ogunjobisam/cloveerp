@@ -9,11 +9,19 @@ import {
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { chooseBackend, isDirectoryHost, normalHost, pageHost, type Backend } from "./backend";
+import {
+  chooseBackend,
+  clientCodeOf,
+  isDirectoryHost,
+  normalHost,
+  pageHost,
+  type Backend,
+} from "./backend";
 import {
   cacheKey,
   cachedEntryJson,
   directoryOutcome,
+  keptCopyAfter,
   readCachedEntry,
   type DirectoryEntry,
   type DirectoryOutcome,
@@ -106,9 +114,21 @@ export let isConfigured = false;
  * there. Null on every host this build knows (the apex, www, the
  * demonstration, a preview, a local stack, the server), and on a directory
  * host until the directory has answered, which is before any screen shows.
+ *
+ * The code is the address the page was opened at, not the register's key.
+ * Since 20261012030000 a client can be renamed: the register keeps its code,
+ * which never changes, and gives it a new address, which is the host and the
+ * code its one organisation is renamed to.
  */
 export let deploymentName: string | null = null;
 export let deploymentCode: string | null = null;
+
+/**
+ * Where a client now is, when this page was opened at an address it has moved
+ * from (https://<new address>.cloveerp.com): set only when ensureBackend
+ * answers "moved", and the root route then takes the page there.
+ */
+export let deploymentMovedTo: string | null = null;
 
 /**
  * This browser tab's own storage, where it keeps whom it acts as in a
@@ -236,12 +256,10 @@ async function lookupDirectory(host: string): Promise<DirectoryOutcome> {
     keptEntry = null;
   }
   const outcome = directoryOutcome(response, keptEntry);
+  const copy = keptCopyAfter(outcome);
   try {
-    if (outcome.kind === "found" && outcome.fresh) {
-      store?.setItem(kept, cachedEntryJson(outcome.entry, Date.now()));
-    } else if (outcome.kind === "none") {
-      store?.removeItem(kept);
-    }
+    if (copy === "forget") store?.removeItem(kept);
+    else if (copy !== null) store?.setItem(kept, cachedEntryJson(copy, Date.now()));
   } catch {
     /* a private window, or site data blocked: the answer is still the answer */
   }
@@ -252,10 +270,15 @@ async function lookupDirectory(host: string): Promise<DirectoryOutcome> {
  * Where the page stands with its project:
  *
  *   ready        it has one, and screens can run against it
+ *   suspended    the client's service is suspended: no project is booted,
+ *                and the page says so
+ *   moved        the client has moved to another address
+ *                (deploymentMovedTo): no project is booted, and the page goes
+ *                there
  *   none         the directory says nobody is at this host
  *   unreachable  the directory could not say, and nothing fresh was kept
  */
-export type BackendState = "ready" | "none" | "unreachable";
+export type BackendState = "ready" | "suspended" | "moved" | "none" | "unreachable";
 
 let directoryBoot: Promise<BackendState> | null = null;
 
@@ -270,10 +293,17 @@ export function ensureBackend(): Promise<BackendState> {
   if (supabase) return Promise.resolve("ready");
   const host = pageHost();
   if (host === null || !isDirectoryHost(host)) return Promise.resolve("none");
-  directoryBoot ??= lookupDirectory(normalHost(host)).then((outcome): BackendState => {
-    if (outcome.kind !== "found") return outcome.kind;
+  const asked = normalHost(host);
+  directoryBoot ??= lookupDirectory(asked).then((outcome): BackendState => {
+    if (outcome.kind === "none" || outcome.kind === "unreachable") return outcome.kind;
     deploymentName = outcome.entry.client_name.trim() || null;
-    deploymentCode = outcome.entry.code;
+    // Neither a suspended client nor an address it has left boots anything.
+    if (outcome.kind === "suspended") return "suspended";
+    if (outcome.kind === "moved") {
+      deploymentMovedTo = outcome.entry.moved_to;
+      return "moved";
+    }
+    deploymentCode = clientCodeOf(asked) ?? outcome.entry.code;
     bootBackend({ url: outcome.entry.url, key: outcome.entry.key });
     return "ready";
   });

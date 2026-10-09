@@ -85,6 +85,7 @@ case "$method $path" in
   "GET v1/projects/"*"/config/database/pooler") answer="${FAKE_POOLER:-$DEFAULT_POOLER}" ;;
   "PATCH v1/projects/"*"/database/password") answer='{}' ;;
   "POST v1/projects/"*"/secrets") answer='{}' ;;
+  "GET v1/projects/"*"/secrets") answer="${FAKE_SECRETS_LIST:-[]}" ;;
   "GET v1/projects/"*"/functions") answer="${FAKE_FUNCTIONS:-$DEFAULT_FUNCTIONS}" ;;
   "GET v1/projects/"*)
     # A status per call, from a list, the last one repeated.
@@ -221,6 +222,15 @@ run "a PATCH that did not take" "${CONF[@]}" 'FAKE_AUTH={"disable_signup":false,
 check '[[ $status -eq 2 && "$out" == *"sign-up is still open"* ]]' "refused when the setting read back wrong"
 run "PostgREST still exposing erp" "${CONF[@]}" 'FAKE_POSTGREST={"db_schema":"public, erp"}' -- configure abcdefghijklmnopqrst acme
 check '[[ $status -eq 2 && "$out" == *"exposes"* ]]' "refused when the erp schema is still exposed"
+run "a renamed client's addresses allowed" "${CONF[@]}" "ALSO_ALLOW=acme acme-old acme acme-foods" -- configure abcdefghijklmnopqrst acme-foods
+check '[[ $status -eq 0 && "$(body 1 | jq -r .site_url)" == "https://acme-foods.cloveerp.com" && "$(body 1 | jq -r .uri_allow_list)" == "https://acme-foods.cloveerp.com/**,https://acme.cloveerp.com/**,https://acme-old.cloveerp.com/**" ]]' \
+      "the site at its address; redirects to it and to each address it holds, each once"
+run "an address held that is not one" "${CONF[@]}" "ALSO_ALLOW=acme Acme.Old" -- configure abcdefghijklmnopqrst acme-foods
+check '[[ $status -eq 2 && "$out" == *"'"'"'Acme.Old'"'"' in ALSO_ALLOW is not an address-shaped code"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
+run "a held address the PATCH did not take" "${CONF[@]}" "ALSO_ALLOW=acme" \
+    'FAKE_AUTH={"disable_signup":true,"mailer_autoconfirm":false,"site_url":"https://acme-foods.cloveerp.com","smtp_host":"smtp.resend.com","uri_allow_list":"https://acme-foods.cloveerp.com/**"}' \
+    -- configure abcdefghijklmnopqrst acme-foods
+check '[[ $status -eq 2 && "$out" == *"does not allow the redirect https://acme.cloveerp.com/** after the PATCH"* ]]' "refused when it reads back without it"
 
 # 5. keys
 run "keys without a file to put the secret in" -- keys abcdefghijklmnopqrst
@@ -269,6 +279,28 @@ run "secrets" -- secrets abcdefghijklmnopqrst RESEND_API_KEY=re_rehearsal_key CL
 check '[[ $status -eq 0 && "$out" == *"secrets=RESEND_API_KEY CLOVEERP_APP_URL"* && "$(body 1 | jq -r "[.[].name] | join(\" \")")" == "RESEND_API_KEY CLOVEERP_APP_URL" && "$(body 1 | jq -r ".[0].value")" == "re_rehearsal_key" ]]' \
       "the names are said, the values sent"
 check '[[ "$out" != *"re_rehearsal_key"* ]]' "the values are not printed"
+
+# 9b. Read back, changing nothing: the site, and a secret's digest
+run "the site" 'FAKE_AUTH={"site_url":"https://acme.cloveerp.com","smtp_pass":"re_rehearsal_key"}' -- site abcdefghijklmnopqrst
+check '[[ $status -eq 0 && "$out" == "site=https://acme.cloveerp.com" && "$(requests)" == "GET https://api.example/v1/projects/abcdefghijklmnopqrst/config/auth;" ]]' \
+      "one GET, the site URL alone printed, nothing else of the settings"
+run "a site asked of no project" -- site "Acme!"
+check '[[ $status -eq 2 && "$out" == *"not a project ref"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
+APP_DIGEST=$(printf '%s' "https://acme.cloveerp.com" | { if command -v sha256sum > /dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -d ' ' -f 1)
+UPPER_DIGEST=$(printf '%s' "$APP_DIGEST" | tr 'a-f' 'A-F')
+run "a secret's digest" "FAKE_SECRETS_LIST=[{\"name\":\"RESEND_API_KEY\",\"value\":\"$(printf 'b%.0s' {1..64})\"},{\"name\":\"CLOVEERP_APP_URL\",\"value\":\"${UPPER_DIGEST}\"}]" \
+    -- secret-digest abcdefghijklmnopqrst CLOVEERP_APP_URL
+check '[[ $status -eq 0 && "$out" == "digest=${APP_DIGEST}" && "$(requests)" == "GET https://api.example/v1/projects/abcdefghijklmnopqrst/secrets;" ]]' \
+      "the one asked for, in lower case; no other secret's digest printed"
+run "a secret the project does not hold" 'FAKE_SECRETS_LIST=[{"name":"RESEND_API_KEY","value":"x"}]' -- secret-digest abcdefghijklmnopqrst CLOVEERP_APP_URL
+check '[[ $status -eq 0 && "$out" == "digest=" ]]' "an empty digest"
+run "a secret listed with its value, not a digest" 'FAKE_SECRETS_LIST=[{"name":"CLOVEERP_APP_URL","value":"https://acme.cloveerp.com"}]' -- secret-digest abcdefghijklmnopqrst CLOVEERP_APP_URL
+check '[[ $status -eq 2 && "$out" == *"lists CLOVEERP_APP_URL with something that is not a SHA-256 digest"* && "$out" != *"https://acme.cloveerp.com"* ]]' \
+      "refused, and what it listed is not printed"
+run "secrets that are not a list" 'FAKE_SECRETS_LIST={"message":"no"}' -- secret-digest abcdefghijklmnopqrst CLOVEERP_APP_URL
+check '[[ $status -eq 2 && "$out" == *"answered something that is not a list"* ]]' "refused"
+run "a name that is not one" -- secret-digest abcdefghijklmnopqrst app_url
+check '[[ $status -eq 2 && "$out" == *"is not a secret name"* && ! -e "$work/fake/curl.log" ]]' "refused before anything is asked"
 
 # 10. The API answering an error
 run "an API error" "${CREATE[@]}" FAKE_HTTP_STATUS=401 -- create acme "Acme Ltd"

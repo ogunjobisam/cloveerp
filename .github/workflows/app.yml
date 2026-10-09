@@ -184,6 +184,7 @@ jobs:
             select d.code, d.status, coalesce(d.last_release_sha, ''), coalesce(d.last_release_outcome, '')
               from erp_meta.deployment d
              where d.status in ('creating', 'building', 'built', 'live', 'suspended', 'retiring')
+               and (d.status <> 'retiring' or d.built_at is not null)
              order by d.code")
           while IFS='|' read -r code status sha outcome; do
             [[ -n "$code" ]] || continue

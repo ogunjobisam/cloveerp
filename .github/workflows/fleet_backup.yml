@@ -1,0 +1,144 @@
+name: fleet backup
+
+# Every database the platform runs, copied off the platform once a week.
+#
+# Supabase backs each project up every day and keeps seven days of them,
+# inside Supabase. So every Sunday at 04:00 UTC, and whenever the owner asks,
+# supabase/ci/fleet_backup.sh dumps the control plane, the demonstration and
+# every client that is built, live, suspended or retiring, one at a time, as
+# the restore drill dumps them and with their sign-ins (and, for a client, its
+# stored documents); seals each copy to the owner's age key; puts it in the
+# owner's bucket at backups/<database>/<date>.dump.age; asks the bucket for it
+# again; and then deletes that database's copies beyond the newest eight. One
+# database that cannot be copied is an error, and the rest are copied all the
+# same; a client's row in the register says it was copied, or why not
+# (rehearsed on every build by fleet_backup_rehearsal.sh).
+#
+# A dump holds a share lock on every table it copies, and a release replaying
+# into the same database meets it and fails on its own thirty-second lock
+# limit. So before each database, not once at the start, the script asks
+# GitHub whether a release is replaying into that one, and waits it out
+# (supabase/ci/fleet_busy.sh); a release that has not yet reached its replay
+# waits for the copy instead (release.yml, "No copy of this database is being
+# made"). Before each client, too, a change of its database password
+# (fleet_secrets.yml) under way or begun before this run is waited out, since
+# a new password breaks the connection the dumps are made with; one begun
+# after this run waits for it instead. And the register is read again for
+# each client just before it is copied: one retired since the run began is
+# left alone, not missed.
+#
+# The bucket and the key are the owner's to make: the age public key in the
+# repository variable CLOVEERP_BACKUP_AGE_RECIPIENT, and the bucket (Cloudflare
+# R2 works) in the repository secrets CLOVEERP_BACKUP_S3_ENDPOINT,
+# CLOVEERP_BACKUP_S3_BUCKET, CLOVEERP_BACKUP_S3_KEY_ID and
+# CLOVEERP_BACKUP_S3_SECRET. Until they exist, a notice names what is
+# missing, nothing is dumped, and the run stays green.
+
+on:
+  schedule:
+    # Sundays, 04:00 UTC: nobody at work, and after the full poll's
+    # assurance (fleet_poll.yml, 03:07).
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "control-plane, demonstration or a client's code; empty for every database."
+        type: string
+        default: ''
+
+permissions:
+  # Read: whether a release is replaying into a database (the script asks
+  # before each).
+  actions: read
+  contents: read
+
+concurrency:
+  group: fleet-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: every database, copied off the platform
+    runs-on: ubuntu-latest
+    # Minutes a database, one at a time with a pause; the rest is the waits
+    # before each, for a change of database passwords (up to an hour, before
+    # a client) and for a release replaying into it (up to ninety minutes),
+    # each rare: a rotation is started by hand, and a release job's own limit
+    # is ninety-five minutes, thirty-five of them its wait for copies before
+    # its replay.
+    timeout-minutes: 300
+    env:
+      # In the environment, never in the script's text: an input is whatever
+      # was typed.
+      TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || '' }}
+      CLOVEERP_LIVE_DATABASE_URL: ${{ secrets.CLOVEERP_LIVE_DATABASE_URL }}
+      CLOVEERP_DEMO_DATABASE_URL: ${{ secrets.CLOVEERP_DEMO_DATABASE_URL }}
+      PRODUCTION_REF: ${{ vars.CLOVEERP_PROJECT_REF || 'xpzffnnhnhcqyjqcueja' }}
+      DEMO_REF: ${{ vars.CLOVEERP_DEMO_PROJECT_REF }}
+      CLOVEERP_BACKUP_AGE_RECIPIENT: ${{ vars.CLOVEERP_BACKUP_AGE_RECIPIENT }}
+      CLOVEERP_BACKUP_S3_REGION: ${{ vars.CLOVEERP_BACKUP_S3_REGION || 'auto' }}
+      CLOVEERP_BACKUP_S3_ENDPOINT: ${{ secrets.CLOVEERP_BACKUP_S3_ENDPOINT }}
+      CLOVEERP_BACKUP_S3_BUCKET: ${{ secrets.CLOVEERP_BACKUP_S3_BUCKET }}
+      CLOVEERP_BACKUP_S3_KEY_ID: ${{ secrets.CLOVEERP_BACKUP_S3_KEY_ID }}
+      CLOVEERP_BACKUP_S3_SECRET: ${{ secrets.CLOVEERP_BACKUP_S3_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Masked, and only from main
+        run: |
+          set -euo pipefail
+          for value in "${CLOVEERP_LIVE_DATABASE_URL}" "${CLOVEERP_DEMO_DATABASE_URL}" "${CLOVEERP_BACKUP_S3_ENDPOINT}" \
+                       "${CLOVEERP_BACKUP_S3_BUCKET}" "${CLOVEERP_BACKUP_S3_KEY_ID}" "${CLOVEERP_BACKUP_S3_SECRET}"; do
+            if [[ -n "$value" ]]; then
+              echo "::add-mask::${value}"
+            fi
+          done
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::run this from main, where supabase/ci/fleet_backup.sh has been reviewed and merged; this run is on ${GITHUB_REF}, and nothing was copied."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Somewhere to put them
+        # Before anything is installed or waited for. Not set up yet is a
+        # notice and a green run (the owner makes the bucket and the key
+        # once); the steps after this one are skipped.
+        id: configured
+        run: |
+          set -uo pipefail
+          rc=0
+          CHECK_ONLY=yes supabase/ci/fleet_backup.sh || rc=$?
+          case "$rc" in
+            0) echo "configured=yes" >> "$GITHUB_OUTPUT" ;;
+            3) echo "configured=no" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+
+      - name: Install the client tools of the live major version, and age
+        if: steps.configured.outputs.configured == 'yes'
+        # pg_dump must be at least the server's version (restore_drill.yml);
+        # age seals each copy.
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17 age
+          pg_dump --version
+          age --version
+          aws --version
+
+      - name: Copy every database
+        # The step release.yml looks for (supabase/ci/fleet_busy.sh copy):
+        # while it runs, a release about to replay waits, up to half an hour.
+        # Renamed, rename it there too.
+        if: steps.configured.outputs.configured == 'yes'
+        run: |
+          set -euo pipefail
+          if [[ -n "${TARGET}" ]]; then
+            supabase/ci/fleet_backup.sh "${TARGET}"
+          else
+            supabase/ci/fleet_backup.sh
+          fi

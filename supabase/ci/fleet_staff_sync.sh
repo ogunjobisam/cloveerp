@@ -12,8 +12,10 @@
 # matched by whoever confirmed that address, and, while it waited, a row that
 # stopped every release to the client (release.yml, "only its owner").
 #
-# For each built or live client in the control plane's register (or the one
-# code given), one at a time:
+# For each client in the control plane's register whose database is up
+# (built, live, suspended or retiring: support may need to enter a suspended
+# client, and a retiring one until it is purged), or the one code given, one
+# at a time:
 #
 #   1. its connection string from the control plane's vault
 #      (cloveerp:deployment:<ref>:db_url), masked the moment it is read and
@@ -195,7 +197,8 @@ clients=$(cp_q -v only="$ONLY" 2> "$work/err" <<'SQL'
 select coalesce(jsonb_agg(jsonb_build_object('code', d.code, 'ref', d.project_ref, 'api_url', coalesce(d.api_url, ''))
                           order by d.code), '[]'::jsonb)
   from erp_meta.deployment d
- where d.status in ('built', 'live')
+ where d.status in ('built', 'live', 'suspended', 'retiring')
+   and (d.status <> 'retiring' or d.built_at is not null)
    and d.project_ref is not null
    and (:'only' = '' or d.code = :'only');
 SQL
@@ -221,10 +224,10 @@ SQL
       echo "::error::'${ONLY}' is not in the control plane's register. No client's staff was changed."
       exit 1
     fi
-    echo "::notice::${ONLY} is ${status}: only a built or live client's staff is kept. Nothing was changed."
+    echo "::notice::${ONLY} is ${status}: only the staff of a client whose database is up (built, live, suspended or retiring) are kept. Nothing was changed."
     exit 0
   fi
-  echo "no built or live client in the register; nobody's staff to keep"
+  echo "no client in the register has a database that is up (built, live, suspended or retiring); nobody's staff to keep"
   exit 0
 fi
 

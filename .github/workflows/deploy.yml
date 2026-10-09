@@ -34,6 +34,11 @@ name: deploy
 #   the demonstration first, then every built client at once, then the
 #   control plane last; a client that fails stops the control plane.
 #
+# A client is released to while its database is up: built, live, suspended
+# (its address is not served, and its project runs on, so it keeps up with
+# every release) or retiring (offboarding, still up until it is purged); not
+# while it is being made, nor once it is retired (20261012030000).
+#
 # And the cadence is the owner's too — a sprint's, with ad-hoc releases where
 # needed — so what runs on each event differs:
 #
@@ -47,7 +52,7 @@ name: deploy
 #                    production until the first client exists.
 #   workflow_dispatch the train, by hand or from the console's Fleet view
 #                    (fleet_sweep.yml): `targets` names all, control,
-#                    demonstration, or built clients by code.
+#                    demonstration, or clients by code.
 #
 # A release applies, then proves the result with the same checks the build
 # runs: a deploy that applied and did not check is the silent-job problem
@@ -89,7 +94,7 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: "The train: all; control; demonstration; or built clients by code, separated by commas. The demonstration goes first whatever is named, unless skip_demonstration."
+        description: "The train: all; control; demonstration; or clients by code (built, live, suspended or retiring), separated by commas. The demonstration goes first whatever is named, unless skip_demonstration."
         type: string
         default: 'all'
       mark_applied:
@@ -122,6 +127,12 @@ jobs:
     # Everything the jobs below need to know about a client is public —
     # its code, its ref, its address — so it travels as a job output; the
     # connection strings stay in the vault for release.yml to read.
+    #
+    # Its address is the register's, not its code: a client renamed
+    # (fleet_rename.yml) keeps its code and is served at its new address,
+    # which every release then confirms (release.yml reads it again when it
+    # gets there). Read through to_jsonb, so a control plane without the
+    # column (before 20261012030000) gives the code, which was its address.
     name: which deployments
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -157,9 +168,11 @@ jobs:
             if [[ "$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "select to_regclass('erp_meta.deployment') is not null")" == "t" ]]; then
               rows=$(psql "$CP_URL" -v ON_ERROR_STOP=1 -tAc "
                 select coalesce(jsonb_agg(jsonb_build_object(
-                         'code', d.code, 'project_ref', d.project_ref, 'status', d.status) order by d.code), '[]'::jsonb)
+                         'code', d.code, 'project_ref', d.project_ref, 'status', d.status,
+                         'address', coalesce(to_jsonb(d) ->> 'address', d.code)) order by d.code), '[]'::jsonb)
                   from erp_meta.deployment d
-                 where d.status in ('built', 'live')
+                 where d.status in ('built', 'live', 'suspended', 'retiring')
+                   and (d.status <> 'retiring' or d.built_at is not null)
                    and d.project_ref is not null;")
               # Retired clients, so a train asked for before one was retired
               # skips it rather than failing (20261011060000).
@@ -203,7 +216,7 @@ jobs:
                 demonstration) : ;;
                 *)
                   if ! [[ "$t" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
-                    echo "::error::'${t}' is not a target: name all, control, demonstration, or a built client's code."
+                    echo "::error::'${t}' is not a target: name all, control, demonstration, or a client's code."
                     exit 1
                   fi
                   row=$(jq -c --arg c "$t" '.[] | select(.code == $c)' <<< "$rows")
@@ -212,7 +225,7 @@ jobs:
                       echo "::notice::'${t}' was retired after this train was asked for; nothing is released to it, and the train carries on."
                       continue
                     fi
-                    echo "::error::'${t}' is not a built client in the register. Nothing was released."
+                    echo "::error::'${t}' is not a client the register releases to (built, live, suspended or retiring). Nothing was released."
                     exit 1
                   fi
                   selected=$(jq -c --argjson r "$row" '. + [$r] | unique_by(.code)' <<< "$selected")
@@ -244,7 +257,7 @@ jobs:
             map(. + {
               others: ($all - [.project_ref] | join(",")),
               vault: ("cloveerp:deployment:" + .project_ref + ":db_url"),
-              origin: ("https://" + .code + "." + $apex),
+              origin: ("https://" + (.address // .code) + "." + $apex),
               dispatch_url: ("https://" + .project_ref + ".supabase.co/functions/v1/dispatch")
             })' <<< "$selected")
           client_refs=$(jq -r '[.[].project_ref] | join(",")' <<< "$rows")
@@ -258,7 +271,7 @@ jobs:
             echo "client_refs=${client_refs}"
             echo "breakglass=${breakglass}"
           } >> "$GITHUB_OUTPUT"
-          echo "event ${EVENT}: demonstration ${want_demo}; clients ${count} of $(jq 'length' <<< "$rows") built; control plane ${want_control}${breakglass:+; BREAK GLASS for ${breakglass}}"
+          echo "event ${EVENT}: demonstration ${want_demo}; clients ${count} of the $(jq 'length' <<< "$rows") released to; control plane ${want_control}${breakglass:+; BREAK GLASS for ${breakglass}}"
           {
             echo "## Targets"
             echo "- demonstration: ${want_demo}"

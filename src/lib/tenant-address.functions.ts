@@ -18,12 +18,19 @@
  * deployments, and an address that names one answers with where that client
  * lives — its own origin, <code>.cloveerp.com — so cloveerp.com/acme takes
  * Acme's people to Acme's own door.
+ *
+ * Since 20261012030000 the register matches a client by its address, which a
+ * rename changes while its code stays: the origin is the address asked about,
+ * never built from the register's code, and an address the client has moved
+ * from sends the visitor straight to the new one (deploymentAddressLookup in
+ * ./deployment-directory.ts, where it is tested). A suspended client's
+ * address still answers, and its own door says it is suspended.
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { APEX_HOST, DEMO_HOST, isDirectoryHost, normalHost } from "./backend";
-import { readDirectoryEntry } from "./deployment-directory";
+import { deploymentAddressLookup, readDirectoryEntry } from "./deployment-directory";
 import { requestHost } from "./request-host";
 import { ADDRESS_MAX, readAddressLookup, type AddressLookup } from "./tenant-address";
 
@@ -50,13 +57,7 @@ export const tenantByAddress = createServerFn({ method: "GET" })
     // register answers an error here, which reads as "not a deployment".
     const deployment = await rpc("erp_deployment_for_host", { p_host: `${code}.${APEX_HOST}` });
     const entry = deployment.error ? null : readDirectoryEntry(deployment.data);
-    if (entry) {
-      return {
-        code: entry.code,
-        name: entry.client_name,
-        origin: `https://${entry.code}.${APEX_HOST}`,
-      };
-    }
+    if (entry) return deploymentAddressLookup(code, entry);
     const { data: answer, error } = await rpc("erp_tenant_by_address", { p_code: data.code });
     // A visitor is told nothing about why: an address that could not be
     // looked up reads the same as one nobody holds.
