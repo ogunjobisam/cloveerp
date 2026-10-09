@@ -582,9 +582,10 @@ jobs:
         # same reason: what live is compared against must be what CI builds.
         run: |
           set -euo pipefail
+          image=$(supabase/ci/postgres_image.sh)
           docker run -d --name clove-erp-reference \
             -e POSTGRES_PASSWORD=postgres -p 5432:5432 \
-            public.ecr.aws/supabase/postgres:17.6.1.167
+            "$image"
           for i in $(seq 1 60); do
             if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then break; fi
             if [[ "$i" -eq 60 ]]; then
