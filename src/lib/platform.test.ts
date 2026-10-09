@@ -9,9 +9,11 @@ import {
   databaseSizeText,
   dayText,
   deploymentAddress,
+  deploymentCommercialLine,
   deploymentHealthLine,
   deploymentLifecycleNotes,
   deploymentOrigin,
+  deploymentUsageText,
   earliestPurgeDate,
   exportDescription,
   exportedSinceServiceStopped,
@@ -25,7 +27,11 @@ import {
   OFFBOARDING_COOL_OFF_DAYS,
   offboardingStepsLeft,
   organisationWhere,
+  planDeploymentsText,
+  POSITION_PENDING_NOTE_HOURS,
+  positionPendingTooLong,
   purgeDateHasCome,
+  readDeploymentCommercial,
   renameAddressHint,
   renameDescription,
   serviceSuspended,
@@ -35,6 +41,7 @@ import {
   type BuildRequestView,
   type ClientDeployment,
   type ClientDeploymentStatus,
+  type DeploymentCommercial,
   type DeploymentHealth,
   type FleetAction,
   type FleetRowView,
@@ -1446,5 +1453,377 @@ describe("a deployment row as the register lists it", () => {
       "export",
       "retire",
     ]);
+  });
+});
+
+describe("a client's contract, as the Fleet reads it", () => {
+  const NOW = new Date("2026-10-09T12:00:00Z");
+  const ago = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
+  type Row = Pick<ClientDeployment, "status" | "commercial"> & { built_at?: string | null };
+  const september = (meter_code: string, quantity: unknown) => ({
+    meter_code,
+    period_start: "2026-09-01",
+    period_end: "2026-09-30",
+    quantity,
+    measured_at: ago(2),
+  });
+  const reading = (
+    meter_code: string,
+    quantity: number | null,
+    period_start: string | null = null,
+    period_end: string | null = null,
+  ) => ({ meter_code, title: null, quantity, period_start, period_end });
+  const held: DeploymentCommercial = {
+    contract_ref: "6b0c2f5e-1d3a-4c8e-9f21-0a7b3c5d9e11",
+    contract_status: "active",
+    plan_code: "standard",
+    position: "applied",
+    position_applied_at: ago(3),
+    position_pending_since: null,
+    position_detail: null,
+    notices_pending: 0,
+    notices_failed: 0,
+    usage: [
+      september("documents_posted", 1234),
+      september("movements_recorded", 56),
+      september("messages_sent", 12),
+      { meter_code: "active_users", quantity: "not measured" },
+    ],
+  };
+  const row = (over: Partial<DeploymentCommercial> = {}, status: Row["status"] = "live"): Row => ({
+    status,
+    // Built long before anything these tests queue.
+    built_at: "2026-08-01T00:00:00Z",
+    commercial: { ...held, ...over },
+  });
+  const usageOf = (raw: unknown) => readDeploymentCommercial({ usage: raw })?.usage ?? null;
+
+  test("the key is read without trusting its shape", () => {
+    expect(readDeploymentCommercial(held)).toEqual({
+      contract_ref: "6b0c2f5e-1d3a-4c8e-9f21-0a7b3c5d9e11",
+      contract_status: "active",
+      plan_code: "standard",
+      position: "applied",
+      position_applied_at: ago(3),
+      position_pending_since: null,
+      position_detail: null,
+      notices_pending: 0,
+      notices_failed: 0,
+      usage: [
+        reading("documents_posted", 1234, "2026-09-01", "2026-09-30"),
+        reading("movements_recorded", 56, "2026-09-01", "2026-09-30"),
+        reading("messages_sent", 12, "2026-09-01", "2026-09-30"),
+        reading("active_users", null),
+      ],
+    });
+    // A register older than the key, or something that is not an object.
+    expect(readDeploymentCommercial(undefined)).toBeNull();
+    expect(readDeploymentCommercial(null)).toBeNull();
+    expect(readDeploymentCommercial("applied")).toBeNull();
+    expect(readDeploymentCommercial([held])).toBeNull();
+    // Every key missing: nothing known, and usage not said.
+    expect(readDeploymentCommercial({})).toEqual({
+      contract_ref: null,
+      contract_status: null,
+      plan_code: null,
+      position: null,
+      position_applied_at: null,
+      position_pending_since: null,
+      position_detail: null,
+      notices_pending: null,
+      notices_failed: null,
+      usage: null,
+    });
+    // Counts written as text are read; a position it does not know, a time it
+    // cannot read, a negative count or blank text are not.
+    const loose = readDeploymentCommercial({
+      position: "claimed",
+      position_applied_at: "yesterday",
+      position_pending_since: 17,
+      position_detail: "   ",
+      plan_code: "",
+      notices_pending: "3",
+      notices_failed: -1,
+    });
+    expect(loose?.position).toBeNull();
+    expect(loose?.position_applied_at).toBeNull();
+    expect(loose?.position_pending_since).toBeNull();
+    expect(loose?.position_detail).toBeNull();
+    expect(loose?.plan_code).toBeNull();
+    expect(loose?.notices_pending).toBe(3);
+    expect(loose?.notices_failed).toBeNull();
+  });
+
+  test("usage comes as rows, as an object keyed by meter, or as one word", () => {
+    expect(
+      usageOf({
+        documents_posted: { period_start: "2026-09-01", period_end: "2026-09-30", quantity: "40" },
+        messages_sent: 7,
+        active_users: "not measured",
+      }),
+    ).toEqual([
+      reading("documents_posted", 40, "2026-09-01", "2026-09-30"),
+      reading("messages_sent", 7),
+      reading("active_users", null),
+    ]);
+    // Said, but nothing measured.
+    expect(usageOf("not measured")).toEqual([]);
+    expect(usageOf(null)).toEqual([]);
+    expect(usageOf([])).toEqual([]);
+    // A row with no meter is dropped; several months of one meter keep the
+    // latest month it measured.
+    expect(
+      usageOf([
+        { quantity: 5 },
+        { meter_code: "documents_posted", period_start: "2026-08-01", quantity: 90 },
+        { meter_code: "documents_posted", period_start: "2026-09-01", quantity: 40 },
+        { meter_code: "documents_posted", period_start: "2026-10-01", quantity: null },
+        { meter_code: "documents_posted", period_start: "2026-07-01", quantity: 70 },
+      ]),
+    ).toEqual([reading("documents_posted", 40, "2026-09-01")]);
+  });
+
+  test("the usage line: every registered meter in order, one never measured is not measured, never 0", () => {
+    expect(deploymentUsageText(usageOf(held.usage))).toBe(
+      "September 2026: 1,234 documents posted, 56 stock movements recorded, 12 messages sent, active users not measured",
+    );
+    // A meter the register leaves out was not measured either.
+    const two = deploymentUsageText(
+      usageOf([september("documents_posted", 1), september("messages_sent", 0)]),
+    );
+    expect(two).toBe(
+      "September 2026: 1 document posted, stock movements not measured, 0 messages sent, active users not measured",
+    );
+    expect(two).not.toContain("0 active users");
+    // Nothing measured, nothing said, and an active-user count once measured.
+    expect(deploymentUsageText([])).toBe("not measured yet");
+    expect(deploymentUsageText(usageOf("not measured"))).toBe("not measured yet");
+    expect(deploymentUsageText(null)).toBeNull();
+    expect(deploymentUsageText(usageOf([september("active_users", 1)]))).toBe(
+      "September 2026: documents posted not measured, stock movements not measured, messages sent not measured, 1 active user",
+    );
+  });
+
+  test("the usage line: months said after each when they differ, and a meter registered later by its title", () => {
+    const usage = usageOf([
+      { meter_code: "documents_posted", period_start: "2026-09-01", quantity: 12.5 },
+      { meter_code: "messages_sent", period_start: "2026-08-01", quantity: 2000 },
+      {
+        meter_code: "invoices_issued",
+        title: "Invoices issued",
+        period_start: "2026-09-01",
+        quantity: 3,
+      },
+      { meter_code: "api_calls", quantity: "not measured" },
+    ]);
+    expect(deploymentUsageText(usage)).toBe(
+      "12.5 documents posted (September 2026), stock movements not measured, 2,000 messages sent (August 2026), active users not measured, api calls not measured, invoices issued: 3 (September 2026)",
+    );
+  });
+
+  test("a row says the plan in force, the position applied, and the latest usage", () => {
+    expect(deploymentCommercialLine(row(), NOW)).toEqual({
+      waiting: null,
+      parts: [
+        { key: "plan", text: "on the standard plan, contract active", tone: "ok" },
+        { key: "position", text: "position applied 3 hours ago", tone: "muted" },
+      ],
+      usage:
+        "September 2026: 1,234 documents posted, 56 stock movements recorded, 12 messages sent, active users not measured",
+      failed: null,
+    });
+    // A contract ending or ended is coloured for it; the plan stays.
+    const parts = (over: Partial<DeploymentCommercial>) =>
+      deploymentCommercialLine(row(over), NOW)?.parts ?? [];
+    expect(parts({ contract_status: "expired" })[0]).toEqual({
+      key: "plan",
+      text: "on the standard plan, contract expired",
+      tone: "warn",
+    });
+    expect(parts({ contract_status: "terminating" })[0]?.tone).toBe("warn");
+    expect(parts({ contract_status: "terminated" })[0]?.tone).toBe("muted");
+    expect(parts({ contract_status: null })[0]?.text).toBe("on the standard plan");
+    expect(parts({ position_applied_at: null }).map((p) => p.text)).toContain("position applied");
+    expect(parts({ notices_pending: 2 }).map((p) => p.text)).toContain("2 notices waiting");
+    expect(parts({ notices_pending: 1 }).map((p) => p.text)).toContain("1 notice waiting");
+    expect(parts({ notices_pending: 0 }).map((p) => p.key)).not.toContain("notices");
+  });
+
+  test("a client offboarded before it was built is sent nothing, so its position is never noted as late", () => {
+    const line = deploymentCommercialLine(
+      {
+        status: "retiring",
+        built_at: null,
+        commercial: {
+          ...held,
+          position: "pending",
+          position_applied_at: null,
+          position_pending_since: ago(24 * 19),
+        },
+      },
+      NOW,
+    );
+    expect(line?.waiting).toBeNull();
+    expect(line?.usage).toBeNull();
+    expect(line?.parts).toContainEqual({
+      key: "position",
+      text: "position not sent: it was never built",
+      tone: "muted",
+    });
+  });
+
+  test("a position queued before its client was built has waited only since the build", () => {
+    const queuedEarly = (builtHoursAgo: number) =>
+      deploymentCommercialLine(
+        {
+          status: "built",
+          built_at: ago(builtHoursAgo),
+          commercial: {
+            ...held,
+            position: "pending",
+            position_applied_at: null,
+            position_pending_since: ago(72),
+          },
+        },
+        NOW,
+      );
+    // Queued three days ago, built two hours ago: not late.
+    expect(queuedEarly(2)?.waiting).toBeNull();
+    expect(
+      positionPendingTooLong({ position: "pending", position_pending_since: ago(72) }, NOW, ago(2)),
+    ).toBe(false);
+    // Built thirty hours ago and still not applied: late, and said.
+    expect(queuedEarly(30)?.waiting).not.toBeNull();
+    expect(
+      positionPendingTooLong(
+        { position: "pending", position_pending_since: ago(72) },
+        NOW,
+        ago(30),
+      ),
+    ).toBe(true);
+  });
+
+  test("a position pending more than a day, on a client that is up, is noted first", () => {
+    expect(POSITION_PENDING_NOTE_HOURS).toBe(24);
+    const pending = (hours: number, detail: string | null = null) =>
+      row({
+        position: "pending",
+        position_applied_at: null,
+        position_pending_since: ago(hours),
+        position_detail: detail,
+      });
+
+    // Under a day: a phrase, no note.
+    const fresh = deploymentCommercialLine(pending(3), NOW);
+    expect(fresh?.waiting).toBeNull();
+    expect(fresh?.parts).toContainEqual({
+      key: "position",
+      text: "position queued 3 hours ago, not applied yet",
+      tone: "muted",
+    });
+    expect(
+      positionPendingTooLong({ position: "pending", position_pending_since: ago(24) }, NOW),
+    ).toBe(false);
+
+    // Over a day: the note, with what its database last answered, and the
+    // phrase is not said twice.
+    const stuck = deploymentCommercialLine(
+      pending(26, "waiting: this database does not know the plan scale yet"),
+      NOW,
+    );
+    expect(stuck?.waiting).toBe(
+      "Its contract's position has waited over a day to be applied, though the fleet sync sends it every hour: it was queued 26 hours ago. Its database last answered: waiting: this database does not know the plan scale yet",
+    );
+    expect(stuck?.parts.map((p) => p.key)).not.toContain("position");
+    expect(deploymentCommercialLine(pending(72), NOW)?.waiting).toBe(
+      "Its contract's position has waited over a day to be applied, though the fleet sync sends it every hour: it was queued 3 days ago.",
+    );
+    expect(
+      positionPendingTooLong({ position: "pending", position_pending_since: ago(24.1) }, NOW),
+    ).toBe(true);
+
+    // Every state whose project is up is sent its position, so each is noted.
+    for (const status of ["built", "live", "suspended", "retiring"] as const) {
+      expect(deploymentCommercialLine({ ...pending(30), status }, NOW)?.waiting).not.toBeNull();
+    }
+    // Before its build finishes the position waits for it, which is no fault.
+    for (const status of ["requested", "creating", "building", "failed"] as const) {
+      const line = deploymentCommercialLine({ ...pending(30), status }, NOW);
+      expect(line?.waiting).toBeNull();
+      expect(line?.parts).toContainEqual({
+        key: "position",
+        text: "position waits for its build",
+        tone: "muted",
+      });
+      expect(line?.usage).toBeNull();
+    }
+    // Applied, or a time not given or unreadable, has not waited.
+    expect(
+      positionPendingTooLong({ position: "applied", position_pending_since: ago(48) }, NOW),
+    ).toBe(false);
+    expect(positionPendingTooLong({ position: "pending", position_pending_since: null }, NOW)).toBe(
+      false,
+    );
+    expect(
+      deploymentCommercialLine(row({ position: "pending", position_pending_since: null }), NOW)
+        ?.parts,
+    ).toContainEqual({ key: "position", text: "position not applied yet", tone: "muted" });
+  });
+
+  test("a notice its database refused is noted last, in red", () => {
+    expect(deploymentCommercialLine(row({ notices_failed: 1 }), NOW)?.failed).toBe(
+      "A notice of its contract could not be recorded on its database, and is not sent again.",
+    );
+    expect(deploymentCommercialLine(row({ notices_failed: "3" }), NOW)?.failed).toBe(
+      "3 notices of its contract could not be recorded on its database, and are not sent again.",
+    );
+    expect(deploymentCommercialLine(row({ notices_failed: 0 }), NOW)?.failed).toBeNull();
+    expect(deploymentCommercialLine(row({ notices_failed: null }), NOW)?.failed).toBeNull();
+    // Whatever its state, short of retired.
+    expect(
+      deploymentCommercialLine(row({ notices_failed: 2 }, "building"), NOW)?.failed,
+    ).not.toBeNull();
+  });
+
+  test("no contract sent, a retired client, or a register older than the key", () => {
+    const none = deploymentCommercialLine(
+      row({
+        contract_ref: null,
+        contract_status: null,
+        plan_code: null,
+        position: "none",
+        position_applied_at: null,
+        usage: null,
+      }),
+      NOW,
+    );
+    expect(none).toEqual({
+      waiting: null,
+      parts: [{ key: "position", text: "no contract sent to it", tone: "muted" }],
+      usage: "not measured yet",
+      failed: null,
+    });
+    // A retired client is owed nothing more; what retiring it failed is no fault.
+    expect(deploymentCommercialLine(row({ notices_failed: 4 }, "retired"), NOW)).toBeNull();
+    expect(deploymentCommercialLine({ status: "live" }, NOW)).toBeNull();
+    expect(deploymentCommercialLine({ status: "live", commercial: null }, NOW)).toBeNull();
+    // An object with nothing readable in it, on a client not yet up, says nothing.
+    expect(deploymentCommercialLine({ status: "requested", commercial: {} }, NOW)).toBeNull();
+  });
+});
+
+describe("the client deployments on a plan", () => {
+  test("one, or several, as the plans view says it", () => {
+    expect(planDeploymentsText({ deployments: 1 })).toBe("1 client deployment");
+    expect(planDeploymentsText({ deployments: 3 })).toBe("3 client deployments");
+    expect(planDeploymentsText({ deployments: "2" })).toBe("2 client deployments");
+  });
+
+  test("nothing when none hold a contract on it, or the register is older than the count", () => {
+    expect(planDeploymentsText({ deployments: 0 })).toBeNull();
+    expect(planDeploymentsText({})).toBeNull();
+    expect(planDeploymentsText({ deployments: null })).toBeNull();
+    expect(planDeploymentsText({ deployments: -1 })).toBeNull();
+    expect(planDeploymentsText({ deployments: 1.5 })).toBeNull();
   });
 });

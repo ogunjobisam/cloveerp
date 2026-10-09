@@ -3,7 +3,8 @@
 # Stand-ins for the commands the lifecycle scripts run, for their rehearsals
 # (fleet_rename_rehearsal.sh, fleet_export_rehearsal.sh,
 # fleet_backup_rehearsal.sh, fleet_status_sync_rehearsal.sh,
-# fleet_busy_rehearsal.sh). Sourced, never run:
+# fleet_busy_rehearsal.sh, fleet_commercial_sync_rehearsal.sh). Sourced,
+# never run:
 #
 #   . supabase/ci/fleet_rehearsal_fakes.sh
 #   fleet_fakes "$work"      # writes psql, curl, pg_dump, age, aws, sleep, gh
@@ -18,8 +19,11 @@
 #             $FAKE_DIR/answers/<database>/<tag>@<code> for a statement given
 #             that code (-v code=...), else <tag>#<nth call> or <tag>; a line
 #             starting ERROR: goes to stderr and, with ON_ERROR_STOP, stops
-#             there (exit 3); a file CONNECT in the database's directory is a
-#             database that cannot be reached (exit 2). Vault entries are
+#             there (exit 3); NOTICE: and WARNING: go to stderr, and DETAIL:,
+#             HINT:, CONTEXT: and LINE too unless the statement is VERBOSITY
+#             terse (-v or \set), as psql prints them; a file CONNECT in the
+#             database's directory is a database that cannot be reached
+#             (exit 2). Vault entries are
 #             $FAKE_DIR/vault/<name, : as _>; events are appended to
 #             $FAKE_DIR/events as code|phase|status|detail. -c is refused:
 #             psql substitutes :'name' only on standard input.
@@ -136,13 +140,23 @@ for f in ${code:+"$dir/$tag@$code"} "$dir/$tag#$k" "$dir/$tag"; do
   if [[ -f "$f" ]]; then file="$f"; break; fi
 done
 [[ -n "$file" ]] || exit 0
+# VERBOSITY terse, given as a variable or set in the statement, keeps what
+# the server adds to an error (DETAIL, HINT, CONTEXT, the LINE it points at)
+# from being printed at all, as psql does.
+terse=no
+if [[ "$(var VERBOSITY)" == terse ]] || printf '%s\n' "$sql" | grep -q '^\\set VERBOSITY terse'; then terse=yes; fi
 while IFS= read -r line || [[ -n "$line" ]]; do
-  if [[ "$line" == ERROR:* ]]; then
-    echo "psql:<stdin>:3: $line" >&2
-    if [[ "$stop" == 1 ]]; then exit 3; fi
-  else
-    printf '%s\n' "$line"
-  fi
+  case "$line" in
+    ERROR:*)
+      echo "psql:<stdin>:3: $line" >&2
+      if [[ "$stop" == 1 ]]; then exit 3; fi ;;
+    DETAIL:*|HINT:*|CONTEXT:*|"LINE "*)
+      if [[ "$terse" != yes ]]; then echo "$line" >&2; fi ;;
+    NOTICE:*|WARNING:*)
+      echo "psql:<stdin>:3: $line" >&2 ;;
+    *)
+      printf '%s\n' "$line" ;;
+  esac
 done < "$file"
 exit 0
 FAKE

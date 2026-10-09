@@ -210,6 +210,41 @@ export type ClientDeployment = {
    * one (exportedSinceServiceStopped). Absent from a register older than it.
    */
   last_export_service_stopped?: boolean;
+  /**
+   * Its contract as the control plane holds it for it, and how far its own
+   * database has caught up (20261012040000): read only through
+   * readDeploymentCommercial, which takes nothing on trust. Absent from a
+   * register older than it.
+   */
+  commercial?: DeploymentCommercial | null;
+};
+
+/**
+ * What the register says of a client's contract (erp_platform_deployments'
+ * commercial, 20261012040000). Every key may be missing or of another shape;
+ * readDeploymentCommercial reads it.
+ */
+export type DeploymentCommercial = {
+  /** The contract, from the newest position sent to it. */
+  contract_ref?: string | null;
+  /** active, terminating, expired or terminated, from the same position. */
+  contract_status?: string | null;
+  /** The plan that position holds it to. */
+  plan_code?: string | null;
+  /** applied, pending (sent, not yet applied by its database), or none sent. */
+  position?: string | null;
+  position_applied_at?: string | null;
+  position_pending_since?: string | null;
+  /** What its database last answered about the position, in plain words. */
+  position_detail?: string | null;
+  /** Notices of its contract's events not yet recorded on its database, and those it refused. */
+  notices_pending?: number | string | null;
+  notices_failed?: number | string | null;
+  /**
+   * The latest month the fleet poll read for each meter. A meter it never
+   * measured is said to be not measured, never 0.
+   */
+  usage?: unknown;
 };
 
 /**
@@ -1041,6 +1076,391 @@ export function lastExportText(
 ): string | null {
   const ago = agoText(d.last_export_at, now);
   return ago === null ? null : `exported ${ago}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* A client's contract, as the Fleet view reads it (20261012040000).          */
+/* -------------------------------------------------------------------------- */
+
+/** Where a client's own database stands with the newest contract position sent to it. */
+export type CommercialPosition = "applied" | "pending" | "none";
+
+/** One meter's latest month on a client's database. A null quantity was never measured. */
+export type UsageReading = {
+  meter_code: string;
+  /** The meter's own title, when the register gives one. */
+  title: string | null;
+  quantity: number | null;
+  period_start: string | null;
+  period_end: string | null;
+};
+
+/** The register's commercial key, read: anything unreadable is null. */
+export type CommercialView = {
+  contract_ref: string | null;
+  contract_status: string | null;
+  plan_code: string | null;
+  position: CommercialPosition | null;
+  position_applied_at: string | null;
+  position_pending_since: string | null;
+  position_detail: string | null;
+  notices_pending: number | null;
+  notices_failed: number | null;
+  /**
+   * The latest month per meter. Null when the register said nothing of
+   * usage; empty when it said nothing was measured.
+   */
+  usage: UsageReading[] | null;
+};
+
+/** Text with something in it, trimmed; anything else is nothing. */
+function textOf(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t === "" ? null : t;
+}
+
+/** A time that can be read, as it was written; anything else is nothing. */
+function timeTextOf(v: unknown): string | null {
+  const t = textOf(v);
+  return t !== null && !Number.isNaN(Date.parse(t)) ? t : null;
+}
+
+/**
+ * A quantity a meter measured: a number not below zero, or one written as
+ * text. Anything else, "not measured" among it, was not measured.
+ */
+function quantityOf(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
+  if (typeof v === "string" && /^\d+(\.\d+)?$/.test(v.trim())) return Number(v.trim());
+  return null;
+}
+
+function objectOf(v: unknown): Record<string, unknown> | null {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+/** One meter's reading, from a row of the register's usage, or a value under a meter's code. */
+function readingOf(code: string | null, v: unknown): UsageReading | null {
+  const o = objectOf(v);
+  if (o === null) {
+    return code === null
+      ? null
+      : {
+          meter_code: code,
+          title: null,
+          quantity: quantityOf(v),
+          period_start: null,
+          period_end: null,
+        };
+  }
+  const meter = textOf(o["meter_code"]) ?? textOf(o["meter"]) ?? textOf(o["code"]) ?? code;
+  if (meter === null) return null;
+  return {
+    meter_code: meter,
+    title: textOf(o["title"]),
+    quantity: quantityOf(o["quantity"] ?? o["value"]),
+    period_start: timeTextOf(o["period_start"]),
+    period_end: timeTextOf(o["period_end"]),
+  };
+}
+
+/** Whether reading a is a later month than b: measured beats not measured, then the later period. */
+function laterReading(a: UsageReading, b: UsageReading): boolean {
+  if ((a.quantity === null) !== (b.quantity === null)) return a.quantity !== null;
+  const at = a.period_start === null ? -Infinity : Date.parse(a.period_start);
+  const bt = b.period_start === null ? -Infinity : Date.parse(b.period_start);
+  return at > bt;
+}
+
+/**
+ * The register's usage, in whichever shape it comes: a list of rows, an
+ * object keyed by meter (each a row, a number, or "not measured"), or one
+ * word for all of it. Null when it says nothing (absent); empty when it says
+ * nothing was measured. One reading per meter, the latest month it measured.
+ */
+function readUsage(v: unknown): UsageReading[] | null {
+  if (v === undefined) return null;
+  const readings: UsageReading[] = [];
+  if (Array.isArray(v)) {
+    for (const item of v as unknown[]) {
+      const r = readingOf(null, item);
+      if (r !== null) readings.push(r);
+    }
+  } else {
+    const o = objectOf(v);
+    if (o !== null) {
+      for (const [code, value] of Object.entries(o)) {
+        const r = readingOf(textOf(code), value);
+        if (r !== null) readings.push(r);
+      }
+    }
+  }
+  const latest = new Map<string, UsageReading>();
+  for (const r of readings) {
+    const held = latest.get(r.meter_code);
+    if (held === undefined || laterReading(r, held)) latest.set(r.meter_code, r);
+  }
+  return [...latest.values()];
+}
+
+const POSITIONS: ReadonlySet<string> = new Set(["applied", "pending", "none"]);
+
+/**
+ * The register's commercial key, read without trusting its shape
+ * (erp_platform_deployments, 20261012040000). Null when there is none: a
+ * register older than it, or something that is not an object.
+ */
+export function readDeploymentCommercial(raw: unknown): CommercialView | null {
+  const o = objectOf(raw);
+  if (o === null) return null;
+  const position = textOf(o["position"]);
+  return {
+    contract_ref: textOf(o["contract_ref"]),
+    contract_status: textOf(o["contract_status"]),
+    plan_code: textOf(o["plan_code"]),
+    position:
+      position !== null && POSITIONS.has(position) ? (position as CommercialPosition) : null,
+    position_applied_at: timeTextOf(o["position_applied_at"]),
+    position_pending_since: timeTextOf(o["position_pending_since"]),
+    position_detail: textOf(o["position_detail"]),
+    notices_pending: countOf(o["notices_pending"]),
+    notices_failed: countOf(o["notices_failed"]),
+    usage: readUsage(o["usage"]),
+  };
+}
+
+/**
+ * The meters a client's usage is measured by (erp_meta.meter_kind), in the
+ * order the Fleet view says them, with how each reads: one, many, and its
+ * name when it was not measured.
+ */
+const METERS: readonly { code: string; one: string; many: string; name: string }[] = [
+  {
+    code: "documents_posted",
+    one: "document posted",
+    many: "documents posted",
+    name: "documents posted",
+  },
+  {
+    code: "movements_recorded",
+    one: "stock movement recorded",
+    many: "stock movements recorded",
+    name: "stock movements",
+  },
+  { code: "messages_sent", one: "message sent", many: "messages sent", name: "messages sent" },
+  // Never measured by anything yet: no job runs its measurement, so it reads
+  // "not measured", never 0.
+  { code: "active_users", one: "active user", many: "active users", name: "active users" },
+];
+
+/** A quantity as a person reads it: 1,234, or 12.5. */
+function quantityText(n: number): string {
+  if (Number.isInteger(n)) return grouped(n);
+  const [whole, fraction] = n.toFixed(2).replace(/0+$/, "").split(".");
+  return fraction ? `${grouped(Number(whole))}.${fraction}` : grouped(Number(whole));
+}
+
+/** The month a period starts in, as a person reads it: September 2026, in UTC. */
+function monthText(iso: string | null): string | null {
+  if (iso === null) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const d = new Date(t);
+  return `${MONTHS[d.getUTCMonth()] ?? ""} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * A client's latest usage, as the Fleet view says it: "September 2026:
+ * 1,234 documents posted, 56 stock movements recorded, 12 messages sent,
+ * active users not measured". Each registered meter is named, in order,
+ * then any other the register gives; a meter never measured is said to be
+ * not measured, never 0. The month is said once when every measured meter
+ * shares it, and after each otherwise. Null when the register said nothing
+ * of usage; "not measured yet" when nothing was.
+ */
+export function deploymentUsageText(usage: readonly UsageReading[] | null): string | null {
+  if (usage === null) return null;
+  const measured = usage.filter((r) => r.quantity !== null);
+  if (measured.length === 0) return "not measured yet";
+  const months = new Set(measured.map((r) => monthText(r.period_start)));
+  const oneMonth = months.size === 1 ? ([...months][0] ?? null) : null;
+  const byCode = new Map(usage.map((r) => [r.meter_code, r]));
+  const known = new Set(METERS.map((m) => m.code));
+  // Its month, after it, when the measured meters do not share one.
+  const dated = (text: string, r: UsageReading) => {
+    const month = monthText(r.period_start);
+    return oneMonth === null && month !== null ? `${text} (${month})` : text;
+  };
+  const parts = METERS.map((m) => {
+    const r = byCode.get(m.code);
+    if (r === undefined || r.quantity === null) return `${m.name} not measured`;
+    return dated(`${quantityText(r.quantity)} ${r.quantity === 1 ? m.one : m.many}`, r);
+  });
+  // A meter registered after this was written: its title, or its code, then the count.
+  const others = usage
+    .filter((r) => !known.has(r.meter_code))
+    .sort((a, b) => a.meter_code.localeCompare(b.meter_code));
+  for (const r of others) {
+    const name = (r.title ?? r.meter_code.replace(/_/g, " ")).toLowerCase();
+    parts.push(
+      r.quantity === null
+        ? `${name} not measured`
+        : dated(`${name}: ${quantityText(r.quantity)}`, r),
+    );
+  }
+  const list = parts.join(", ");
+  return oneMonth === null ? list : `${oneMonth}: ${list}`;
+}
+
+/** How long a position may wait to be applied on a client that is up before the Fleet says so. */
+export const POSITION_PENDING_NOTE_HOURS = 24;
+
+/**
+ * Whether the newest position sent to a client has waited more than a day
+ * to be applied. The fleet sync sends it on every run, hourly, to every
+ * client whose project is up, so a day of waiting means its database keeps
+ * answering that it cannot take it yet. A time that cannot be read has not
+ * waited.
+ */
+export function positionPendingTooLong(
+  c: Pick<CommercialView, "position" | "position_pending_since">,
+  now: Date,
+  builtAt?: string | null,
+): boolean {
+  if (c.position !== "pending") return false;
+  const queued = timeOf(c.position_pending_since);
+  if (queued === null) return false;
+  // A position queued before its deployment was built is not sent until the
+  // build is done: it has waited only since then.
+  const built = timeOf(builtAt ?? null);
+  const since = built !== null && built > queued ? built : queued;
+  return now.getTime() - since > POSITION_PENDING_NOTE_HOURS * 3_600_000;
+}
+
+/**
+ * What the Fleet view says of a client's contract, under its health: a note
+ * first when its position has waited over a day to be applied, then a phrase
+ * for the plan in force and the contract's state, the position's state and
+ * the notices waiting, then its latest usage, and last a note when any
+ * notice of its contract failed.
+ */
+export type CommercialLine = {
+  waiting: string | null;
+  parts: HealthPart[];
+  usage: string | null;
+  failed: string | null;
+};
+
+const CONTRACT_TONE: Record<string, HealthTone> = {
+  active: "ok",
+  terminating: "warn",
+  expired: "warn",
+  terminated: "muted",
+};
+
+/**
+ * What the Fleet view says of a deployment's contract (erp_platform_
+ * deployments' commercial, 20261012040000), or null when there is nothing
+ * to say: a register older than it, or a retired deployment, which is owed
+ * nothing more.
+ *
+ * The position is sent to a client only while its project is up (built,
+ * live, suspended or being offboarded). Before that it waits for the build,
+ * which sends it as it finishes, so its waiting is only noted, and usage is
+ * read, once it is up. A note is also made when any notice of its contract
+ * was refused by its database: those are not sent again.
+ */
+export function deploymentCommercialLine(
+  d: Pick<ClientDeployment, "status" | "commercial"> & { built_at?: string | null | undefined },
+  now: Date,
+): CommercialLine | null {
+  if (d.status === "retired") return null;
+  const c = readDeploymentCommercial(d.commercial);
+  if (c === null) return null;
+  // The deployments the fleet's sync sends a position to and the poll reads:
+  // up, and when being offboarded, only one that was built.
+  const neverBuilt = typeof d.built_at !== "string";
+  const up = POLLED.has(d.status) && !(d.status === "retiring" && neverBuilt);
+  const parts: HealthPart[] = [];
+
+  if (c.plan_code !== null) {
+    parts.push({
+      key: "plan",
+      text:
+        c.contract_status === null
+          ? `on the ${c.plan_code} plan`
+          : `on the ${c.plan_code} plan, contract ${c.contract_status}`,
+      tone: c.contract_status === null ? "muted" : (CONTRACT_TONE[c.contract_status] ?? "muted"),
+    });
+  }
+
+  const tooLong = up && positionPendingTooLong(c, now, d.built_at ?? null);
+  if (c.position === "applied") {
+    const applied = agoText(c.position_applied_at, now);
+    parts.push({
+      key: "position",
+      text: applied === null ? "position applied" : `position applied ${applied}`,
+      tone: "muted",
+    });
+  } else if (c.position === "pending" && !tooLong) {
+    const queued = agoText(c.position_pending_since, now);
+    parts.push({
+      key: "position",
+      text: !up
+        ? d.status === "retiring"
+          ? "position not sent: it was never built"
+          : "position waits for its build"
+        : queued === null
+          ? "position not applied yet"
+          : `position queued ${queued}, not applied yet`,
+      tone: "muted",
+    });
+  } else if (c.position === "none" && c.plan_code === null) {
+    parts.push({ key: "position", text: "no contract sent to it", tone: "muted" });
+  }
+
+  const pending = c.notices_pending;
+  if (pending !== null && pending > 0) {
+    parts.push({
+      key: "notices",
+      text: `${pending} ${pending === 1 ? "notice" : "notices"} waiting`,
+      tone: "muted",
+    });
+  }
+
+  const waiting = !tooLong
+    ? null
+    : `Its contract's position has waited over a day to be applied, though the fleet sync sends it every hour: it was queued ${
+        agoText(c.position_pending_since, now) ?? "over a day ago"
+      }.${c.position_detail === null ? "" : ` Its database last answered: ${c.position_detail}`}`;
+
+  const failedCount = c.notices_failed;
+  const failed =
+    failedCount === null || failedCount === 0
+      ? null
+      : `${failedCount === 1 ? "A notice" : `${failedCount} notices`} of its contract could not be recorded on its database, and ${
+          failedCount === 1 ? "is" : "are"
+        } not sent again.`;
+
+  const usage = up ? deploymentUsageText(c.usage) : null;
+
+  if (waiting === null && parts.length === 0 && usage === null && failed === null) return null;
+  return { waiting, parts, usage, failed };
+}
+
+/**
+ * How many client deployments hold a contract in force on a plan, as the
+ * plans view says it (erp_platform_plans' deployments, 20261012040000):
+ * "1 client deployment", "3 client deployments". Null when there are none,
+ * or the register is older than the count.
+ */
+export function planDeploymentsText(p: { deployments?: unknown }): string | null {
+  const n = countOf(p.deployments);
+  if (n === null || n === 0) return null;
+  return `${n} client ${n === 1 ? "deployment" : "deployments"}`;
 }
 
 /**

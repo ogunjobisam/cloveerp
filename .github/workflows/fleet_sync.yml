@@ -27,16 +27,31 @@ name: fleet staff and status
 # before cannot carry on. A client not yet released the routine is noted and
 # followed after the next train. What changed is a note on its row.
 #
+# And then, through supabase/ci/fleet_commercial_sync.sh, every client up is
+# given what the control plane owes it from its contract (20261012040000):
+# its position (plan, term, dated bands and add-ons, active or expired),
+# which its own database enforces, sent every run so a client rebuilt,
+# restored or resumed heals itself; and the contract's notices, delivered once
+# each, in the order they were queued, into its organisation's event stream.
+# Every answer is settled on the control plane in one call per client, where
+# the Fleet view shows it; nothing owed is printed here (the notes, totals and
+# values in it are the owner's business, and these logs are public). A
+# client not yet released the routines is noted, and owed the same next run.
+#
 # It runs every hour, so a change on the control plane reaches every client
 # within the hour; after every release train (deploy.yml), so a client that
 # has just been released the routines is kept at once; after a client's build
 # from empty (deployment_from_empty.yml, with its code), so a new client has
-# the staff before anyone needs to support it; whenever a client is
-# suspended, reinstated or offboarded (the console's door asks for a sync of
-# that client, and the sweep, fleet_sweep.yml, starts this with its code);
-# and by hand, for every client or one. GitHub keeps one waiting run in the
-# group below and cancels an older waiting one, so of several clients asked
-# for while a sync runs, one may wait for the next hour's.
+# the staff, and the contract it was sold, before anyone needs to support it;
+# whenever a client is suspended, reinstated or offboarded, or its contract
+# queues a position or a notice (the console's door, or the contract routine,
+# asks for a sync of that client, and the sweep, fleet_sweep.yml, starts this
+# with its code: minutes once the sweep's wake reaches it, at worst the next
+# hourly run); and by hand, for every client or one. GitHub keeps one waiting
+# run in the group below and cancels an older waiting one, so of several
+# clients asked for while a sync runs, one may wait for the next hour's; the
+# contract step therefore serves every client whatever code it was started
+# for.
 #
 # Every connection string and key comes from the control plane's vault, read
 # over CLOVEERP_LIVE_DATABASE_URL and masked before anything else is printed.
@@ -50,7 +65,7 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: "One client's code, as the register holds it; empty for every client whose database is up (built, live, suspended or retiring)."
+        description: "One client's code, as the register holds it, for its staff and status (its contract is carried to every client either way); empty for every client whose database is up (built, live, suspended or retiring)."
         type: string
         default: ''
 
@@ -67,8 +82,9 @@ jobs:
   sync:
     name: every client's staff and status as the control plane's
     runs-on: ubuntu-latest
-    # A few statements per member per client, one client at a time with a
-    # pause, each statement under a 30-second limit: minutes for a fleet of
+    # A few statements per member per client, and four more per client for
+    # its contract, one client at a time with a pause, each statement under
+    # a 30-second limit (60 on the control plane): minutes for a fleet of
     # twenty. The limit is for a sync stuck on something none of those limits
     # covers.
     timeout-minutes: 30
@@ -118,3 +134,19 @@ jobs:
           else
             supabase/ci/fleet_status_sync.sh
           fi
+
+      - name: Keep every client's contract as the control plane holds it
+        # Whatever happened to the staff and the status above: a client's
+        # contract is not held up by either.
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOVEERP_LIVE_DATABASE_URL}" ]]; then
+            echo "::error::CLOVEERP_LIVE_DATABASE_URL is not set, so what the control plane owes its clients cannot be read. Nothing was applied."
+            exit 1
+          fi
+          # Every client whose database is up, whatever code this run was
+          # started for: GitHub cancels an older waiting run of this group,
+          # and with it the code it was asked for, so the run that does start
+          # serves them all. CODE is not passed on.
+          supabase/ci/fleet_commercial_sync.sh

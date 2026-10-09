@@ -40,6 +40,22 @@
 # is still written, with errors saying why, so the Fleet view says so within
 # the hour; the register's "silent" flag is for a poll that has stopped.
 #
+# And its usage, every poll: erp_meta.usage_meter for the current month and
+# the two before it, summed by meter and period over every organisation its
+# database holds or held and purged (a purge is audited as
+# platform.tenant_purged, and a re-onboarded organisation has a new id, so a
+# month both shared counts both), and only those: the meters of the test
+# organisations a build from empty runs its suites with are left out (their
+# rows stay behind, deleted with no purge recorded). Written with
+# erp_meta.record_deployment_usage(code, rows) on the
+# control plane (20261012040000), which replaces each period's figure and
+# deletes none. A meter with no row in those months is not measured (nothing
+# runs erp.measure_active_users, so active_users never is), which is not
+# nought: it is sent as no row, and said as not measured. The figures are a
+# named client's business and these logs are public, so only how many rows
+# were read is printed, never a quantity. A usage that cannot be read is an
+# entry in errors, like any other reading.
+#
 # One client never stops the poll: every reading is its own statement, a
 # statement that fails or runs out of time is an entry in errors, and the
 # next client is read all the same.
@@ -63,8 +79,8 @@
 #
 # Exit: 0 when every client's health was written (a client that could not be
 # read is a warning and an entry in its errors); 1 when the control plane
-# could not be read or a client's health could not be written on it; 2 when
-# nothing was tried.
+# could not be read or a client's health or usage could not be written on it;
+# 2 when nothing was tried.
 #
 # bash 3.2 and 5. Rehearsed on every build with a psql and a curl that answer
 # from a script: supabase/ci/fleet_poll_rehearsal.sh.
@@ -140,16 +156,20 @@ reg() { CLOVEERP_LIVE_DATABASE_URL="$CP_URL" PSQL="$PSQL_CMD" "$HERE/fleet_regis
 ready=$(cp_q 2> "$work/err" <<'SQL'
 -- fleet: cp-ready
 select (to_regclass('erp_meta.deployment') is not null)::text
-       || ' ' || (to_regprocedure('erp_meta.record_deployment_health(text,jsonb)') is not null)::text;
+       || ' ' || (to_regprocedure('erp_meta.record_deployment_health(text,jsonb)') is not null)::text
+       || ' ' || (to_regprocedure('erp_meta.record_deployment_usage(text,jsonb)') is not null)::text;
 SQL
 ) || { echo "::error::the control plane could not be read ($(said)). Nothing was polled."; exit 1; }
-read -r has_register can_record <<< "$ready"
+read -r has_register can_record can_usage <<< "$ready"
 if [[ "$has_register" != true ]]; then
   echo "the control plane has no register of deployments yet, so there is no client to poll"
   exit 0
 fi
 if [[ "$can_record" != true ]]; then
   echo "::notice::the control plane has no erp_meta.record_deployment_health yet (20261012010000 is not released there), so what is read is said here and in the summary, and written nowhere."
+fi
+if [[ "$can_usage" != true ]]; then
+  echo "::notice::the control plane has no erp_meta.record_deployment_usage yet (20261012040000 is not released there), so each client's usage is read, counted here, and written nowhere."
 fi
 
 staff=$(cp_q 2> "$work/err" <<'SQL'
@@ -194,8 +214,8 @@ echo "a ${MODE} poll of ${count} client(s)"
 {
   echo "## The fleet's health (${MODE} poll)"
   echo
-  echo "| client | release | assurance | size | last drain pass | support windows | staff | backups | not read |"
-  echo "|---|---|---|---|---|---|---|---|---|"
+  echo "| client | release | assurance | size | last drain pass | support windows | staff | backups | usage | not read |"
+  echo "|---|---|---|---|---|---|---|---|---|---|"
 } >> "$SUMMARY"
 
 unwritten=0
@@ -205,7 +225,7 @@ unread=0
 poll_client() {
   local code="$1" ref="$2" prior="$3"
   local url="" vault rc line key value k items missing errs other
-  local health errors read_ok=no
+  local health errors read_ok=no usage usage_rows="" usage_words="" unwritten_here=no
   local -a others
   errors='[]'
   health='{}'
@@ -257,6 +277,22 @@ select 'database_bytes' || chr(9) || pg_database_size(current_database());
 select 'last_drain_pass_at' || chr(9) || coalesce((select to_char(max(p.finished_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from erp_meta.drain_pass p), '');
 select 'open_support_windows' || chr(9) || (select count(*) from erp.support_access a where a.expires_at > now());
 select 'staff' || chr(9) || coalesce((select jsonb_agg(lower(btrim(s.email)) || ':' || s.staff_role order by lower(btrim(s.email)), s.staff_role) from erp_meta.platform_staff s where s.revoked_at is null), '[]'::jsonb)::text;
+select 'usage' || chr(9) || jsonb_build_object(
+         'kinds', coalesce((select jsonb_agg(k.code order by k.code) from erp_meta.meter_kind k), '[]'::jsonb),
+         'rows', coalesce((select jsonb_agg(jsonb_build_object('meter_code', u.meter_code, 'period_start', u.period_start,
+                                                               'period_end', u.period_end, 'quantity', u.quantity,
+                                                               'measured_at', u.measured_at)
+                                            order by u.meter_code, u.period_start, u.period_end)
+                             from (select m.meter_code, m.period_start, m.period_end,
+                                          sum(m.quantity) as quantity, max(m.measured_at) as measured_at
+                                     from erp_meta.usage_meter m
+                                    where m.period_start >= (date_trunc('month', current_date) - interval '2 months')::date
+                                      and m.period_start <= current_date
+                                      and (exists (select 1 from erp.tenant t where t.id = m.tenant_id)
+                                           or exists (select 1 from erp_meta.platform_audit a
+                                                       where a.action = 'platform.tenant_purged'
+                                                         and a.tenant_id = m.tenant_id))
+                                    group by m.meter_code, m.period_start, m.period_end) u), '[]'::jsonb))::text;
 SQL
     if [[ "$rc" -ne 0 || ! -s "$work/out" ]]; then
       missed "its database could not be reached or read ($(said))"
@@ -276,7 +312,7 @@ SQL
     grep -E '(^|: )(ERROR|FATAL):' "$work/err" > "$work/errors" 2> /dev/null || true
     errs=0
     missing=""
-    for k in release_sha database_bytes last_drain_pass_at open_support_windows staff; do
+    for k in release_sha database_bytes last_drain_pass_at open_support_windows staff usage; do
       if ! grep -q "^${k}	" "$work/out"; then
         missing="${missing} ${k}"
       fi
@@ -302,6 +338,24 @@ SQL
         if [[ "$value" == "$staff" ]]; then put staff_in_step true; else put staff_in_step false; fi
       else
         missed "its staff list came back in a shape that could not be read"
+      fi
+    fi
+
+    # Its usage: the rows as the control plane keeps them, and the meters
+    # with none in these months, which are not measured (never nought).
+    value=$(sed -n 's/^usage	//p' "$work/out" | head -n 1)
+    if [[ -n "$value" ]]; then
+      if usage=$(jq -ce '
+            select(type == "object" and (.rows | type) == "array" and (.kinds | type) == "array")
+            | select(all(.rows[]; (.meter_code | type) == "string" and (.period_start | type) == "string"
+                                  and (.period_end | type) == "string" and (.quantity | type) == "number" and .quantity >= 0))
+            | {rows, not_measured: (.kinds - [.rows[].meter_code])}' <<< "$value" 2> /dev/null); then
+        usage_rows=$(jq -c '.rows' <<< "$usage")
+        usage_words="$(jq -r '.rows | length' <<< "$usage") row(s)"
+        k=$(jq -r '.not_measured | join(", ")' <<< "$usage")
+        if [[ -n "$k" ]]; then usage_words="${usage_words}; not measured: ${k}"; fi
+      else
+        missed "its usage came back in a shape that could not be read"
       fi
     fi
   fi
@@ -366,7 +420,9 @@ SQL
     echo "::warning::${code}: $(jq -r 'join("; ")' <<< "$errors")"
   fi
   echo "${code}: ${health}"
-  jq -r --arg c "$code" '"| \($c) | \(.release_sha // "" | .[0:7]) | \(if .assurance_failures == null then "" elif .assurance_failures == 0 then "green" else "\(.assurance_failures) not green" end) | \(if .database_bytes == null then "" else "\(.database_bytes / 1048576 | floor) MB" end) | \(.last_drain_pass_at // "") | \(.open_support_windows // "") | \(if .staff_in_step == null then "" elif .staff_in_step then "in step" else "out of step" end) | \(if .backups_count == null then "" else "\(.backups_count), newest \(.backups_latest_at // "none")" end) | \(.errors | join("; ")) |"' <<< "$health" >> "$SUMMARY"
+  # How much was read, never a figure: a named client's usage is its business.
+  if [[ -n "$usage_words" ]]; then echo "${code}: usage, ${usage_words}"; fi
+  jq -r --arg c "$code" --arg u "$usage_words" '"| \($c) | \(.release_sha // "" | .[0:7]) | \(if .assurance_failures == null then "" elif .assurance_failures == 0 then "green" else "\(.assurance_failures) not green" end) | \(if .database_bytes == null then "" else "\(.database_bytes / 1048576 | floor) MB" end) | \(.last_drain_pass_at // "") | \(.open_support_windows // "") | \(if .staff_in_step == null then "" elif .staff_in_step then "in step" else "out of step" end) | \(if .backups_count == null then "" else "\(.backups_count), newest \(.backups_latest_at // "none")" end) | \($u) | \(.errors | join("; ")) |"' <<< "$health" >> "$SUMMARY"
 
   if [[ "$can_record" == true ]]; then
     if ! cp_q -v code="$code" -v health="$health" > /dev/null 2> "$work/err" <<'SQL'
@@ -375,9 +431,27 @@ select erp_meta.record_deployment_health(:'code', :'health'::jsonb);
 SQL
     then
       echo "::error::${code}: its health could not be written on the control plane ($(said))."
-      unwritten=$((unwritten + 1))
+      unwritten_here=yes
     fi
   fi
+
+  # Its usage, when there is a row of it: none sent is none deleted.
+  if [[ "$can_usage" == true && -n "$usage_rows" && "$usage_rows" != "[]" ]]; then
+    if ! cp_q -v code="$code" -v usage="$usage_rows" > /dev/null 2> "$work/err" <<'SQL'
+-- fleet: cp-record-usage
+\set VERBOSITY terse
+select erp_meta.record_deployment_usage(:'code', :'usage'::jsonb);
+SQL
+    then
+      # The refusal's code, never its words, which may quote a figure; and
+      # VERBOSITY terse keeps the DETAIL that would from being printed at all.
+      k=$(grep -oE 'CLOVEERP_[A-Z0-9_]+' "$work/err" 2> /dev/null | awk '!seen[$0]++' | tr '\n' ' ' | sed 's/ $//' || true)
+      if [[ -z "$k" ]] && grep -q 'statement timeout' "$work/err" 2> /dev/null; then k="a statement timeout"; fi
+      echo "::error::${code}: its usage could not be written on the control plane (${k:-an error that names no CLOVEERP_ code})."
+      unwritten_here=yes
+    fi
+  fi
+  if [[ "$unwritten_here" == yes ]]; then unwritten=$((unwritten + 1)); fi
   return 0
 }
 
@@ -394,7 +468,7 @@ for ((c = 0; c < count; c++)); do
 done
 
 if [[ "$unwritten" -gt 0 ]]; then
-  echo "::error::the health of ${unwritten} of ${count} client(s) could not be written on the control plane; each is said above. Every client was read."
+  echo "::error::the health or usage of ${unwritten} of ${count} client(s) could not be written on the control plane; each is said above. Every client was read."
   exit 1
 fi
 if [[ "$unread" -gt 0 ]]; then
