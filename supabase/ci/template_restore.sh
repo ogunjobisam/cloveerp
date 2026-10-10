@@ -232,7 +232,13 @@ while read -r name schema; do
   [[ "$name" =~ ^[a-z0-9_]+$ && "$schema" =~ ^[a-z_][a-z0-9_]*$ ]] ||
     refuse "the manifest names an extension '${name}' in '${schema}', which will not be written into SQL."
 done <<< "$extensions"
-roles=$(jq -c '.roles // []' "$manifest")
+# One entry a role: a manifest that lists one twice (made before
+# template_make.sh read a membership granted by two grantors as one) would
+# otherwise have it made twice in the one transaction, and the restore fail.
+roles=$(jq -c '(.roles // []) | group_by(.name) | map(.[0] + {
+           login: any(.[]; .login), bypassrls: any(.[]; .bypassrls), superuser: any(.[]; .superuser),
+           builder_member: any(.[]; .builder_member), builder_set: any(.[]; .builder_set),
+           builder_inherit: any(.[]; .builder_inherit)})' "$manifest")
 bad_roles=$(jq -r '[.[] | select((.name | test("^[a-z_][a-z0-9_]*$") | not) or .login or .bypassrls or .superuser) | .name] | join(", ")' <<< "$roles")
 [[ -z "$bad_roles" ]] || refuse "the manifest asks for the role(s) ${bad_roles}, which a restore does not make."
 
