@@ -334,16 +334,18 @@ jobs:
           # has no pg_cron, and must not be given one: it would start posting
           # to live's dispatch. Left out of what ran, and said so.
           psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.platform_assurance();" > assurance.json
+          # ok is true, false, or null where a check does not apply; as the
+          # console's own (ok)::boolean reads it, null is neither.
           checks='map(select(.code != "platform_scheduled"))'
           RAN=$(jq -r "$checks | map(.code) | sort | map(\"'\" + . + \"'\") | join(\",\")" assurance.json)
-          PASSED=$(jq -r "$checks | map(select(.ok)) | length" assurance.json)
-          FAILED=$(jq -r "$checks | map(select(.ok | not)) | length" assurance.json)
+          PASSED=$(jq -r "$checks | map(select((.ok | tostring) == \"true\")) | length" assurance.json)
+          FAILED=$(jq -r "$checks | map(select((.ok | tostring) == \"false\")) | length" assurance.json)
           {
             echo "DRILL_RAN=$RAN"
             echo "DRILL_PASSED=$PASSED"
             echo "DRILL_FAILED=$FAILED"
           } >> "$GITHUB_ENV"
-          bad=$(jq -r "$checks | map(select(.ok | not)) | sort_by(.code) | map(.code + \": \" + ((.detail // \"\") | tostring | .[0:120])) | join(\"\\n\")" assurance.json)
+          bad=$(jq -r "$checks | map(select((.ok | tostring) == \"false\")) | sort_by(.code) | map(.code + \": \" + ((.detail // \"\") | tostring | .[0:120])) | join(\"\\n\")" assurance.json)
           if [[ -n "$bad" ]]; then
             echo "DRILL_NOTE<<EOF" >> "$GITHUB_ENV"
             echo "$bad" >> "$GITHUB_ENV"
