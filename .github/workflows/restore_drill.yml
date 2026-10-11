@@ -294,8 +294,20 @@ jobs:
                                      create extension if not exists btree_gist with schema extensions;'
           $PSQL -d clove_restore -c 'create role clove_enquiry nologin nobypassrls noinherit' || true
           # The dump carries CREATE SCHEMA public, which the image already has.
+          # And default privileges only the restorer's in a product schema, as
+          # template_restore.sh keeps them: live's dump also carries the host's
+          # own (FOR ROLE supabase_admin IN SCHEMA public), which no role but
+          # the host's may set — the drill of 11 Oct stopped on exactly that.
+          # A table of contents line is "<id>; <catalog> <oid> DEFAULT ACL
+          # <schema, or -> DEFAULT PRIVILEGES FOR <kind> <role>".
           # Everything else in it is restored.
-          pg_restore -l live.dump | grep -v 'SCHEMA - public' > live.list
+          restorer=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc 'select current_user')
+          pg_restore -l live.dump | grep -v 'SCHEMA - public' |
+            awk -v me="$restorer" -v product=" erp erp_ref erp_meta erp_ai erp_test erp_ingress " '
+              / DEFAULT ACL / { if ($NF == me && index(product, " " $6 " ") > 0) print; next }
+              { print }' > live.list
+          left=$(( $(pg_restore -l live.dump | grep -c ' DEFAULT ACL ' || true) - $(grep -c ' DEFAULT ACL ' live.list || true) ))
+          echo "- ${left} default privilege(s) of the host's own left to this host" >> "$GITHUB_STEP_SUMMARY"
           pg_restore --dbname=clove_restore --no-owner --exit-on-error --single-transaction -L live.list live.dump
           # The host's default privileges hand anon EXECUTE to every function
           # as it is created, and a dump's ACL commands are written relative
