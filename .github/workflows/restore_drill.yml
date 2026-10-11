@@ -447,7 +447,14 @@ jobs:
               case when '${outcome}' = 'passed' then 0 else 1 end,
               '${outcome}', '$CODE', \$note\$${note}\$note\$, 'restore_drill.yml');"
           echo "- one organisation ($CODE) restored alone: ${outcome}; $out" >> "$GITHUB_STEP_SUMMARY"
-          [[ "$outcome" == "passed" ]]
+          # The summary is read only by someone signed in; the log by anyone
+          # who can see the run.
+          if [[ "$outcome" != "passed" ]]; then
+            echo "::error::${CODE} restored alone does not pass:"
+            printf '%s\n' "$note"
+            exit 1
+          fi
+          echo "$out"
 
       - name: Both commitments read proved
         # In the database drilled: a client's commitments are its own.
