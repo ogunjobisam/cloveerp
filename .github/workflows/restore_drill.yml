@@ -294,8 +294,20 @@ jobs:
                                      create extension if not exists btree_gist with schema extensions;'
           $PSQL -d clove_restore -c 'create role clove_enquiry nologin nobypassrls noinherit' || true
           # The dump carries CREATE SCHEMA public, which the image already has.
+          # And default privileges only the restorer's in a product schema, as
+          # template_restore.sh keeps them: live's dump also carries the host's
+          # own (FOR ROLE supabase_admin IN SCHEMA public), which no role but
+          # the host's may set — the drill of 11 Oct stopped on exactly that.
+          # A table of contents line is "<id>; <catalog> <oid> DEFAULT ACL
+          # <schema, or -> DEFAULT PRIVILEGES FOR <kind> <role>".
           # Everything else in it is restored.
-          pg_restore -l live.dump | grep -v 'SCHEMA - public' > live.list
+          restorer=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc 'select current_user')
+          pg_restore -l live.dump | grep -v 'SCHEMA - public' |
+            awk -v me="$restorer" -v product=" erp erp_ref erp_meta erp_ai erp_test erp_ingress " '
+              / DEFAULT ACL / { if ($NF == me && index(product, " " $6 " ") > 0) print; next }
+              { print }' > live.list
+          left=$(( $(pg_restore -l live.dump | grep -c ' DEFAULT ACL ' || true) - $(grep -c ' DEFAULT ACL ' live.list || true) ))
+          echo "- ${left} default privilege(s) of the host's own left to this host" >> "$GITHUB_STEP_SUMMARY"
           pg_restore --dbname=clove_restore --no-owner --exit-on-error --single-transaction -L live.list live.dump
           # The host's default privileges hand anon EXECUTE to every function
           # as it is created, and a dump's ACL commands are written relative
@@ -316,21 +328,24 @@ jobs:
         # record below, whichever way it goes.
         run: |
           set -euo pipefail
-          psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
-            select string_agg(quote_literal(c ->> 'code'), ',' order by c ->> 'code')
-                   || '|' || count(*) filter (where (c ->> 'ok')::boolean)
-                   || '|' || count(*) filter (where not (c ->> 'ok')::boolean)
-              from jsonb_array_elements(erp.platform_assurance()) c;" > assurance.txt
-          IFS='|' read -r RAN PASSED FAILED < assurance.txt
+          # Except platform_scheduled: the schedule is pg_cron's (cron.job),
+          # which belongs to the host like auth and storage, and is put back by
+          # a release (erp.ensure_platform_schedule()), not by a dump. The copy
+          # has no pg_cron, and must not be given one: it would start posting
+          # to live's dispatch. Left out of what ran, and said so.
+          psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.platform_assurance();" > assurance.json
+          # ok is true, false, or null where a check does not apply; as the
+          # console's own (ok)::boolean reads it, null is neither.
+          checks='map(select(.code != "platform_scheduled"))'
+          RAN=$(jq -r "$checks | map(.code) | sort | map(\"'\" + . + \"'\") | join(\",\")" assurance.json)
+          PASSED=$(jq -r "$checks | map(select((.ok | tostring) == \"true\")) | length" assurance.json)
+          FAILED=$(jq -r "$checks | map(select((.ok | tostring) == \"false\")) | length" assurance.json)
           {
             echo "DRILL_RAN=$RAN"
             echo "DRILL_PASSED=$PASSED"
             echo "DRILL_FAILED=$FAILED"
           } >> "$GITHUB_ENV"
-          bad=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
-            select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
-              from jsonb_array_elements(erp.platform_assurance()) c
-             where not (c ->> 'ok')::boolean;")
+          bad=$(jq -r "$checks | map(select((.ok | tostring) == \"false\")) | sort_by(.code) | map(.code + \": \" + ((.detail // \"\") | tostring | .[0:120])) | join(\"\\n\")" assurance.json)
           if [[ -n "$bad" ]]; then
             echo "DRILL_NOTE<<EOF" >> "$GITHUB_ENV"
             echo "$bad" >> "$GITHUB_ENV"
@@ -351,6 +366,7 @@ jobs:
           {
             echo "## Restore drill of ${DRILL_SOURCE}"
             echo "- platform_assurance: $PASSED check(s) green on the restored database"
+            echo "- platform_scheduled left out: the schedule is the host's, put back by a release"
             echo "- $out"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -416,7 +432,8 @@ jobs:
           bad=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "
             select coalesce(string_agg(c ->> 'code' || ': ' || left(c ->> 'detail', 120), E'\n'), '')
               from jsonb_array_elements(erp.platform_assurance()) c
-             where not (c ->> 'ok')::boolean;")
+             where not (c ->> 'ok')::boolean
+               and c ->> 'code' <> 'platform_scheduled';")
           if [[ -n "$bad" ]]; then outcome=failed; note="run ${GITHUB_RUN_ID}: ${bad}"; fi
           if ! out=$(psql -v ON_ERROR_STOP=1 -d clove_restore -tAc "select erp.assert_whole_database_reconciles();" 2>&1); then
             outcome=failed; note="run ${GITHUB_RUN_ID}: ${out}"
@@ -430,7 +447,14 @@ jobs:
               case when '${outcome}' = 'passed' then 0 else 1 end,
               '${outcome}', '$CODE', \$note\$${note}\$note\$, 'restore_drill.yml');"
           echo "- one organisation ($CODE) restored alone: ${outcome}; $out" >> "$GITHUB_STEP_SUMMARY"
-          [[ "$outcome" == "passed" ]]
+          # The summary is read only by someone signed in; the log by anyone
+          # who can see the run.
+          if [[ "$outcome" != "passed" ]]; then
+            echo "::error::${CODE} restored alone does not pass:"
+            printf '%s\n' "$note"
+            exit 1
+          fi
+          echo "$out"
 
       - name: Both commitments read proved
         # In the database drilled: a client's commitments are its own.
