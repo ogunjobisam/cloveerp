@@ -95,9 +95,29 @@ export function stageReadArgs(
   args: Record<string, unknown>,
   states: readonly string[] | undefined,
   showFinished: boolean,
+  awaiting?: Awaiting,
 ): Record<string, unknown> {
   if (fn !== DOCUMENT_READ || !states || states.length === 0 || showFinished) return args;
-  return { ...args, p_states: [...states] };
+  return awaiting
+    ? { ...args, p_states: [...states], p_awaiting: awaiting }
+    : { ...args, p_states: [...states] };
+}
+
+/**
+ * What a finished document still waits for from another one, as
+ * public.erp_documents answers it (`awaiting`, 20261012110000): a posted
+ * delivery the invoice, a posted goods receipt the supplier's bill.
+ */
+export type Awaiting = "invoice" | "bill";
+
+/**
+ * Whether a row is a finished document a step still holds because it waits
+ * for the next one: a posted delivery not yet invoiced sits at Delivery, a
+ * posted receipt not yet billed at Goods receipt (12 October live walk: the
+ * Delivery step read 0 while DN-000472 waited five days for its invoice).
+ */
+export function stillAwaiting(row: Row, awaiting: Awaiting | undefined): boolean {
+  return awaiting !== undefined && row["awaiting"] === awaiting;
 }
 
 /**
@@ -107,14 +127,22 @@ export function stageReadArgs(
  */
 export function rowsAtStage(
   rows: Row[],
-  step: { states?: readonly string[] | undefined; statusKey?: string | undefined },
+  step: {
+    states?: readonly string[] | undefined;
+    statusKey?: string | undefined;
+    awaiting?: Awaiting | undefined;
+  },
   showFinished = false,
 ): Row[] {
   const states = step.states;
   if (!states || states.length === 0) return rows;
   return rows.filter((row) => {
     const state = stateOf(row, step.statusKey);
-    const here = state !== null && states.includes(state) && row["is_cancelled"] !== true;
+    const inState = state !== null && states.includes(state) && row["is_cancelled"] !== true;
+    // A step that holds finished documents while they wait for the next one
+    // holds a finished one only while it still waits.
+    const here =
+      inState && (!step.awaiting || !SETTLED.has(state) || stillAwaiting(row, step.awaiting));
     return here || (showFinished && isFinished(row, step.statusKey));
   });
 }
@@ -130,10 +158,16 @@ export function settledAtStage(
   row: Row | null,
   statusKey: string | undefined,
   states: readonly string[] | undefined,
+  awaiting?: Awaiting,
 ): string | null {
   if (!row) return null;
   const state = stateOf(row, statusKey);
-  if (state !== null && states?.includes(state)) return null;
+  if (
+    state !== null &&
+    states?.includes(state) &&
+    (!awaiting || !SETTLED.has(state) || stillAwaiting(row, awaiting))
+  )
+    return null;
   if (row["is_cancelled"] === true) return "cancelled";
   return state !== null && SETTLED.has(state) ? state : null;
 }

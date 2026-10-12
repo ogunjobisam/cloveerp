@@ -865,6 +865,7 @@ export type Database = {
       erp_documents: {
         Args: {
           p_actionable?: boolean
+          p_awaiting?: string
           p_exclude_cancelled?: boolean
           p_limit?: number
           p_states?: string[]
