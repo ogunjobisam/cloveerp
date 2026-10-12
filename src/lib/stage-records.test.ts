@@ -41,6 +41,7 @@ import {
   stageLinesRead,
   stageReadArgs,
   stateOf,
+  stillAwaiting,
   summariseRecord,
 } from "./stage-records";
 
@@ -148,6 +149,96 @@ describe("a step lists what sits there", () => {
     ).toBe("pending_approval");
     expect(stateOf({ status: "Released" }, "status")).toBe("released");
     expect(stateOf(null)).toBeNull();
+  });
+});
+
+/**
+ * A finished document a step holds while it waits for the next one.
+ *
+ * The 12 October live walk found the Sales page's Delivery step reading 0 while
+ * DN-000472, posted five days before, waited for its invoice: the step listed
+ * drafts, posted is where a delivery's lifecycle ends, and the Invoice step
+ * lists invoices. "Invoice a delivery" offered DN-000479 an hour after it was
+ * invoiced. Goods receipts and "Bill a receipt" had the same gap.
+ */
+describe("a step holds what waits for the next document (12 October live walk)", () => {
+  const DELIVERIES = [
+    { document_id: "dn-draft", state: "draft", awaiting: null },
+    { document_id: "dn-waiting", state: "posted", awaiting: "invoice" },
+    { document_id: "dn-invoiced", state: "posted", awaiting: null },
+    { document_id: "dn-void", state: "posted", awaiting: "invoice", is_cancelled: true },
+  ];
+
+  test("the step asks the door for its states and what they wait for", () => {
+    expect(
+      stageReadArgs(
+        DOCUMENT_READ,
+        { p_type_code: "delivery", p_limit: 200 },
+        ["draft", "posted"],
+        false,
+        "invoice",
+      ),
+    ).toEqual({
+      p_type_code: "delivery",
+      p_limit: 200,
+      p_states: ["draft", "posted"],
+      p_awaiting: "invoice",
+    });
+  });
+
+  test("it holds the draft and the posted delivery still to be invoiced, not the invoiced one", () => {
+    const rows = rowsAtStage(DELIVERIES, { states: ["draft", "posted"], awaiting: "invoice" });
+    expect(rows.map((r) => r["document_id"])).toEqual(["dn-draft", "dn-waiting"]);
+  });
+
+  test("show finished brings the invoiced one back as finished", () => {
+    const rows = rowsAtStage(
+      DELIVERIES,
+      { states: ["draft", "posted"], awaiting: "invoice" },
+      true,
+    );
+    expect(rows.map((r) => r["document_id"])).toEqual([
+      "dn-draft",
+      "dn-waiting",
+      "dn-invoiced",
+      "dn-void",
+    ]);
+  });
+
+  test("a waiting delivery is not settled at the step; an invoiced one is", () => {
+    const states = ["draft", "posted"];
+    expect(settledAtStage(DELIVERIES[1]!, undefined, states, "invoice")).toBeNull();
+    expect(settledAtStage(DELIVERIES[2]!, undefined, states, "invoice")).toBe("posted");
+  });
+
+  test("a receipt waiting for its bill is not waiting to be invoiced", () => {
+    const receipt = { document_id: "grn", state: "posted", awaiting: "bill" };
+    expect(stillAwaiting(receipt, "bill")).toBe(true);
+    expect(stillAwaiting(receipt, "invoice")).toBe(false);
+    expect(stillAwaiting(receipt, undefined)).toBe(false);
+  });
+
+  test("Sales and Procurement hold them, and their pickers offer only those still waiting", () => {
+    const sales = readFileSync(join(import.meta.dir, "..", "routes", "sales", "index.tsx"), "utf8");
+    const delivery = sales.slice(
+      sales.indexOf('label: "Delivery"'),
+      sales.indexOf('label: "Invoice"'),
+    );
+    expect(delivery).toContain('states: ["draft", "posted"]');
+    expect(delivery).toContain('awaiting: "invoice"');
+
+    const procurement = readFileSync(
+      join(import.meta.dir, "..", "routes", "procurement", "index.tsx"),
+      "utf8",
+    );
+    const receipt = procurement.slice(procurement.indexOf('label: "Goods receipt"'));
+    expect(receipt.slice(0, 1200)).toContain('awaiting: "bill"');
+    const bill = procurement.slice(procurement.indexOf('label: "Bill a receipt"'));
+    expect(bill.slice(0, 2000)).toContain('p_awaiting: "bill"');
+
+    const modules = readFileSync(join(import.meta.dir, "modules.tsx"), "utf8");
+    const invoice = modules.slice(modules.indexOf('label: "Invoice a delivery"'));
+    expect(invoice.slice(0, 2000)).toContain('p_awaiting: "invoice"');
   });
 });
 

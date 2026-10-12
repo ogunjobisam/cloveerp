@@ -381,8 +381,12 @@ const ORDER_TO_CASH: FlowSpec = {
         "Deliveries appear here once one is created from a confirmed sales order: choose the order on the sales order step.",
 
       typeCode: "delivery",
-      // Waiting to leave. Posted, the goods have gone.
-      states: ["draft"],
+      // Waiting to leave, or gone and waiting to be invoiced: posted is where
+      // a delivery's own lifecycle ends, and the step read 0 while DN-000472
+      // waited five days for its invoice (12 October live walk). Invoiced, it
+      // has left this step.
+      states: ["draft", "posted"],
+      awaiting: "invoice",
       partyRole: "customer",
       recordArg: "p_delivery_id",
       // Posted where it is listed (J-17): Despatch lists posted deliveries

@@ -2261,7 +2261,15 @@ export const FINANCE: ModuleDef = {
           required: true,
           options: {
             fn: "erp_documents",
-            args: { p_type_code: "delivery", p_limit: 100, p_states: ["posted"] },
+            // And only deliveries still to be invoiced: the picker offered
+            // DN-000479 an hour after it was invoiced and paid (12 October
+            // live walk), and choosing it could only be refused.
+            args: {
+              p_type_code: "delivery",
+              p_limit: 100,
+              p_states: ["posted"],
+              p_awaiting: "invoice",
+            },
             value: "document_id",
             label: ["document_number", "party", "total_minor", "document_date"],
             describe: documentChoice,
