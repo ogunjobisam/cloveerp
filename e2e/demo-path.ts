@@ -109,17 +109,14 @@ const CLOSE_AND_TIE: readonly Step[] = [
     doors: ["erp_receivables_ageing", "erp_payables_ageing"],
     leaves: "Nothing. The third and fourth ties are read, not written.",
   },
+  // The last step stays in Work. It was Checks and sign-off, a Settings
+  // screen, so the rail switched to Settings at the very end of both flows
+  // (KI-01, v1 known issues); the four ties are this screen's whole purpose.
   {
     path: "/finance/reconciliation",
-    does: "Read the four ties in one place, in the words a finance person uses, for this organisation: each one holds, or is named with the difference it found and what to do about it.",
+    does: "Read the four ties in one place, in the words a finance person uses, for this organisation: each one holds, or is named with the difference it found and what to do about it. The same checks run on every release, so the ties are proved rather than eyeballed off four screens.",
     doors: ["erp_book_ties"],
     leaves: "Nothing. The ties are read, not written.",
-  },
-  {
-    path: "/operations/assurance",
-    does: "Run every structural check against this database, the whole-database reconciliation among them, so the four ties are proved rather than eyeballed off four screens.",
-    doors: ["erp_platform_assurance"],
-    leaves: "Nothing. The checks run live and report.",
   },
 ];
 
@@ -399,6 +396,8 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/act":
     "Where an Approve or Reject link out of an email lands. Approvals on the demo path are decided on the step that raised them, so no email is needed to finish either flow.",
   "/profile": "Your own account, your language and how the desk is set up for you.",
+  "/operations/assurance":
+    "The builder's register of every structural check, under Settings. The four ties are read on Do the books tie, which stays in Work.",
   "/settings": "The way into the configuration screens, and the setup walkthrough over them.",
   "/notifications": "What has been sent to you. Reading it moves no record.",
   "/device":
