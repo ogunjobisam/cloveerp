@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { callErp } from "../../lib/erp";
 import { formatMinor, minorUnitsOf, toMinor, type Currency } from "../../lib/money";
 import { asksTheirReference, partyLabel } from "../../lib/stage-records";
+import { productChoice } from "../../lib/plain-words";
 import { useCurrencies } from "./currencies";
 import { ActionButton, ActionDialog, ErrorNote } from "./action";
 import { documentTone, isDoorOpened } from "./available-transitions";
@@ -292,7 +293,18 @@ export function NewDocumentAction({
               name: "item_id",
               label: "Product",
               kind: "select",
-              options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+              // A purchase order offers its supplier's products first, each with
+              // the supplier's code, then the rest marked (KI-03, 20261012130000).
+              options:
+                type.base_type_code === "purchase_order"
+                  ? {
+                      fn: "erp_items",
+                      value: "item_id",
+                      label: ["code", "name"],
+                      argsFrom: { p_supplier_id: "p_party_id" },
+                      describe: productChoice,
+                    }
+                  : { fn: "erp_items", value: "item_id", label: ["code", "name"] },
             },
             { name: "quantity", label: "Quantity", kind: "number", placeholder: "100" },
             {

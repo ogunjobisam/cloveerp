@@ -30,6 +30,7 @@ import {
   documentOutcome,
   legalNumberOf,
   madeDocumentOutcome,
+  productChoice,
   lookupOutcome,
   article,
   localIsoDate,
@@ -235,6 +236,37 @@ describe("a toast names what was made", () => {
       'doc.state === "partially_despatched" ? (\n          <CloseThisOrderShort',
     );
     expect(page).toContain('permission="sales.order"');
+  });
+
+  test("a purchase order's picker names the supplier's products and marks the rest (KI-03)", () => {
+    const ui = (t: string) => t;
+    const base = { code: "FG-1000", name: "Acme widget" };
+    expect(productChoice({ ...base, from_supplier: true, supplier_item_code: "ZZ-77" }, ui)).toBe(
+      "FG-1000 — Acme widget (their code ZZ-77)",
+    );
+    expect(productChoice({ ...base, from_supplier: true, supplier_item_code: null }, ui)).toBe(
+      "FG-1000 — Acme widget",
+    );
+    expect(productChoice({ ...base, from_supplier: false }, ui)).toBe(
+      "FG-1000 — Acme widget (not from this supplier)",
+    );
+    expect(productChoice({ ...base, from_supplier: null }, ui)).toBe("FG-1000 — Acme widget");
+  });
+
+  test("the pickers say why they are empty when the work is done, and a purchase order follows its supplier (KI-03, KI-05)", () => {
+    const modules = readFileSync(join(ROOT, "src", "lib", "modules.tsx"), "utf8");
+    const invoice = modules.slice(modules.indexOf('label: "Invoice a delivery"'));
+    expect(invoice.slice(0, 2200)).toContain('empty: "Every posted delivery has been invoiced."');
+    const procurement = readFileSync(
+      join(ROOT, "src", "routes", "procurement", "index.tsx"),
+      "utf8",
+    );
+    const bill = procurement.slice(procurement.indexOf('label: "Bill a receipt"'));
+    expect(bill.slice(0, 2200)).toContain('empty: "Every posted goods receipt has been billed."');
+    const documents = readFileSync(join(ROOT, "src", "components", "erp", "documents.tsx"), "utf8");
+    expect(documents).toContain('argsFrom: { p_supplier_id: "p_party_id" }');
+    const page = readFileSync(join(ROOT, "src", "routes", "documents", "$documentId.tsx"), "utf8");
+    expect(page).toContain("args: { p_for_document: documentId }");
   });
 
   test("a move with no word of its own still says it moved", () => {

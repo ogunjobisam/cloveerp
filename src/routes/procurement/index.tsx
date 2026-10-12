@@ -108,7 +108,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     fn: "erp_transition_document",
     fields: [pickRequisition("submit")],
     mapArgs: (v) => ({ p_document_id: v["p_document_id"], p_transition_code: "submit" }),
-    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    invalidates: [
+      "erp_documents",
+      "erp_document_approval_chain",
+      "erp_document_approval_decisions",
+      "erp_my_approvals",
+    ],
     submitLabel: "Submit for approval",
   },
   {
@@ -120,7 +125,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
     permission: "procurement.requisition",
     fn: "erp_stamp_document_approval",
     fields: [pickRequisition()],
-    invalidates: ["erp_document_approval_chain", "erp_my_approvals", "erp_approval_routing_stamps"],
+    invalidates: [
+      "erp_document_approval_chain",
+      "erp_document_approval_decisions",
+      "erp_my_approvals",
+      "erp_approval_routing_stamps",
+    ],
     submitLabel: "Route it",
   },
   {
@@ -147,7 +157,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       p_transition_code: "approve",
       ...(v["p_reason"] ? { p_reason: v["p_reason"] } : {}),
     }),
-    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    invalidates: [
+      "erp_documents",
+      "erp_document_approval_chain",
+      "erp_document_approval_decisions",
+      "erp_my_approvals",
+    ],
     submitLabel: "Approve it",
   },
   {
@@ -174,7 +189,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       p_transition_code: "reject",
       p_reason: v["p_reason"],
     }),
-    invalidates: ["erp_documents", "erp_document_approval_chain", "erp_my_approvals"],
+    invalidates: [
+      "erp_documents",
+      "erp_document_approval_chain",
+      "erp_document_approval_decisions",
+      "erp_my_approvals",
+    ],
     submitLabel: "Send it back",
   },
   {
@@ -215,7 +235,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
       p_approve: v["p_approve"] === "true",
       ...(v["p_comment"] ? { p_comment: v["p_comment"] } : {}),
     }),
-    invalidates: ["erp_my_approvals", "erp_documents", "erp_document_approval_chain"],
+    invalidates: [
+      "erp_my_approvals",
+      "erp_documents",
+      "erp_document_approval_chain",
+      "erp_document_approval_decisions",
+    ],
     submitLabel: "Record the decision",
   },
   {
@@ -324,6 +349,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
             p_states: ["posted"],
             p_awaiting: "bill",
           },
+          empty: "Every posted goods receipt has been billed.",
           value: "document_id",
           label: ["document_number", "party", "total_minor", "document_date"],
           describe: documentChoice,
@@ -494,7 +520,12 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         hint: "Leave empty to take the order line's price.",
       },
     ],
-    invalidates: ["erp_match_workbench", "erp_grni"],
+    invalidates: [
+      "erp_match_workbench",
+      "erp_grni",
+      "erp_supplier_balances",
+      "erp_payables_ageing",
+    ],
   },
   {
     // A line that did not match raised an approval, and the exception held
@@ -671,7 +702,7 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         false,
       ),
     ],
-    invalidates: ["erp_document_approval_chain"],
+    invalidates: ["erp_document_approval_chain", "erp_document_approval_decisions"],
   },
   {
     label: "Find a purchase price",
