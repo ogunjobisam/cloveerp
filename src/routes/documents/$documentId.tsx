@@ -48,7 +48,12 @@ import { DocumentTransitions } from "../../components/erp/document-transitions";
 import { RenderedPrint } from "../../components/erp/count-sheet-print";
 import { useErpSession } from "../../components/erp/session-context";
 import { usePrintRendered } from "../../components/erp/use-print-rendered";
-import { lineContext, lineRemovedOutcome, relatedDocuments } from "../../lib/plain-words";
+import {
+  lineContext,
+  lineRemovedOutcome,
+  productChoice,
+  relatedDocuments,
+} from "../../lib/plain-words";
 
 /**
  * One document, whatever kind of document it is.
@@ -1206,10 +1211,14 @@ function Lines({
                 name: "p_item_id",
                 label: "Product",
                 required: true,
+                // A purchase order's supplier's products first (KI-03); any
+                // other document lists them as before.
                 options: {
                   fn: "erp_items",
+                  args: { p_for_document: documentId },
                   value: "item_id",
                   label: ["code", "name"],
+                  describe: productChoice,
                 },
               },
               { kind: "number", name: "p_quantity", label: "Quantity", required: true },

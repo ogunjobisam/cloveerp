@@ -147,7 +147,13 @@ export const MOVE_READS_AGAIN: readonly string[] = [
   "erp_documents",
   "erp_available_transitions",
   "erp_document_approval_chain",
+  // The decisions read under the chain: "Waiting on" lagged a decision until a
+  // refresh (KI-04).
+  "erp_document_approval_decisions",
   "erp_my_approvals",
+  // The supplier balances beside Purchasing's steps: a bill registered on its
+  // step left the open-bill count behind until a refresh (KI-04).
+  "erp_supplier_balances",
   ...ORDER_SECTION_READS,
   ...RECEIPT_SECTION_READS,
 ];
