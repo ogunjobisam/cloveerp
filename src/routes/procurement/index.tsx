@@ -316,7 +316,14 @@ const PROCUREMENT_ACTIONS: ActionSpec[] = [
         required: true,
         options: {
           fn: "erp_documents",
-          args: { p_type_code: "goods_receipt", p_limit: 100, p_states: ["posted"] },
+          // Only receipts still to be billed: one already billed can only be
+          // refused (20261012110000).
+          args: {
+            p_type_code: "goods_receipt",
+            p_limit: 100,
+            p_states: ["posted"],
+            p_awaiting: "bill",
+          },
           value: "document_id",
           label: ["document_number", "party", "total_minor", "document_date"],
           describe: documentChoice,
@@ -787,10 +794,12 @@ const PURCHASE_TO_PAY: FlowSpec = {
         "Receipts appear here once goods are received against a purchase order. Receive an order is on this step.",
 
       typeCode: "goods_receipt",
-      // A receipt still being counted in. Posted, its stock is in goods-in
-      // and it waits for the bill from the supplier, which is raised at the
-      // Supplier bill step: "Bill a receipt" there picks posted receipts.
-      states: ["draft"],
+      // A receipt still being counted in, or posted and waiting for the bill
+      // from the supplier, which is raised at the Supplier bill step: "Bill a
+      // receipt" there picks the posted receipts still to be billed. Billed,
+      // it has left this step (12 October live walk).
+      states: ["draft", "posted"],
+      awaiting: "bill",
       actionStates: {
         erp_receive_against: ["draft"],
       },

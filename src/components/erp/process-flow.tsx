@@ -26,7 +26,9 @@ import {
   settledAtStage,
   stageReadArgs,
   stateOf,
+  stillAwaiting,
   summariseRecord,
+  type Awaiting,
   type DocumentLine,
   type Offer,
   type StageLines,
@@ -102,6 +104,13 @@ export type Stage = {
    * the same rows, and "Show finished" brings back the ones that are done.
    */
   states?: string[];
+  /**
+   * A finished document this step still holds while it waits for the next
+   * one: a posted delivery until it is invoiced, a posted goods receipt until
+   * it is billed (public.erp_documents' p_awaiting, 20261012110000). Its state
+   * goes in `states` beside the step's own.
+   */
+  awaiting?: Awaiting;
   /** The words on the history toggle, where "Show finished" is not all it brings back. */
   showFinishedLabel?: string;
   /**
@@ -213,9 +222,10 @@ function sourceOf(stage: Stage): StageList | undefined {
  * for the list; the count never includes them.
  */
 function useStageRows(stage: Stage, showFinished = false) {
+  const { ui } = useT();
   const source = sourceOf(stage);
   const args = source
-    ? stageReadArgs(source.fn, source.args ?? {}, stage.states, showFinished)
+    ? stageReadArgs(source.fn, source.args ?? {}, stage.states, showFinished, stage.awaiting)
     : {};
 
   const query = useQuery({
@@ -225,7 +235,11 @@ function useStageRows(stage: Stage, showFinished = false) {
   });
 
   const read = Array.isArray(query.data) ? query.data : [];
-  const held = rowsAtStage(read, { states: stage.states, statusKey: source?.status }, showFinished);
+  const held = rowsAtStage(
+    read,
+    { states: stage.states, statusKey: source?.status, awaiting: stage.awaiting },
+    showFinished,
+  ).map((row) => awaitingWords(row, stage.awaiting, ui));
   const rows = source?.arrange ? source.arrange(held, showFinished) : held;
 
   // Whether a step with nothing waiting on it has nothing at all, or has
@@ -242,7 +256,9 @@ function useStageRows(stage: Stage, showFinished = false) {
   // a step is empty, the type is read whole. It is the same read, under the
   // same key, that ticking the toggle performs, so the answer is already in
   // hand by the time anybody ticks it.
-  const wholeArgs = source ? stageReadArgs(source.fn, source.args ?? {}, stage.states, true) : {};
+  const wholeArgs = source
+    ? stageReadArgs(source.fn, source.args ?? {}, stage.states, true, stage.awaiting)
+    : {};
   const wholeQuery = useQuery({
     queryKey: [source?.fn ?? "no-stage-list", wholeArgs],
     queryFn: () => (source ? callErp<Row[]>(source.fn, wholeArgs) : Promise.resolve([] as Row[])),
@@ -258,7 +274,7 @@ function useStageRows(stage: Stage, showFinished = false) {
   const whole = Array.isArray(wholeQuery.data) ? wholeQuery.data : [];
   const finished = rowsAtStage(
     whole,
-    { states: stage.states, statusKey: source?.status },
+    { states: stage.states, statusKey: source?.status, awaiting: stage.awaiting },
     true,
   ).length;
 
@@ -272,6 +288,24 @@ function useStageRows(stage: Stage, showFinished = false) {
     finished: rows.length === 0 ? finished : 0,
     /** Whether that count has been taken yet, so "nothing here" is not said too soon. */
     countingFinished: wholeQuery.isFetching,
+  };
+}
+
+/**
+ * A finished document the step holds because it waits for the next one is
+ * shown as waiting, not as "Posted": posted is where its own lifecycle ends,
+ * and what it still needs is another document.
+ */
+function awaitingWords(
+  row: Row,
+  awaiting: Awaiting | undefined,
+  ui: (text: string) => string,
+): Row {
+  if (!stillAwaiting(row, awaiting)) return row;
+  return {
+    ...row,
+    state_name:
+      awaiting === "invoice" ? ui("Waiting to be invoiced") : ui("Waiting for the supplier's bill"),
   };
 }
 
@@ -637,7 +671,7 @@ function StageRecord({
       ? [join(row, source.title), join(row, source.subtitle)].filter(Boolean).join(" · ")
       : undefined;
   const state = stateOf(row, source?.status);
-  const settled = settledAtStage(row, source?.status, stage.states);
+  const settled = settledAtStage(row, source?.status, stage.states, stage.awaiting);
   const isDocument = Boolean(row && source?.fn === DOCUMENT_READ && id);
 
   // The moves the document's current state has, read as its own page reads
