@@ -1,4 +1,5 @@
 import { prettifyField } from "./friendly";
+import { fill } from "./interview";
 import { formatMinor } from "./money";
 import { quantityWords } from "./samples";
 
@@ -1030,6 +1031,23 @@ export function approvalChoice(row: Row): string {
  * Fasteners — £213.00 — 5 Oct 2026". Bill a receipt offered "GRN-000143 —
  * posted" a hundred times over, every one of them posted (5 October re-test).
  */
+/**
+ * A product as a purchase order's picker offers it (20261012130000): the
+ * supplier's own with their code for it, every other marked as not from this
+ * supplier. Asked about no supplier, just the code and name (KI-03).
+ */
+export function productChoice(row: Row, ui: (text: string) => string): string {
+  const product = [text(row, "code"), text(row, "name")]
+    .filter((x): x is string => x !== null && x !== "")
+    .join(" — ");
+  if (row["from_supplier"] === false)
+    return fill(ui("{product} (not from this supplier)"), { product });
+  const code = text(row, "supplier_item_code");
+  if (row["from_supplier"] === true && code)
+    return fill(ui("{product} (their code {code})"), { product, code });
+  return product;
+}
+
 export function documentChoice(row: Row): string {
   const value = text(row, "total_minor");
   const currency = text(row, "currency");

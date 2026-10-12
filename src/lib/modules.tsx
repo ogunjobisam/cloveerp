@@ -2288,6 +2288,7 @@ export const FINANCE: ModuleDef = {
               p_states: ["posted"],
               p_awaiting: "invoice",
             },
+            empty: "Every posted delivery has been invoiced.",
             value: "document_id",
             label: ["document_number", "party", "total_minor", "document_date"],
             describe: documentChoice,

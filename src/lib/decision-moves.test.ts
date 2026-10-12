@@ -208,6 +208,9 @@ describe("what a move reads again", () => {
     }
     expect(MOVE_READS_AGAIN).toContain("erp_document_approval_chain");
     expect(MOVE_READS_AGAIN).toContain("erp_my_approvals");
+    // KI-04: the decisions under the chain, and the supplier balances beside the steps.
+    expect(MOVE_READS_AGAIN).toContain("erp_document_approval_decisions");
+    expect(MOVE_READS_AGAIN).toContain("erp_supplier_balances");
   });
 
   test("a goods receipt's: posting or cancelling one refreshes received-not-billed, the matching workbench and what is left to receive", () => {

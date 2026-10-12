@@ -43,6 +43,7 @@ export function DecisionMoves({
       "erp_document",
       "erp_available_transitions",
       "erp_document_approval_chain",
+      "erp_document_approval_decisions",
       "erp_my_approvals",
     ],
   });
