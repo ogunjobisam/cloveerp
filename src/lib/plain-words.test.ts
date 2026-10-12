@@ -28,6 +28,7 @@ import {
   describeWarehouseTask,
   documentIdInPath,
   documentOutcome,
+  madeDocumentOutcome,
   lookupOutcome,
   article,
   localIsoDate,
@@ -188,6 +189,33 @@ describe("a toast names what was made", () => {
         moved_on: "inherit_approval",
       }),
     ).toBe("PO-000058 created from REQ-000049 and approved.");
+  });
+
+  test("a delivery made from its order is named and linked (12 October live walk)", () => {
+    expect(
+      madeDocumentOutcome({
+        document_id: "dn-479",
+        document_number: "DN-000479",
+        order_document_number: "SO-000482",
+        lines: 2,
+        moved_on: null,
+      }),
+    ).toEqual({
+      message: "DN-000479 created from SO-000482.",
+      documents: [{ documentId: "dn-479", number: "DN-000479" }],
+    });
+    expect(madeDocumentOutcome({ document_number: "SO-1", picked: 3 })).toBeNull();
+    expect(madeDocumentOutcome("dn-479")).toBeNull();
+  });
+
+  test("creating a delivery or a receipt from its order says what it made, with a link", () => {
+    const action = readFileSync(join(ROOT, "src", "components", "erp", "action.tsx"), "utf8");
+    expect(action).toContain(
+      "erp_create_delivery_from_order: (result) => Promise.resolve(madeDocumentOutcome(result))",
+    );
+    expect(action).toContain(
+      "erp_create_receipt_from_order: (result) => Promise.resolve(madeDocumentOutcome(result))",
+    );
   });
 
   test("a move with no word of its own still says it moved", () => {

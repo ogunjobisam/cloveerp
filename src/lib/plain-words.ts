@@ -203,6 +203,21 @@ export function documentOutcome(result: unknown): string | null {
 }
 
 /**
+ * A door's answer that names the document it made, as an outcome with a way to
+ * it: "DN-000479 created from SO-000482." and the delivery as a link, kept long
+ * enough to follow. Creating a delivery from its order said its sentence for
+ * five seconds and named nothing to press, so the dialog seemed to close
+ * having made nothing (12 October live walk). Null for any other answer.
+ */
+export function madeDocumentOutcome(result: unknown): Outcome | null {
+  const message = documentOutcome(result);
+  const r = asRecord(result);
+  const number = r ? text(r, "document_number") : null;
+  const id = madeDocumentId(result);
+  return message && number && id ? { message, documents: [{ documentId: id, number }] } : null;
+}
+
+/**
  * The document a door made, from its answer: what the screen opens next.
  * Converting a quotation answers with the order it raised.
  */
