@@ -28,6 +28,7 @@ import {
   describeWarehouseTask,
   documentIdInPath,
   documentOutcome,
+  legalNumberOf,
   madeDocumentOutcome,
   lookupOutcome,
   article,
@@ -216,6 +217,24 @@ describe("a toast names what was made", () => {
     expect(action).toContain(
       "erp_create_receipt_from_order: (result) => Promise.resolve(madeDocumentOutcome(result))",
     );
+  });
+
+  test("an issued invoice says its legal number when it differs (12 October live walk)", () => {
+    expect(legalNumberOf({ document_number: "INV-000478", legal_number: "INV-000001" })).toBe(
+      "INV-000001",
+    );
+    expect(legalNumberOf({ document_number: "INV-000478", legal_number: "INV-000478" })).toBeNull();
+    expect(legalNumberOf({ document_number: "INV-000478", legal_number: null })).toBeNull();
+    expect(legalNumberOf({ document_number: "INV-000478" })).toBeNull();
+  });
+
+  test("a sales order despatched in part can be closed short from its page", () => {
+    const page = readFileSync(join(ROOT, "src", "routes", "documents", "$documentId.tsx"), "utf8");
+    expect(page).toContain('fn="erp_close_sales_order_short"');
+    expect(page).toContain(
+      'doc.state === "partially_despatched" ? (\n          <CloseThisOrderShort',
+    );
+    expect(page).toContain('permission="sales.order"');
   });
 
   test("a move with no word of its own still says it moved", () => {

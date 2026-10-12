@@ -29,6 +29,7 @@ import { fill } from "./interview";
 import {
   documentChoice,
   localIsoDate,
+  legalNumberOf,
   openInvoiceWords,
   orderPeriods,
   quarterToDate,
@@ -2218,7 +2219,24 @@ export const FINANCE: ModuleDef = {
             argsFrom: { p_party_id: "p_party_id", p_currency: "p_currency" },
             value: "document_id",
             label: ["document_number", "owing_minor", "due_date"],
-            describe: (row, ui) => fill(ui("{invoice}: {owes}, due {due}"), openInvoiceWords(row)),
+            // With the legal number an issued invoice carries on its PDF,
+            // beside its own (20261012120000).
+            describe: (row, ui) => {
+              const words = openInvoiceWords(row);
+              const legal = legalNumberOf(row);
+              return fill(
+                ui("{invoice}: {owes}, due {due}"),
+                legal
+                  ? {
+                      ...words,
+                      invoice: fill(ui("{number} (legal no. {legal})"), {
+                        number: words.invoice,
+                        legal,
+                      }),
+                    }
+                  : words,
+              );
+            },
             empty:
               "This customer owes nothing in this currency, so there is no invoice for the cash to pay.",
           },

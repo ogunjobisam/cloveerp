@@ -8,7 +8,7 @@ import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
 import { formatMinor, minorUnitsOf } from "../../lib/money";
-import { article, transitionTone } from "../../lib/plain-words";
+import { article, legalNumberOf, transitionTone } from "../../lib/plain-words";
 import {
   DOCUMENT_READ,
   describeLine,
@@ -239,7 +239,7 @@ function useStageRows(stage: Stage, showFinished = false) {
     read,
     { states: stage.states, statusKey: source?.status, awaiting: stage.awaiting },
     showFinished,
-  ).map((row) => awaitingWords(row, stage.awaiting, ui));
+  ).map((row) => legalNumberWords(awaitingWords(row, stage.awaiting, ui), ui));
   const rows = source?.arrange ? source.arrange(held, showFinished) : held;
 
   // Whether a step with nothing waiting on it has nothing at all, or has
@@ -306,6 +306,23 @@ function awaitingWords(
     ...row,
     state_name:
       awaiting === "invoice" ? ui("Waiting to be invoiced") : ui("Waiting for the supplier's bill"),
+  };
+}
+
+/**
+ * An issued invoice listed with the legal number its PDF carries beside its
+ * own, when the two differ (20261012120000): "INV-000478 (legal no.
+ * INV-000001)". The customer quotes the legal one.
+ */
+function legalNumberWords(row: Row, ui: (text: string) => string): Row {
+  const legal = legalNumberOf(row);
+  if (!legal) return row;
+  return {
+    ...row,
+    document_number: fill(ui("{number} (legal no. {legal})"), {
+      number: String(row["document_number"] ?? ""),
+      legal,
+    }),
   };
 }
 
