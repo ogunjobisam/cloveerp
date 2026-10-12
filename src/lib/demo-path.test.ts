@@ -5,7 +5,7 @@ import * as ts from "typescript";
 
 import { FLOWS, OFF_THE_PATH, pathsOnTheDemoPath } from "../../e2e/demo-path";
 import { ROUTES } from "../../e2e/routes";
-import { MODULES } from "./modules";
+import { MODULES, allTiles, areaOf } from "./modules";
 import { DOCUMENT_READ } from "./stage-records";
 
 /**
@@ -193,7 +193,22 @@ describe("the demo path", () => {
       expect(
         flow.steps[flow.steps.length - 1]?.path,
         `${flow.key} stops before the ties are proved`,
-      ).toBe("/operations/assurance");
+      ).toBe("/finance/reconciliation");
+    }
+  });
+
+  test("stays in Work from the first screen to the last (KI-01)", () => {
+    // The rail switched to Settings at the last step of both flows when they
+    // ended on Checks and sign-off. A tile kept off the rail decides nothing.
+    const tiles = allTiles().filter((t) => !t.offRail);
+    for (const flow of FLOWS) {
+      for (const step of flow.steps) {
+        const tile = tiles
+          .filter((t) => step.path === t.path || step.path.startsWith(`${t.path}/`))
+          .sort((a, b) => b.path.length - a.path.length)[0];
+        if (!tile) continue;
+        expect(areaOf(tile.group), `${flow.key} leaves Work at ${step.path}`).toBe("work");
+      }
     }
   });
 

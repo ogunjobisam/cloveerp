@@ -858,6 +858,19 @@ const PURCHASE_TO_PAY: FlowSpec = {
     {
       label: "Payment",
       hint: "Bills fall into a payment run, which somebody else approves before it is paid.",
+      // The runs on their way to being paid, as Financials' Payment run step
+      // counts them (KI-02). Proposed, approved and paid there.
+      list: {
+        fn: "erp_payment_proposals",
+        args: { p_limit: 200 },
+        id: "proposal_id",
+        title: ["reference"],
+        subtitle: ["payment_date", "currency"],
+        status: "status",
+        noun: "payment run",
+        nounPlural: "payment runs",
+      },
+      states: ["draft", "proposed", "approved"],
       to: "/finance",
       toLabel: "Open finance",
     },

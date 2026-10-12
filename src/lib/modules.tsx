@@ -911,11 +911,38 @@ export const INVENTORY: ModuleDef = {
       {
         label: "Correct",
         hint: "What the count found, or damage: a write-off leaves a movement and a reason.",
+        // What waits to be corrected (KI-02): counts that found a difference
+        // and wait on a decision, with their approver, or were refused. The
+        // worklist offers what can be done with each.
+        list: {
+          fn: "erp_count_tasks",
+          args: { p_limit: 200 },
+          id: "task_id",
+          title: ["item", "location"],
+          subtitle: ["expected", "counted", "variance"],
+          status: "status",
+          noun: "count to correct",
+          nounPlural: "counts to correct",
+        },
+        states: ["counted", "pending_approval", "rejected"],
         createFn: "erp_write_off_stock",
+        to: "/inventory/audit",
+        toLabel: "Open the counting worklist",
       },
       {
         label: "Pass on",
         hint: "Stock that leaves your custody without being sold — a keeper, a contract manufacturer.",
+        // What is with a keeper now (KI-02, 20261012140000).
+        list: {
+          fn: "erp_stock_with_keepers",
+          args: { p_limit: 200 },
+          id: "balance_id",
+          title: ["item", "item_name"],
+          subtitle: ["keeper", "quantity", "site"],
+          status: "status",
+          noun: "holding with a keeper",
+          nounPlural: "holdings with a keeper",
+        },
         createFn: "erp_hand_over_custody",
       },
     ],
@@ -1050,7 +1077,7 @@ export const INVENTORY: ModuleDef = {
         pickBatch("p_batch_id", "Batch (if controlled)"),
         reason("p_reason", "Why", false),
       ],
-      invalidates: ["erp_stock_health", "erp_count_tasks"],
+      invalidates: ["erp_stock_health", "erp_count_tasks", "erp_stock_with_keepers"],
     },
     {
       label: "Propose an identity policy",
@@ -1408,7 +1435,13 @@ export const INVENTORY: ModuleDef = {
         // is written off as the supplier's: no cost, no journal.
         pickParty(undefined, "p_owner_party_id", "Owner (blank for the company)", false),
       ],
-      invalidates: ["erp_stock_health", "erp_stock_valuation", "erp_stock_ageing", "erp_batches"],
+      invalidates: [
+        "erp_stock_health",
+        "erp_stock_valuation",
+        "erp_stock_ageing",
+        "erp_batches",
+        "erp_count_tasks",
+      ],
     },
     {
       label: "Split a batch",
