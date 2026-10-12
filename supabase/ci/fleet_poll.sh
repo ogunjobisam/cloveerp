@@ -49,9 +49,10 @@
 # rows stay behind, deleted with no purge recorded). Written with
 # erp_meta.record_deployment_usage(code, rows) on the
 # control plane (20261012040000), which replaces each period's figure and
-# deletes none. A meter with no row in those months is not measured (nothing
-# runs erp.measure_active_users, so active_users never is), which is not
-# nought: it is sent as no row, and said as not measured. The figures are a
+# deletes none. A meter with no row in those months is not measured, which
+# is not nought: it is sent as no row, and said as not measured. active_users
+# is measured by the client itself, daily, from the job its organisation is
+# given as it is made (20261012100000). The figures are a
 # named client's business and these logs are public, so only how many rows
 # were read is printed, never a quantity. A usage that cannot be read is an
 # entry in errors, like any other reading.
