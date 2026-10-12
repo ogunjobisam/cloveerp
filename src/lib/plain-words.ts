@@ -203,6 +203,21 @@ export function documentOutcome(result: unknown): string | null {
 }
 
 /**
+ * A door's answer that names the document it made, as an outcome with a way to
+ * it: "DN-000479 created from SO-000482." and the delivery as a link, kept long
+ * enough to follow. Creating a delivery from its order said its sentence for
+ * five seconds and named nothing to press, so the dialog seemed to close
+ * having made nothing (12 October live walk). Null for any other answer.
+ */
+export function madeDocumentOutcome(result: unknown): Outcome | null {
+  const message = documentOutcome(result);
+  const r = asRecord(result);
+  const number = r ? text(r, "document_number") : null;
+  const id = madeDocumentId(result);
+  return message && number && id ? { message, documents: [{ documentId: id, number }] } : null;
+}
+
+/**
  * The document a door made, from its answer: what the screen opens next.
  * Converting a quotation answers with the order it raised.
  */
@@ -620,6 +635,16 @@ export function receiptOutcome(
  * An open invoice as Apply cash offers it, from erp_open_invoices' row:
  * "INV-000441: £795.00, due 4 Nov 2026" (20261010021000).
  */
+/**
+ * The legal number an issued invoice carries on its PDF, when it is not the
+ * document's own number (20261012120000): the two come from separate
+ * sequences and may share a prefix, so a screen says both (owner, 12 October).
+ */
+export function legalNumberOf(row: Record<string, unknown>): string | null {
+  const legal = text(row, "legal_number");
+  return legal && legal !== text(row, "document_number") ? legal : null;
+}
+
 export function openInvoiceWords(row: Record<string, unknown>): {
   invoice: string;
   owes: string;

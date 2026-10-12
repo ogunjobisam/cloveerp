@@ -24,6 +24,7 @@ import { callErp, hasPermission } from "../../lib/erp";
 import { prettifyField } from "../../lib/friendly";
 import { useT } from "../../lib/i18n";
 import { fill } from "../../lib/interview";
+import { currentIssue, readIssues } from "../../lib/invoice-issue";
 import {
   DELIVER_THIS_ORDER,
   DELIVERY_FROM_ORDER_FIELDS,
@@ -289,6 +290,9 @@ function Document() {
           {doc.due_date ? (
             <span className="text-xs text-muted-foreground">due {doc.due_date}</span>
           ) : null}
+          {doc.document_type === "sales_invoice" && doc.is_committed ? (
+            <LegalNumber documentId={documentId} documentNumber={doc.document_number} />
+          ) : null}
           {doc.payment_run ? (
             <span className="text-xs text-muted-foreground">paid by run {doc.payment_run}</span>
           ) : null}
@@ -315,6 +319,15 @@ function Document() {
           doc.state === "picking" ||
           doc.state === "partially_despatched") ? (
           <DeliverThisOrder
+            documentId={documentId}
+            context={`${doc.document_number} · ${doc.party ?? "no party"}`}
+          />
+        ) : null}
+
+        {/* An order despatched in part whose customer will not take the rest
+            is closed for what went (20261012120000). */}
+        {doc.document_type === "sales_order" && doc.state === "partially_despatched" ? (
+          <CloseThisOrderShort
             documentId={documentId}
             context={`${doc.document_number} · ${doc.party ?? "no party"}`}
           />
@@ -549,6 +562,76 @@ function Document() {
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The legal number an issued invoice carries on its PDF, beside its own
+ * (20261012120000): the two come from separate sequences and may share a
+ * prefix. The same read as the invoice's issue panel, so it costs nothing.
+ */
+function LegalNumber({
+  documentId,
+  documentNumber,
+}: {
+  documentId: string;
+  documentNumber: string;
+}) {
+  const { ui } = useT();
+  const issues = useQuery({
+    queryKey: ["erp_document_issues", { p_document_id: documentId, p_limit: 20 }],
+    queryFn: () =>
+      callErp<unknown>("erp_document_issues", { p_document_id: documentId, p_limit: 20 }),
+  });
+  const legal = currentIssue(readIssues(issues.data))?.issued_number ?? null;
+  if (!legal || legal === documentNumber) return null;
+  return (
+    <span className="text-xs text-muted-foreground">
+      {fill(ui("Legal no. {legal}"), { legal })}
+    </span>
+  );
+}
+
+/**
+ * Close the order on this page short: the customer will not take the rest.
+ *
+ * A purchase order closes short when the supplier will send nothing more; a
+ * sales order had no twin, so an order despatched in part stayed open for good
+ * (12 October live walk). The order is finished for what went, anything held
+ * back for the rest is released, and the reason is kept on its history.
+ */
+function CloseThisOrderShort({ documentId, context }: { documentId: string; context: string }) {
+  const { ui } = useT();
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <ActionDialog
+        trigger={<ActionButton variant="secondary">{ui("Close the rest short")}</ActionButton>}
+        title="Close the rest of this order short"
+        description="The customer will not take the rest. The order is finished for what went, and anything held back for the rest is released."
+        permission="sales.order"
+        fn="erp_close_sales_order_short"
+        fields={[
+          {
+            kind: "text",
+            name: "p_reason",
+            label: "Why the rest will not be sent",
+            required: true,
+            placeholder: "The customer no longer needs the rest",
+            hint: "Kept on the order's history with the move.",
+          },
+        ]}
+        prefill={{ p_order: documentId }}
+        context={context}
+        invalidates={[
+          "erp_document",
+          "erp_documents",
+          "erp_deliverable_lines",
+          "erp_release_sequence",
+          "erp_available_transitions",
+        ]}
+        submitLabel="Close it short"
+      />
     </div>
   );
 }

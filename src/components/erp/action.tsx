@@ -47,6 +47,7 @@ import { permissionName } from "../../lib/permission-name";
 import {
   actionOutcome,
   documentOutcome,
+  madeDocumentOutcome,
   paymentRunOutcome,
   paymentProposalOutcome,
   noticeReceiptOutcome,
@@ -1152,6 +1153,11 @@ const FOLLOW_UP_BY_FN: Record<
       ? { message, documents: [{ documentId: result, number: invoice }] }
       : null;
   },
+  // A delivery or a goods receipt made from its order answers with its number
+  // and the order's; the outcome names both and links to what was made, as an
+  // invoice made from a delivery does (12 October live walk).
+  erp_create_delivery_from_order: (result) => Promise.resolve(madeDocumentOutcome(result)),
+  erp_create_receipt_from_order: (result) => Promise.resolve(madeDocumentOutcome(result)),
   // A problem reported answers with its id; its reference is on its row
   // (J-124).
   erp_raise_quality_event: async (result) => {
