@@ -5881,6 +5881,16 @@ export const EXTRA_TILES: TileDef[] = [
     group: "settle",
   },
   {
+    path: "/production/structure",
+    titleKey: "nav.production_structure",
+    title: "Product structure",
+    blurb:
+      "What a made product is made of at every level, how long its routing takes, and what one costs to make.",
+    permission: "production.read",
+    group: "make",
+    module: "production",
+  },
+  {
     path: "/finance/journals",
     titleKey: "nav.finance_journals",
     title: "Journals",

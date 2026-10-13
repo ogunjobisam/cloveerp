@@ -476,6 +476,8 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/planning":
     "Demand and supply planning. Planned orders are one way an order is raised; the demo path raises one from a requisition instead.",
   "/production": "Manufacturing. Out of scope for v1 beyond entitlement gating.",
+  "/production/structure":
+    "A made product's structure and cost, read from its bills and routing. Neither flow makes anything.",
   "/quality": "Inspection and release. Nothing on the demo path is inspected.",
   "/reporting": "The report catalogue. The four ties are read on the screens that own the figures.",
   "/reporting/distribution": "Who a report goes to, and when it is sent to them.",

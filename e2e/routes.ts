@@ -113,6 +113,7 @@ export const ROUTES: readonly RouteUnderTest[] = [
   { path: "/planning", kind: "desk", file: "planning/index.tsx" },
   { path: "/procurement", kind: "desk", file: "procurement/index.tsx" },
   { path: "/production", kind: "desk", file: "production/index.tsx" },
+  { path: "/production/structure", kind: "desk", file: "production/structure.tsx" },
   { path: "/quality", kind: "desk", file: "quality/index.tsx" },
   { path: "/sales", kind: "desk", file: "sales/index.tsx" },
 

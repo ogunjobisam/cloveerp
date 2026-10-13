@@ -28,7 +28,7 @@ function workEntries(tiles: readonly TileDef[]): number {
 }
 
 describe("the rail folds a sub-screen under its parent", () => {
-  test("exactly these twelve screens fold, each under the screen of its own group", () => {
+  test("exactly these thirteen screens fold, each under the screen of its own group", () => {
     const folded = onRail
       .flatMap((t) => {
         const parent = railParent(t.path, onRail);
@@ -46,6 +46,7 @@ describe("the rail folds a sub-screen under its parent", () => {
       "/inventory/audit -> /inventory",
       "/inventory/transfers -> /inventory",
       "/master-data/imports -> /master-data",
+      "/production/structure -> /production",
       "/reporting/distribution -> /reporting",
       "/reporting/reproducibility -> /reporting",
     ]);
@@ -85,7 +86,7 @@ describe("the rail folds a sub-screen under its parent", () => {
     );
     const flat = (tiles: TileDef[]) =>
       1 + tiles.filter((t) => !t.offRail && areaOf(t.group) === "work").length;
-    expect([flat(platform), flat(customer), flat(demonstration)]).toEqual([28, 26, 23]);
+    expect([flat(platform), flat(customer), flat(demonstration)]).toEqual([29, 27, 23]);
     expect([workEntries(platform), workEntries(customer), workEntries(demonstration)]).toEqual([
       16, 14, 11,
     ]);

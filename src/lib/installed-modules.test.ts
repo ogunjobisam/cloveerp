@@ -41,7 +41,7 @@ describe("the screens that need their module installed", () => {
       .filter((t) => t.module)
       .map((t) => t.path)
       .sort();
-    expect(tagged).toEqual(["/planning", "/production", "/quality"]);
+    expect(tagged).toEqual(["/planning", "/production", "/production/structure", "/quality"]);
   });
 
   test("a path belongs to the module of the longest tile it sits under", () => {
