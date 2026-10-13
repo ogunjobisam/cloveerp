@@ -210,7 +210,10 @@ const RETURN_FIELDS = [
  * gave the obligation, and finalised true. The export's own vrn and period
  * dates are for the file and are not sent.
  */
-export function returnBody(exported: Record<string, unknown>, periodKey: string): Record<string, unknown> {
+export function returnBody(
+  exported: Record<string, unknown>,
+  periodKey: string,
+): Record<string, unknown> {
   const body: Record<string, unknown> = { periodKey };
   for (const f of RETURN_FIELDS) {
     const v = exported[f];
@@ -239,7 +242,9 @@ export function readReceipt(json: unknown, headers: { get(name: string): string 
   const processingDate = x["processingDate"];
   const formBundleNumber = x["formBundleNumber"];
   if (typeof processingDate !== "string" || typeof formBundleNumber !== "string") {
-    throw new Error("HMRC accepted the return but its receipt names no processing date or form bundle");
+    throw new Error(
+      "HMRC accepted the return but its receipt names no processing date or form bundle",
+    );
   }
   const s = (k: string) => (typeof x[k] === "string" ? (x[k] as string) : null);
   return {
@@ -265,7 +270,8 @@ export function hmrcProblem(status: number, json: unknown): { code: string; word
     INVALID_REQUEST: "HMRC could not read the return.",
     VRN_INVALID: "HMRC does not recognise the company's VAT number.",
     INVALID_CREDENTIALS: "The connection to HMRC has expired. Connect the company to HMRC again.",
-    CLIENT_OR_AGENT_NOT_AUTHORISED: "The person who connected this company to HMRC may not file its VAT.",
+    CLIENT_OR_AGENT_NOT_AUTHORISED:
+      "The person who connected this company to HMRC may not file its VAT.",
     MATCHING_RESOURCE_NOT_FOUND: "HMRC has no record of this.",
     INSOLVENT_TRADER: "HMRC holds this company as an insolvent trader and refuses the return.",
     MESSAGE_THROTTLED_OUT: "HMRC asked us to slow down. Try again in a minute.",
@@ -354,10 +360,12 @@ export function fraudHeaders(client: ClientFacts, server: ServerFacts): Record<s
  * the reason to give HMRC when the omission is discussed with them.
  */
 export const HEADERS_NOT_SENT: Readonly<Record<string, string>> = {
-  "Gov-Client-Multi-Factor": "Clove ERP signs people in with a password or an emailed link; there is no second factor to report.",
+  "Gov-Client-Multi-Factor":
+    "Clove ERP signs people in with a password or an emailed link; there is no second factor to report.",
   "Gov-Client-Public-Port":
     "The request reaches the function through Supabase's edge, which does not pass on the client's source port.",
-  "Gov-Vendor-License-IDs": "Clove ERP is sold by subscription; no licence key is installed on the device.",
+  "Gov-Vendor-License-IDs":
+    "Clove ERP is sold by subscription; no licence key is installed on the device.",
 };
 
 /** The first public address in an X-Forwarded-For chain, as the edge saw the client. */
@@ -368,10 +376,16 @@ export function clientIp(forwardedFor: string | null): string | null {
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])];
     const isPrivate =
-      a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254);
     return isPrivate ? null : first;
   }
-  return /^[0-9a-f:]+$/i.test(first) && first.includes(":") && !/^(::1|fe80:|fc|fd)/i.test(first) ? first : null;
+  return /^[0-9a-f:]+$/i.test(first) && first.includes(":") && !/^(::1|fe80:|fc|fd)/i.test(first)
+    ? first
+    : null;
 }
 
 /** HMRC's legal declaration, shown and ticked before a return is submitted. */

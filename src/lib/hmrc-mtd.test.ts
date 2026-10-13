@@ -62,7 +62,10 @@ describe("where and as whom", () => {
 describe("the state that travels through HMRC", () => {
   test("is trusted only with the key that signed it", async () => {
     const state = await signState("k", "ticket-1", "acme.cloveerp.com");
-    expect(await verifyState("k", state)).toEqual({ ticket: "ticket-1", host: "acme.cloveerp.com" });
+    expect(await verifyState("k", state)).toEqual({
+      ticket: "ticket-1",
+      host: "acme.cloveerp.com",
+    });
     expect(await verifyState("other", state)).toBeNull();
     const [payload] = state.split(".");
     expect(await verifyState("k", `${payload}.forged`)).toBeNull();
@@ -176,7 +179,10 @@ describe("the return", () => {
         code: "DUPLICATE_SUBMISSION",
         message: "The VAT return was already submitted for the given period",
       }),
-    ).toEqual({ code: "DUPLICATE_SUBMISSION", words: "HMRC already holds a return for this period." });
+    ).toEqual({
+      code: "DUPLICATE_SUBMISSION",
+      words: "HMRC already holds a return for this period.",
+    });
     expect(hmrcProblem(400, { errors: [{ code: "VRN_INVALID" }] }).code).toBe("VRN_INVALID");
     expect(hmrcProblem(500, null)).toEqual({
       code: "HTTP_500",
@@ -205,7 +211,9 @@ describe("fraud prevention headers", () => {
   test("say what HMRC asks of a web application its server calls for", () => {
     const h = fraudHeaders(client, server);
     expect(h["Gov-Client-Connection-Method"]).toBe("WEB_APP_VIA_SERVER");
-    expect(h["Gov-Client-Screens"]).toBe("width=1920&height=1080&scaling-factor=1.25&colour-depth=24");
+    expect(h["Gov-Client-Screens"]).toBe(
+      "width=1920&height=1080&scaling-factor=1.25&colour-depth=24",
+    );
     expect(h["Gov-Client-Window-Size"]).toBe("width=1256&height=803");
     expect(h["Gov-Client-Timezone"]).toBe("UTC+01:00");
     expect(h["Gov-Client-User-IDs"]).toBe("clove-erp=jo%40acme.test");

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ActionButton, ErrorNote, useErpAction } from "../../components/erp/action";
 import { Gate } from "../../components/erp/gate";
+import { HmrcPanel } from "../../components/erp/hmrc-panel";
 import { PageHeader } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import type { FlowSpec } from "../../components/erp/process-flow";
@@ -141,11 +142,11 @@ function VatReturns() {
       <PageHeader
         title={t("nav.finance_vat", "VAT returns")}
         howItWorks={ui(
-          "A return takes every VAT entry dated up to its period's end that no earlier return took, so something posted late into a finalised quarter is in the next return. Boxes 1 and 4 are the tax the ledger carries; boxes 6 and 7 are the net of the same documents, in whole pounds. Finalising freezes the boxes, and an error in a finalised return is corrected by posting the correction, which the next return takes. The product does not send anything to HMRC: the return is filed from bridging software, which reads the exported file. Bridging tools differ in what they import — most read a spreadsheet of the nine boxes, some the MTD return body as JSON — so check which yours reads; no tool is named or promised here.",
+          "A return takes every VAT entry dated up to its period's end that no earlier return took, so something posted late into a finalised quarter is in the next return. Boxes 1 and 4 are the tax the ledger carries; boxes 6 and 7 are the net of the same documents, in whole pounds. Finalising freezes the boxes, and an error in a finalised return is corrected by posting the correction, which the next return takes. A company connected to HMRC submits its finalised return from here, against the period HMRC holds for the same dates, with HMRC's declaration agreed and its receipt kept. A company that is not connected exports the return for bridging software instead: most read a spreadsheet of the nine boxes, some the MTD return body as JSON, so check which yours reads.",
         )}
       >
-        Two presses a period: finalise it once it has ended, then export the return for the bridging
-        software that files it with HMRC.
+        Two presses a period: finalise it once it has ended, then submit it to HMRC, or export it
+        for the bridging software that files it.
       </PageHeader>
 
       {obligations.isPending ? (
@@ -196,6 +197,8 @@ function VatReturns() {
               </Table>
             </section>
           ) : null}
+
+          <HmrcPanel finalised={finalised} />
 
           {EXPORT_STAGE && finalised.length > 0 ? (
             <section
