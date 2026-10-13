@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
+import { BankStatementImport } from "../../components/erp/bank-statement-import";
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
 import { callErp } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
+import { formatMinor } from "../../lib/money";
 
 export const Route = createFileRoute("/finance/bank")({
   head: () => ({
@@ -42,6 +45,32 @@ type BankAccount = {
   is_default: boolean;
   status: "open" | "closed";
   closed_reason: string | null;
+};
+
+/** Shaped by public.erp_bank_statements() (20261013020000). */
+type Statement = {
+  statement_id: string;
+  bank_account_id: string;
+  bank_account: string;
+  source: string;
+  starts_on: string;
+  ends_on: string;
+  opening_minor: number;
+  closing_minor: number;
+  currency: string;
+  line_count: number;
+  unmatched: number;
+  status: "imported" | "reconciled";
+};
+
+type StatementLineRow = {
+  line_id: string;
+  line_no: number;
+  booked_on: string;
+  amount_minor: number;
+  description: string;
+  reference: string | null;
+  status: string;
 };
 
 /** What every bank account form reads again once it has changed one. */
@@ -243,6 +272,132 @@ function Bank() {
           </Table>
         )}
       </section>
+
+      <BankStatementImport accounts={rows.filter((r) => r.status === "open")} />
+
+      <Statements />
     </div>
+  );
+}
+
+/**
+ * The statements imported, newest first, each with how many of its lines are
+ * still unmatched. A statement opens to its lines; the latest of an account,
+ * imported in error and nothing done with it, can be withdrawn.
+ */
+function Statements() {
+  const { ui } = useT();
+  const [open, setOpen] = useState<string | null>(null);
+  const statements = useQuery({
+    queryKey: ["erp_bank_statements"],
+    queryFn: () => callErp<Statement[]>("erp_bank_statements", {}),
+  });
+  const lines = useQuery({
+    queryKey: ["erp_bank_statement_lines", { p_statement_id: open }],
+    queryFn: () =>
+      callErp<StatementLineRow[]>("erp_bank_statement_lines", { p_statement_id: open }),
+    enabled: open !== null,
+  });
+  const rows = statements.data ?? [];
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 sm:px-5">
+      <h2 className="mb-3 text-sm font-semibold">{ui("Statements")}</h2>
+      <ErrorNote error={statements.error} />
+      {statements.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {ui("Reading the statements…")}
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{ui("No statement imported yet.")}</p>
+      ) : (
+        <Table
+          columns={[
+            ui("Bank account"),
+            ui("Period"),
+            ui("Opening balance"),
+            ui("Closing balance"),
+            ui("Lines"),
+            ui("Unmatched"),
+            "",
+          ]}
+        >
+          {rows.map((r) => (
+            <tr key={r.statement_id} className="border-b border-border/60 align-top">
+              <td className="py-2 pr-4">{r.bank_account}</td>
+              <td className="py-2 pr-4 tabular-nums">
+                {r.starts_on} – {r.ends_on}
+              </td>
+              <td className="py-2 pr-4 tabular-nums">{formatMinor(r.opening_minor, r.currency)}</td>
+              <td className="py-2 pr-4 tabular-nums">{formatMinor(r.closing_minor, r.currency)}</td>
+              <td className="py-2 pr-4 tabular-nums">{r.line_count}</td>
+              <td className="py-2 pr-4 tabular-nums">{r.unmatched}</td>
+              <td className="py-2">
+                <div className="flex flex-wrap gap-2">
+                  <ActionButton
+                    variant="secondary"
+                    onClick={() => setOpen(open === r.statement_id ? null : r.statement_id)}
+                  >
+                    {open === r.statement_id ? ui("Hide the lines") : ui("Show the lines")}
+                  </ActionButton>
+                  {r.status === "imported" ? (
+                    <ActionDialog
+                      trigger={
+                        <ActionButton variant="secondary">
+                          {ui("Withdraw this statement")}
+                        </ActionButton>
+                      }
+                      title="Withdraw this statement"
+                      description="Takes out the latest statement of an account, imported in error and nothing done with it yet. Its lines can then be imported again."
+                      permission="finance.post"
+                      fn="erp_withdraw_bank_statement"
+                      fields={[
+                        {
+                          kind: "text",
+                          name: "p_reason",
+                          label: "Why it is withdrawn",
+                          required: true,
+                          placeholder: "Imported into the wrong account",
+                          hint: "Kept with the withdrawal for the auditor.",
+                        },
+                      ]}
+                      prefill={{ p_statement_id: r.statement_id }}
+                      context={`${r.bank_account} · ${r.starts_on} – ${r.ends_on}`}
+                      invalidates={["erp_bank_statements"]}
+                      submitLabel="Withdraw it"
+                    />
+                  ) : null}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+      {open !== null ? (
+        <div className="mt-4">
+          <ErrorNote error={lines.error} />
+          <Table
+            columns={[ui("Date"), ui("Description"), ui("Reference"), ui("Amount"), ui("State")]}
+          >
+            {(lines.data ?? []).map((l) => (
+              <tr key={l.line_id} className="border-b border-border/60">
+                <td className="py-1.5 pr-4 tabular-nums">{l.booked_on}</td>
+                <td className="py-1.5 pr-4">{l.description}</td>
+                <td className="py-1.5 pr-4">{l.reference ?? ""}</td>
+                <td className="py-1.5 pr-4 text-right tabular-nums">
+                  {formatMinor(
+                    l.amount_minor,
+                    rows.find((r) => r.statement_id === open)?.currency ?? "GBP",
+                  )}
+                </td>
+                <td className="py-1.5 pr-4">
+                  {ui(l.status === "unmatched" ? "Unmatched" : "Matched")}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        </div>
+      ) : null}
+    </section>
   );
 }
