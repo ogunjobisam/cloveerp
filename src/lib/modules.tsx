@@ -3576,6 +3576,67 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_routings", "erp_work_centre_load"],
     },
     {
+      label: "Set co-products and by-products",
+      description:
+        "What else a bill's run makes: co-products sharing its cost, and by-products credited at a value. Setting them again replaces what the bill said; works orders raised from now on carry them.",
+      permission: "production.order",
+      fn: "erp_define_bom_outputs",
+      fields: [
+        {
+          kind: "select",
+          name: "p_bom_id",
+          label: "Bill of materials",
+          required: true,
+          options: {
+            fn: "erp_boms",
+            value: "bom_id",
+            label: ["code", "item"],
+            keep: (row) => row["status"] === "active",
+          },
+        },
+        {
+          kind: "rows",
+          name: "p_co_products",
+          label: "Co-products",
+          addLabel: "Add a co-product",
+          hint: "Each co-product takes this share of the run's cost; the product itself carries what they leave.",
+          columns: [
+            {
+              name: "item_id",
+              label: "Product",
+              kind: "select",
+              options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+            },
+            { name: "quantity", label: "Quantity", kind: "number", placeholder: "20" },
+            {
+              name: "cost_share_pct",
+              label: "Share of cost (%)",
+              kind: "number",
+              placeholder: "25",
+            },
+          ],
+        },
+        {
+          kind: "rows",
+          name: "p_by_products",
+          label: "By-products",
+          addLabel: "Add a by-product",
+          hint: "Each by-product is valued at this a unit, taken off the run's cost before it is shared.",
+          columns: [
+            {
+              name: "item_id",
+              label: "Product",
+              kind: "select",
+              options: { fn: "erp_items", value: "item_id", label: ["code", "name"] },
+            },
+            { name: "quantity", label: "Quantity", kind: "number", placeholder: "5" },
+            { name: "unit_value_minor", label: "Value each", kind: "money", currency: "GBP" },
+          ],
+        },
+      ],
+      invalidates: ["erp_bom_outputs", "erp_boms"],
+    },
+    {
       label: "Start making something",
       permission: "production.order",
       fn: "erp_raise_works_order",
@@ -3695,6 +3756,31 @@ export const PRODUCTION: ModuleDef = {
         },
       ],
       invalidates: ["erp_works_orders", "erp_stock_health"],
+    },
+    {
+      label: "Receive a co-product or by-product",
+      description:
+        "Takes in what a works order makes besides its product, at its share of the order's standard or its value a unit.",
+      permission: "production.execute",
+      fn: "erp_receive_works_order_by_output",
+      fields: [
+        pickFrom(
+          "erp_works_order_outputs",
+          "works_order_output_id",
+          ["order_number", "output", "kind"],
+          "p_works_order_output_id",
+          "Co-product or by-product",
+        ),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        {
+          kind: "text",
+          name: "p_batch_number",
+          label: "Batch number",
+          placeholder: "B-2026-0142",
+          hint: "Leave blank to let the system number it.",
+        },
+      ],
+      invalidates: ["erp_works_order_outputs", "erp_works_orders", "erp_stock_health"],
     },
     {
       label: "Close a works order",
@@ -3915,6 +4001,38 @@ export const PRODUCTION: ModuleDef = {
         { header: "Makes", cell: "output_quantity", numeric: true },
         date("Effective", "effective_from"),
         pill("status"),
+      ],
+    },
+    {
+      title: "Co-products and by-products to come in",
+      description:
+        "Takes in what a works order makes besides its product, at its share of the order's standard or its value a unit.",
+      fn: "erp_works_order_outputs",
+      empty:
+        "No co-products or by-products are waiting. They appear once an order is raised from a bill that names them.",
+      rowKey: (r, i) => String(r["works_order_output_id"] ?? i),
+      columns: [
+        { header: "Works order", cell: "order_number" },
+        { header: "Product", cell: "output" },
+        { header: "Kind", cell: "kind" },
+        { header: "Planned", cell: "planned_quantity", numeric: true },
+        { header: "Received", cell: "quantity_received", numeric: true },
+        pill("status"),
+      ],
+    },
+    {
+      title: "Co-products and by-products",
+      description:
+        "What else a bill's run makes: co-products sharing its cost, and by-products credited at a value. Setting them again replaces what the bill said; works orders raised from now on carry them.",
+      fn: "erp_bom_outputs",
+      empty: "No co-products or by-products yet. Set them on a bill from Actions.",
+      rowKey: (r, i) => String(r["bom_output_id"] ?? i),
+      columns: [
+        { header: "Bill", cell: "bom" },
+        { header: "Product", cell: "output" },
+        { header: "Kind", cell: "kind" },
+        { header: "Quantity", cell: "quantity", numeric: true },
+        { header: "Share of cost (%)", cell: "cost_share_pct", numeric: true },
       ],
     },
     {
