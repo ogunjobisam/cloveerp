@@ -91,7 +91,11 @@ const METHOD = {
 } as const;
 
 /** What a match or an unmatch changes, read again. */
-const MATCH_READS = ["erp_bank_statements", "erp_bank_statement_lines", "erp_bank_match_candidates"];
+const MATCH_READS = [
+  "erp_bank_statements",
+  "erp_bank_statement_lines",
+  "erp_bank_match_candidates",
+];
 
 /** What every bank account form reads again once it has changed one. */
 const READS = ["erp_bank_accounts"];
@@ -377,7 +381,10 @@ function Statements() {
                   {r.status === "imported" && r.unmatched > 0 ? (
                     <ActionButton
                       variant="secondary"
-                      busy={autoMatch.isPending && autoMatch.variables?.["p_statement_id"] === r.statement_id}
+                      busy={
+                        autoMatch.isPending &&
+                        autoMatch.variables?.["p_statement_id"] === r.statement_id
+                      }
                       disabled={!hasPermission(session, "finance.post")}
                       onClick={() => {
                         setOpen(r.statement_id);
@@ -456,9 +463,7 @@ function Statements() {
                     </div>
                   ) : null}
                 </td>
-                <td className="py-1.5">
-                  {lineAction(l, open, currency, ui)}
-                </td>
+                <td className="py-1.5">{lineAction(l, open, currency, ui)}</td>
               </tr>
             ))}
           </Table>
