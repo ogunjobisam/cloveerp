@@ -119,7 +119,14 @@ describe("the screens cut after them", () => {
 
   test("/production keeps the register and no longer restates its steps on the Dashboard", () => {
     const making = moduleAt("/production");
-    expect(making.worklists.map((w) => w.fn)).toEqual(["erp_boms"]);
+    // The bills, and since 20261013080000 the load on each work centre, the
+    // routings and the work centres: none of them a step of the strip.
+    expect(making.worklists.map((w) => w.fn)).toEqual([
+      "erp_boms",
+      "erp_work_centre_load",
+      "erp_routings",
+      "erp_work_centres",
+    ]);
     expect(making.reports.map((r) => r.fn)).toEqual(["erp_works_orders"]);
     expect(stageDoors(making)).toContain("erp_works_orders");
   });
