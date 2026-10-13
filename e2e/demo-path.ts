@@ -372,8 +372,6 @@ export const WITHOUT_A_LIST: Readonly<Record<string, string>> = {
   "/": "The desk's home is the way in: what waits on the person, and the launchpad.",
   "/finance/close":
     "The walk reads the checklist without opening the close, and a close not opened has no tasks to list.",
-  "/finance/statements":
-    "The walk's organisation is seeded with master data and two drafts and posts nothing, so its profit and loss and balance sheet are rightly empty.",
   "/finance/reconciliation": "Four ties rather than a list; the walk reads each one's verdict.",
 };
 

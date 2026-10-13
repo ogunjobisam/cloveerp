@@ -48,7 +48,7 @@ setup("the no-tenant account signs in and is asked for an invitation", async ({ 
 });
 
 setup("the demo account signs in and seeds its organisation", async ({ page }) => {
-  setup.setTimeout(300_000);
+  setup.setTimeout(900_000);
   await signIn(page, DEMO);
 
   const shell = page.getByRole("navigation", { name: "Areas" }).first();
@@ -95,5 +95,49 @@ setup("the demo account signs in and seeds its organisation", async ({ page }) =
   }
 
   await expect(shell).toBeVisible({ timeout: 240_000 });
+
+  // A history of trading, as ci-demo is given one (supabase/ci/seed_demo.sql):
+  // the seed above makes master data and two drafts and posts nothing, so the
+  // walk's screens would rightly be empty, and an empty grid where data should
+  // be is what the walk exists to catch (KI-09). The last sixty days, built a
+  // slice at a time until the seed says it is done, as the account that may
+  // seed demonstrations; with its own session, so the database decides.
+  const url = process.env["VITE_SUPABASE_URL"];
+  const key = process.env["VITE_SUPABASE_PUBLISHABLE_KEY"];
+  const token = await page.evaluate(() => {
+    for (let i = 0; i < localStorage.length; i++) {
+      const name = localStorage.key(i) ?? "";
+      if (/^sb-.*-auth-token$/.test(name)) {
+        const session = JSON.parse(localStorage.getItem(name) ?? "{}") as { access_token?: string };
+        if (session.access_token) return session.access_token;
+      }
+    }
+    return null;
+  });
+  if (!url || !key || !token) {
+    throw new Error(
+      "the demo account's session or the stack's address is missing, so no history could be built",
+    );
+  }
+  let from: string | null = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
+  for (let slice = 0; from && slice < 20; slice++) {
+    const response = await fetch(`${url}/rest/v1/rpc/erp_seed_demo_history`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ p_from: from, p_to: null, p_scale: 1 }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `building the demonstration's history answered ${response.status}: ${await response.text()}`,
+      );
+    }
+    const built = (await response.json()) as { done?: boolean; next_from?: string | null };
+    from = built.done ? null : (built.next_from ?? null);
+  }
+
   await page.context().storageState({ path: DEMO.state });
 });
