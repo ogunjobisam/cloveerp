@@ -2,7 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
+import {
+  ActionButton,
+  ActionDialog,
+  ErrorNote,
+  GoTo,
+  useErpAction,
+} from "../../components/erp/action";
+import { pickParty } from "../../components/erp/actions-bar";
 import { BankStatementImport } from "../../components/erp/bank-statement-import";
 import { Gate } from "../../components/erp/gate";
 import { useErpSession } from "../../components/erp/session-context";
@@ -64,7 +71,7 @@ type Statement = {
   status: "imported" | "reconciled";
 };
 
-/** Shaped by public.erp_bank_statement_lines() (20261013030000). */
+/** Shaped by public.erp_bank_statement_lines() (20261013030000, 20261013040000). */
 type StatementLineRow = {
   line_id: string;
   line_no: number;
@@ -75,11 +82,35 @@ type StatementLineRow = {
   status: string;
   match: {
     match_id: string;
-    method: "reference" | "payment_run" | "amount_date" | "manual";
+    method: keyof typeof METHOD;
     note: string | null;
     lines: number;
     entries: string[];
   } | null;
+  /** The journal that posts the line, or waits to. */
+  entry: {
+    journal_id: string;
+    journal_number: string | null;
+    origin: "rule" | "hand";
+    state: "draft" | "submitted" | "returned" | "posted" | "reversed";
+    narrative: string;
+    rule: string | null;
+  } | null;
+  /** The rule that would post the line, while nothing else has. */
+  rule: string | null;
+};
+
+/** Shaped by public.erp_bank_rules() (20261013040000). */
+type BankRule = {
+  rule_id: string;
+  name: string;
+  words: string;
+  direction: "in" | "out" | "either";
+  account: string;
+  bank_account: string | null;
+  priority: number;
+  status: "active" | "inactive";
+  retired_reason: string | null;
 };
 
 /** How a match was made, as the line says it. */
@@ -88,13 +119,29 @@ const METHOD = {
   payment_run: "Payment run",
   amount_date: "By amount and date",
   manual: "By hand",
+  entry: "Entry",
+  receipt: "Receive cash",
+  settlement: "Card settlement",
 } as const;
+
+/** A waiting entry's journal, as the line says it. */
+const ENTRY_STATE = {
+  draft: "Waiting for approval",
+  submitted: "Waiting for approval",
+  returned: "Sent back",
+  posted: "Posted",
+  reversed: "Posted",
+} as const;
+
+/** Money in, out or either, as a rule says it. */
+const DIRECTION = { in: "In", out: "Out", either: "Either" } as const;
 
 /** What a match or an unmatch changes, read again. */
 const MATCH_READS = [
   "erp_bank_statements",
   "erp_bank_statement_lines",
   "erp_bank_match_candidates",
+  "erp_journals",
 ];
 
 /** What every bank account form reads again once it has changed one. */
@@ -300,6 +347,8 @@ function Bank() {
       <BankStatementImport accounts={rows.filter((r) => r.status === "open")} />
 
       <Statements />
+
+      <Rules />
     </div>
   );
 }
@@ -335,6 +384,14 @@ function Statements() {
         : ui("No line could be matched with certainty.");
     },
   });
+  const applyRules = useErpAction({
+    fn: "erp_apply_bank_rules",
+    invalidates: MATCH_READS,
+    outcome: (result) => {
+      const posted = (result as { posted?: number } | null)?.posted ?? 0;
+      return posted > 0 ? `${ui("Lines posted by rule")}: ${posted}` : ui("No line fits a rule.");
+    },
+  });
   const currency = rows.find((r) => r.statement_id === open)?.currency ?? "GBP";
 
   return (
@@ -342,6 +399,7 @@ function Statements() {
       <h2 className="mb-3 text-sm font-semibold">{ui("Statements")}</h2>
       <ErrorNote error={statements.error} />
       <ErrorNote error={autoMatch.error} />
+      <ErrorNote error={applyRules.error} />
       {statements.isPending ? (
         <p role="status" className="text-sm text-muted-foreground">
           {ui("Reading the statements…")}
@@ -392,6 +450,22 @@ function Statements() {
                       }}
                     >
                       {ui("Match automatically")}
+                    </ActionButton>
+                  ) : null}
+                  {r.status === "imported" && r.unmatched > 0 ? (
+                    <ActionButton
+                      variant="secondary"
+                      busy={
+                        applyRules.isPending &&
+                        applyRules.variables?.["p_statement_id"] === r.statement_id
+                      }
+                      disabled={!hasPermission(session, "finance.post")}
+                      onClick={() => {
+                        setOpen(r.statement_id);
+                        applyRules.mutate({ p_statement_id: r.statement_id });
+                      }}
+                    >
+                      {ui("Apply the rules")}
                     </ActionButton>
                   ) : null}
                   {r.status === "imported" ? (
@@ -453,7 +527,15 @@ function Statements() {
                   {ui(l.status === "unmatched" ? "Unmatched" : "Matched")}
                 </td>
                 <td className="py-1.5 pr-4">
-                  {l.match ? (
+                  {l.entry ? (
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span>{l.entry.narrative}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {ui(ENTRY_STATE[l.entry.state])}
+                        {l.entry.journal_number ? ` · ${l.entry.journal_number}` : ""}
+                      </span>
+                    </div>
+                  ) : l.match ? (
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <span>{l.match.entries.join(", ")}</span>
                       <span className="text-xs text-muted-foreground">
@@ -484,71 +566,164 @@ function lineAction(
   currency: string,
   ui: (text: string) => string,
 ) {
+  if (l.status === "unmatched" && l.entry) {
+    return <GoTo to="/finance/journals">{ui("Journals")}</GoTo>;
+  }
   if (l.status === "unmatched") {
+    const context = `${l.booked_on} · ${l.description} · ${formatMinor(l.amount_minor, currency)}`;
     return (
-      <ActionDialog
-        trigger={<ActionButton variant="secondary">{ui("Match")}</ActionButton>}
-        title="Match this line"
-        description="Choose what the books hold for this line. What you choose must come to the line's amount."
-        permission="finance.post"
-        fn="erp_match_bank_lines"
-        fields={[
-          {
-            kind: "multi",
-            name: "p_entry_keys",
-            label: "Matched to",
-            required: true,
-            options: {
-              fn: "erp_bank_match_candidates",
-              args: { p_line_id: l.line_id },
-              value: "entry_key",
-              label: ["label"],
-              describe: (row, t) =>
-                [
-                  String(row["label"] ?? ""),
-                  String(row["posted_on"] ?? ""),
-                  formatMinor(Number(row["amount_minor"] ?? 0), currency),
-                  row["same_amount"] === true ? t("Same amount") : "",
-                  row["quoted"] === true ? t("Quoted on the line") : "",
-                ]
-                  .filter((part) => part !== "")
-                  .join(" · "),
-              empty: "Nothing in the books is waiting to be matched to a line of this sign.",
+      <div className="flex flex-wrap gap-2">
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui("Match")}</ActionButton>}
+          title="Match this line"
+          description="Choose what the books hold for this line. What you choose must come to the line's amount."
+          permission="finance.post"
+          fn="erp_match_bank_lines"
+          fields={[
+            {
+              kind: "multi",
+              name: "p_entry_keys",
+              label: "Matched to",
+              required: true,
+              options: {
+                fn: "erp_bank_match_candidates",
+                args: { p_line_id: l.line_id },
+                value: "entry_key",
+                label: ["label"],
+                describe: (row, t) =>
+                  [
+                    String(row["label"] ?? ""),
+                    String(row["posted_on"] ?? ""),
+                    formatMinor(Number(row["amount_minor"] ?? 0), currency),
+                    row["same_amount"] === true ? t("Same amount") : "",
+                    row["quoted"] === true ? t("Quoted on the line") : "",
+                  ]
+                    .filter((part) => part !== "")
+                    .join(" · "),
+                empty: "Nothing in the books is waiting to be matched to a line of this sign.",
+              },
             },
-          },
-          {
-            kind: "multi",
-            name: "p_other_line_ids",
-            label: "Other lines in this match",
-            hint: "When the bank shows in several lines what the books hold as one, or the other way round.",
-            options: {
-              fn: "erp_bank_statement_lines",
-              args: { p_statement_id: statementId },
-              value: "line_id",
-              label: ["description"],
-              keep: (row) => row["status"] === "unmatched" && row["line_id"] !== l.line_id,
-              describe: (row) =>
-                [
-                  String(row["booked_on"] ?? ""),
-                  String(row["description"] ?? ""),
-                  formatMinor(Number(row["amount_minor"] ?? 0), currency),
-                ].join(" · "),
+            {
+              kind: "multi",
+              name: "p_other_line_ids",
+              label: "Other lines in this match",
+              hint: "When the bank shows in several lines what the books hold as one, or the other way round.",
+              options: {
+                fn: "erp_bank_statement_lines",
+                args: { p_statement_id: statementId },
+                value: "line_id",
+                label: ["description"],
+                keep: (row) => row["status"] === "unmatched" && row["line_id"] !== l.line_id,
+                describe: (row) =>
+                  [
+                    String(row["booked_on"] ?? ""),
+                    String(row["description"] ?? ""),
+                    formatMinor(Number(row["amount_minor"] ?? 0), currency),
+                  ].join(" · "),
+              },
             },
-          },
-          {
-            kind: "text",
-            name: "p_note",
-            label: "Why do these go together?",
-            required: true,
-            placeholder: "Paid two invoices in one transfer",
-            hint: "Kept with the match for the reviewer.",
-          },
-        ]}
-        prefill={{ p_line_id: l.line_id }}
-        context={`${l.booked_on} · ${l.description} · ${formatMinor(l.amount_minor, currency)}`}
-        invalidates={MATCH_READS}
-        submitLabel="Match"
-      />
+            {
+              kind: "text",
+              name: "p_note",
+              label: "Why do these go together?",
+              required: true,
+              placeholder: "Paid two invoices in one transfer",
+              hint: "Kept with the match for the reviewer.",
+            },
+          ]}
+          prefill={{ p_line_id: l.line_id }}
+          context={`${l.booked_on} · ${l.description} · ${formatMinor(l.amount_minor, currency)}`}
+          invalidates={MATCH_READS}
+          submitLabel="Match"
+        />
+        {l.rule ? (
+          <ActionDialog
+            trigger={<ActionButton variant="secondary">{ui("Post by rule")}</ActionButton>}
+            title="Post by rule"
+            description="A line that quotes a rule's words posts to its account when you press Apply the rules, or Post by rule on the line. The lowest priority applies first."
+            permission="finance.post"
+            fn="erp_post_bank_line_by_rule"
+            fields={[]}
+            prefill={{ p_line_id: l.line_id }}
+            context={`${context} · ${ui("Rule")}: ${l.rule}`}
+            invalidates={MATCH_READS}
+            submitLabel="Post by rule"
+          />
+        ) : null}
+        {l.amount_minor > 0 ? (
+          <ActionDialog
+            trigger={<ActionButton variant="secondary">{ui("Receive cash")}</ActionButton>}
+            title="Receive cash from this line"
+            description="The line is applied as cash from the customer against the invoices you tick, dated the day the bank booked it. What they do not take stays on the customer's account."
+            permission="finance.post"
+            fn="erp_receive_bank_line"
+            fields={[
+              pickParty("customer", "p_party_id", "Customer"),
+              {
+                kind: "multi",
+                name: "p_invoice_ids",
+                label: "Invoices",
+                required: true,
+                hint: "Tick the invoices this money pays.",
+                options: {
+                  fn: "erp_open_invoices",
+                  args: { p_currency: currency },
+                  argsFrom: { p_party_id: "p_party_id" },
+                  value: "document_id",
+                  label: ["document_number"],
+                  describe: (row) =>
+                    [
+                      String(row["document_number"] ?? ""),
+                      formatMinor(Number(row["owing_minor"] ?? 0), currency),
+                      String(row["due_date"] ?? ""),
+                    ].join(" · "),
+                  empty: "This customer owes nothing in this currency.",
+                },
+              },
+            ]}
+            prefill={{ p_line_id: l.line_id }}
+            context={context}
+            invalidates={[...MATCH_READS, "erp_open_invoices", "erp_receivables_ageing"]}
+            submitLabel="Receive cash"
+          />
+        ) : null}
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui("Post by hand")}</ActionButton>}
+          title="Post this line by hand"
+          description="The line is posted against the account you choose once somebody else who may approve journals approves it on the Journals screen. A bank entry carries no VAT: a line with VAT on it is a supplier's bill and its payment."
+          permission="finance.post"
+          fn="erp_propose_bank_entry"
+          fields={[
+            {
+              kind: "select",
+              name: "p_account_id",
+              label: "Post to",
+              required: true,
+              options: {
+                fn: "erp_accounts",
+                value: "account_id",
+                label: ["code", "name"],
+                keep: (row) =>
+                  row["control_kind"] === null &&
+                  row["is_postable"] === true &&
+                  row["account_type"] !== "statistical",
+              },
+            },
+            {
+              kind: "text",
+              name: "p_narrative",
+              label: "What was the money?",
+              required: true,
+              placeholder: "Interest paid by the bank for September",
+              hint: "Whoever approves it reads this.",
+            },
+          ]}
+          prefill={{ p_line_id: l.line_id }}
+          context={context}
+          invalidates={MATCH_READS}
+          submitLabel="Submit for approval"
+        />
+      </div>
     );
   }
   if (l.status === "matched") {
@@ -577,4 +752,158 @@ function lineAction(
     );
   }
   return null;
+}
+
+/**
+ * The bank rules: the words a line quotes and the account it posts to. A rule
+ * posts when the reconciler presses Apply the rules or Post by rule; one that
+ * no longer applies is retired with a reason, and what it posted stands.
+ */
+function Rules() {
+  const { ui } = useT();
+  const rules = useQuery({
+    queryKey: ["erp_bank_rules"],
+    queryFn: () => callErp<BankRule[]>("erp_bank_rules", {}),
+  });
+  const rows = rules.data ?? [];
+  const reads = ["erp_bank_rules", "erp_bank_statement_lines"];
+
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 sm:px-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{ui("Bank rules")}</h2>
+        <ActionDialog
+          trigger={<ActionButton variant="secondary">{ui("Define a rule")}</ActionButton>}
+          title="Define a bank rule"
+          description="A line that quotes a rule's words posts to its account when you press Apply the rules, or Post by rule on the line. The lowest priority applies first."
+          permission="finance.configure"
+          fn="erp_define_bank_rule"
+          fields={[
+            {
+              kind: "text",
+              name: "p_name",
+              label: "Rule name",
+              required: true,
+              placeholder: "Account fee",
+              hint: "Shown on the line and on the journal it posts.",
+            },
+            {
+              kind: "text",
+              name: "p_words",
+              label: "Words on the line",
+              required: true,
+              placeholder: "ACCOUNT FEE",
+              hint: "The words the bank prints on the line, as a whole word or words. Case and punctuation do not matter.",
+            },
+            {
+              kind: "select",
+              name: "p_account_id",
+              label: "Posts to",
+              required: true,
+              options: {
+                fn: "erp_accounts",
+                value: "account_id",
+                label: ["code", "name"],
+                keep: (row) =>
+                  row["control_kind"] === null &&
+                  row["is_postable"] === true &&
+                  row["account_type"] !== "statistical",
+              },
+            },
+            {
+              kind: "choice",
+              name: "p_direction",
+              label: "Money",
+              required: true,
+              choices: [
+                { value: "out", label: "Out" },
+                { value: "in", label: "In" },
+                { value: "either", label: "Either" },
+              ],
+            },
+            {
+              kind: "select",
+              name: "p_bank_account_id",
+              label: "Only on this bank account",
+              hint: "Leave empty for every bank account of the company.",
+              options: {
+                fn: "erp_bank_accounts",
+                value: "bank_account_id",
+                label: ["name"],
+                keep: (row) => row["status"] === "open",
+              },
+            },
+            {
+              kind: "number",
+              name: "p_priority",
+              label: "Priority",
+              placeholder: "100",
+              hint: "The lowest applies first when two rules fit a line.",
+            },
+          ]}
+          invalidates={reads}
+          submitLabel="Define a rule"
+        />
+      </div>
+      <p className="mb-3 max-w-prose text-sm text-muted-foreground">
+        {ui(
+          "A line that quotes a rule's words posts to its account when you press Apply the rules, or Post by rule on the line. The lowest priority applies first.",
+        )}
+      </p>
+      <ErrorNote error={rules.error} />
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{ui("No bank rule yet.")}</p>
+      ) : (
+        <Table
+          columns={[
+            ui("Rule name"),
+            ui("Words on the line"),
+            ui("Money"),
+            ui("Posts to"),
+            ui("Bank account"),
+            ui("Priority"),
+            "",
+          ]}
+        >
+          {rows.map((r) => (
+            <tr key={r.rule_id} className="border-b border-border/60 align-top">
+              <td className="py-2 pr-4">{r.name}</td>
+              <td className="py-2 pr-4 font-mono text-xs">{r.words}</td>
+              <td className="py-2 pr-4">{ui(DIRECTION[r.direction])}</td>
+              <td className="py-2 pr-4">{r.account}</td>
+              <td className="py-2 pr-4">{r.bank_account ?? ""}</td>
+              <td className="py-2 pr-4 tabular-nums">{r.priority}</td>
+              <td className="py-2">
+                {r.status === "active" ? (
+                  <ActionDialog
+                    trigger={<ActionButton variant="secondary">{ui("Retire")}</ActionButton>}
+                    title="Retire this rule"
+                    description="Entries it posted stand. Lines it would have posted wait for a person or another rule."
+                    permission="finance.configure"
+                    fn="erp_retire_bank_rule"
+                    fields={[
+                      {
+                        kind: "text",
+                        name: "p_reason",
+                        label: "Why it is retired",
+                        required: true,
+                        placeholder: "The bank stopped charging this fee",
+                        hint: "Kept with the rule.",
+                      },
+                    ]}
+                    prefill={{ p_rule_id: r.rule_id }}
+                    context={r.name}
+                    invalidates={reads}
+                    submitLabel="Retire"
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">{r.retired_reason}</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </section>
+  );
 }
