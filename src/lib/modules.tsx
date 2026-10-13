@@ -1213,6 +1213,48 @@ export const INVENTORY: ModuleDef = {
       invalidates: ["erp_change_sets"],
     },
     {
+      // inventory.negative_stock (20261013060000, KI-07): whether a movement
+      // may take a place below nought, for the organisation, a company or a site.
+      label: "Propose whether stock may go below nought",
+      description:
+        "Whether a stock movement may take a place below nought, for the organisation, a company or one of its sites. As shipped, only a count or stock adjustment and an emergency issue may. Proposed as a change like any other configuration.",
+      permission: "administration.configure",
+      fn: "erp_propose_negative_stock_policy",
+      fields: [
+        {
+          kind: "select",
+          name: "p_entity_code",
+          label: "Company",
+          options: { fn: "erp_entities", value: "code", label: ["code", "name"] },
+          hint: "Leave unchosen to set the policy for the whole organisation.",
+        },
+        {
+          kind: "select",
+          name: "p_site_code",
+          label: "Site",
+          options: { fn: "erp_sites", value: "code", label: ["code", "name"] },
+          hint: "Leave unchosen to apply the policy across the whole company.",
+        },
+        {
+          kind: "choice",
+          name: "p_policy",
+          label: "Stock below nought",
+          required: true,
+          choices: [
+            { value: "movement_type", label: "As each kind of movement allows" },
+            { value: "never", label: "Never" },
+            { value: "allowed", label: "Always" },
+          ],
+          hint: "Never refuses even an adjustment or an emergency issue that would leave a place below nought. Always lets a despatch go ahead with nothing on the shelf; the place shows less than nought until stock is received.",
+        },
+        {
+          ...pickChangeSet("p_change_set_id", "Add to an existing change", false),
+          hint: "Leave unchosen to start a new change for this proposal.",
+        },
+      ],
+      invalidates: ["erp_change_sets"],
+    },
+    {
       label: "Commit an allocation",
       description:
         "Turn a reservation into a pick from one location and batch, under the site's allocation policy.",
