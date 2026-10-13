@@ -69,6 +69,21 @@ type Statement = {
   line_count: number;
   unmatched: number;
   status: "imported" | "reconciled";
+  difference_minor: number | null;
+  difference_reason: string | null;
+};
+
+/** Shaped by public.erp_bank_reconciliation() (20261013050000). */
+type Reconciliation = {
+  closing_minor: number;
+  uncleared_in_minor: number;
+  uncleared_out_minor: number;
+  ahead_minor: number;
+  book_minor: number;
+  difference_minor: number;
+  unmatched_lines: number;
+  uncleared: { posted_on: string; what: string; party: string | null; amount_minor: number }[];
+  difference_reason: string | null;
 };
 
 /** Shaped by public.erp_bank_statement_lines() (20261013030000, 20261013040000). */
@@ -362,6 +377,7 @@ function Statements() {
   const { ui } = useT();
   const { session } = useErpSession();
   const [open, setOpen] = useState<string | null>(null);
+  const [report, setReport] = useState<string | null>(null);
   const statements = useQuery({
     queryKey: ["erp_bank_statements"],
     queryFn: () => callErp<Statement[]>("erp_bank_statements", {}),
@@ -427,7 +443,13 @@ function Statements() {
               <td className="py-2 pr-4 tabular-nums">{formatMinor(r.opening_minor, r.currency)}</td>
               <td className="py-2 pr-4 tabular-nums">{formatMinor(r.closing_minor, r.currency)}</td>
               <td className="py-2 pr-4 tabular-nums">{r.line_count}</td>
-              <td className="py-2 pr-4 tabular-nums">{r.unmatched}</td>
+              <td className="py-2 pr-4 tabular-nums">
+                {r.status === "reconciled" ? (
+                  <Pill tone="ok">{ui("Reconciled")}</Pill>
+                ) : (
+                  r.unmatched
+                )}
+              </td>
               <td className="py-2">
                 <div className="flex flex-wrap gap-2">
                   <ActionButton
@@ -495,12 +517,71 @@ function Statements() {
                       submitLabel="Withdraw it"
                     />
                   ) : null}
+                  <ActionButton
+                    variant="secondary"
+                    onClick={() => setReport(report === r.statement_id ? null : r.statement_id)}
+                  >
+                    {report === r.statement_id
+                      ? ui("Hide the reconciliation")
+                      : ui("Show the reconciliation")}
+                  </ActionButton>
+                  {r.status === "imported" && r.unmatched === 0 ? (
+                    <ActionDialog
+                      trigger={<ActionButton>{ui("Reconcile")}</ActionButton>}
+                      title="Reconcile this statement"
+                      description="Every line is matched or posted. The statement is locked once it is reconciled; somebody who may close periods can reopen the latest one with a reason."
+                      permission="finance.post"
+                      fn="erp_reconcile_bank_statement"
+                      fields={[
+                        {
+                          kind: "text",
+                          name: "p_difference_reason",
+                          label: "Why the difference stands",
+                          placeholder: "Books wrong before the bank statements began",
+                          hint: "Needed only when the books and the bank do not agree.",
+                        },
+                      ]}
+                      prefill={{ p_statement_id: r.statement_id }}
+                      context={`${r.bank_account} · ${r.starts_on} – ${r.ends_on}`}
+                      invalidates={[...MATCH_READS, "erp_bank_reconciliation"]}
+                      submitLabel="Reconcile"
+                    />
+                  ) : null}
+                  {r.status === "reconciled" ? (
+                    <ActionDialog
+                      trigger={<ActionButton variant="secondary">{ui("Reopen")}</ActionButton>}
+                      title="Reopen this statement"
+                      description="The statement is unlocked so its lines can be matched or posted again. Only the latest reconciled statement of an account is reopened."
+                      permission="finance.close_period"
+                      fn="erp_reopen_bank_statement"
+                      fields={[
+                        {
+                          kind: "text",
+                          name: "p_reason",
+                          label: "Why it is reopened",
+                          required: true,
+                          placeholder: "A receipt was matched to the wrong line",
+                          hint: "Kept with the statement for the auditor.",
+                        },
+                      ]}
+                      prefill={{ p_statement_id: r.statement_id }}
+                      context={`${r.bank_account} · ${r.starts_on} – ${r.ends_on}`}
+                      invalidates={[...MATCH_READS, "erp_bank_reconciliation"]}
+                      submitLabel="Reopen"
+                    />
+                  ) : null}
                 </div>
               </td>
             </tr>
           ))}
         </Table>
       )}
+      {report !== null ? (
+        <ReconciliationView
+          statementId={report}
+          currency={rows.find((r) => r.statement_id === report)?.currency ?? "GBP"}
+        />
+      ) : null}
       {open !== null ? (
         <div className="mt-4">
           <ErrorNote error={lines.error} />
@@ -905,5 +986,75 @@ function Rules() {
         </Table>
       )}
     </section>
+  );
+}
+
+/**
+ * A statement's reconciliation, as an accountant writes it: the bank's
+ * closing balance, what the books hold that the bank has not shown, what the
+ * bank shows that the books date later, against the books' balance that day.
+ */
+function ReconciliationView({ statementId, currency }: { statementId: string; currency: string }) {
+  const { ui } = useT();
+  const rec = useQuery({
+    queryKey: ["erp_bank_reconciliation", { p_statement_id: statementId }],
+    queryFn: () =>
+      callErp<Reconciliation>("erp_bank_reconciliation", { p_statement_id: statementId }),
+  });
+  const r = rec.data;
+  const money = (minor: number) => formatMinor(minor, currency);
+  const adjusted = r
+    ? r.closing_minor + r.uncleared_in_minor - r.uncleared_out_minor - r.ahead_minor
+    : 0;
+
+  return (
+    <div className="mt-4 min-w-0 rounded-lg border border-border px-4 py-3">
+      <h3 className="mb-2 text-sm font-semibold">{ui("Reconciliation")}</h3>
+      <ErrorNote error={rec.error} />
+      {r ? (
+        <div className="flex min-w-0 flex-col gap-3">
+          <dl className="grid max-w-md grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm tabular-nums">
+            <dt>{ui("Balance per bank statement")}</dt>
+            <dd className="text-right">{money(r.closing_minor)}</dd>
+            <dt>{ui("Add: receipts the bank has not shown")}</dt>
+            <dd className="text-right">{money(r.uncleared_in_minor)}</dd>
+            <dt>{ui("Less: payments the bank has not shown")}</dt>
+            <dd className="text-right">{money(r.uncleared_out_minor)}</dd>
+            <dt>{ui("Less: on the bank, in the books after this day")}</dt>
+            <dd className="text-right">{money(r.ahead_minor)}</dd>
+            <dt className="font-medium">{ui("Adjusted bank balance")}</dt>
+            <dd className="text-right font-medium">{money(adjusted)}</dd>
+            <dt className="font-medium">{ui("Balance per books")}</dt>
+            <dd className="text-right font-medium">{money(r.book_minor)}</dd>
+            <dt>{ui("Difference")}</dt>
+            <dd className={r.difference_minor === 0 ? "text-right" : "text-right text-destructive"}>
+              {money(r.difference_minor)}
+            </dd>
+          </dl>
+          {r.difference_reason ? (
+            <p className="text-sm text-muted-foreground">{r.difference_reason}</p>
+          ) : null}
+          {r.uncleared.length > 0 ? (
+            <div className="min-w-0">
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {ui("Not yet on the bank")}
+              </h4>
+              <Table columns={[ui("Date"), ui("Description"), ui("Amount")]}>
+                {r.uncleared.map((u, i) => (
+                  <tr key={`${u.what}-${i}`} className="border-b border-border/60">
+                    <td className="py-1.5 pr-4 tabular-nums">{u.posted_on}</td>
+                    <td className="py-1.5 pr-4">
+                      {u.what}
+                      {u.party ? ` · ${u.party}` : ""}
+                    </td>
+                    <td className="py-1.5 pr-4 text-right tabular-nums">{money(u.amount_minor)}</td>
+                  </tr>
+                ))}
+              </Table>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
