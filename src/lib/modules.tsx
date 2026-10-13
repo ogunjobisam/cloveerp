@@ -3637,6 +3637,63 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_bom_outputs", "erp_boms"],
     },
     {
+      label: "Order from a subcontractor",
+      description:
+        "A purchase order to a subcontractor for a product made to its bill of materials, at the price of the work. Submit, approve and send it as any order; send them the components; receiving it consumes the components into the product.",
+      permission: "procurement.order",
+      fn: "erp_raise_subcontract_order",
+      fields: [
+        pickParty("supplier", "p_supplier_party_id", "Subcontractor"),
+        {
+          kind: "select",
+          name: "p_item_id",
+          label: "Product",
+          required: true,
+          options: {
+            fn: "erp_boms",
+            value: "item_id",
+            label: ["item", "item_name"],
+            keep: (row) => row["status"] === "active",
+          },
+        },
+        pickSite(),
+        { kind: "number", name: "p_quantity", label: "Quantity", required: true },
+        {
+          kind: "money",
+          name: "p_service_price_minor",
+          label: "Price of the work, each",
+          currency: "GBP",
+          required: true,
+          hint: "What a subcontractor charges for making one. The product is valued at this and the components sent.",
+        },
+      ],
+      invalidates: ["erp_subcontract_orders", "erp_documents"],
+    },
+    {
+      label: "Send components to a subcontractor",
+      description:
+        "Hands the components a subcontract order needs, by its bill of materials, into the subcontractor's keeping.",
+      permission: "inventory.adjust",
+      fn: "erp_send_subcontract_components",
+      fields: [
+        pickFrom(
+          "erp_subcontract_orders",
+          "order_line_id",
+          ["order_number", "item", "subcontractor"],
+          "p_order_line_id",
+          "Subcontract order",
+        ),
+        pickLocation("p_location_id", "From", true),
+        {
+          kind: "number",
+          name: "p_quantity",
+          label: "Quantity",
+          hint: "How many of the product to send components for. Leave empty for what is left on the order.",
+        },
+      ],
+      invalidates: ["erp_subcontract_orders", "erp_stock_with_keepers"],
+    },
+    {
       label: "Start making something",
       permission: "production.order",
       fn: "erp_raise_works_order",
@@ -4018,6 +4075,24 @@ export const PRODUCTION: ModuleDef = {
         { header: "Planned", cell: "planned_quantity", numeric: true },
         { header: "Received", cell: "quantity_received", numeric: true },
         pill("status"),
+      ],
+    },
+    {
+      title: "Subcontract orders",
+      description:
+        "Orders a subcontractor makes from components sent to them: what has come back, and what they still hold.",
+      fn: "erp_subcontract_orders",
+      empty:
+        "No subcontract orders yet. Raise one from Actions for a product with a bill of materials.",
+      rowKey: (r, i) => String(r["order_line_id"] ?? i),
+      columns: [
+        { header: "Order", cell: "order_number" },
+        { header: "Subcontractor", cell: "subcontractor" },
+        { header: "Product", cell: "item" },
+        { header: "Quantity", cell: "quantity", numeric: true },
+        { header: "Received", cell: "received", numeric: true },
+        { header: "Components held", cell: "components_held" },
+        pill("state"),
       ],
     },
     {
