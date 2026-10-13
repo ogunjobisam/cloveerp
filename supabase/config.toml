@@ -124,6 +124,18 @@ import_map = "./functions/import_map.json"
 verify_jwt = false
 import_map = "./functions/import_map.json"
 
+# Making Tax Digital for VAT (20261013070000).
+#
+# verify_jwt is false for the reason document_output has it false: the
+# function asks Supabase Auth who the bearer is itself and refuses the anon
+# key, then opens every ticket with the person's own session, so the
+# database's own permission check decides. HMRC_CLIENT_ID, HMRC_CLIENT_SECRET
+# and HMRC_ENVIRONMENT are its secrets; without the first two it refuses, and
+# says this deployment is not registered with HMRC yet.
+[functions.hmrc]
+verify_jwt = false
+import_map = "./functions/import_map.json"
+
 # Passwords.
 #
 # The two settings the CLI carries. Leaked-password protection (checking a new

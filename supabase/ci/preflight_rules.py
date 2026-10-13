@@ -319,6 +319,13 @@ class Repo:
             if "integrations" in p.parts:
                 continue
             doors.update(pat.findall(p.read_text(errors="replace")))
+        # And supabase/functions, as app_doors.sh reads it since 8 October: a
+        # door an Edge Function calls has a home there, and registering it as
+        # API-only would be refused by the build as a row past its reason.
+        functions = self.root / "supabase" / "functions"
+        if functions.is_dir():
+            for p in functions.rglob("*.ts"):
+                doors.update(pat.findall(p.read_text(errors="replace")))
         self._doors = doors
         return doors
 

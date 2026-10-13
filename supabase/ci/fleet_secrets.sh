@@ -449,13 +449,20 @@ rotate_db_password() {
 }
 
 set_function_secrets() {
-  local c="$1" ref="$2" addr="$3" origin
+  local c="$1" ref="$2" addr="$3" origin hmrc=""
   origin="https://${addr}.${APEX}"
-  if ! "$PROV" secrets "$ref" "RESEND_API_KEY=${RESEND_API_KEY}" "CLOVEERP_APP_URL=${origin}" "CLOVEERP_INVITE_FROM=${INVITE_FROM}" > /dev/null; then
+  local these=("RESEND_API_KEY=${RESEND_API_KEY}" "CLOVEERP_APP_URL=${origin}" "CLOVEERP_INVITE_FROM=${INVITE_FROM}")
+  # HMRC's application for Making Tax Digital (20261013070000), when the
+  # repository holds it; until then a client's HMRC function refuses to file.
+  if [[ -n "${HMRC_CLIENT_ID:-}" && -n "${HMRC_CLIENT_SECRET:-}" ]]; then
+    these+=("HMRC_CLIENT_ID=${HMRC_CLIENT_ID}" "HMRC_CLIENT_SECRET=${HMRC_CLIENT_SECRET}" "HMRC_ENVIRONMENT=${HMRC_ENVIRONMENT:-sandbox}")
+    hmrc=", with HMRC's application (${HMRC_ENVIRONMENT:-sandbox})"
+  fi
+  if ! "$PROV" secrets "$ref" "${these[@]}" > /dev/null; then
     FAILED_WHY="the Management API did not take ${c}'s function secrets, so they are as they were"
     return 1
   fi
-  DONE_WHAT="function secrets set: RESEND_API_KEY, CLOVEERP_APP_URL (${origin}) and CLOVEERP_INVITE_FROM"
+  DONE_WHAT="function secrets set: RESEND_API_KEY, CLOVEERP_APP_URL (${origin}) and CLOVEERP_INVITE_FROM${hmrc}"
 }
 
 patch_auth() {
