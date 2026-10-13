@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import * as ts from "typescript";
 
-import { FLOWS, OFF_THE_PATH, pathsOnTheDemoPath } from "../../e2e/demo-path";
+import { FLOWS, OFF_THE_PATH, WITHOUT_A_LIST, pathsOnTheDemoPath } from "../../e2e/demo-path";
 import { ROUTES } from "../../e2e/routes";
 import { MODULES, allTiles, areaOf } from "./modules";
 import { DOCUMENT_READ } from "./stage-records";
@@ -195,6 +195,18 @@ describe("the demo path", () => {
         `${flow.key} stops before the ties are proved`,
       ).toBe("/finance/reconciliation");
     }
+  });
+
+  test("excuses from showing a list only screens on the path, each for a stated reason (KI-09)", () => {
+    const onPath = pathsOnTheDemoPath();
+    for (const [path, reason] of Object.entries(WITHOUT_A_LIST)) {
+      expect(onPath, `${path} is excused from showing a list but is not on the path`).toContain(
+        path,
+      );
+      expect(reason.endsWith("."), `${path}'s reason is not a sentence`).toBe(true);
+    }
+    // Most of the path has to show its data: the excuses are the exception.
+    expect(Object.keys(WITHOUT_A_LIST).length).toBeLessThan(onPath.length / 2);
   });
 
   test("stays in Work from the first screen to the last (KI-01)", () => {
