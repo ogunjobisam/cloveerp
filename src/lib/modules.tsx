@@ -3451,6 +3451,131 @@ export const PRODUCTION: ModuleDef = {
       invalidates: ["erp_boms"],
     },
     {
+      // A work centre's capacity and cost (20261013080000): what the load on
+      // each week is measured against, and what an hour on a routing costs.
+      label: "Define a work centre",
+      description:
+        "Where operations are done at a site: the hours it is staffed a day, the days a week, how efficiently, and what an hour costs. Defining one again by its code changes it.",
+      permission: "production.order",
+      fn: "erp_define_work_centre",
+      fields: [
+        pickSite(),
+        {
+          kind: "text",
+          name: "p_code",
+          label: "Code",
+          required: true,
+          placeholder: "MIX-1",
+          hint: "Short, in capitals, as routings name it.",
+        },
+        {
+          kind: "text",
+          name: "p_name",
+          label: "Name",
+          required: true,
+          placeholder: "Mixer one",
+          hint: "What the floor calls it.",
+        },
+        { kind: "number", name: "p_hours_per_day", label: "Hours a day", required: true },
+        { kind: "number", name: "p_days_per_week", label: "Days a week", placeholder: "5" },
+        {
+          kind: "number",
+          name: "p_efficiency_pct",
+          label: "Efficiency (%)",
+          placeholder: "100",
+          hint: "The share of its hours that turns into work, after breaks and changeovers.",
+        },
+        {
+          kind: "money",
+          name: "p_cost_rate_minor_per_hour",
+          label: "Cost an hour",
+          currency: "GBP",
+        },
+      ],
+      invalidates: ["erp_work_centres", "erp_work_centre_load"],
+    },
+    {
+      label: "Retire a work centre",
+      permission: "production.order",
+      fn: "erp_retire_work_centre",
+      fields: [
+        pickFrom(
+          "erp_work_centres",
+          "work_centre_id",
+          ["code", "name", "site"],
+          "p_work_centre_id",
+          "Work centre",
+        ),
+        reason("p_reason", "Why it is retired", true),
+      ],
+      invalidates: ["erp_work_centres", "erp_work_centre_load"],
+    },
+    {
+      // The steps a product goes through (20261013080000). A works order copies
+      // them, its hours are booked against them, and the load adds them up.
+      label: "Define a routing",
+      description:
+        "The operations a product goes through at a site, in order, each at a work centre with its set-up and run minutes. A new routing replaces the one in force; works orders raised from now on carry it.",
+      permission: "production.order",
+      fn: "erp_define_routing",
+      fields: [
+        pickItem(),
+        pickSite(),
+        {
+          kind: "text",
+          name: "p_name",
+          label: "Name",
+          placeholder: "Standard",
+          hint: "Optional. Useful when a product is made more than one way.",
+        },
+        {
+          kind: "rows",
+          name: "p_operations",
+          label: "Operations",
+          addLabel: "Add an operation",
+          hint: "Each step in order, where it is done, and how long: set-up once a run, then minutes for each unit.",
+          columns: [
+            { name: "name", label: "Operation", kind: "text", placeholder: "Mix" },
+            {
+              name: "work_centre_code",
+              label: "Work centre",
+              kind: "select",
+              options: {
+                fn: "erp_work_centres",
+                value: "code",
+                label: ["code", "name"],
+                keep: (row) => row["status"] === "active",
+              },
+            },
+            { name: "setup_minutes", label: "Set-up minutes", kind: "number", placeholder: "30" },
+            {
+              name: "run_minutes_per_unit",
+              label: "Minutes a unit",
+              kind: "number",
+              placeholder: "2",
+            },
+          ],
+        },
+      ],
+      invalidates: ["erp_routings", "erp_work_centre_load"],
+    },
+    {
+      label: "Withdraw a routing",
+      permission: "production.order",
+      fn: "erp_withdraw_routing",
+      fields: [
+        pickFrom(
+          "erp_routings",
+          "routing_id",
+          ["code", "item", "status"],
+          "p_routing_id",
+          "Routing",
+        ),
+        reason("p_reason", "Why it is withdrawn", true),
+      ],
+      invalidates: ["erp_routings", "erp_work_centre_load"],
+    },
+    {
       label: "Start making something",
       permission: "production.order",
       fn: "erp_raise_works_order",
@@ -3789,6 +3914,56 @@ export const PRODUCTION: ModuleDef = {
         { header: "Components", cell: "components" },
         { header: "Makes", cell: "output_quantity", numeric: true },
         date("Effective", "effective_from"),
+        pill("status"),
+      ],
+    },
+    {
+      title: "Capacity, eight weeks ahead",
+      description:
+        "What each work centre can give a week against what is asked of it: operations left on released works orders, and production the latest plan suggests.",
+      fn: "erp_work_centre_load",
+      empty:
+        "No work centres yet. Define one from Actions, and give products routings, to see the load on each week by week.",
+      rowKey: (r, i) => `${String(r["work_centre"] ?? "")}-${String(r["week_start"] ?? i)}`,
+      columns: [
+        { header: "Work centre", cell: "work_centre" },
+        date("Week of", "week_start"),
+        { header: "Available (min)", cell: "available_minutes", numeric: true },
+        { header: "Works orders (min)", cell: "works_order_minutes", numeric: true },
+        { header: "Planned (min)", cell: "planned_minutes", numeric: true },
+        { header: "Load (%)", cell: "load_pct", numeric: true },
+      ],
+    },
+    {
+      title: "Routings",
+      description: "The operations each made product goes through, version by version.",
+      fn: "erp_routings",
+      empty:
+        "No routings yet. Define one from Actions so works orders carry operations to book hours against.",
+      rowKey: (r, i) => String(r["routing_id"] ?? i),
+      columns: [
+        { header: "Routing", cell: "code" },
+        { header: "Product", cell: "item" },
+        { header: "Site", cell: "site" },
+        { header: "Steps", cell: "steps" },
+        { header: "Minutes a unit", cell: "minutes_per_unit", numeric: true },
+        pill("status"),
+      ],
+    },
+    {
+      title: "Work centres",
+      description: "Where the work is done, and what each can give a week.",
+      fn: "erp_work_centres",
+      empty: "No work centres yet. Define one from Actions.",
+      rowKey: (r, i) => String(r["work_centre_id"] ?? i),
+      columns: [
+        { header: "Code", cell: "code" },
+        { header: "Name", cell: "name" },
+        { header: "Site", cell: "site" },
+        { header: "Hours a day", cell: "hours_per_day", numeric: true },
+        { header: "Days a week", cell: "days_per_week", numeric: true },
+        { header: "Efficiency (%)", cell: "efficiency_pct", numeric: true },
+        { header: "Minutes a week", cell: "minutes_per_week", numeric: true },
         pill("status"),
       ],
     },
