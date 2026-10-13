@@ -396,6 +396,8 @@ export const OFF_THE_PATH: Readonly<Record<string, string>> = {
   "/act":
     "Where an Approve or Reject link out of an email lands. Approvals on the demo path are decided on the step that raised them, so no email is needed to finish either flow.",
   "/profile": "Your own account, your language and how the desk is set up for you.",
+  "/finance/bank":
+    "The company's bank accounts and, as bank reconciliation is built, its statements. The demonstration's bank is seeded and neither flow reconciles it yet.",
   "/operations/assurance":
     "The builder's register of every structural check, under Settings. The four ties are read on Do the books tie, which stays in Work.",
   "/settings": "The way into the configuration screens, and the setup walkthrough over them.",

@@ -42,6 +42,7 @@ import { Route as CommercialQuotesRouteImport } from './routes/commercial/quotes
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as FinanceAccountDeterminationRouteImport } from './routes/finance/account-determination'
+import { Route as FinanceBankRouteImport } from './routes/finance/bank'
 import { Route as FinanceCloseRouteImport } from './routes/finance/close'
 import { Route as FinanceCostCentresRouteImport } from './routes/finance/cost-centres'
 import { Route as FinanceDimensionsRouteImport } from './routes/finance/dimensions'
@@ -253,6 +254,11 @@ const FinanceAccountDeterminationRoute =
     path: '/finance/account-determination',
     getParentRoute: () => rootRouteImport,
   } as any)
+const FinanceBankRoute = FinanceBankRouteImport.update({
+  id: '/finance/bank',
+  path: '/finance/bank',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceCloseRoute = FinanceCloseRouteImport.update({
   id: '/finance/close',
   path: '/finance/close',
@@ -475,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/bank': typeof FinanceBankRoute
   '/finance/close': typeof FinanceCloseRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
@@ -547,6 +554,7 @@ export interface FileRoutesByTo {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/bank': typeof FinanceBankRoute
   '/finance/close': typeof FinanceCloseRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
@@ -620,6 +628,7 @@ export interface FileRoutesById {
   '/commercial/quotes': typeof CommercialQuotesRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/finance/account-determination': typeof FinanceAccountDeterminationRoute
+  '/finance/bank': typeof FinanceBankRoute
   '/finance/close': typeof FinanceCloseRoute
   '/finance/cost-centres': typeof FinanceCostCentresRoute
   '/finance/dimensions': typeof FinanceDimensionsRoute
@@ -694,6 +703,7 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/bank'
     | '/finance/close'
     | '/finance/cost-centres'
     | '/finance/dimensions'
@@ -766,6 +776,7 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/bank'
     | '/finance/close'
     | '/finance/cost-centres'
     | '/finance/dimensions'
@@ -838,6 +849,7 @@ export interface FileRouteTypes {
     | '/commercial/quotes'
     | '/documents/$documentId'
     | '/finance/account-determination'
+    | '/finance/bank'
     | '/finance/close'
     | '/finance/cost-centres'
     | '/finance/dimensions'
@@ -911,6 +923,7 @@ export interface RootRouteChildren {
   CommercialQuotesRoute: typeof CommercialQuotesRoute
   DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
   FinanceAccountDeterminationRoute: typeof FinanceAccountDeterminationRoute
+  FinanceBankRoute: typeof FinanceBankRoute
   FinanceCloseRoute: typeof FinanceCloseRoute
   FinanceCostCentresRoute: typeof FinanceCostCentresRoute
   FinanceDimensionsRoute: typeof FinanceDimensionsRoute
@@ -1182,6 +1195,13 @@ declare module '@tanstack/react-router' {
       path: '/finance/account-determination'
       fullPath: '/finance/account-determination'
       preLoaderRoute: typeof FinanceAccountDeterminationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finance/bank': {
+      id: '/finance/bank'
+      path: '/finance/bank'
+      fullPath: '/finance/bank'
+      preLoaderRoute: typeof FinanceBankRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/finance/close': {
@@ -1479,6 +1499,7 @@ const rootRouteChildren: RootRouteChildren = {
   CommercialQuotesRoute: CommercialQuotesRoute,
   DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
   FinanceAccountDeterminationRoute: FinanceAccountDeterminationRoute,
+  FinanceBankRoute: FinanceBankRoute,
   FinanceCloseRoute: FinanceCloseRoute,
   FinanceCostCentresRoute: FinanceCostCentresRoute,
   FinanceDimensionsRoute: FinanceDimensionsRoute,
