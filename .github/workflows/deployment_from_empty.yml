@@ -148,6 +148,12 @@ jobs:
       INVITE_FROM: ${{ vars.CLOVEERP_INVITE_FROM || format('Clove ERP <{0}>', vars.CLOVEERP_MAIL_FROM || 'noreply@cloveerp.com') }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      # HMRC's application for Making Tax Digital (20261013070000), when the
+      # owner has registered one; a client built without them refuses to file
+      # until they are set (fleet secrets, set_function_secrets).
+      HMRC_CLIENT_ID: ${{ secrets.HMRC_CLIENT_ID }}
+      HMRC_CLIENT_SECRET: ${{ secrets.HMRC_CLIENT_SECRET }}
+      HMRC_ENVIRONMENT: ${{ vars.CLOVEERP_HMRC_ENVIRONMENT || 'sandbox' }}
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -769,11 +775,14 @@ jobs:
         if: env.KIND == 'client'
         run: |
           set -euo pipefail
-          supabase/ci/provision_project.sh secrets "${PROJECT_REF}" \
-            "RESEND_API_KEY=${RESEND_API_KEY}" \
-            "CLOVEERP_APP_URL=${ORIGIN}" \
-            "CLOVEERP_INVITE_FROM=${INVITE_FROM}"
-          supabase/ci/fleet_register.sh event "${CODE}" functions done "functions deployed; RESEND_API_KEY, CLOVEERP_APP_URL and CLOVEERP_INVITE_FROM set"
+          set_these=("RESEND_API_KEY=${RESEND_API_KEY}" "CLOVEERP_APP_URL=${ORIGIN}" "CLOVEERP_INVITE_FROM=${INVITE_FROM}")
+          said="RESEND_API_KEY, CLOVEERP_APP_URL and CLOVEERP_INVITE_FROM set"
+          if [[ -n "${HMRC_CLIENT_ID}" && -n "${HMRC_CLIENT_SECRET}" ]]; then
+            set_these+=("HMRC_CLIENT_ID=${HMRC_CLIENT_ID}" "HMRC_CLIENT_SECRET=${HMRC_CLIENT_SECRET}" "HMRC_ENVIRONMENT=${HMRC_ENVIRONMENT}")
+            said="${said}, with HMRC's application (${HMRC_ENVIRONMENT})"
+          fi
+          supabase/ci/provision_project.sh secrets "${PROJECT_REF}" "${set_these[@]}"
+          supabase/ci/fleet_register.sh event "${CODE}" functions done "functions deployed; ${said}"
 
       - name: The email provider's webhook
         # Resend tells a project what became of each email it sent

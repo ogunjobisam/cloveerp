@@ -321,6 +321,10 @@ check '[[ "$(body 1 | jq -r "map(.name + \"=\" + .value) | join(\";\")")" == "RE
 check '[[ "$out" != *"re_rehearsal_key"* && "$(events)" != *"re_rehearsal_key"* && "$(cat "$work/summary")" != *"re_rehearsal_key"* ]]' "the key is printed nowhere"
 run "function secrets with a sender given" "INVITE_FROM=Acme Support <help@acme.example>" -- set_function_secrets acme "$REASON"
 check '[[ $status -eq 0 && "$(body 1 | jq -r ".[2].value")" == "Acme Support <help@acme.example>" ]]' "the sender given"
+run "function secrets with HMRC's application" HMRC_CLIENT_ID=hmrc-id HMRC_CLIENT_SECRET=hmrc_rehearsal_secret -- set_function_secrets acme "$REASON"
+check '[[ $status -eq 0 && "$(body 1 | jq -r "map(.name) | join(\";\")")" == "RESEND_API_KEY;CLOVEERP_APP_URL;CLOVEERP_INVITE_FROM;HMRC_CLIENT_ID;HMRC_CLIENT_SECRET;HMRC_ENVIRONMENT" && "$(body 1 | jq -r ".[5].value")" == "sandbox" ]]' \
+      "HMRC's id, secret and environment beside the rest, sandbox unless said"
+check '[[ "$out" != *"hmrc_rehearsal_secret"* && "$(events)" != *"hmrc_rehearsal_secret"* && "$(cat "$work/summary")" != *"hmrc_rehearsal_secret"* ]]' "HMRC's secret is printed nowhere"
 run "function secrets the API will not take" FAKE_HTTP_STATUSES=403 -- set_function_secrets all "$REASON"
 check '[[ $status -eq 1 && "$out" == *"did not take acme"* && "$out" == *"Not touched, because acme failed first: beta"* ]]' "refused, and beta left alone"
 
