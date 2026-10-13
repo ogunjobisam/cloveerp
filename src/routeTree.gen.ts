@@ -74,6 +74,7 @@ import { Route as OperationsOutputRouteImport } from './routes/operations/output
 import { Route as PlanningIndexRouteImport } from './routes/planning/index'
 import { Route as ProcurementIndexRouteImport } from './routes/procurement/index'
 import { Route as ProductionIndexRouteImport } from './routes/production/index'
+import { Route as ProductionStructureRouteImport } from './routes/production/structure'
 import { Route as QualityIndexRouteImport } from './routes/quality/index'
 import { Route as ReportingIndexRouteImport } from './routes/reporting/index'
 import { Route as ReportingDistributionRouteImport } from './routes/reporting/distribution'
@@ -416,6 +417,11 @@ const ProductionIndexRoute = ProductionIndexRouteImport.update({
   path: '/production/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProductionStructureRoute = ProductionStructureRouteImport.update({
+  id: '/production/structure',
+  path: '/production/structure',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QualityIndexRoute = QualityIndexRouteImport.update({
   id: '/quality/',
   path: '/quality/',
@@ -512,6 +518,7 @@ export interface FileRoutesByFullPath {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/production/structure': typeof ProductionStructureRoute
   '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
@@ -586,6 +593,7 @@ export interface FileRoutesByTo {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/production/structure': typeof ProductionStructureRoute
   '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance': typeof FinanceIndexRoute
@@ -661,6 +669,7 @@ export interface FileRoutesById {
   '/operations/integrations': typeof OperationsIntegrationsRoute
   '/operations/jobs': typeof OperationsJobsRoute
   '/operations/output': typeof OperationsOutputRoute
+  '/production/structure': typeof ProductionStructureRoute
   '/reporting/distribution': typeof ReportingDistributionRoute
   '/reporting/reproducibility': typeof ReportingReproducibilityRoute
   '/finance/': typeof FinanceIndexRoute
@@ -737,6 +746,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/production/structure'
     | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance/'
@@ -811,6 +821,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/production/structure'
     | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance'
@@ -885,6 +896,7 @@ export interface FileRouteTypes {
     | '/operations/integrations'
     | '/operations/jobs'
     | '/operations/output'
+    | '/production/structure'
     | '/reporting/distribution'
     | '/reporting/reproducibility'
     | '/finance/'
@@ -960,6 +972,7 @@ export interface RootRouteChildren {
   OperationsIntegrationsRoute: typeof OperationsIntegrationsRoute
   OperationsJobsRoute: typeof OperationsJobsRoute
   OperationsOutputRoute: typeof OperationsOutputRoute
+  ProductionStructureRoute: typeof ProductionStructureRoute
   ReportingDistributionRoute: typeof ReportingDistributionRoute
   ReportingReproducibilityRoute: typeof ReportingReproducibilityRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
@@ -1434,6 +1447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductionIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/production/structure': {
+      id: '/production/structure'
+      path: '/production/structure'
+      fullPath: '/production/structure'
+      preLoaderRoute: typeof ProductionStructureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/quality/': {
       id: '/quality/'
       path: '/quality'
@@ -1544,6 +1564,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperationsIntegrationsRoute: OperationsIntegrationsRoute,
   OperationsJobsRoute: OperationsJobsRoute,
   OperationsOutputRoute: OperationsOutputRoute,
+  ProductionStructureRoute: ProductionStructureRoute,
   ReportingDistributionRoute: ReportingDistributionRoute,
   ReportingReproducibilityRoute: ReportingReproducibilityRoute,
   FinanceIndexRoute: FinanceIndexRoute,
