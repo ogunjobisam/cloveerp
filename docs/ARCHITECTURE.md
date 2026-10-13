@@ -34,8 +34,8 @@ Concretely: <!-- count:erp_tables -->263<!-- /count --> tenant tables,
 <!-- count:policies -->382<!-- /count --> row-security policies and
 <!-- count:triggers -->890<!-- /count --> triggers — of which the policies and
 most of the triggers are _generated_, not written — in
-<!-- count:migrations -->817<!-- /count --> migrations and
-<!-- count:sql_lines -->501147<!-- /count --> lines of SQL.
+<!-- count:migrations -->818<!-- /count --> migrations and
+<!-- count:sql_lines -->501190<!-- /count --> lines of SQL.
 
 ### Coverage against the specification
 
@@ -150,7 +150,7 @@ promotion.
 
 **B5 — Localisation.** No user-facing literal anywhere: every string resolves
 through a resource key and a locale fallback chain with an `en` floor.
-<!-- count:en_strings -->6590<!-- /count --> English strings, a German core pack
+<!-- count:en_strings -->6591<!-- /count --> English strings, a German core pack
 of <!-- count:de_strings -->772<!-- /count -->, a tenant's own terms under
 `custom.`, and a report of what a locale still serves from English.
 
