@@ -5656,6 +5656,14 @@ export const EXTRA_TILES: TileDef[] = [
     group: "settle",
   },
   {
+    path: "/finance/bank",
+    titleKey: "nav.finance_bank",
+    title: "Bank",
+    blurb: "The company's bank accounts, and which one receipts and payments use.",
+    permission: ["finance.read", "finance.configure"],
+    group: "settle",
+  },
+  {
     path: "/finance/journals",
     titleKey: "nav.finance_journals",
     title: "Journals",
