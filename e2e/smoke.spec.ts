@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { DEMO, NO_TENANT } from "./accounts";
-import { pathsOnTheDemoPath } from "./demo-path";
+import { WITHOUT_A_LIST, pathsOnTheDemoPath } from "./demo-path";
 
 /**
  * What a browser can see that a schema assertion cannot.
@@ -125,11 +125,53 @@ test.describe("signed in, seeded demo organisation", () => {
         page.getByRole("heading", { name: "This page didn't load" }),
         `${path} fell to the error screen`,
       ).toBeHidden();
+      // No empty grid where data should be (KI-09): a list with rows in it, or
+      // a step of the process with something waiting at it. Read from the
+      // marks the screens carry, not their words, which a tenant may rename.
+      if (!(path in WITHOUT_A_LIST)) {
+        await expect
+          .poll(
+            async () =>
+              page.evaluate(() => {
+                const rows = [...document.querySelectorAll("table[data-rows]")].some(
+                  (t) => Number(t.getAttribute("data-rows")) > 0,
+                );
+                const waiting = [...document.querySelectorAll("[data-step-count]")].some(
+                  (c) => Number((c.textContent ?? "").trim()) > 0,
+                );
+                return rows || waiting;
+              }),
+            {
+              message: `${path} showed no list with rows and no step with anything waiting`,
+              timeout: 30_000,
+            },
+          )
+          .toBe(true);
+      }
       // The reads a screen starts as it opens, answered before the next one.
       await page.waitForTimeout(2_000);
     }
 
     expect(crashes, `uncaught client error(s):\n${crashes.join("\n")}`).toEqual([]);
     expect(refused, `database reads that failed:\n${refused.join("\n")}`).toEqual([]);
+  });
+
+  // KI-09: the reconciliation read with the seeded organisation's own figures.
+  // The build closes the seeded month with no waivers and proves the ties, so
+  // here all four are listed and each one holds. By code and verdict, not by
+  // their words.
+  test("the reconciliation lists the four ties on the seeded organisation's data, each holding", async ({
+    page,
+  }) => {
+    await page.goto("/finance/reconciliation");
+    const ties = page.locator("li[data-tie]");
+    await expect(ties, "the reconciliation listed no ties").toHaveCount(4, { timeout: 30_000 });
+    const verdicts = await ties.evaluateAll((els) =>
+      els.map((e) => `${e.getAttribute("data-tie")}: ${e.getAttribute("data-verdict")}`),
+    );
+    expect(
+      verdicts.filter((v) => !v.endsWith(": holds")),
+      "a tie that does not hold",
+    ).toEqual([]);
   });
 });

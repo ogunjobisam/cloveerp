@@ -126,6 +126,8 @@ function Reconciliation() {
             <li
               key={r.code}
               className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 sm:px-5"
+              data-tie={r.code}
+              data-verdict={r.verdict}
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h2 className="text-sm font-semibold">{r.tie}</h2>
