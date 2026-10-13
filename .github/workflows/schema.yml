@@ -1920,6 +1920,13 @@ jobs:
           set -euo pipefail
           bunx playwright test --project=ui
 
+      # Theme 4: every screen, and every form behind its Actions button, at a
+      # phone's width. Answered in the browser as ui is, so no stack.
+      - name: Every screen and form fits a phone
+        run: |
+          set -euo pipefail
+          bunx playwright test --project=phone
+
       - name: What the browser saw when it failed
         # The trace is written on a retry, which CI is configured for, so a
         # failure here arrives with the run attached rather than as a request
