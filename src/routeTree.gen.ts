@@ -51,6 +51,7 @@ import { Route as FinanceReconciliationRouteImport } from './routes/finance/reco
 import { Route as FinanceStatementsRouteImport } from './routes/finance/statements'
 import { Route as FinanceVatRouteImport } from './routes/finance/vat'
 import { Route as GovernanceIndexRouteImport } from './routes/governance/index'
+import { Route as HmrcCallbackRouteImport } from './routes/hmrc/callback'
 import { Route as InventoryIndexRouteImport } from './routes/inventory/index'
 import { Route as InventoryAdjustmentsRouteImport } from './routes/inventory/adjustments'
 import { Route as InventoryAuditRouteImport } from './routes/inventory/audit'
@@ -299,6 +300,11 @@ const GovernanceIndexRoute = GovernanceIndexRouteImport.update({
   path: '/governance/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HmrcCallbackRoute = HmrcCallbackRouteImport.update({
+  id: '/hmrc/callback',
+  path: '/hmrc/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InventoryIndexRoute = InventoryIndexRouteImport.update({
   id: '/inventory/',
   path: '/inventory/',
@@ -489,6 +495,7 @@ export interface FileRoutesByFullPath {
   '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/finance/vat': typeof FinanceVatRoute
+  '/hmrc/callback': typeof HmrcCallbackRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -562,6 +569,7 @@ export interface FileRoutesByTo {
   '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/finance/vat': typeof FinanceVatRoute
+  '/hmrc/callback': typeof HmrcCallbackRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -636,6 +644,7 @@ export interface FileRoutesById {
   '/finance/reconciliation': typeof FinanceReconciliationRoute
   '/finance/statements': typeof FinanceStatementsRoute
   '/finance/vat': typeof FinanceVatRoute
+  '/hmrc/callback': typeof HmrcCallbackRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
   '/inventory/audit': typeof InventoryAuditRoute
   '/inventory/forecast': typeof InventoryForecastRoute
@@ -711,6 +720,7 @@ export interface FileRouteTypes {
     | '/finance/reconciliation'
     | '/finance/statements'
     | '/finance/vat'
+    | '/hmrc/callback'
     | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -784,6 +794,7 @@ export interface FileRouteTypes {
     | '/finance/reconciliation'
     | '/finance/statements'
     | '/finance/vat'
+    | '/hmrc/callback'
     | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -857,6 +868,7 @@ export interface FileRouteTypes {
     | '/finance/reconciliation'
     | '/finance/statements'
     | '/finance/vat'
+    | '/hmrc/callback'
     | '/inventory/adjustments'
     | '/inventory/audit'
     | '/inventory/forecast'
@@ -931,6 +943,7 @@ export interface RootRouteChildren {
   FinanceReconciliationRoute: typeof FinanceReconciliationRoute
   FinanceStatementsRoute: typeof FinanceStatementsRoute
   FinanceVatRoute: typeof FinanceVatRoute
+  HmrcCallbackRoute: typeof HmrcCallbackRoute
   InventoryAdjustmentsRoute: typeof InventoryAdjustmentsRoute
   InventoryAuditRoute: typeof InventoryAuditRoute
   InventoryForecastRoute: typeof InventoryForecastRoute
@@ -1260,6 +1273,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GovernanceIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/hmrc/callback': {
+      id: '/hmrc/callback'
+      path: '/hmrc/callback'
+      fullPath: '/hmrc/callback'
+      preLoaderRoute: typeof HmrcCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inventory/': {
       id: '/inventory/'
       path: '/inventory'
@@ -1507,6 +1527,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceReconciliationRoute: FinanceReconciliationRoute,
   FinanceStatementsRoute: FinanceStatementsRoute,
   FinanceVatRoute: FinanceVatRoute,
+  HmrcCallbackRoute: HmrcCallbackRoute,
   InventoryAdjustmentsRoute: InventoryAdjustmentsRoute,
   InventoryAuditRoute: InventoryAuditRoute,
   InventoryForecastRoute: InventoryForecastRoute,
