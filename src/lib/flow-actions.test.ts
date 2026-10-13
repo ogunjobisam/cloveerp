@@ -392,8 +392,9 @@ describe("a module's daily verbs and the rest (PR11 M6)", () => {
     const { daily, behind } = pageActions(INVENTORY);
     const staged = stagedKeys(INVENTORY.flow as FlowSpec);
     const all = moduleActions(INVENTORY);
-    // Twenty-two before PR11 M6, and the two raises it brings here.
-    expect(all.length).toBe(24);
+    // Twenty-two before PR11 M6, and the two raises it brings here; one more
+    // since KI-07, proposing whether stock may go below nought.
+    expect(all.length).toBe(25);
     for (const a of all) {
       const places = [daily.includes(a), behind.includes(a), staged.has(actionKey(a))].filter(
         Boolean,
