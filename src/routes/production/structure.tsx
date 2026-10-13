@@ -81,6 +81,16 @@ type Structure = {
   current_cost_minor: number | null;
   costing_method: string;
   where_used: { item_id: string; code: string; name: string; bom: string; quantity_per: number }[];
+  /** What the run makes besides the product (20261013100000). */
+  outputs: {
+    item_id: string;
+    code: string;
+    name: string;
+    kind: string;
+    quantity: number;
+    cost_share_pct: number | null;
+    unit_value_minor: number | null;
+  }[];
 };
 
 const ADOPT = { fn: "erp_adopt_rolled_up_cost", permission: "finance.configure" } as const;
@@ -325,6 +335,40 @@ function ProductStructure() {
                     <td className="py-2 pr-4">{o.work_centre ?? ""}</td>
                     <td className="py-2 pr-4 tabular-nums">{number(o.minutes)}</td>
                     <td className="py-2 pr-4 tabular-nums">{money(o.cost_minor)}</td>
+                  </tr>
+                ))}
+              </Table>
+            </section>
+          ) : null}
+
+          {data.outputs.length > 0 ? (
+            <section className="flex min-w-0 flex-col gap-3">
+              <h2 className="text-sm font-semibold">
+                {ui("Also makes")} · {number(data.quantity)}
+              </h2>
+              <Table
+                columns={[
+                  ui("Product"),
+                  ui("Kind"),
+                  ui("In all"),
+                  ui("Share of cost (%)"),
+                  ui("Value each"),
+                ]}
+              >
+                {data.outputs.map((o) => (
+                  <tr key={o.item_id} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-4">
+                      <span className="font-medium">{o.code}</span>{" "}
+                      <span className="text-muted-foreground">{o.name}</span>
+                    </td>
+                    <td className="py-2 pr-4">{o.kind}</td>
+                    <td className="py-2 pr-4 tabular-nums">{number(o.quantity)}</td>
+                    <td className="py-2 pr-4 tabular-nums">
+                      {o.cost_share_pct === null ? "" : number(o.cost_share_pct)}
+                    </td>
+                    <td className="py-2 pr-4 tabular-nums">
+                      {o.unit_value_minor === null ? "" : money(o.unit_value_minor)}
+                    </td>
                   </tr>
                 ))}
               </Table>
