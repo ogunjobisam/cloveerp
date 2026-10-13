@@ -1,6 +1,6 @@
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ErpError, callErp } from "../../lib/erp";
 import { EmptyState, LoadingRows, Prose } from "./page";
@@ -175,7 +175,13 @@ export function Table({ columns, children }: { columns: string[]; children: Reac
     // better than one that moves the whole page. A shadow at an edge says
     // there is more that way, which a clipped column never did (J-88).
     <div className="scroll-shadow-x w-full max-w-full overflow-x-auto">
-      <table className="w-full min-w-[36rem] text-left text-sm">
+      {/* How many rows it holds, for the browser walk on a seeded organisation
+          (KI-09): a screen on the demo path whose every list is empty there is
+          an empty grid where data should be. */}
+      <table
+        className="w-full min-w-[36rem] text-left text-sm"
+        data-rows={Children.toArray(children).length}
+      >
         <thead>
           <tr className="border-b border-border">
             {columns.map((c, i) => (

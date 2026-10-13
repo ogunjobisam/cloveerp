@@ -361,6 +361,20 @@ export const ORDER_TO_CASH: Flow = {
 export const FLOWS: readonly Flow[] = [PURCHASE_TO_PAY, ORDER_TO_CASH];
 
 /** Every route either flow touches, in the order it is first reached. */
+/**
+ * The screens on the path that draw no list on a freshly seeded organisation,
+ * and why (KI-09). Every other screen the walk visits must show at least one
+ * list with rows in it, or a step of its process with something waiting: the
+ * Definition of Done's "no empty grids where data should be". The
+ * reconciliation is read on its own terms — four ties, each holding.
+ */
+export const WITHOUT_A_LIST: Readonly<Record<string, string>> = {
+  "/": "The desk's home is the way in: what waits on the person, and the launchpad.",
+  "/finance/close":
+    "The walk reads the checklist without opening the close, and a close not opened has no tasks to list.",
+  "/finance/reconciliation": "Four ties rather than a list; the walk reads each one's verdict.",
+};
+
 export function pathsOnTheDemoPath(): string[] {
   const seen: string[] = [];
   for (const flow of FLOWS)
