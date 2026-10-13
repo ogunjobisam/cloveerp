@@ -2,12 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ActionButton, ActionDialog, ErrorNote } from "../../components/erp/action";
+import { ActionButton, ActionDialog, ErrorNote, useErpAction } from "../../components/erp/action";
 import { BankStatementImport } from "../../components/erp/bank-statement-import";
 import { Gate } from "../../components/erp/gate";
+import { useErpSession } from "../../components/erp/session-context";
 import { PageHeader } from "../../components/erp/page";
 import { Pill, Table } from "../../components/erp/panel";
-import { callErp } from "../../lib/erp";
+import { callErp, hasPermission } from "../../lib/erp";
 import { useT } from "../../lib/i18n";
 import { formatMinor } from "../../lib/money";
 
@@ -63,6 +64,7 @@ type Statement = {
   status: "imported" | "reconciled";
 };
 
+/** Shaped by public.erp_bank_statement_lines() (20261013030000). */
 type StatementLineRow = {
   line_id: string;
   line_no: number;
@@ -71,7 +73,25 @@ type StatementLineRow = {
   description: string;
   reference: string | null;
   status: string;
+  match: {
+    match_id: string;
+    method: "reference" | "payment_run" | "amount_date" | "manual";
+    note: string | null;
+    lines: number;
+    entries: string[];
+  } | null;
 };
+
+/** How a match was made, as the line says it. */
+const METHOD = {
+  reference: "By reference",
+  payment_run: "Payment run",
+  amount_date: "By amount and date",
+  manual: "By hand",
+} as const;
+
+/** What a match or an unmatch changes, read again. */
+const MATCH_READS = ["erp_bank_statements", "erp_bank_statement_lines", "erp_bank_match_candidates"];
 
 /** What every bank account form reads again once it has changed one. */
 const READS = ["erp_bank_accounts"];
@@ -287,6 +307,7 @@ function Bank() {
  */
 function Statements() {
   const { ui } = useT();
+  const { session } = useErpSession();
   const [open, setOpen] = useState<string | null>(null);
   const statements = useQuery({
     queryKey: ["erp_bank_statements"],
@@ -299,11 +320,24 @@ function Statements() {
     enabled: open !== null,
   });
   const rows = statements.data ?? [];
+  const autoMatch = useErpAction({
+    fn: "erp_auto_match_bank_statement",
+    invalidates: MATCH_READS,
+    outcome: (result) => {
+      const r = result as { reference?: number; payment_run?: number; amount_date?: number } | null;
+      const matched = (r?.reference ?? 0) + (r?.payment_run ?? 0) + (r?.amount_date ?? 0);
+      return matched > 0
+        ? `${ui("Lines matched automatically")}: ${matched}`
+        : ui("No line could be matched with certainty.");
+    },
+  });
+  const currency = rows.find((r) => r.statement_id === open)?.currency ?? "GBP";
 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-4 sm:px-5">
       <h2 className="mb-3 text-sm font-semibold">{ui("Statements")}</h2>
       <ErrorNote error={statements.error} />
+      <ErrorNote error={autoMatch.error} />
       {statements.isPending ? (
         <p role="status" className="text-sm text-muted-foreground">
           {ui("Reading the statements…")}
@@ -340,6 +374,19 @@ function Statements() {
                   >
                     {open === r.statement_id ? ui("Hide the lines") : ui("Show the lines")}
                   </ActionButton>
+                  {r.status === "imported" && r.unmatched > 0 ? (
+                    <ActionButton
+                      variant="secondary"
+                      busy={autoMatch.isPending && autoMatch.variables?.["p_statement_id"] === r.statement_id}
+                      disabled={!hasPermission(session, "finance.post")}
+                      onClick={() => {
+                        setOpen(r.statement_id);
+                        autoMatch.mutate({ p_statement_id: r.statement_id });
+                      }}
+                    >
+                      {ui("Match automatically")}
+                    </ActionButton>
+                  ) : null}
                   {r.status === "imported" ? (
                     <ActionDialog
                       trigger={
@@ -377,21 +424,40 @@ function Statements() {
         <div className="mt-4">
           <ErrorNote error={lines.error} />
           <Table
-            columns={[ui("Date"), ui("Description"), ui("Reference"), ui("Amount"), ui("State")]}
+            columns={[
+              ui("Date"),
+              ui("Description"),
+              ui("Reference"),
+              ui("Amount"),
+              ui("State"),
+              ui("Matched to"),
+              "",
+            ]}
           >
             {(lines.data ?? []).map((l) => (
-              <tr key={l.line_id} className="border-b border-border/60">
+              <tr key={l.line_id} className="border-b border-border/60 align-top">
                 <td className="py-1.5 pr-4 tabular-nums">{l.booked_on}</td>
                 <td className="py-1.5 pr-4">{l.description}</td>
                 <td className="py-1.5 pr-4">{l.reference ?? ""}</td>
                 <td className="py-1.5 pr-4 text-right tabular-nums">
-                  {formatMinor(
-                    l.amount_minor,
-                    rows.find((r) => r.statement_id === open)?.currency ?? "GBP",
-                  )}
+                  {formatMinor(l.amount_minor, currency)}
                 </td>
                 <td className="py-1.5 pr-4">
                   {ui(l.status === "unmatched" ? "Unmatched" : "Matched")}
+                </td>
+                <td className="py-1.5 pr-4">
+                  {l.match ? (
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span>{l.match.entries.join(", ")}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {ui(METHOD[l.match.method])}
+                        {l.match.note ? ` · ${l.match.note}` : ""}
+                      </span>
+                    </div>
+                  ) : null}
+                </td>
+                <td className="py-1.5">
+                  {lineAction(l, open, currency, ui)}
                 </td>
               </tr>
             ))}
@@ -400,4 +466,110 @@ function Statements() {
       ) : null}
     </section>
   );
+}
+
+/**
+ * What can be done with one line of a statement not yet reconciled: an
+ * unmatched line is matched by hand to what the books hold, the same amount
+ * first; a matched line's match is undone, with a reason.
+ */
+function lineAction(
+  l: StatementLineRow,
+  statementId: string,
+  currency: string,
+  ui: (text: string) => string,
+) {
+  if (l.status === "unmatched") {
+    return (
+      <ActionDialog
+        trigger={<ActionButton variant="secondary">{ui("Match")}</ActionButton>}
+        title="Match this line"
+        description="Choose what the books hold for this line. What you choose must come to the line's amount."
+        permission="finance.post"
+        fn="erp_match_bank_lines"
+        fields={[
+          {
+            kind: "multi",
+            name: "p_entry_keys",
+            label: "Matched to",
+            required: true,
+            options: {
+              fn: "erp_bank_match_candidates",
+              args: { p_line_id: l.line_id },
+              value: "entry_key",
+              label: ["label"],
+              describe: (row, t) =>
+                [
+                  String(row["label"] ?? ""),
+                  String(row["posted_on"] ?? ""),
+                  formatMinor(Number(row["amount_minor"] ?? 0), currency),
+                  row["same_amount"] === true ? t("Same amount") : "",
+                  row["quoted"] === true ? t("Quoted on the line") : "",
+                ]
+                  .filter((part) => part !== "")
+                  .join(" · "),
+              empty: "Nothing in the books is waiting to be matched to a line of this sign.",
+            },
+          },
+          {
+            kind: "multi",
+            name: "p_other_line_ids",
+            label: "Other lines in this match",
+            hint: "When the bank shows in several lines what the books hold as one, or the other way round.",
+            options: {
+              fn: "erp_bank_statement_lines",
+              args: { p_statement_id: statementId },
+              value: "line_id",
+              label: ["description"],
+              keep: (row) => row["status"] === "unmatched" && row["line_id"] !== l.line_id,
+              describe: (row) =>
+                [
+                  String(row["booked_on"] ?? ""),
+                  String(row["description"] ?? ""),
+                  formatMinor(Number(row["amount_minor"] ?? 0), currency),
+                ].join(" · "),
+            },
+          },
+          {
+            kind: "text",
+            name: "p_note",
+            label: "Why do these go together?",
+            required: true,
+            placeholder: "Paid two invoices in one transfer",
+            hint: "Kept with the match for the reviewer.",
+          },
+        ]}
+        prefill={{ p_line_id: l.line_id }}
+        context={`${l.booked_on} · ${l.description} · ${formatMinor(l.amount_minor, currency)}`}
+        invalidates={MATCH_READS}
+        submitLabel="Match"
+      />
+    );
+  }
+  if (l.status === "matched") {
+    return (
+      <ActionDialog
+        trigger={<ActionButton variant="secondary">{ui("Unmatch")}</ActionButton>}
+        title="Undo this match"
+        description="The line, and any other line in the same match, is unmatched again, and what it was matched to waits in the books once more."
+        permission="finance.post"
+        fn="erp_unmatch_bank_line"
+        fields={[
+          {
+            kind: "text",
+            name: "p_reason",
+            label: "Why was the match wrong?",
+            required: true,
+            placeholder: "The transfer paid a different invoice",
+            hint: "Kept with the change for the reviewer.",
+          },
+        ]}
+        prefill={{ p_line_id: l.line_id }}
+        context={`${l.booked_on} · ${l.description} · ${formatMinor(l.amount_minor, currency)}`}
+        invalidates={MATCH_READS}
+        submitLabel="Unmatch"
+      />
+    );
+  }
+  return null;
 }
