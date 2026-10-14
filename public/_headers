@@ -1,0 +1,10 @@
+# The security headers for static files, which Cloudflare serves before the
+# Worker sees the request. The same values as src/lib/security-headers.ts;
+# src/lib/security-headers.test.ts holds the two together.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()
