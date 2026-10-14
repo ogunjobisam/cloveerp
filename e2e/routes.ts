@@ -32,6 +32,7 @@ export const ROUTES: readonly RouteUnderTest[] = [
   { path: "/product", kind: "public", file: "product.tsx" },
   { path: "/contact", kind: "public", file: "contact.tsx" },
   { path: "/platform", kind: "public", file: "platform.tsx" },
+  { path: "/privacy", kind: "public", file: "privacy.tsx" },
   { path: "/signin", kind: "public", file: "signin.tsx" },
   // An organisation's address. The organisation is looked up by a server
   // function this suite's backend cannot answer, so it is rendered at an
