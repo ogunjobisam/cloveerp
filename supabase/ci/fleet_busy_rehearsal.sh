@@ -401,8 +401,8 @@ SECRETS_WF="$ROOT/.github/workflows/fleet_secrets.yml"
 check 'grep -qxF "run-name: \"fleet secrets: \${{ inputs.action }} for \${{ inputs.code }}\"" "$SECRETS_WF"' \
       "fleet_secrets.yml titles each run with its action"
 actions=$(awk '/^      action:/ { a = 1 } a && /^      code:/ { exit } a && /^          - / { sub(/^ *- /, ""); print }' "$SECRETS_WF" | tr '\n' ' ')
-check '[[ "$actions" == "rotate_db_password set_function_secrets patch_auth resend_webhook resend_webhook_delete " ]] && grep -qF "test(\"rotate_db_password\")" "$SCRIPT" && grep -qF "test(\"set_function_secrets|patch_auth|resend_webhook\")" "$SCRIPT" && grep -qF "test(\"resend_webhook\") | not" "$SCRIPT"' \
-      "and its actions are the five the title rules tell apart"
+check '[[ "$actions" == "rotate_db_password set_function_secrets set_hmrc_secrets patch_auth resend_webhook resend_webhook_delete " ]] && grep -qF "test(\"rotate_db_password\")" "$SCRIPT" && grep -qF "test(\"set_function_secrets|set_hmrc_secrets|patch_auth|resend_webhook\")" "$SCRIPT" && grep -qF "test(\"resend_webhook\") | not" "$SCRIPT"' \
+      "and its actions are the six the title rules tell apart"
 check 'grep -qF "fleet_busy.sh wait 20 runs \"fleet_secrets.yml=Change them, one client at a time\"" "$ROOT/.github/workflows/fleet_rename.yml"' \
       "a rename asks about the step the webhooks are left out of, by its name"
 check 'grep -qF "fleet_busy.sh\" wait \"\$ROTATION_WAIT\" runs-in \"\$ROTATION_SPEC\"" "$ROOT/supabase/ci/fleet_backup.sh"' \
