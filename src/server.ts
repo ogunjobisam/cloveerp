@@ -64,14 +64,17 @@ async function cspReport(request: Request): Promise<Response> {
 }
 
 /**
- * A page carries the full policy, report-only while what it would refuse is
- * read (it refuses nothing yet); the enforced Content-Security-Policy stays
- * frame-ancestors alone until then (src/lib/security-headers.ts).
+ * A page carries the full policy, enforced (14 October 2026). It ran
+ * report-only first, and the demonstration's signed-in screens (21 of work,
+ * 23 of settings, a form, the scanner) raised nothing it would refuse. What
+ * it refuses from now on is still reported to CSP_REPORT_PATH. Files that
+ * are not pages keep the frame-ancestors policy (src/lib/security-headers.ts),
+ * which withSecurityHeaders leaves alone when a page has its own.
  */
 function withPolicy(response: Response, nonce: string): Response {
   if (!(response.headers.get("content-type") ?? "").includes("text/html")) return response;
   const headers = new Headers(response.headers);
-  headers.set("Content-Security-Policy-Report-Only", contentSecurityPolicy(nonce, CSP_REPORT_PATH));
+  headers.set("Content-Security-Policy", contentSecurityPolicy(nonce, CSP_REPORT_PATH));
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

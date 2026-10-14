@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import {
@@ -9,6 +10,10 @@ import {
 import { Gate } from "../../components/erp/gate";
 import { PageHeader } from "../../components/erp/page";
 import { DataPanel, Pill, Table } from "../../components/erp/panel";
+import { useErpSession } from "../../components/erp/session-context";
+import { promptFor } from "../../lib/device-prompts";
+import { callErp } from "../../lib/erp";
+import { moduleByKey } from "../../lib/modules";
 
 export const Route = createFileRoute("/operations/devices")({
   head: () => ({
@@ -116,6 +121,31 @@ function when(value: string | null) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
+// The page says what a device, an action and a step are in words: the rows
+// carry codes (handheld, MAIN-WH, keyed, site_id) that are the database's.
+const STATE_WORDS: Record<string, string> = {
+  active: "Active",
+  suspended: "Suspended",
+  retired: "Retired",
+  queued: "Queued",
+  applied: "Applied",
+  conflicted: "Conflicted",
+  abandoned: "Abandoned",
+};
+const INPUT_WORDS: Record<string, string> = {
+  scanned: "Scanned",
+  keyed: "Typed in",
+  voice: "Voice",
+};
+const capitalised = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const stateWords = (code: string) => STATE_WORDS[code] ?? capitalised(code);
+
+/** A step's field as a name ("Site", "How many?"), from the scanner's prompt. */
+function fieldName(key: string): string {
+  const prompt = promptFor(key);
+  return prompt.startsWith("Scan the ") ? capitalised(prompt.slice("Scan the ".length)) : prompt;
+}
+
 function actionTone(status: string): "ok" | "warn" | "bad" | "muted" {
   switch (status) {
     case "applied":
@@ -131,6 +161,28 @@ function actionTone(status: string): "ok" | "warn" | "bad" | "muted" {
 }
 
 function Devices() {
+  const { session } = useErpSession();
+  const siteName = (code: string) => session.sites.find((x) => x.code === code)?.name ?? code;
+  const classes = useQuery({
+    queryKey: ["erp_device_classes", {}],
+    queryFn: () => callErp<{ code: string; name: string }[]>("erp_device_classes"),
+    retry: false,
+  });
+  const className = (code: string) => classes.data?.find((c) => c.code === code)?.name ?? code;
+  const tasks = useQuery({
+    queryKey: ["erp_device_tasks", {}],
+    queryFn: () => callErp<{ code: string; name: string }[]>("erp_device_tasks"),
+    retry: false,
+  });
+  const taskName = (code: string) => tasks.data?.find((t) => t.code === code)?.name ?? code;
+  const symbologies = useQuery({
+    queryKey: ["erp_symbologies", {}],
+    queryFn: () => callErp<{ code: string; name: string }[]>("erp_symbologies"),
+    retry: false,
+  });
+  const symbologyName = (code: string) =>
+    symbologies.data?.find((x) => x.code === code)?.name ?? code;
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
@@ -294,14 +346,14 @@ function Devices() {
                     {r.serial_number ? ` · ${r.serial_number}` : ""}
                   </div>
                 </td>
-                <td className="py-2 pr-4 text-sm">{r.device_class}</td>
-                <td className="py-2 pr-4 font-mono text-xs">{r.site}</td>
+                <td className="py-2 pr-4 text-sm">{className(r.device_class)}</td>
+                <td className="py-2 pr-4 text-sm">{siteName(r.site)}</td>
                 <td className="py-2 pr-4">
                   {r.open_session ? <Pill tone="ok">Open</Pill> : <Pill tone="muted">None</Pill>}
                 </td>
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{when(r.last_seen_at)}</td>
                 <td className="py-2">
-                  <Pill tone={r.status === "active" ? "ok" : "muted"}>{r.status}</Pill>
+                  <Pill tone={r.status === "active" ? "ok" : "muted"}>{stateWords(r.status)}</Pill>
                 </td>
               </tr>
             ))}
@@ -325,19 +377,19 @@ function Devices() {
                     <div className="mt-0.5">captured {when(r.captured_at)}</div>
                   ) : null}
                 </td>
-                <td className="py-2 pr-4 font-mono text-xs">
-                  {r.device}
-                  <div className="mt-0.5 text-muted-foreground">{r.site}</div>
+                <td className="py-2 pr-4 text-xs">
+                  <span className="font-mono">{r.device}</span>
+                  <div className="mt-0.5 text-muted-foreground">{siteName(r.site)}</div>
                 </td>
-                <td className="py-2 pr-4 text-sm">{r.task_code}</td>
+                <td className="py-2 pr-4 text-sm">{taskName(r.task_code)}</td>
                 <td className="py-2 pr-4 text-sm">
-                  {r.input_method}
+                  {INPUT_WORDS[r.input_method] ?? capitalised(r.input_method)}
                   {r.keyed_reason ? (
                     <div className="mt-0.5 text-xs text-muted-foreground">{r.keyed_reason}</div>
                   ) : null}
                 </td>
                 <td className="py-2 pr-4">
-                  <Pill tone={actionTone(r.status)}>{r.status}</Pill>
+                  <Pill tone={actionTone(r.status)}>{stateWords(r.status)}</Pill>
                 </td>
                 <td className="py-2 pr-4 text-xs text-muted-foreground">{when(r.applied_at)}</td>
                 <td className="py-2 text-xs text-muted-foreground">
@@ -360,28 +412,36 @@ function Devices() {
         empty="No step is registered, which is itself unexpected."
       >
         {(rows) => (
-          <Table columns={["Step", "Applies through", "Payload", "Note"]}>
+          <Table columns={["Step", "Applies through", "What it asks for", "Note"]}>
             {rows.map((r) => (
               <tr key={r.code} className="border-b border-border/50 align-top last:border-0">
                 <td className="py-2 pr-4">
                   <div className="text-sm">{r.name}</div>
-                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                    {r.code} · {r.task_group}
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {capitalised(r.task_group)}
                   </div>
                 </td>
                 <td className="py-2 pr-4">
                   {/* The module, not its database function (J-115). */}
                   {r.sql_function ? (
-                    <Pill tone="ok">{r.module_code}</Pill>
+                    <Pill tone="ok">
+                      {r.module_code
+                        ? (moduleByKey(r.module_code)?.title ?? capitalised(r.module_code))
+                        : "—"}
+                    </Pill>
                   ) : r.writes_nothing ? (
                     <Pill tone="muted">Reads only</Pill>
                   ) : (
                     <Pill tone="warn">Not yet</Pill>
                   )}
                 </td>
-                <td className="py-2 pr-4 font-mono text-xs">
+                <td className="py-2 pr-4 text-xs">
                   {r.payload_keys.length > 0
-                    ? r.payload_keys.map((k) => (k.required ? k.key : `${k.key}?`)).join(", ")
+                    ? r.payload_keys
+                        .map((k) =>
+                          k.required ? fieldName(k.key) : `${fieldName(k.key)} (optional)`,
+                        )
+                        .join("; ")
                     : "—"}
                 </td>
                 <td className="py-2 text-xs text-muted-foreground">
@@ -405,14 +465,16 @@ function Devices() {
               <tr key={r.id} className="border-b border-border/50 align-top last:border-0">
                 <td className="py-2 pr-4">
                   <div className="text-sm">{r.task_name}</div>
-                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                    {r.task_code} · {r.task_group}
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {capitalised(r.task_group)}
                   </div>
                 </td>
                 <td className="py-2 pr-4 text-sm">
                   {r.item_class ?? <span className="text-muted-foreground">Default</span>}
                 </td>
-                <td className="py-2 pr-4 font-mono text-xs">{r.accepted_symbologies.join(", ")}</td>
+                <td className="py-2 pr-4 text-xs">
+                  {r.accepted_symbologies.map(symbologyName).join(", ")}
+                </td>
                 <td className="py-2 pr-4 font-mono text-xs">
                   {r.mandatory_identifiers.length > 0 ? r.mandatory_identifiers.join(", ") : "—"}
                 </td>
