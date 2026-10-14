@@ -86,7 +86,8 @@ describe("the two screens this pass cut", () => {
 
   test("/inventory keeps Expiry horizon and no longer restates the task lists", () => {
     const stock = moduleAt("/inventory");
-    expect(stock.worklists.map((w) => w.fn)).toEqual(["erp_expiry_horizon"]);
+    // And since 20261014020000 the short picks, which no step lists.
+    expect(stock.worklists.map((w) => w.fn)).toEqual(["erp_expiry_horizon", "erp_pick_shortages"]);
     expect(stageDoors(stock)).toContain("erp_count_tasks");
     expect(stageDoors(stock)).toContain("erp_warehouse_tasks");
   });
