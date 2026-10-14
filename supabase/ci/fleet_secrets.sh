@@ -37,6 +37,13 @@
 #   set_function_secrets  RESEND_API_KEY, CLOVEERP_APP_URL (the deployment's
 #                         origin, https://<address>.<APEX>) and
 #                         CLOVEERP_INVITE_FROM, as a build sets them.
+#   set_hmrc_secrets      HMRC_CLIENT_ID, HMRC_CLIENT_SECRET and
+#                         HMRC_ENVIRONMENT alone (theme 2, 14 October 2026),
+#                         nothing else a project holds touched, so it is safe
+#                         on the demonstration and the control plane, whose
+#                         other function secrets no build of this repository
+#                         set. For a client, all of them, demonstration or
+#                         control.
 #   patch_auth            the auth and PostgREST settings a build applies
 #                         (provision_project.sh configure): sign-up closed,
 #                         addresses confirmed, the site URL of
@@ -89,7 +96,8 @@
 #           in the register (not retiring for resend_webhook; retiring or
 #           retired for resend_webhook_delete); or all, every client that is
 #           built, live, suspended or retiring (not retiring for
-#           resend_webhook); or, for resend_webhook, demonstration or control.
+#           resend_webhook); or, for resend_webhook and set_hmrc_secrets,
+#           demonstration or control.
 #   reason  why, in words; it goes on each client's row.
 #
 # Environment:
@@ -140,8 +148,8 @@ summary() { if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then echo "$*" >> "$GITHUB_S
 
 action="${1:-}"; code="${2:-}"; reason="${3:-}"
 case "$action" in
-  rotate_db_password|set_function_secrets|patch_auth|resend_webhook|resend_webhook_delete) ;;
-  *) refuse "usage: fleet_secrets.sh rotate_db_password|set_function_secrets|patch_auth|resend_webhook|resend_webhook_delete <code|all> <reason>; '${action}' is not one of them, and nothing was changed." ;;
+  rotate_db_password|set_function_secrets|set_hmrc_secrets|patch_auth|resend_webhook|resend_webhook_delete) ;;
+  *) refuse "usage: fleet_secrets.sh rotate_db_password|set_function_secrets|set_hmrc_secrets|patch_auth|resend_webhook|resend_webhook_delete <code|all> <reason>; '${action}' is not one of them, and nothing was changed." ;;
 esac
 if [[ "$code" != all ]] && ! [[ "$code" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; then
   refuse "'${code}' is neither a client's code nor all; nothing was changed."
@@ -165,6 +173,10 @@ case "$action" in
       [[ "${MAIL_FROM:-}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || refuse "neither INVITE_FROM nor MAIL_FROM is set, so invitations would have no sender; nothing was changed."
       INVITE_FROM="Clove ERP <${MAIL_FROM}>"
     fi ;;
+  set_hmrc_secrets)
+    [[ -n "${HMRC_CLIENT_ID:-}" && -n "${HMRC_CLIENT_SECRET:-}" ]] || refuse "HMRC_CLIENT_ID and HMRC_CLIENT_SECRET are not both set as repository secrets, so there is no HMRC application to give the functions; nothing was changed."
+    HMRC_ENVIRONMENT="${HMRC_ENVIRONMENT:-sandbox}"
+    [[ "$HMRC_ENVIRONMENT" == sandbox || "$HMRC_ENVIRONMENT" == production ]] || refuse "HMRC_ENVIRONMENT ('${HMRC_ENVIRONMENT}') is neither sandbox nor production; nothing was changed." ;;
   patch_auth)
     [[ -n "${RESEND_API_KEY:-}" ]] || refuse "RESEND_API_KEY is not set, so the projects' SMTP cannot be set; nothing was changed."
     [[ "${MAIL_FROM:-}" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || refuse "MAIL_FROM is not an email address, so sign-in links would have no sender; nothing was changed." ;;
@@ -245,9 +257,21 @@ make_webhook() {
   DONE_WHAT="the email provider's webhook ${verdict} (${id}) and proved: a signed event reached its function, which recorded nothing"
 }
 
+set_hmrc_secrets() {
+  local c="$1" ref="$2"
+  # HMRC's application alone (14 October 2026): nothing else the project
+  # holds is sent, so its email key and address stay as they are.
+  if ! "$PROV" secrets "$ref" "HMRC_CLIENT_ID=${HMRC_CLIENT_ID}" "HMRC_CLIENT_SECRET=${HMRC_CLIENT_SECRET}" \
+         "HMRC_ENVIRONMENT=${HMRC_ENVIRONMENT}" > /dev/null; then
+    FAILED_WHY="the Management API did not take ${c}'s HMRC secrets, so they are as they were"
+    return 1
+  fi
+  DONE_WHAT="HMRC's application set (${HMRC_ENVIRONMENT}): HMRC_CLIENT_ID, HMRC_CLIENT_SECRET and HMRC_ENVIRONMENT, nothing else touched"
+}
+
 # The demonstration and the control plane, which are in no register: each
 # by the ref the workflow gives it, and nothing written on a row.
-if [[ "$action" == resend_webhook && ( "$code" == demonstration || "$code" == control ) ]]; then
+if [[ ( "$action" == resend_webhook || "$action" == set_hmrc_secrets ) && ( "$code" == demonstration || "$code" == control ) ]]; then
   if [[ "$code" == demonstration ]]; then
     target="${DEMO_REF:-}"; known_as="CLOVEERP_DEMO_PROJECT_REF"
   else
@@ -258,7 +282,9 @@ if [[ "$action" == resend_webhook && ( "$code" == demonstration || "$code" == co
   summary "Why: ${reason}"
   echo "${code} (${target}): ${action}"
   FAILED_WHY=""; DONE_WHAT=""
-  if make_webhook "$code" "$target"; then
+  doer=make_webhook
+  if [[ "$action" == set_hmrc_secrets ]]; then doer=set_hmrc_secrets; fi
+  if "$doer" "$code" "$target"; then
     echo "${code}: ${DONE_WHAT}"
     summary "- ${code}: ${DONE_WHAT}"
     exit 0

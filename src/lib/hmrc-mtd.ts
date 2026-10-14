@@ -190,6 +190,28 @@ export function obligationFor(list: Obligation[], start: string, end: string): O
   return list.find((o) => o.status === "O" && o.start === start && o.end === end) ?? null;
 }
 
+/**
+ * The open obligation a return is submitted against: the one with its own
+ * dates, and in production no other. HMRC's sandbox answers every VAT number
+ * with the same fixed test periods (2017), which no return made today
+ * matches, so there, and only there, a return with no period of its own goes
+ * against the earliest open test period, said as such (14 October 2026).
+ */
+export function obligationToFile(
+  list: Obligation[],
+  start: string,
+  end: string,
+  environment: HmrcEnvironment,
+): { obligation: Obligation; standIn: boolean } | null {
+  const own = obligationFor(list, start, end);
+  if (own) return { obligation: own, standIn: false };
+  if (environment !== "sandbox") return null;
+  const open = list
+    .filter((o) => o.status === "O")
+    .sort((a, b) => a.start.localeCompare(b.start))[0];
+  return open ? { obligation: open, standIn: true } : null;
+}
+
 // ── The return ─────────────────────────────────────────────────────────────
 
 const RETURN_FIELDS = [

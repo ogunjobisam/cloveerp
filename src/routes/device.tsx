@@ -21,6 +21,8 @@ import {
   type RecordResult,
   type ScanCapture,
 } from "../lib/device-queue";
+import { cameraAvailable, makeDetector, type Detector } from "../lib/camera-detector";
+import { cameraScan } from "../lib/camera-scan";
 import { callErp, hasPermission } from "../lib/erp";
 import { moduleOffered } from "../lib/installed-modules";
 import {
@@ -73,7 +75,14 @@ export const Route = createFileRoute("/device")({
     meta: [
       { title: "Scanner — Clove ERP" },
       { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1" },
+      // Installable from the browser's menu as its own app, opening straight
+      // on the scanner, full screen and upright (theme 4).
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "Scanner" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black" },
     ],
+    links: [{ rel: "manifest", href: "/scanner.webmanifest" }],
   }),
   component: () => (
     <Gate bare>
@@ -1086,11 +1095,17 @@ function ScanInput({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  // A phone with no scanner reads with its camera (theme 4). Asked after
+  // mounting: the server has no navigator to ask.
+  const [canCamera, setCanCamera] = useState(false);
+  const [camera, setCamera] = useState(false);
 
   useEffect(() => input.current?.focus(), []);
+  useEffect(() => setCanCamera(cameraAvailable()), []);
 
-  async function submit() {
-    const raw = value.trim();
+  async function submit(read?: { raw: string; symbology: string }) {
+    const raw = (read?.raw ?? value).trim();
+    const scannedAs = read?.symbology ?? symbology;
     if (raw === "") return;
     if (keyed && reason.trim() === "") {
       setNote(ui("Typing an identifier needs a reason."));
@@ -1104,7 +1119,7 @@ function ScanInput({
     try {
       v = evaluateScan({
         barcode: raw,
-        symbology,
+        symbology: scannedAs,
         symbologies: reference.symbologies,
         rules,
         register: reference.register,
@@ -1173,6 +1188,24 @@ function ScanInput({
     );
   }
 
+  if (camera) {
+    return (
+      <CameraView
+        reference={reference}
+        onRead={(raw, scannedAs) => {
+          setCamera(false);
+          setSymbology(scannedAs);
+          setValue(raw);
+          void submit({ raw, symbology: scannedAs });
+        }}
+        onClose={() => {
+          setCamera(false);
+          input.current?.focus();
+        }}
+      />
+    );
+  }
+
   return (
     <form
       className="flex flex-1 flex-col gap-4"
@@ -1237,6 +1270,11 @@ function ScanInput({
         <button type="submit" className={PRIMARY} disabled={busy}>
           {busy ? ui("Checking…") : keyed ? ui("Use what I typed") : ui("Confirm scan")}
         </button>
+        {!keyed && canCamera ? (
+          <button type="button" className={SECONDARY} onClick={() => setCamera(true)}>
+            {ui("Scan with the camera")}
+          </button>
+        ) : null}
         {!keyed ? (
           <button
             type="button"
@@ -1264,6 +1302,134 @@ function ScanInput({
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * The phone's camera as the scanner (theme 4). It reads frames until one
+ * holds a barcode of a type the product reads, hands it on as a scan, and
+ * stops the camera; nothing is decided here that a hardware scan would not
+ * have decided in ScanInput. A barcode of another type is said, not taken.
+ */
+function CameraView({
+  reference,
+  onRead,
+  onClose,
+}: {
+  reference: Cache;
+  onRead: (raw: string, symbology: string) => void;
+  onClose: () => void;
+}) {
+  const { ui } = useT();
+  const video = useRef<HTMLVideoElement>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [seen, setSeen] = useState<string | null>(null);
+  // The words and the handler as they are now, read by the frame loop
+  // without restarting the camera every time the screen draws.
+  const latest = useRef({
+    onRead,
+    reference,
+    denied: ui(
+      "The camera is not allowed. Allow it for this site in the phone's settings, or scan with the scanner.",
+    ),
+    none: ui(
+      "No camera could be opened. Scan with the scanner, or type the identifier with a reason.",
+    ),
+    unreadable: ui("This phone cannot read barcodes with its camera. Scan with the scanner."),
+  });
+  useEffect(() => {
+    latest.current.onRead = onRead;
+    latest.current.reference = reference;
+  });
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let stopped = false;
+    let timer = 0;
+    const words = latest.current;
+
+    void (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+      } catch (e) {
+        setProblem(
+          e instanceof DOMException && e.name === "NotAllowedError" ? words.denied : words.none,
+        );
+        return;
+      }
+      const v = video.current;
+      if (stopped || !v) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      v.srcObject = stream;
+      await v.play().catch(() => undefined);
+
+      let detector: Detector;
+      try {
+        detector = await makeDetector();
+      } catch {
+        setProblem(words.unreadable);
+        return;
+      }
+
+      const tick = async () => {
+        if (stopped) return;
+        if (v.readyState >= 2) {
+          try {
+            const ref = latest.current.reference;
+            const known = ref.symbologies.map((x) => x.code);
+            for (const read of await detector.detect(v)) {
+              const scan = cameraScan(read, ref.register, known);
+              if (scan.symbology !== null) {
+                stopped = true;
+                stream?.getTracks().forEach((t) => t.stop());
+                latest.current.onRead(scan.raw, scan.symbology);
+                return;
+              }
+              setSeen(scan.why);
+            }
+          } catch {
+            // A frame that could not be read; the next one may be.
+          }
+        }
+        timer = window.setTimeout(() => void tick(), 120);
+      };
+      void tick();
+    })();
+
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  return (
+    <div className="flex flex-1 flex-col gap-4">
+      <div
+        className="relative max-h-[60vh] w-full overflow-hidden rounded-xl bg-black"
+        style={{ aspectRatio: "3 / 4" }}
+      >
+        <video ref={video} playsInline muted className="h-full w-full object-cover" />
+        <div
+          aria-hidden
+          className="absolute inset-x-8 top-1/3 h-1/3 rounded-lg border-4 border-white/80"
+        />
+      </div>
+      <p role="status" className="rounded-xl bg-muted px-4 py-3 text-base">
+        {problem ??
+          (seen ? `${ui("Not taken")}: ${seen}` : ui("Hold the barcode inside the frame."))}
+      </p>
+      <div className="mt-auto">
+        <button type="button" className={SECONDARY} onClick={onClose}>
+          {ui("Stop the camera")}
+        </button>
+      </div>
+    </div>
   );
 }
 
