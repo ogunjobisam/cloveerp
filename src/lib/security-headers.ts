@@ -23,6 +23,13 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   // The camera for the scanner on this site; nothing else a page may ask for.
   "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
+  // Found by the ZAP baseline of the demonstration (14 October 2026): no
+  // other site keeps a handle on a window of ours (sign-in and HMRC's are
+  // full redirects, never pop-ups), and our files are for *.cloveerp.com's
+  // own pages. Cross-Origin-Embedder-Policy is not set: require-corp would
+  // refuse the fonts and Cloudflare's own analytics, which send no CORP.
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-site",
 };
 
 /** The response with every security header it does not already set. */
