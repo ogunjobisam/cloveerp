@@ -24,6 +24,7 @@ import {
 import { cameraAvailable, makeDetector, type Detector } from "../lib/camera-detector";
 import { cameraScan } from "../lib/camera-scan";
 import { callErp, hasPermission } from "../lib/erp";
+import { promptFor } from "../lib/device-prompts";
 import { moduleOffered } from "../lib/installed-modules";
 import {
   evaluateScan,
@@ -519,6 +520,14 @@ function DeviceClient() {
   // already under way keeps its handler, so it can still be finished or left.
   const offered = handlers.filter((h) => moduleOffered(session, h.module_code));
   const operator = session.principal?.given_name ?? session.principal?.display_name ?? "";
+  // A device names its site and class by code; the screen says their names.
+  const siteName = (code: string) => session.sites.find((s) => s.code === code)?.name ?? code;
+  const classes = useQuery({
+    queryKey: ["erp_device_classes", {}],
+    queryFn: () => callErp<{ code: string; name: string }[]>("erp_device_classes"),
+    retry: false,
+  });
+  const className = (code: string) => classes.data?.find((c) => c.code === code)?.name ?? code;
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-background text-foreground">
@@ -533,7 +542,7 @@ function DeviceClient() {
         <div className="min-w-0">
           <div className="truncate text-base font-semibold">{device?.name ?? ui("Scanner")}</div>
           <div className="truncate text-sm text-muted-foreground">
-            {device ? `${device.code} · ${device.site}` : ui("No device chosen")}
+            {device ? `${device.code} · ${siteName(device.site)}` : ui("No device chosen")}
             {operator ? ` · ${operator}` : ""}
           </div>
         </div>
@@ -553,6 +562,8 @@ function DeviceClient() {
             loading={devices.isPending}
             error={devices.error}
             canRegister={hasPermission(session, "administration.configure")}
+            siteName={siteName}
+            className={className}
             onPick={(code) => {
               setDeviceCode(code);
               setStage({ kind: "session" });
@@ -564,6 +575,7 @@ function DeviceClient() {
           <SessionStart
             device={device}
             canSupervise={hasPermission(session, "administration.read")}
+            operatorId={session.principal_id}
             online={online}
             onBack={() => setStage({ kind: "device" })}
             onOpen={openSession}
@@ -693,11 +705,15 @@ function DevicePick({
   loading,
   error,
   canRegister,
+  siteName,
+  className,
   onPick,
 }: {
   devices: Device[];
   loading: boolean;
   error: unknown;
+  siteName: (code: string) => string;
+  className: (code: string) => string;
   /** Whether the reader may register one (administration.configure, which
    *  erp.register_device authorises), so the empty list says where (J-47). */
   canRegister: boolean;
@@ -732,7 +748,7 @@ function DevicePick({
           >
             <span className="block text-lg font-semibold">{d.name}</span>
             <span className="block text-sm text-muted-foreground">
-              {d.code} · {d.site} · {d.device_class}
+              {d.code} · {siteName(d.site)} · {className(d.device_class)}
               {d.open_session ? ` · ${ui("in use")}` : ""}
             </span>
           </button>
@@ -747,12 +763,15 @@ function DevicePick({
 function SessionStart({
   device,
   canSupervise,
+  operatorId,
   online,
   onBack,
   onOpen,
 }: {
   device: Device;
   canSupervise: boolean;
+  /** The person starting the session, who cannot also be its supervisor. */
+  operatorId: string | null;
   online: boolean;
   onBack: () => void;
   onOpen: (supervisor: { id: string; reason: string } | null) => Promise<void>;
@@ -824,7 +843,7 @@ function SessionStart({
             >
               <option value="">{ui("Choose a person")}</option>
               {(principals.data ?? [])
-                .filter((p) => p.kind === "person")
+                .filter((p) => p.kind === "person" && p.id !== operatorId)
                 .map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.display_name}
@@ -839,9 +858,12 @@ function SessionStart({
         </div>
       ) : null}
       {error ? (
-        <p role="alert" className="text-base">
-          {friendlyError(error).title}
-        </p>
+        <div role="alert" className="flex flex-col gap-1 text-base">
+          <p>{friendlyError(error).title}</p>
+          {friendlyError(error).hint ? (
+            <p className="text-muted-foreground">{friendlyError(error).hint}</p>
+          ) : null}
+        </div>
       ) : null}
       <div className="mt-auto">
         <button
@@ -963,41 +985,6 @@ function isScanKey(k: PayloadKey): boolean {
   return k.type === "uuid";
 }
 
-const KEY_WORDS: Record<string, string> = {
-  item_id: "Scan the product",
-  component_item_id: "Scan the component",
-  location_id: "Scan the location",
-  to_location_id: "Scan the destination location",
-  from_location_id: "Scan the source location",
-  container_id: "Scan the handling unit",
-  batch_id: "Scan the batch",
-  works_order_id: "Scan the works order",
-  task_id: "Scan the task",
-  allocation_id: "Scan the pick",
-  receipt_id: "Scan the receipt",
-  sscc: "Scan the carton",
-  order_line_id: "Scan the order line",
-  original_document_id: "Scan the original document",
-  shipment_id: "Scan the shipment",
-  inspection_id: "Scan the inspection",
-  quantity: "How many?",
-  minutes: "How many minutes?",
-  reason: "Why?",
-  note: "Note",
-  status: "New status",
-  carrier_code: "Carrier",
-  service_code: "Service",
-  reason_code: "Reason code",
-  severity: "Severity",
-  batch_number: "Batch number",
-  characteristic: "Characteristic",
-  numeric_value: "Measured value",
-  operation_seq: "Operation number",
-  quantity_scrapped: "How many scrapped?",
-  scrap_reason: "Why scrapped?",
-  disposition: "Decision",
-};
-
 function CaptureStep({
   stage,
   handler,
@@ -1027,7 +1014,7 @@ function CaptureStep({
   const { ui } = useT();
   const key = handler.payload_keys[stage.step]!;
   const total = handler.payload_keys.length;
-  const prompt = ui(KEY_WORDS[key.key] ?? key.key);
+  const prompt = ui(promptFor(key.key));
 
   return (
     <div className="flex flex-1 flex-col gap-4">
