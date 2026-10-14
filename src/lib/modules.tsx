@@ -1638,6 +1638,26 @@ export const INVENTORY: ModuleDef = {
         { header: "Days left", cell: "days_remaining", numeric: true },
       ],
     },
+    {
+      // Recorded on the scanner (20261014020000); no step lists them.
+      title: "Short picks",
+      description:
+        "Places a picker found short, and what was found. A place is not offered to another pick of the product until it is counted: raise a count for it under Stock audit.",
+      fn: "erp_pick_shortages",
+      empty:
+        "No pick has been found short. A picker records one on the scanner when a place holds less than the book says.",
+      rowKey: (r, i) => String(r["pick_shortage_id"] ?? i),
+      columns: [
+        { header: "To count", cell: (r) => (r["to_count"] === true ? "✓" : "") },
+        { header: "Product", cell: "item" },
+        { header: "Location", cell: "location" },
+        { header: "Booked", cell: "quantity_booked", numeric: true },
+        { header: "Found", cell: "quantity_found", numeric: true },
+        { header: "Short", cell: "quantity_short", numeric: true },
+        { header: "Reason", cell: "reason" },
+        date("Recorded", "recorded_at"),
+      ],
+    },
   ],
   reports: [
     {
