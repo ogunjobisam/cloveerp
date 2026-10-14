@@ -109,7 +109,7 @@ const ADOPT = { fn: "erp_adopt_rolled_up_cost", permission: "finance.configure" 
  *
  * Adopting the roll-up as the standard is offered to whoever may set costs,
  * and only where the product is standard-costed; the database refuses it
- * otherwise, and refuses it with stock on hand it would revalue.
+ * otherwise, and revalues any stock on hand at the new standard.
  */
 function ProductStructure() {
   const { t, ui } = useT();
@@ -149,7 +149,10 @@ function ProductStructure() {
   const adopt = useErpAction({
     fn: ADOPT.fn,
     invalidates: ["erp_product_structure"],
-    outcome: () => ui("The rolled-up cost is now the product's standard."),
+    outcome: () =>
+      ui(
+        "The rolled-up cost is now the product's standard, and the stock held was revalued at it.",
+      ),
   });
 
   // Made products first: they are what this screen is for. A bought one is
@@ -275,7 +278,9 @@ function ProductStructure() {
                   {ui("Adopt as standard cost")}
                 </ActionButton>
                 <span className="text-xs text-muted-foreground">
-                  {ui("Refused while stock is on hand at the old standard.")}
+                  {ui(
+                    "Stock on hand is revalued at the new standard; the difference posts to stock adjustments.",
+                  )}
                 </span>
               </div>
             ) : null}

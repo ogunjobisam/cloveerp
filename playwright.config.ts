@@ -117,6 +117,16 @@ export default defineConfig({
       // giveaway that it was the clock rather than the screens.
       timeout: 90_000,
     },
+
+    // The same screens at a phone's width (theme 4, "phones and scanners"),
+    // answered the same way as ui, so it needs no stack either. Chromium with
+    // a Pixel 7's viewport, touch and user agent.
+    {
+      name: "phone",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /phone\.spec\.ts/,
+      timeout: 90_000,
+    },
   ],
 
   webServer: {

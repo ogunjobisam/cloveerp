@@ -325,6 +325,20 @@ run "function secrets with HMRC's application" HMRC_CLIENT_ID=hmrc-id HMRC_CLIEN
 check '[[ $status -eq 0 && "$(body 1 | jq -r "map(.name) | join(\";\")")" == "RESEND_API_KEY;CLOVEERP_APP_URL;CLOVEERP_INVITE_FROM;HMRC_CLIENT_ID;HMRC_CLIENT_SECRET;HMRC_ENVIRONMENT" && "$(body 1 | jq -r ".[5].value")" == "sandbox" ]]' \
       "HMRC's id, secret and environment beside the rest, sandbox unless said"
 check '[[ "$out" != *"hmrc_rehearsal_secret"* && "$(events)" != *"hmrc_rehearsal_secret"* && "$(cat "$work/summary")" != *"hmrc_rehearsal_secret"* ]]' "HMRC's secret is printed nowhere"
+run "HMRC's application alone" HMRC_CLIENT_ID=hmrc-id HMRC_CLIENT_SECRET=hmrc_rehearsal_secret -- set_hmrc_secrets acme "$REASON"
+check '[[ $status -eq 0 && "$(body 1 | jq -r "map(.name) | join(\";\")")" == "HMRC_CLIENT_ID;HMRC_CLIENT_SECRET;HMRC_ENVIRONMENT" && "$(body 1 | jq -r ".[2].value")" == "sandbox" ]]' \
+      "HMRC's id, secret and environment, and nothing else the project holds"
+check '[[ "$out" != *"hmrc_rehearsal_secret"* && "$(events)" != *"hmrc_rehearsal_secret"* && "$(cat "$work/summary")" != *"hmrc_rehearsal_secret"* ]]' "its secret is printed nowhere"
+run "HMRC's application for the demonstration" HMRC_CLIENT_ID=hmrc-id HMRC_CLIENT_SECRET=hmrc_rehearsal_secret DEMO_REF=dddddddddddddddddddd -- set_hmrc_secrets demonstration "$REASON"
+check '[[ $status -eq 0 && "$(order)" == "POST /v1/projects/dddddddddddddddddddd/secrets;" && "$(body 1 | jq -r "map(.name) | join(\";\")")" == "HMRC_CLIENT_ID;HMRC_CLIENT_SECRET;HMRC_ENVIRONMENT" ]]' \
+      "the demonstration's project, which is in no register, given HMRC's application alone"
+run "HMRC's application for the control plane" HMRC_CLIENT_ID=hmrc-id HMRC_CLIENT_SECRET=hmrc_rehearsal_secret HMRC_ENVIRONMENT=production PRODUCTION_REF=pppppppppppppppppppp -- set_hmrc_secrets control "$REASON"
+check '[[ $status -eq 0 && "$(order)" == "POST /v1/projects/pppppppppppppppppppp/secrets;" && "$(body 1 | jq -r ".[2].value")" == production ]]' \
+      "the control plane's, in production when the repository says so"
+run "HMRC's application, none registered" -- set_hmrc_secrets all "$REASON"
+check '[[ $status -eq 2 && "$out" == *"no HMRC application to give the functions"* ]] && untouched' "refused, nothing touched"
+run "HMRC's application, an environment that is neither" HMRC_CLIENT_ID=hmrc-id HMRC_CLIENT_SECRET=hmrc_rehearsal_secret HMRC_ENVIRONMENT=live -- set_hmrc_secrets acme "$REASON"
+check '[[ $status -eq 2 && "$out" == *"neither sandbox nor production"* ]] && untouched' "refused, nothing touched"
 run "function secrets the API will not take" FAKE_HTTP_STATUSES=403 -- set_function_secrets all "$REASON"
 check '[[ $status -eq 1 && "$out" == *"did not take acme"* && "$out" == *"Not touched, because acme failed first: beta"* ]]' "refused, and beta left alone"
 

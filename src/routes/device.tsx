@@ -75,7 +75,14 @@ export const Route = createFileRoute("/device")({
     meta: [
       { title: "Scanner — Clove ERP" },
       { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1" },
+      // Installable from the browser's menu as its own app, opening straight
+      // on the scanner, full screen and upright (theme 4).
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "Scanner" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black" },
     ],
+    links: [{ rel: "manifest", href: "/scanner.webmanifest" }],
   }),
   component: () => (
     <Gate bare>

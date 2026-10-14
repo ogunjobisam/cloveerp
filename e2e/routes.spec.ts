@@ -176,3 +176,41 @@ test.describe("the session itself failing", () => {
     expect(backend.crashes).toEqual([]);
   });
 });
+
+test.describe("the scanner installs on a phone", () => {
+  test("/device names its manifest, which is served, starts on the scanner and has its icons", async ({
+    page,
+    backend,
+  }) => {
+    await page.goto("/device");
+    const href = await page.locator('link[rel="manifest"]').getAttribute("href");
+    expect(href, "/device names no manifest").toBe("/scanner.webmanifest");
+
+    const answer = await page.request.get(href ?? "");
+    expect(answer.status()).toBe(200);
+    const manifest = (await answer.json()) as {
+      start_url: string;
+      scope: string;
+      display: string;
+      icons: { src: string; sizes: string; purpose: string }[];
+    };
+    expect([manifest.start_url, manifest.scope, manifest.display]).toEqual([
+      "/device",
+      "/device",
+      "standalone",
+    ]);
+    // What Chrome asks of an installable app: a 192 and a 512, and a maskable
+    // one for Android's shapes.
+    expect(manifest.icons.map((i) => `${i.sizes} ${i.purpose}`).sort()).toEqual([
+      "192x192 any",
+      "512x512 any",
+      "512x512 maskable",
+    ]);
+    for (const icon of [...manifest.icons.map((i) => i.src), "/apple-touch-icon.png"]) {
+      const got = await page.request.get(icon);
+      expect(got.status(), `${icon} is not served`).toBe(200);
+      expect(got.headers()["content-type"]).toContain("image/png");
+    }
+    expect(backend.crashes).toEqual([]);
+  });
+});
