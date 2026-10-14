@@ -1,0 +1,17 @@
+{
+  "name": "Clove ERP Scanner",
+  "short_name": "Scanner",
+  "description": "The warehouse scanner: one task at a time, scan first, and it keeps working without a signal.",
+  "id": "/device",
+  "start_url": "/device",
+  "scope": "/device",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#241F1B",
+  "theme_color": "#241F1B",
+  "icons": [
+    { "src": "/scanner-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/scanner-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/scanner-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

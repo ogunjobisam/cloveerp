@@ -125,7 +125,7 @@ is_target() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]]; }
 open_runs() {
   local only='.'
   if [[ "${2:-}" == rotations ]]; then
-    only='select(((.display_title // "") | test("rotate_db_password")) or ((.display_title // "") | test("set_function_secrets|patch_auth|resend_webhook") | not))'
+    only='select(((.display_title // "") | test("rotate_db_password")) or ((.display_title // "") | test("set_function_secrets|set_hmrc_secrets|patch_auth|resend_webhook") | not))'
   elif [[ "${2:-}" == changes ]]; then
     only='select((.display_title // "") | test("resend_webhook") | not)'
   fi
