@@ -10,6 +10,7 @@ import {
   hmrcProblem,
   normaliseVrn,
   obligationFor,
+  obligationToFile,
   readObligations,
   readReceipt,
   relayTarget,
@@ -107,6 +108,26 @@ describe("obligations", () => {
     expect(list.map((o) => o.periodKey)).toEqual(["18A1", "18A2"]);
     expect(list[0]?.received).toBe("2017-05-06");
     expect(readObligations(null)).toEqual([]);
+  });
+
+  test("in production a return goes only against its own period; in the sandbox, HMRC's test period stands in", () => {
+    const list = readObligations(example);
+    expect(obligationToFile(list, "2026-07-01", "2026-09-30", "production")).toBeNull();
+    expect(obligationToFile(list, "2017-04-01", "2017-06-30", "production")).toEqual({
+      obligation: list[1]!,
+      standIn: false,
+    });
+    const sandbox = obligationToFile(list, "2026-07-01", "2026-09-30", "sandbox");
+    expect(sandbox?.standIn).toBe(true);
+    expect(sandbox?.obligation.periodKey).toBe("18A2");
+    expect(
+      obligationToFile(
+        list.filter((o) => o.status !== "O"),
+        "2026-07-01",
+        "2026-09-30",
+        "sandbox",
+      ),
+    ).toBeNull();
   });
 
   test("a return answers the open obligation with its own dates, and no other", () => {
