@@ -98,6 +98,9 @@ type Device = {
   name: string;
   device_class: string;
   site: string;
+  /** The device's site, offered without a scan (20261014050000). */
+  site_id?: string;
+  site_name?: string;
   status: string;
   open_session: boolean;
 };
@@ -589,6 +592,7 @@ function DeviceClient() {
             task={ref.tasks.find((t) => t.code === stage.task)!}
             reference={ref}
             deviceCode={deviceCode}
+            device={device}
             online={online}
             onAbandon={() => setStage({ kind: "tasks" })}
             onBack={() =>
@@ -996,6 +1000,20 @@ const KEY_WORDS: Record<string, string> = {
   quantity_scrapped: "How many scrapped?",
   scrap_reason: "Why scrapped?",
   disposition: "Decision",
+  // Every key a task asks for has words (20261014050000); the heading said
+  // "site_id" where a key had none.
+  site_id: "Scan the site",
+  parent_container_id: "Scan the parent handling unit",
+  party_id: "Scan the business partner",
+  document_id: "Scan the document",
+  code: "Code",
+  container_type: "Type of handling unit",
+  instrument: "Instrument",
+  outcome: "Outcome",
+  text_value: "Measured text",
+  scrapped: "How many scrapped?",
+  cost_minor: "Cost",
+  completed: "Done?",
 };
 
 function CaptureStep({
@@ -1004,6 +1022,7 @@ function CaptureStep({
   task,
   reference,
   deviceCode,
+  device,
   online,
   onAbandon,
   onBack,
@@ -1014,6 +1033,7 @@ function CaptureStep({
   task: DeviceTask;
   reference: Cache;
   deviceCode: string;
+  device: Device | null;
   online: boolean;
   onAbandon: () => void;
   onBack: () => void;
@@ -1028,6 +1048,10 @@ function CaptureStep({
   const key = handler.payload_keys[stage.step]!;
   const total = handler.payload_keys.length;
   const prompt = ui(KEY_WORDS[key.key] ?? key.key);
+  // The device is registered to a site: that is the answer to "which site",
+  // offered in one press, with scanning another still possible.
+  const ownSite = key.key === "site_id" && device?.site_id ? device : null;
+  const [scanAnotherSite, setScanAnotherSite] = useState(false);
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -1046,7 +1070,41 @@ function CaptureStep({
       {stage.step === 0 ? (
         <p className="text-base text-muted-foreground">{task.starts_when}</p>
       ) : null}
-      {isScanKey(key) ? (
+      {ownSite && !scanAnotherSite ? (
+        <div className="flex flex-1 flex-col gap-4">
+          <div className="rounded-xl border-2 border-input bg-card px-4 py-3">
+            <p className="text-sm text-muted-foreground">{ui("This device's site")}</p>
+            <p className="text-xl font-semibold">
+              {ownSite.site_name ?? ownSite.site} · {ownSite.site}
+            </p>
+          </div>
+          <div className="mt-auto flex flex-col gap-3">
+            <button
+              type="button"
+              className={PRIMARY}
+              onClick={() =>
+                onAdvance(
+                  key.key,
+                  ownSite.site_id,
+                  {
+                    raw: ownSite.site,
+                    id: ownSite.site_id ?? null,
+                    label: ownSite.site_name ?? ownSite.site,
+                    fields: {},
+                    keyed: false,
+                  },
+                  null,
+                )
+              }
+            >
+              {ui("Use this site")}
+            </button>
+            <button type="button" className={SECONDARY} onClick={() => setScanAnotherSite(true)}>
+              {ui("Scan another site")}
+            </button>
+          </div>
+        </div>
+      ) : isScanKey(key) ? (
         <ScanInput
           key={key.key}
           payloadKey={key.key}
