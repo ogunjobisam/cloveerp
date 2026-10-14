@@ -38,7 +38,7 @@ import {
   environmentOf,
   fraudHeaders,
   hmrcProblem,
-  obligationFor,
+  obligationToFile,
   readObligations,
   readReceipt,
   returnBody,
@@ -145,7 +145,10 @@ function asClientFacts(raw: unknown): ClientFacts {
   };
 }
 
-async function tokenRequest(cfg: Config, form: Record<string, string>): Promise<Record<string, unknown>> {
+async function tokenRequest(
+  cfg: Config,
+  form: Record<string, string>,
+): Promise<Record<string, unknown>> {
   const response = await fetch(`${apiBase(cfg.environment)}/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -173,7 +176,10 @@ async function accessToken(cfg: Config, admin: Rpc, t: Ticket): Promise<string> 
       "CLOVEERP_HMRC_REFUSED: The connection to HMRC has expired. Connect the company to HMRC again.",
     );
   }
-  const json = await tokenRequest(cfg, { grant_type: "refresh_token", refresh_token: t.refresh_token });
+  const json = await tokenRequest(cfg, {
+    grant_type: "refresh_token",
+    refresh_token: t.refresh_token,
+  });
   await admin("erp_hmrc_store_tokens", {
     p_ticket: t.ticket,
     p_access_token: json["access_token"],
@@ -263,7 +269,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const ticketOf = async (id: string): Promise<Ticket> => {
       const t = (await admin("erp_hmrc_ticket", { p_ticket: id })) as Ticket;
       if (t.auth_user_id !== userId) {
-        throw new Error("CLOVEERP_HMRC_TICKET_NOT_IN_FORCE: this request to HMRC was opened by somebody else");
+        throw new Error(
+          "CLOVEERP_HMRC_TICKET_NOT_IN_FORCE: this request to HMRC was opened by somebody else",
+        );
       }
       return t;
     };
@@ -278,7 +286,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
 
     if (action === "connect") {
-      const host = typeof input["return_host"] === "string" ? input["return_host"].toLowerCase() : null;
+      const host =
+        typeof input["return_host"] === "string" ? input["return_host"].toLowerCase() : null;
       const ticket = (await caller("erp_hmrc_open_ticket", {
         p_purpose: "connect",
         p_entity_id: input["entity_id"],
@@ -298,11 +307,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (action === "exchange") {
       const verified = await verifyState(cfg.clientSecret, String(input["state"] ?? ""));
       if (!verified) {
-        throw new Error("CLOVEERP_HMRC_TICKET_NOT_IN_FORCE: HMRC's answer did not come from a request made here");
+        throw new Error(
+          "CLOVEERP_HMRC_TICKET_NOT_IN_FORCE: HMRC's answer did not come from a request made here",
+        );
       }
       const t = await ticketOf(verified.ticket);
       if (t.purpose !== "connect") {
-        throw new Error("CLOVEERP_HMRC_TICKET_NOT_IN_FORCE: HMRC's answer is not to a request to connect");
+        throw new Error(
+          "CLOVEERP_HMRC_TICKET_NOT_IN_FORCE: HMRC's answer is not to a request to connect",
+        );
       }
       const json = await tokenRequest(cfg, {
         grant_type: "authorization_code",
@@ -331,7 +344,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const token = await accessToken(cfg, admin, t);
       const today = new Date();
       const from = new Date(today.getTime() - 365 * 86_400_000);
-      const list = await readAndRecordObligations(cfg, admin, t, token, factsFor(t), isoDay(from), isoDay(today));
+      const list = await readAndRecordObligations(
+        cfg,
+        admin,
+        t,
+        token,
+        factsFor(t),
+        isoDay(from),
+        isoDay(today),
+      );
       return reply(req, 200, { obligations: list });
     }
 
@@ -347,8 +368,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       const headers = factsFor(t);
       const token = await accessToken(cfg, admin, t);
-      const list = await readAndRecordObligations(cfg, admin, t, token, headers, t.period_start, t.period_end);
-      const open = obligationFor(list, t.period_start, t.period_end);
+      const list = await readAndRecordObligations(
+        cfg,
+        admin,
+        t,
+        token,
+        headers,
+        t.period_start,
+        t.period_end,
+      );
+      const chosen = obligationToFile(list, t.period_start, t.period_end, cfg.environment);
+      const open = chosen?.obligation ?? null;
+      // In HMRC's sandbox only: the test period stood in for the return's own.
+      const standIn = chosen?.standIn
+        ? { start: open?.start, end: open?.end, period_key: open?.periodKey }
+        : null;
       if (!open) {
         throw new Error(
           `CLOVEERP_HMRC_NO_OPEN_OBLIGATION: HMRC holds no open return for ${t.period_start} to ${t.period_end}. Read the obligations from HMRC and check the company's VAT periods match HMRC's.`,
@@ -368,7 +402,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           p_receipt: receipt,
           p_outcome: "accepted",
         });
-        return reply(req, 200, { receipt, recorded });
+        return reply(req, 200, { receipt, recorded, sandbox_period: standIn });
       }
       const problem = hmrcProblem(r.status, r.json);
       if (problem.code === "DUPLICATE_SUBMISSION") {
@@ -381,7 +415,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           p_receipt: { correlationId: r.headers.get("X-CorrelationId") },
           p_outcome: "already_held",
         });
-        return reply(req, 200, { already_held: true, recorded });
+        return reply(req, 200, { already_held: true, recorded, sandbox_period: standIn });
       }
       throw new Error(`CLOVEERP_HMRC_REFUSED: ${problem.words}`);
     }
