@@ -1,6 +1,17 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+/* The two typefaces, served from cloveerp.com rather than Google Fonts (the
+   penetration test, 14 October 2026: a stylesheet from Google cannot carry a
+   fixed integrity hash, and every page asked a third party for it). */
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
+@import "@fontsource/figtree/700.css";
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
