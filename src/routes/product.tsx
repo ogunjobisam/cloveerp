@@ -767,6 +767,9 @@ function Footer() {
         <Link to="/contact" className="underline underline-offset-2">
           Contact us
         </Link>
+        <Link to="/privacy" className="underline underline-offset-2">
+          Privacy
+        </Link>
         <Link to="/signin" className="underline underline-offset-2">
           Sign in
         </Link>

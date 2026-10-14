@@ -18,6 +18,7 @@ import { Route as HelpRouteImport } from './routes/help'
 import { Route as JoinRouteImport } from './routes/join'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PlatformRouteImport } from './routes/platform'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RespondRouteImport } from './routes/respond'
@@ -126,6 +127,11 @@ const NotificationsRoute = NotificationsRouteImport.update({
 const PlatformRoute = PlatformRouteImport.update({
   id: '/platform',
   path: '/platform',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductRoute = ProductRouteImport.update({
@@ -470,6 +476,7 @@ export interface FileRoutesByFullPath {
   '/join': typeof JoinRoute
   '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
+  '/privacy': typeof PrivacyRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/respond': typeof RespondRoute
@@ -545,6 +552,7 @@ export interface FileRoutesByTo {
   '/join': typeof JoinRoute
   '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
+  '/privacy': typeof PrivacyRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/respond': typeof RespondRoute
@@ -621,6 +629,7 @@ export interface FileRoutesById {
   '/join': typeof JoinRoute
   '/notifications': typeof NotificationsRoute
   '/platform': typeof PlatformRoute
+  '/privacy': typeof PrivacyRoute
   '/product': typeof ProductRoute
   '/profile': typeof ProfileRoute
   '/respond': typeof RespondRoute
@@ -698,6 +707,7 @@ export interface FileRouteTypes {
     | '/join'
     | '/notifications'
     | '/platform'
+    | '/privacy'
     | '/product'
     | '/profile'
     | '/respond'
@@ -773,6 +783,7 @@ export interface FileRouteTypes {
     | '/join'
     | '/notifications'
     | '/platform'
+    | '/privacy'
     | '/product'
     | '/profile'
     | '/respond'
@@ -848,6 +859,7 @@ export interface FileRouteTypes {
     | '/join'
     | '/notifications'
     | '/platform'
+    | '/privacy'
     | '/product'
     | '/profile'
     | '/respond'
@@ -924,6 +936,7 @@ export interface RootRouteChildren {
   JoinRoute: typeof JoinRoute
   NotificationsRoute: typeof NotificationsRoute
   PlatformRoute: typeof PlatformRoute
+  PrivacyRoute: typeof PrivacyRoute
   ProductRoute: typeof ProductRoute
   ProfileRoute: typeof ProfileRoute
   RespondRoute: typeof RespondRoute
@@ -1053,6 +1066,13 @@ declare module '@tanstack/react-router' {
       path: '/platform'
       fullPath: '/platform'
       preLoaderRoute: typeof PlatformRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/product': {
@@ -1516,6 +1536,7 @@ const rootRouteChildren: RootRouteChildren = {
   JoinRoute: JoinRoute,
   NotificationsRoute: NotificationsRoute,
   PlatformRoute: PlatformRoute,
+  PrivacyRoute: PrivacyRoute,
   ProductRoute: ProductRoute,
   ProfileRoute: ProfileRoute,
   RespondRoute: RespondRoute,

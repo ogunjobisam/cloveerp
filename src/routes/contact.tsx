@@ -367,6 +367,11 @@ function ContactPage() {
             </a>
             .
           </p>
+          <p className="text-xs text-ink/60">
+            <Link to="/privacy" className="underline underline-offset-2 hover:text-ink">
+              Privacy
+            </Link>
+          </p>
           <p className="text-[11px] font-medium uppercase tracking-widest text-ink/40">
             Built for precision in the United Kingdom · Clove ERP MMXXVI
           </p>
