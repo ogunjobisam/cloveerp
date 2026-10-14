@@ -162,6 +162,26 @@ export function escapeHtml(value: string): string {
 }
 
 /**
+ * A URL safe to put in an href, or "#" if its scheme is not one we send.
+ *
+ * escapeHtml already stops a URL breaking out of the attribute, so there is no
+ * cross-site scripting here: a mail client does not run JavaScript. But a link
+ * whose scheme is javascript: or data: has no business in our mail, and in
+ * practice every URL we build is one of ours — an http(s) action link, a
+ * relative path, or a mailto: to an address the database has already checked.
+ * So the scheme is allow-listed (the penetration test's finding 14): http,
+ * https, mailto, and the relative forms (/… and #…) a path or in-page anchor
+ * take. Anything else collapses to "#", a link that goes nowhere rather than a
+ * scheme we never meant to send. The caller still escapes the result.
+ */
+export function safeUrl(value: string): string {
+  const url = value.trim();
+  if (url.startsWith("/") || url.startsWith("#")) return url;
+  if (/^(https?|mailto):/i.test(url)) return url;
+  return "#";
+}
+
+/**
  * One line, bounded. Control characters and line breaks become spaces, so a
  * name cannot start a second header line or a second paragraph.
  */
@@ -209,7 +229,7 @@ function p(words: string, size: number, colour: string, cls: string, margin = "0
 }
 
 function button(action: EmailAction, filled: boolean): string {
-  const href = escapeHtml(action.url);
+  const href = escapeHtml(safeUrl(action.url));
   const label = escapeHtml(oneLine(action.label, 60));
   const background = filled ? PALETTE.brand : PALETTE.card;
   const colour = filled ? PALETTE.onBrand : PALETTE.brand;
@@ -248,7 +268,7 @@ function detailRows(details: readonly EmailDetail[]): string {
       }
       const shown = escapeHtml(oneLine(d.value, 300));
       const value = d.url
-        ? `<a class="ce-link" href="${escapeHtml(d.url)}" style="color:${PALETTE.accent};text-decoration:underline;">${shown}</a>`
+        ? `<a class="ce-link" href="${escapeHtml(safeUrl(d.url))}" style="color:${PALETTE.accent};text-decoration:underline;">${shown}</a>`
         : shown;
       return (
         `<tr>${label}<td class="ce-ink ce-rule" valign="top" style="${border}padding:10px 0;` +
@@ -324,7 +344,7 @@ function renderHtml(input: EmailInput, words: LayoutWords): string {
         links
           .map(
             (a) =>
-              `<a class="ce-link" href="${escapeHtml(a.url)}" style="color:${PALETTE.accent};text-decoration:underline;">` +
+              `<a class="ce-link" href="${escapeHtml(safeUrl(a.url))}" style="color:${PALETTE.accent};text-decoration:underline;">` +
               `${escapeHtml(oneLine(a.label, 60))}</a>`,
           )
           .join(
@@ -342,7 +362,7 @@ function renderHtml(input: EmailInput, words: LayoutWords): string {
       .map(
         (a) =>
           `<p class="ce-muted" style="margin:0 0 8px;color:${PALETTE.muted};font-family:${SANS};font-size:13px;line-height:1.55;word-break:break-all;">` +
-          `${escapeHtml(oneLine(a.label, 60))}: <a class="ce-link" href="${escapeHtml(a.url)}" ` +
+          `${escapeHtml(oneLine(a.label, 60))}: <a class="ce-link" href="${escapeHtml(safeUrl(a.url))}" ` +
           `style="color:${PALETTE.accent};text-decoration:underline;">${escapeHtml(a.url)}</a></p>`,
       )
       .join("");
@@ -354,7 +374,7 @@ function renderHtml(input: EmailInput, words: LayoutWords): string {
     ? p(mandatory, 12, PALETTE.muted, "ce-muted", "0 0 8px")
     : input.preferencesUrl
       ? `<p class="ce-muted" style="margin:0 0 8px;color:${PALETTE.muted};font-family:${SANS};font-size:12px;line-height:1.6;">` +
-        `<a class="ce-link" href="${escapeHtml(input.preferencesUrl)}" style="color:${PALETTE.accent};text-decoration:underline;">` +
+        `<a class="ce-link" href="${escapeHtml(safeUrl(input.preferencesUrl))}" style="color:${PALETTE.accent};text-decoration:underline;">` +
         `${escapeHtml(words.preferences)}</a></p>`
       : "";
   const footer = input.footer

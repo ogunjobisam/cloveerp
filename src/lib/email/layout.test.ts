@@ -6,6 +6,7 @@ import {
   escapeHtml,
   oneLine,
   renderEmail,
+  safeUrl,
   type EmailInput,
 } from "./layout.ts";
 
@@ -227,5 +228,36 @@ describe("the small helpers", () => {
     expect(oneLine(" a\tb\n\nc ")).toBe("a b c");
     expect(oneLine("x".repeat(10), 5)).toBe("xxxx…");
     expect(oneLine(undefined)).toBe("");
+  });
+});
+
+describe("safeUrl allow-lists the schemes we send", () => {
+  test("keeps the schemes and relative forms a Clove e-mail actually uses", () => {
+    expect(safeUrl("https://cloveerp.com/governance?task=t1")).toBe(
+      "https://cloveerp.com/governance?task=t1",
+    );
+    expect(safeUrl("http://demo.cloveerp.com/x")).toBe("http://demo.cloveerp.com/x");
+    expect(safeUrl("mailto:sam@example.com?subject=Hi")).toBe("mailto:sam@example.com?subject=Hi");
+    expect(safeUrl("/sales/order/1")).toBe("/sales/order/1");
+    expect(safeUrl("#section")).toBe("#section");
+  });
+
+  test("collapses anything else to a link that goes nowhere", () => {
+    expect(safeUrl("javascript:alert(1)")).toBe("#");
+    expect(safeUrl("  JavaScript:alert(1)")).toBe("#");
+    expect(safeUrl("data:text/html,<script>alert(1)</script>")).toBe("#");
+    expect(safeUrl("vbscript:msgbox(1)")).toBe("#");
+    expect(safeUrl('"><script>alert(2)</script>')).toBe("#");
+  });
+
+  test("a dangerous scheme never reaches an href in a rendered e-mail", () => {
+    const out = renderEmail({
+      ...base,
+      details: [{ label: "link", value: "see", url: "javascript:alert(1)" }],
+      primary: { label: "Go", url: "data:text/html,<b>x</b>" },
+    });
+    const html = typeof out === "string" ? out : out.html;
+    expect(html).not.toMatch(/href="javascript:/i);
+    expect(html).not.toMatch(/href="data:/i);
   });
 });
