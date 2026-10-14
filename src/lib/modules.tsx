@@ -2003,6 +2003,27 @@ export const FINANCE: ModuleDef = {
   group: "settle",
   actions: [
     {
+      // VAT returns are filed under it (20261014030000); nothing wrote it before.
+      label: "Record the company's VAT number",
+      description:
+        "The number VAT returns are filed with HMRC under, from the day given. The number in force until then ends the day before.",
+      permission: "finance.configure",
+      fn: "erp_record_vat_registration",
+      fields: [
+        pickEntity(),
+        {
+          kind: "text",
+          name: "p_vat_number",
+          label: "VAT number",
+          required: true,
+          placeholder: "GB 123 4567 89",
+          hint: "Nine digits, with or without GB in front, as on the VAT registration certificate.",
+        },
+        { kind: "date", name: "p_valid_from", label: "From" },
+      ],
+      invalidates: ["erp_hmrc_status", "erp_vat_obligations"],
+    },
+    {
       label: "Add a company to a group",
       description:
         "Puts a subsidiary under its parent, installs the parent's group ledger and promotes the elimination rule.",
