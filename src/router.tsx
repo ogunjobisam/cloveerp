@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { currentNonce } from "./lib/content-security-policy";
 import { ErpError } from "./lib/erp";
 
 /**
@@ -36,11 +37,16 @@ export const getRouter = () => {
     },
   });
 
+  // On the server, the request's nonce, stamped on every script the router
+  // writes (src/lib/content-security-policy.ts); in the browser the router
+  // reads it back from the page.
+  const nonce = currentNonce();
   const router = createRouter({
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
+    ...(nonce ? { ssr: { nonce } } : {}),
   });
 
   return router;
