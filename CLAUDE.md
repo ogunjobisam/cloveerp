@@ -2,7 +2,9 @@
 
 TanStack Start + React 19 + Tailwind 4 + Supabase (PostgreSQL 17.6).
 Package manager is **bun**, never npm.
-Connected to Lovable: never force-push, rebase, amend or squash pushed commits.
+Never rewrite published history on `main`: no force-push, rebase, amend or
+squash of pushed commits. The release register and GitHub deployments reference
+commit SHAs, so rewriting main's history breaks the deploy chain.
 
 ## Read this before exploring
 
@@ -101,7 +103,7 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   production by accident. Needing one of them for an incident is a reason to
   add it deliberately and take it out again, not a reason to leave it on.
 
-## Hosting: Cloudflare, not Lovable
+## Hosting: Cloudflare
 
 - The application is a Cloudflare Worker, `clove-erp`, serving
   `cloveerp.com`, `www`, `demo` and every client's `<code>.cloveerp.com`
@@ -111,8 +113,8 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   on main, it ships the newest commit that every database it serves carries
   (the demonstration, the control plane, every client) and that the schema
   build passed on, and never one older than the Worker already runs, so the
-  application never ships ahead of its migrations. Not Lovable's publish, not
-  `wrangler deploy` by hand.
+  application never ships ahead of its migrations. Never by hand with
+  `wrangler deploy`.
 - `wrangler.jsonc` is the staging Worker; `wrangler.production.jsonc` is the
   live one. `app.yml` copies the production file over `wrangler.jsonc` before
   the build when the repository variable `CLOVEERP_APP_ROUTES` is `on`. Never
@@ -127,15 +129,6 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   the Cloudflare dashboard, never in the repository).
 - A new client needs no hosting step: the directory (`/api/directory/<host>`)
   maps a subdomain to its project.
-
-## Lovable
-
-- Lovable no longer serves the application. It stays connected to this
-  repository as an editor and preview only.
-- `AGENTS.md` is Lovable-managed. Leave it alone.
-- Commits on the connected branch sync into the Lovable editor, so keep that
-  branch working.
-- Never rewrite published history.
 
 ## Conventions
 
