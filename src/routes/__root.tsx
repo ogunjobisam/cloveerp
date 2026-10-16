@@ -13,7 +13,6 @@ import appCss from "../styles.css?url";
 import { toast } from "sonner";
 import { Toaster } from "../components/ui/sonner";
 import { goesWithThePage } from "../lib/toast-age";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NotFoundComponent } from "../components/erp/not-found";
 import { APEX_ORIGIN, apexRedirect } from "../lib/backend";
 import { movedHref } from "../lib/deployment-directory";
@@ -23,9 +22,6 @@ import { hostKindOf, requestPageHost } from "../lib/request-host";
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">

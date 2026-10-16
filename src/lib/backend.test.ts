@@ -47,7 +47,7 @@ describe("the project a page talks to", () => {
 
   test("anywhere else the environment still wins where it is set", () => {
     expect(chooseBackend("127.0.0.1", stack)).toEqual(stack);
-    expect(chooseBackend("id-preview--clove.lovable.app", stack)).toEqual(stack);
+    expect(chooseBackend("preview.example.com", stack)).toEqual(stack);
   });
 
   test("a host that only looks like the demonstration's is not it", () => {

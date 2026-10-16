@@ -173,3 +173,7 @@ time, one pull request per day:
   merge; fire the fleet release train (`fleet_sweep.yml` / `deploy.yml`
   dispatch) only when the rehearsal is good, in order demonstration → clients →
   control plane, paced and verified at each stage.
+- **The daily bundle is the default, not a lock.** When something should not wait
+  — a hotfix, a small urgent change — mark a PR ready and release ad hoc; each
+  such build just costs its own minutes, so reserve it for what genuinely cannot
+  ride the next day's bundle.

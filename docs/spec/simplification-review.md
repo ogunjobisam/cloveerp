@@ -40,8 +40,9 @@ These are binding for every node.
   tables directly.
 - **Numbering rules and document types are not guarded** and are written
   directly.
-- **Do not rewrite history.** The repo is Lovable-connected and `AGENTS.md` is
-  Lovable-managed. Leave both alone.
+- **Do not rewrite history on `main`.** The release register and GitHub
+  deployments reference commit SHAs, so rewriting published history breaks the
+  deploy chain.
 - **Branch short-lived, PR into main.** There is no test or production branch.
   Supabase preview branching is being switched off; do not rely on a preview
   project for staging.
