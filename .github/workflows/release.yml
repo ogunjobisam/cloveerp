@@ -892,7 +892,7 @@ jobs:
         run: |
           set -euo pipefail
           release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'lovable', 'run ${GITHUB_RUN_ID}');")
+            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'github', 'run ${GITHUB_RUN_ID}');")
           echo "RELEASE_ID=$release" >> "$GITHUB_ENV"
           echo "release $release recorded for ${GITHUB_SHA}"
 

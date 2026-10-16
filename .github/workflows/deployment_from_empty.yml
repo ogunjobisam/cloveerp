@@ -929,7 +929,7 @@ jobs:
           echo "PHASE=prove" >> "$GITHUB_ENV"
           [[ "${KIND}" != client ]] || supabase/ci/fleet_register.sh event "${CODE}" prove note "proving the build: the assurance, the whole-database reconciliation, and a sign-in link to the owner" || true
           release=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "
-            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'lovable', 'deployment from empty, run ${GITHUB_RUN_ID}');")
+            select erp.record_release('${GITHUB_SHA}', '${DEPLOY_STARTED_AT}'::timestamptz, 'github', 'deployment from empty, run ${GITHUB_RUN_ID}');")
           assurance="$RUNNER_TEMP/assurance.json"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -tAc "select erp.platform_assurance();" > "$assurance"
           bad=$(jq -r '.[] | select(.ok == false) | "\(.code): \((.detail // "")[0:120])"' "$assurance")
