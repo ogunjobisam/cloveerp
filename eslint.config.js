@@ -19,6 +19,7 @@ export default tseslint.config(
       "src/integrations/supabase/**",
       "worker/**",
       "supabase/functions/**",
+      "mcp/**",
     ],
   },
   {

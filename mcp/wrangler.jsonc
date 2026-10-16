@@ -1,0 +1,25 @@
+{
+  // The CloveERP MCP connector — a SEPARATE Cloudflare Worker from the app
+  // Worker (clove-erp). It is not built or shipped by app.yml; it has its own
+  // deploy path (to be added). See mcp/README.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clove-erp-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // nodejs_compat for the OAuth/MCP libraries; global_fetch_strictly_public is
+  // required by workers-oauth-provider when Client-ID-Metadata-Documents are on.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "observability": { "enabled": true },
+  // Grants and tokens live here (hashed; props encrypted). Create with:
+  //   wrangler kv namespace create OAUTH_KV
+  // then paste the id below. Left blank in the repo on purpose.
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "" }],
+  "vars": {
+    // Public values only. The connector signs the user in against Supabase with
+    // the publishable (anon) key and never holds the service role key.
+    "SUPABASE_URL": "",
+    "SUPABASE_PUBLISHABLE_KEY": ""
+  }
+  // A route (e.g. mcp.cloveerp.com) is added at deploy time once the subdomain
+  // is reserved (DB + e2e inventory) — see mcp/README.md.
+}

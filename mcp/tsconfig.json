@@ -1,0 +1,21 @@
+{
+  // Standalone tsconfig for the MCP Worker. It is NOT part of the app's
+  // `bun run typecheck` (the root tsconfig excludes mcp/); check it with
+  //   bunx tsc -p mcp/tsconfig.json --noEmit
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "baseUrl": "."
+  },
+  "include": ["src/**/*.ts"]
+}

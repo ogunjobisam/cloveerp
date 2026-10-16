@@ -17,7 +17,7 @@
   // client stack the app bypasses for the thirty lines in src/lib/erp.ts, and
   // one of them reads SUPABASE_SERVICE_ROLE_KEY. Deleting them is the better
   // fix; excluding them is the smaller one, and this change is not the place.
-  "exclude": ["src/integrations/supabase/**"],
+  "exclude": ["src/integrations/supabase/**", "mcp/**"],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",
