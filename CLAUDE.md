@@ -148,3 +148,28 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
 - For a scoped change, edit and run the checks — do not ask permission per file.
 - Never create README or documentation files unless I ask. `docs/` figures are
   checked against the database; adding prose there breaks the build.
+
+### Daily release rhythm
+
+The repository is private, so Actions minutes are metered and the ~25–40 minute
+database build is the cost to watch. Until we move to sprints, work a day at a
+time, one pull request per day:
+
+- **One day-branch off `main`, opened as a draft in the morning and kept draft
+  all day.** A draft runs only the cheap jobs on each push; the database build
+  runs once, when the PR is marked ready. Accumulate the day's commits here —
+  each new migration its own single commit (rule E), unique version prefix,
+  never edited after pushing — and keep the branch green with the local checks as
+  you go, because when it is marked ready every whole-tree invariant
+  (screen-string ↔ migration seed, docs figures, generator idempotence) must
+  pass at once, and one failure red-lines the whole day.
+- **Recompute figures once** before marking ready, if the day changed any
+  (`docs/build_counts.sh --write` plus the docx `build.py`), and commit them.
+- **Mark ready once, at the end of the day** → one build → merge (never
+  rewriting main's history).
+- **Merge auto-rehearses on the demonstration** and ships the Worker to the
+  floor commit. Confirm that deploy is green and the rehearsal looks right.
+- **Production is human-gated.** Clients and the control plane do not ship on a
+  merge; fire the fleet release train (`fleet_sweep.yml` / `deploy.yml`
+  dispatch) only when the rehearsal is good, in order demonstration → clients →
+  control plane, paced and verified at each stage.
