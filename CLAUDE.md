@@ -2,7 +2,9 @@
 
 TanStack Start + React 19 + Tailwind 4 + Supabase (PostgreSQL 17.6).
 Package manager is **bun**, never npm.
-Connected to Lovable: never force-push, rebase, amend or squash pushed commits.
+Never rewrite published history on `main`: no force-push, rebase, amend or
+squash of pushed commits. The release register and GitHub deployments reference
+commit SHAs, so rewriting main's history breaks the deploy chain.
 
 ## Read this before exploring
 
@@ -101,7 +103,7 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   production by accident. Needing one of them for an incident is a reason to
   add it deliberately and take it out again, not a reason to leave it on.
 
-## Hosting: Cloudflare, not Lovable
+## Hosting: Cloudflare
 
 - The application is a Cloudflare Worker, `clove-erp`, serving
   `cloveerp.com`, `www`, `demo` and every client's `<code>.cloveerp.com`
@@ -111,8 +113,8 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   on main, it ships the newest commit that every database it serves carries
   (the demonstration, the control plane, every client) and that the schema
   build passed on, and never one older than the Worker already runs, so the
-  application never ships ahead of its migrations. Not Lovable's publish, not
-  `wrangler deploy` by hand.
+  application never ships ahead of its migrations. Never by hand with
+  `wrangler deploy`.
 - `wrangler.jsonc` is the staging Worker; `wrangler.production.jsonc` is the
   live one. `app.yml` copies the production file over `wrangler.jsonc` before
   the build when the repository variable `CLOVEERP_APP_ROUTES` is `on`. Never
@@ -127,15 +129,6 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
   the Cloudflare dashboard, never in the repository).
 - A new client needs no hosting step: the directory (`/api/directory/<host>`)
   maps a subdomain to its project.
-
-## Lovable
-
-- Lovable no longer serves the application. It stays connected to this
-  repository as an editor and preview only.
-- `AGENTS.md` is Lovable-managed. Leave it alone.
-- Commits on the connected branch sync into the Lovable editor, so keep that
-  branch working.
-- Never rewrite published history.
 
 ## Conventions
 
@@ -155,3 +148,28 @@ A change is done when `bun run typecheck`, `bun run lint`, `bun run test` and
 - For a scoped change, edit and run the checks — do not ask permission per file.
 - Never create README or documentation files unless I ask. `docs/` figures are
   checked against the database; adding prose there breaks the build.
+
+### Daily release rhythm
+
+The repository is private, so Actions minutes are metered and the ~25–40 minute
+database build is the cost to watch. Until we move to sprints, work a day at a
+time, one pull request per day:
+
+- **One day-branch off `main`, opened as a draft in the morning and kept draft
+  all day.** A draft runs only the cheap jobs on each push; the database build
+  runs once, when the PR is marked ready. Accumulate the day's commits here —
+  each new migration its own single commit (rule E), unique version prefix,
+  never edited after pushing — and keep the branch green with the local checks as
+  you go, because when it is marked ready every whole-tree invariant
+  (screen-string ↔ migration seed, docs figures, generator idempotence) must
+  pass at once, and one failure red-lines the whole day.
+- **Recompute figures once** before marking ready, if the day changed any
+  (`docs/build_counts.sh --write` plus the docx `build.py`), and commit them.
+- **Mark ready once, at the end of the day** → one build → merge (never
+  rewriting main's history).
+- **Merge auto-rehearses on the demonstration** and ships the Worker to the
+  floor commit. Confirm that deploy is green and the rehearsal looks right.
+- **Production is human-gated.** Clients and the control plane do not ship on a
+  merge; fire the fleet release train (`fleet_sweep.yml` / `deploy.yml`
+  dispatch) only when the rehearsal is good, in order demonstration → clients →
+  control plane, paced and verified at each stage.
