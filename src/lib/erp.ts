@@ -64,10 +64,9 @@ import {
  * The values are in the source rather than only in the environment because a
  * build that reads only the environment is a build that can arrive
  * unconfigured, and one did: the values lived in a tracked `.env` until it left
- * version control, and from then on every publish shipped an application whose
- * first screen told the visitor to set two variables. The application was
- * then published by hand from Lovable, and the values are inlined at build
- * time, so nothing downstream could repair it either.
+ * version control, and from then on every build shipped an application whose
+ * first screen told the visitor to set two variables. The values are inlined at
+ * build time, so nothing downstream could repair it either.
  *
  * The publishable key is public by design. Supabase ships it in the client
  * bundle of every application built on it — this one included, before and after
@@ -75,8 +74,8 @@ import {
  * this project it opens nothing on its own: `anon` holds EXECUTE on no function
  * in any product schema (`erp.assert_no_public_execute`), the `erp` schema is
  * not exposed to PostgREST at all, and every table is behind row-level
- * security. What it buys is that every build starts connected — Lovable's
- * publish, the build CI runs with no environment at all, a fresh clone, a fork.
+ * security. What it buys is that every build starts connected — the deploy,
+ * the build CI runs with no environment at all, a fresh clone, a fork.
  *
  * Since 6 October there are two projects, and the page's own address chooses
  * (./backend.ts): opened at demo.cloveerp.com it talks to the demonstration

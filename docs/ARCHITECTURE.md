@@ -318,11 +318,12 @@ Stated plainly, because the register would be worth nothing otherwise.
 - **The live route depends on a secret** (`CLOVEERP_LIVE_DATABASE_URL`) and on
   the branching integration's production deploy; both are the owner's, and
   `supabase/ops/README.md` says what each carries.
-- **The application is published by hand, and separately.** The schema is
-  deployed by `deploy.yml` on merge; the front end is built and published from
-  the Lovable editor onto a Cloudflare Worker serving `cloveerp.com`. Nothing
-  in this repository publishes it, so for a while after either deployment the
-  other is behind — which is what the `compat` job measures. Every `VITE_*`
+- **The application and the schema are deployed separately.** The schema is
+  deployed by `deploy.yml` on merge; the front end is built and published by
+  `app.yml` onto a Cloudflare Worker serving `cloveerp.com`, always to the
+  newest commit every database already carries. The two can still be briefly
+  out of step after a deployment — which is what the `compat` job measures.
+  Every `VITE_*`
   value is inlined at build time, so the published bundle's configuration can
   only be changed by publishing again.
 

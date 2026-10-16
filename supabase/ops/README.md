@@ -101,8 +101,8 @@ Three things can be rolled back, and they roll back differently.
   written (D27); a migration that must be undone is undone by the next
   migration, which says why. `supabase/ci/migrations_immutable.sh` refuses an
   edited file, so history stays what was applied.
-- **The application rolls back by publishing the previous build** in Lovable.
-  That is safe only when the previous build's doors still exist on the current
+- **The application rolls back by shipping an earlier commit** through `app.yml`.
+  That is safe only when the earlier build's doors still exist on the current
   schema, which the `compat` job in `schema.yml` proves on every pull request:
   it builds the schema as `main` has it and as the pull request leaves it,
   extracts every door name the application calls on each side, and fails the
@@ -199,27 +199,26 @@ feed going dark and recovering, the review, the resolution and the history.
 
 ### The application: how it is published
 
-The schema and the application are deployed by different routes, and only the
-schema's is a workflow. The application is built and published **by hand from
-the Lovable editor**, which produces a Cloudflare Worker (`ogunjobisam-erpware`
-in the generated `.output/server/wrangler.json`) serving `cloveerp.com`.
-Nothing in this repository publishes it; `deploy.yml` records the release and
-names the channel `lovable`, which is the only trace of it here.
+The schema and the application are deployed by different workflows. The schema
+is deployed by `deploy.yml`; the application is built and published by
+**`app.yml`**, which produces a Cloudflare Worker serving `cloveerp.com` and
+ships the newest commit every database already carries (never one older than the
+Worker already runs). `deploy.yml` records each release; since Lovable was
+retired it names the channel `github`.
 
 The consequence that has bitten once: every `VITE_*` value is **inlined into
 the bundle at build time**, so there is no runtime configuration to change
-afterwards — a wrong or missing value is fixed by a re-publish and by nothing
+afterwards — a wrong or missing value is fixed by a rebuild and by nothing
 else. On 6 September the published site served "Not connected to a project" to
 every visitor, because the two values the browser needs had only ever lived in
 a tracked `.env` and that file left version control on 5 September. They are
 now defaulted in `src/lib/erp.ts`, so a build with no environment at all still
 reaches the project, and `schema.yml` reads the built bundle to prove it.
 
-To point the application at a different project, set `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_PUBLISHABLE_KEY` in Lovable's Supabase connection (the `VITE_`
-names cannot be set through its secrets tool, which reserves them) and publish
-again. To rotate the publishable key of *this* project, change the constant in
-`src/lib/erp.ts` and publish: the key is public by definition — it is in every
+To point the application at a different project, set `SUPABASE_URL` and
+`SUPABASE_PUBLISHABLE_KEY` in the wrangler config files and redeploy. To rotate
+the publishable key of *this* project, change the constant in
+`src/lib/erp.ts` and redeploy: the key is public by definition — it is in every
 bundle already, `anon` holds EXECUTE on nothing, and every table is behind row
 security — so it belongs where the build can always find it.
 

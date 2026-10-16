@@ -43,9 +43,10 @@ project named in `src/lib/erp.ts`, because a build that can only read them
 from its host is a build that can be published unable to talk to anything, and
 was.
 
-The application is published by hand from Lovable, which builds it to a
-Cloudflare Worker; the schema is deployed separately by `deploy.yml` on merge.
-`supabase/ops/README.md` carries both routes.
+The application is built and deployed by `app.yml` to a Cloudflare Worker,
+shipping the newest commit every database already carries; the schema is
+deployed separately by `deploy.yml` on merge. `supabase/ops/README.md` carries
+both routes.
 
 ### The database
 
